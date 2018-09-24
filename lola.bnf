@@ -1,0 +1,183 @@
+//////////////////////////////////////////////////
+//////////////////// Symbols /////////////////////
+//////////////////////////////////////////////////
+
+Symbol ::= unicode
+Letter ::= 'a'..'z' | 'A'..'Z'
+Digit ::= 0..9
+
+
+//////////////////////////////////////////////////
+//////////// Operators and Functions /////////////
+//////////////////////////////////////////////////
+
+CompOp ::= '<' | '<=' | '>' | '>=' | '=' | '≤' | '≥' | '!=' | '≠'
+
+BinaryFunctionSymbol ::=
+      'nroot'
+    | 'π' // Tuple Projection
+
+UnaryFunctionSymbol ::=
+      'sin'
+    | 'cos'
+    | 'tan'
+    | 'arcsin'
+    | 'arccos'
+    | 'arctan'
+    | 'exp'
+    | 'floor'
+    | 'ceil'
+    | 'sqrt'
+
+WindowOp ::= 'Σ' | 'Π' | 'avg' | 'count' | '∫' | 'sum' | 'prod' | '#' | 'integral'
+
+FunctionSymbol ::= UnaryFunctionSymbol | BinaryFunctionSymbol
+
+
+//////////////////////////////////////////////////
+//////////////////// Literals ////////////////////
+//////////////////////////////////////////////////
+
+NumberLiteral ::= ('+' | '-')? Digit* ('.' Digit*)? ('e' ('+' | '-')? Digit*)?
+
+StringLiteral ::= '"' (Symbol - '"' | Digit)* '"'
+
+TupleLiteral ::= '(' (Literal (',' Literal)*)? ')'
+
+Literal ::= StringLiteral | NumberLiteral | TupleLiteral
+
+IntegerLiteral ::= Digit*
+
+Type ::= 'Int8' | 'Int16' | 'Int32' | 'Int64' | 'Bool' | 'Double' | 'String' | '(' (Type (',' Type)*)? ')'
+
+
+//////////////////////////////////////////////////
+////////////////// Time Related //////////////////
+//////////////////////////////////////////////////
+
+Duration ::= NumberLiteral UnitOfTime
+
+UnitOfTime ::= | 'ns' | 'μs' | 'ms' | 's' | 'min' | 'h' | 'd' | 'w'
+
+Frequency ::= Duration | NumberLiteral UnitOfFreq
+
+UnitOfFreq ::= 'μHz' | 'mHz' | 'Hz' | 'kHz' | 'MHz'
+
+
+//////////////////////////////////////////////////
+///////////////////// Names //////////////////////
+//////////////////////////////////////////////////
+
+Var ::=  (Letter | '_') (Letter | Digit | '_')*
+
+Parameter ::= Var // Semantic Category
+
+EffectiveConstant ::= Parameter | Literal
+
+StreamInstance ::= Var ('(' EffectiveConstant (',' EffectiveConstant)* ')')?
+
+
+//////////////////////////////////////////////////
+////////////////// Expressions ///////////////////
+//////////////////////////////////////////////////
+
+// Precedences:
+// Atomic < TernaryExpr < BooleanDisExpr < BooleanConExpr 
+//      < CompExpr < AddExpr < MultiExpr < ExpoExpr < UnaryExpr < DefaultExpr 
+//      < FunctionExpr < LookupExpr < CompoundExpr
+
+Expr ::= CompoundExpr
+
+CompoundExpr ::=
+      LookupExpr
+    | Var '.' Var
+
+LookupExpr ::=
+      FunctionExpr
+    | StreamInstance '[' EffectiveConstant ']' 
+    | StreamInstance '[' Duration ',' WindowOp ']'
+    | StreamInstance '[' Duration ']'
+
+FunctionExpr ::= 
+      DefaultExpr
+    | FunctionSymbol '(' Expr (',' Expr)* ')' 
+    | 'π' '(' IntegerLiteral ',' Var ')'
+
+DefaultExpr ::= 
+      UnaryExpr 
+    | LookupExpr '?' Expr
+
+UnaryExpr ::=
+      ExpoExpr
+    | '+' UnaryExpr
+    | '-' UnaryExpr
+    | '!' UnaryExpr
+
+ExpoExpr ::=
+      DefaultExpr
+    | MultiExpr '**' ExpoExpr
+
+MultiExpr ::=
+      AddExpr 
+    | MultiExpr '*' AddExpr 
+    | MultiExpr '/' AddExpr 
+    | MultiExpr '%' AddExpr
+
+AddExpr ::=
+      CompExpr
+    | AddExpr '+' CompExpr
+    | AddExpr '-' CompExpr
+
+CompExpr ::=
+      BooleanConExpr
+    | BooleanExpr CompOp BooleanExpr
+
+BooleanConExpr ::=
+      BooleanDisExpr
+    | BooleanConExpr '∧' BooleanDisExpr
+    | BooleanConExpr '&' BooleanDisExpr
+    | BooleanConExpr 'and' BooleanDisExpr
+
+BooleanDisExpr ::=
+      TernaryExpr
+    | BooleanDisExpr '∨' TernaryExpr
+    | BooleanDisExpr '|' TernaryExpr
+    | BooleanDisExpr 'or' TernaryExpr
+
+TernaryExpr ::=
+      AtomicExpr
+    | 'if' Expr 'then' Expr 'else' Expr
+
+AtomicExpr ::= 
+      EffectiveConstant 
+    | Var
+    | '(' Expr ')'
+    | '(' (Expr (',' Expr)*)? ')'
+
+
+//////////////////////////////////////////////////
+/////////////////// Statements ///////////////////
+//////////////////////////////////////////////////
+
+ParamList ::= '<' Type Var (',' Type Var)* '>'
+
+TemplateSpec ::= 
+      '{' 
+        ('invoke' Expr ('if' | 'unless') Expr)? 
+        ('extend' Expr? ('@' Frequency)?)?
+        ('terminate' Expr)?
+      '}'
+
+IncludeStatement ::= 'include' StringLiteral
+
+TypeDecl ::= 'Type' Var '{' Type Var (',' Type Var)+ '}'
+
+ConstantStream ::= 'constant' Type Var ':=' Literal
+
+InputStream ::= 'input' Type Var ParamList? (',' Var ParamList?)*
+
+OutputStream ::= 'output' Type Var ParamList? TemplateSpec? ':=' Expr
+
+Trigger ::= 'trigger' Var? Expr StringLiteral?
+
+Spec ::= (IncludeStatement | TypeDecl | ConstantStream | InputStream | OutputStream | Trigger)*
