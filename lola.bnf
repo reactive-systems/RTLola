@@ -31,7 +31,7 @@ UnaryFunctionSymbol ::=
 
 WindowOp ::= 'Σ' | 'Π' | 'avg' | 'count' | '∫' | 'sum' | 'prod' | '#' | 'integral'
 
-FunctionSymbol ::= UnaryFunctionSymbol | BinaryFunctionSymbol
+FunctionSymbol ::= UnaryFunctionSymbol | BinaryFunctionSymbol | Ident
 
 
 //////////////////////////////////////////////////
@@ -44,11 +44,15 @@ StringLiteral ::= '"' (Symbol - '"' | Digit)* '"'
 
 TupleLiteral ::= '(' (Literal (',' Literal)*)? ')'
 
-Literal ::= StringLiteral | NumberLiteral | TupleLiteral
+BooleanLiteral ::= 'true' | 'false' | '⊤' | '⊥'
+
+Literal ::= StringLiteral | NumberLiteral | TupleLiteral | BooleanLiteral
 
 IntegerLiteral ::= Digit*
 
-Type ::= 'Int8' | 'Int16' | 'Int32' | 'Int64' | 'Bool' | 'Double' | 'String' | '(' (Type (',' Type)*)? ')'
+PType ::= 'Int8' | 'Int16' | 'Int32' | 'Int64' | 'Bool' | 'Double' | 'String'
+
+Type ::= '(' (Type (',' Type)*)? ')' | Ident | PType
 
 
 //////////////////////////////////////////////////
@@ -68,13 +72,13 @@ UnitOfFreq ::= 'μHz' | 'mHz' | 'Hz' | 'kHz' | 'MHz'
 ///////////////////// Names //////////////////////
 //////////////////////////////////////////////////
 
-Var ::=  (Letter | '_') (Letter | Digit | '_')*
+Ident ::=  (Letter | '_') (Letter | Digit | '_')*
 
-Parameter ::= Var // Semantic Category
+Parameter ::= Ident // Semantic Category
 
 EffectiveConstant ::= Parameter | Literal
 
-StreamInstance ::= Var ('(' EffectiveConstant (',' EffectiveConstant)* ')')?
+StreamInstance ::= Ident ('(' EffectiveConstant (',' EffectiveConstant)* ')')?
 
 
 //////////////////////////////////////////////////
@@ -90,7 +94,7 @@ Expr ::= CompoundExpr
 
 CompoundExpr ::=
       LookupExpr
-    | Var '.' Var
+    | Ident '.' Ident
 
 LookupExpr ::=
       FunctionExpr
@@ -101,7 +105,7 @@ LookupExpr ::=
 FunctionExpr ::= 
       DefaultExpr
     | FunctionSymbol '(' Expr (',' Expr)* ')' 
-    | 'π' '(' IntegerLiteral ',' Var ')'
+    | 'π' '(' IntegerLiteral ',' Ident ')'
 
 DefaultExpr ::= 
       UnaryExpr 
@@ -130,7 +134,7 @@ AddExpr ::=
 
 CompExpr ::=
       BooleanConExpr
-    | BooleanExpr CompOp BooleanExpr
+    | BooleanConExpr CompOp BooleanConExpr
 
 BooleanConExpr ::=
       BooleanDisExpr
@@ -150,16 +154,16 @@ TernaryExpr ::=
 
 AtomicExpr ::= 
       EffectiveConstant 
-    | Var
+    | Ident
     | '(' Expr ')'
-    | '(' (Expr (',' Expr)*)? ')'
+    | '(' (Expr (',' Expr)+)? ')'
 
 
 //////////////////////////////////////////////////
 /////////////////// Statements ///////////////////
 //////////////////////////////////////////////////
 
-ParamList ::= '<' Type Var (',' Type Var)* '>'
+ParamList ::= '<' Type Ident (',' Type Ident)* '>'
 
 TemplateSpec ::= 
       '{' 
@@ -170,14 +174,17 @@ TemplateSpec ::=
 
 IncludeStatement ::= 'include' StringLiteral
 
-TypeDecl ::= 'Type' Var '{' Type Var (',' Type Var)+ '}'
+TypeDecl ::= 'Type' Ident '{' Type Ident (',' Type Ident)+ '}'
 
-ConstantStream ::= 'constant' Type Var ':=' Literal
+ConstantStream ::= 'constant' PType Ident ':=' Literal
 
-InputStream ::= 'input' Type Var ParamList? (',' Var ParamList?)*
+InputStream ::= 'input' PType Ident ParamList? (',' Ident ParamList?)*
 
-OutputStream ::= 'output' Type Var ParamList? TemplateSpec? ':=' Expr
+OutputStream ::= 'output' Type Ident ParamList? TemplateSpec? ':=' Expr
 
-Trigger ::= 'trigger' Var? Expr StringLiteral?
+Trigger ::= 'trigger' Ident? Expr StringLiteral?
 
-Spec ::= (IncludeStatement | TypeDecl | ConstantStream | InputStream | OutputStream | Trigger)*
+LanguageSpec ::= '//!' ('ClassicLola' | 'Lola2.0' | 'RTLola')
+
+Spec ::= LanguageSpec? (IncludeStatement | TypeDecl | ConstantStream |
+InputStream | OutputStream | Trigger)*

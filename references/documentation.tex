@@ -72,7 +72,7 @@
   \begin{grammar}
     <EffectiveConstant> ::= <Literal> | <Parameter>
   
-    <StreamInstance> ::= <Var> (`(' [<EffectiveConstant>] `)')?
+    <StreamInstance> ::= <Ident> (`(' [<EffectiveConstant>] `)')?
   \end{grammar}
   
   \section{Expressions}
@@ -87,10 +87,10 @@
       \alt <StreamInstance>` [' <Duration> `,' <WindowOperator> `]'
       \alt `if' <Expression> `then' <Expression> `else' <Expression>
       \alt <Literal>
-      \alt <Var>
-      \alt <Var>.<Var>
+      \alt <Ident>
+      \alt <Ident>.<Ident>
       \alt `(' <Expression> `)'
-      \alt `(' [<Expression>]? `)'
+      \alt `(' (<Expression> (`,' <Expression>)*)? `)'
   \end{grammar}
     
     
@@ -107,17 +107,19 @@
       
   <IncludeStatement> ::= `include' <StringLiteral>
   
-  <TypeDeclaration> ::= `Type' <Var> `{' [<Type> <Var>] `}'
+  <TypeDeclaration> ::= `Type' <Ident> `{' [<Type> <Ident>] `}'
   
-  <ConstantStream> ::= `constant' <Type> <Var> := <Literal>
+  <ConstantStream> ::= `constant' <Type> <Ident> := <Literal>
   
-  <InputStream> ::= `input' <Type> [<Var> (`<'[<Type> <Var>]`>')?]
+  <InputStream> ::= `input' <Type> [<Ident> (`<'[<Type> <Ident>]`>')?]
   
-  <OutputStream> ::= `output' <Type> <Var> (`<'[<Type> <Var>]`>')? <TemplateSpec>? `:=' <Expression>
+  <OutputStream> ::= `output' <Type> <Ident> (`<'[<Type> <Ident>]`>')? <TemplateSpec>? `:=' <Expression>
   
-  <Trigger> ::= `trigger' <Var>? <Expression> <StringLiteral>?
+  <Trigger> ::= `trigger' <Ident>? <Expression> <StringLiteral>?
   
-  <LolaSpecification> ::= (<IncludeStatement> | <TypeDeclaration> | <ConstantStream> | <InputStream> | <OutputStream> | <Trigger>)+
+  <LanguageSpec> ::= `//!' (`ClassicLola' | `Lola2.0' | `RTLola')
+  
+  <LolaSpecification> ::= <LanguageSpec>? (<IncludeStatement> | <TypeDeclaration> | <ConstantStream> | <InputStream> | <OutputStream> | <Trigger>)+
     
   \end{grammar}
 
