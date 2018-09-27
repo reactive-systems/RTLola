@@ -1,0 +1,181 @@
+// Status: WIP (Draft)
+
+
+// Take a look at https://pest-parser.github.io/book/grammars/syntax.html
+// TODO we can probably mark some rules as atomic or hidden
+
+Spec = { soi ~LanguageSpec? ~ Declaration* ~ eoi}
+LanguageSpec ={ "//!" ~("ClassicLola" | "Lola2.0" | "RTLola") }
+Declaration = _{IncludeStatement | TypeDecl | ConstantStream | InputStream | OutputStream | Trigger}
+
+//////////////////////////////////////////////////
+/////////////////// Statements ///////////////////
+//////////////////////////////////////////////////
+
+ParamList = { "<"~ Type~ Ident~ ("," ~Type~ Ident)* ~">"}
+
+TemplateSpec = { 
+      "{" ~
+        ("invoke" ~Expr ~("if" | "unless")~ Expr)? ~
+        ("extend" ~Expr?~ ("@"~ Frequency)?)?~
+        ("terminate" ~Expr)?~
+      "}"}
+
+IncludeStatement = { "include"~ StringLiteral}
+
+TypeDecl = { "Type"~ Ident ~"{" ~Type~ Ident~ ("," ~Type~ Ident)+ ~ "}"}
+
+ConstantStream = { "constant"~ PType ~Ident ~":=" ~Literal}
+
+InputStream = { "input" ~PType ~Ident~ ParamList? ~(","~ Ident~ ParamList?)*}
+
+OutputStream = { "output"~ Type ~Ident~ ParamList?~ TemplateSpec? ~":="~ Expr}
+
+Trigger = { "trigger"~ Ident?~ Expr~ StringLiteral?}
+
+//////////////////////////////////////////////////
+////////////////// Expressions ///////////////////
+//////////////////////////////////////////////////
+
+// TODO take a look at https://pest-parser.github.io/book/ and the usage of the PrecClimber
+
+// Precedences:
+// Atomic < TernaryExpr < BooleanDisExpr < BooleanConExpr 
+//      < CompExpr < AddExpr < MultiExpr < ExpoExpr < UnaryExpr < DefaultExpr 
+//      < FunctionExpr < LookupExpr < CompoundExpr
+
+Operation = _{ Add | Subtract | Power | Multiply | Divide | Mod | And | Or }
+    Add      = { "+"  }
+    Subtract = { "-"  }
+    Multiply = { "*"  }
+    Divide   = { "/"  }
+    Mod      = { "%"  }
+    Power    = { "**" }
+    And      = { "∧" | "&" | "and" }
+    Or       = { "∨" | "|" | "or"  }
+
+Expr = { Term ~ (Operation ~ Term)* }
+// TODO Do we need Term to exist for the precedence climber?
+Term = _{ Literal | "(" ~ Expr ~ ")" | CompoundExpr | DefaultExpr| LookupExpr | FunctionExpr | UnaryExpr | TernaryExpr | Ident | Tuple}
+
+
+CompoundExpr = {Ident~ "."~ Ident}
+
+LookupExpr = {
+      StreamInstance ~"["~ EffectiveConstant~ "]" 
+    | StreamInstance ~"["~ Duration ~"," ~WindowOp~ "]"
+    | StreamInstance ~"["~ Duration~ "]"}
+
+FunctionExpr = { 
+      FunctionSymbol~ "(" ~Expr ~("," ~Expr)*~ ")" 
+    | "π"~ "("~ IntegerLiteral ~","~ Ident~ ")"}
+
+DefaultExpr = { 
+      LookupExpr~ "?"~ Term}
+
+UnaryExpr = {
+      "+"~ Term
+    | "-"~ Term
+    | "!"~ Term}
+
+
+TernaryExpr = {
+      "if"~ Expr~ "then"~ Expr~ "else"~ Expr}  
+
+Tuple = { "("~ (Expr~ (","~ Expr)+)?~ ")"}
+
+
+//////////////////////////////////////////////////
+//////////// Operators and Functions /////////////
+//////////////////////////////////////////////////
+
+LessThan = {"<"}
+LessThanOrEqual = {"<=" | "≤"}
+MoreThan = {">"}
+MoreThanOrEqual = {">=" | "≥"}
+NotEqual = {"!=" | "≠"}
+Equal = {"="}
+CompOp = {LessThanOrEqual | MoreThanOrEqual | LessThan | MoreThan | NotEqual | Equal}
+
+BinaryFunctionSymbol = {
+      "nroot"
+    | "π" // Tuple Projection
+    }
+
+UnaryFunctionSymbol = {
+      "sin"
+    | "cos"
+    | "tan"
+    | "amrcsin"
+    | "arccos"
+    | "arctan"
+    | "exp"
+    | "floor"
+    | "ceil"
+    | "sqrt"
+}
+
+Sum = {"Σ" | "sum"}
+Count = {"#"|"count"}
+Product = {"Π" | "prod"}
+Integral = {"∫"  | "integral"}
+
+WindowOp = _{ Sum | Product | "avg" | Count | Integral}
+
+FunctionSymbol = _{ UnaryFunctionSymbol | BinaryFunctionSymbol}
+
+
+//////////////////////////////////////////////////
+//////////////////// Literals ////////////////////
+//////////////////////////////////////////////////
+
+NumberLiteral = { ("+" | "-")?~ Digit+~ ("."~ Digit*)?~ ("e"~ ("+" | "-")?~ Digit*)?}
+
+StringLiteral = _{ "\""~ String~ "\""}
+String = @{("\\\""|!("\"") ~ any)*}
+
+TupleLiteral = { "(" ~(Literal ~(","~ Literal)*)?~ ")"}
+BooleanLiteral = { True | False}
+True = {"true"| "⊤"}
+False = {"false"  | "⊥"}
+Literal = _{ StringLiteral | NumberLiteral | TupleLiteral | BooleanLiteral}
+
+IntegerLiteral = { Digit*}
+
+PType = { "Int8" | "Int16" | "Int32" | "Int64" | "Bool" | "Double" | "String" }
+Type = {"("~ (Type ~(","~Type)*)?~ ")" | PType | Ident}
+
+//////////////////////////////////////////////////
+////////////////// Time Related //////////////////
+//////////////////////////////////////////////////
+
+Duration = { NumberLiteral~ UnitOfTime}
+
+UnitOfTime = { "ns" | "μs" | "ms" | "s" | "min" | "h" | "d" | "w"}
+
+Frequency = { Duration | NumberLiteral ~UnitOfFreq}
+
+UnitOfFreq = { "μHz" | "mHz" | "Hz" | "kHz" | "MHz"}
+
+
+//////////////////////////////////////////////////
+///////////////////// Names //////////////////////
+//////////////////////////////////////////////////
+
+Ident = @{  (Letter | "_") ~ (Letter | Digit | "_")*}
+
+Parameter = { Ident} // Semantic Category
+
+EffectiveConstant = _{ Parameter | Literal}
+
+StreamInstance = { Ident ~("(" ~EffectiveConstant ~(","~ EffectiveConstant)* ~")")?}
+
+//////////////////////////////////////////////////
+//////////////////// Symbols /////////////////////
+//////////////////////////////////////////////////
+
+Letter = { 'a'..'z' | 'A'..'Z'}
+Digit = {'0'..'9'}
+Number = { '0'..'9'+ }
+whitespace = _{ " " | "\t" | "\n"}
+comment = _{ ("/*" ~ (!"*/" ~ any)* ~ "*/") | ("//" ~(!("\n")~any)*~ "\n"? ) }
