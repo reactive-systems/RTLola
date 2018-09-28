@@ -1,0 +1,13 @@
+image: "rust:latest"
+
+# Install additional packages, like a C compiler and cmake
+#before_script:
+#- apt-get update -yqq
+#- apt-get install -yqq --no-install-recommends build-essential cmake
+
+# Use cargo to test the project
+test:cargo:
+  script:
+  - rustc --version && cargo --version      # Print version info for debugging
+  - cargo test --all --verbose
+
