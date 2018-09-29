@@ -1,5 +1,7 @@
 //! This module contains the parser for the Lola Language.
 
+use ast::*;
+use pest::error::Error;
 use pest::prec_climber::{Assoc, Operator, PrecClimber};
 use pest::Parser;
 use std::collections::HashMap;
@@ -25,9 +27,23 @@ lazy_static! {
     };
 }
 
+fn parse(content: &str) -> Result<LolaSpec, Error<Rule>> {
+    let pairs = LolaParser::parse(Rule::Spec, content)?;
+    let mut spec = LolaSpec::new();
+    for pair in pairs {
+        match pair.as_rule() {
+            Rule::LanguageSpec => {
+                spec.language = Some(LanguageSpec::from(pair.as_str()));
+            }
+            _ => unimplemented!(),
+        }
+    }
+    Ok(spec)
+}
+
 /// A symbol is a reference to an entry in SymbolTable
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy)]
-pub(crate) struct Symbol(u32);
+pub struct Symbol(u32);
 
 impl Symbol {
     pub fn new(name: u32) -> Symbol {
@@ -37,6 +53,20 @@ impl Symbol {
     fn to_usize(&self) -> usize {
         self.0 as usize
     }
+}
+
+#[derive(Debug)]
+pub struct Ident {
+    pub name: Symbol,
+    pub span: Span,
+}
+
+/// A span marks a range in a file.
+/// Start and end positions are *byte* offsets.
+#[derive(Debug)]
+pub struct Span {
+    start: usize,
+    end: usize,
 }
 
 /// A SymbolTable is a bi-directional mapping between strings and symbols
@@ -80,7 +110,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_parse_simple() {
+    fn parse_simple() {
         let pairs = LolaParser::parse(Rule::Spec, "input in: Int\noutput out: Int := in\n")
             .unwrap_or_else(|e| panic!("{}", e));
     }
@@ -143,7 +173,7 @@ mod tests {
     }
 
     #[test]
-    fn test_symbol_table() {
+    fn symbol_table() {
         let mut symboltable = SymbolTable::new();
         let sym_a = symboltable.get_symbol_for("a");
         let sym_b = symboltable.get_symbol_for("b");

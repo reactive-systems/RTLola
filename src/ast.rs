@@ -1,16 +1,29 @@
 //! This module contains the AST data structures for the Lola Language.
 
-use super::parse::{Symbol, SymbolTable};
+use super::parse::{Ident, Span, Symbol, SymbolTable};
 
 /// The root Lola specification
 #[derive(Debug)]
 pub struct LolaSpec {
-    language: Option<LanguageSpec>,
-    constants: Vec<ConstantDecl>,
-    inputs: Vec<InputDecl>,
-    outputs: Vec<OutputDecl>,
-    trigger: Vec<TriggerDecl>,
+    pub language: Option<LanguageSpec>,
+    constants: Vec<Constant>,
+    inputs: Vec<Input>,
+    outputs: Vec<Output>,
+    trigger: Vec<Trigger>,
     symbols: SymbolTable,
+}
+
+impl LolaSpec {
+    pub fn new() -> LolaSpec {
+        LolaSpec {
+            language: None,
+            constants: Vec::new(),
+            inputs: Vec::new(),
+            outputs: Vec::new(),
+            trigger: Vec::new(),
+            symbols: SymbolTable::new(),
+        }
+    }
 }
 
 /// Versions and Extensions of the Lola language
@@ -29,40 +42,53 @@ pub enum LanguageSpec {
     RTLola,
 }
 
+impl<'a> From<&'a str> for LanguageSpec {
+    fn from(string: &str) -> Self {
+        unimplemented!();
+    }
+}
+
 /// A declaration of a constant (stream)
 #[derive(Debug)]
-pub struct ConstantDecl {
-    symbol: Symbol,
+pub struct Constant {
+    name: Ident,
     ty: Type,
-    expression: Expression,
+    literal: Literal,
+    span: Span,
 }
 
 /// A declaration of an input stream
 #[derive(Debug)]
-pub struct InputDecl {
-    symbol: Symbol,
+pub struct Input {
+    name: Ident,
     ty: Type,
     expression: Expression,
+    span: Span,
 }
 
 /// A declaration of an output stream
 #[derive(Debug)]
-pub struct OutputDecl {
-    symbol: Symbol,
+pub struct Output {
+    name: Ident,
     ty: Type,
     expression: Expression,
+    span: Span,
 }
 
 /// A declaration of a trigger
 #[derive(Debug)]
-pub struct TriggerDecl {
-    symbol: Option<Symbol>,
+pub struct Trigger {
+    name: Option<Ident>,
     expression: Expression,
     message: Option<Symbol>,
+    span: Span,
 }
 
 #[derive(Debug)]
-pub struct Type(Symbol);
+pub struct Type {
+    name: Symbol,
+    span: Span,
+}
 
 /// An expression
 ///
@@ -70,6 +96,7 @@ pub struct Type(Symbol);
 #[derive(Debug)]
 pub struct Expression {
     kind: ExpressionKind,
+    span: Span,
 }
 
 #[derive(Debug)]
@@ -93,7 +120,22 @@ pub enum ExpressionKind {
 }
 
 #[derive(Debug)]
-pub struct Literal(Symbol);
+pub struct Literal {
+    kind: LitKind,
+    span: Span,
+}
+
+#[derive(Debug)]
+pub enum LitKind {
+    /// A string literal (`"foo"`)
+    Str(Symbol),
+    /// An integer literal (`1`)
+    Int(u128),
+    /// A float literal (`1f64` or `1E10f64`)
+    Float(Symbol),
+    /// A boolean literal
+    Bool(bool),
+}
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum BinOp {
