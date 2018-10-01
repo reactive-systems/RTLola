@@ -4,7 +4,7 @@
 // Take a look at https://pest-parser.github.io/book/grammars/syntax.html
 // TODO we can probably mark some rules as atomic or hidden
 
-Spec = { soi ~LanguageSpec? ~ Declaration* ~ eoi}
+Spec = { SOI ~LanguageSpec? ~ Declaration* ~ EOI}
 LanguageSpec ={ "//!" ~("ClassicLola" | "Lola2.0" | "RTLola") }
 Declaration = _{IncludeStatement | TypeDecl | ConstantStream | InputStream | OutputStream | Trigger}
 
@@ -132,7 +132,7 @@ FunctionSymbol = _{ UnaryFunctionSymbol | BinaryFunctionSymbol}
 NumberLiteral = { ("+" | "-")?~ Digit+~ ("."~ Digit*)?~ ("e"~ ("+" | "-")?~ Digit*)?}
 
 StringLiteral = _{ "\""~ String~ "\""}
-String = @{("\\\""|!("\"") ~ any)*}
+String = @{("\\\""|!("\"") ~ ANY)*}
 
 TupleLiteral = { "(" ~(Literal ~(","~ Literal)*)?~ ")"}
 BooleanLiteral = { True | False}
@@ -177,5 +177,5 @@ StreamInstance = { Ident ~("(" ~EffectiveConstant ~(","~ EffectiveConstant)* ~")
 Letter = { 'a'..'z' | 'A'..'Z'}
 Digit = {'0'..'9'}
 Number = { '0'..'9'+ }
-whitespace = _{ " " | "\t" | "\n"}
-comment = _{ ("/*" ~ (!"*/" ~ any)* ~ "*/") | ("//" ~(!("\n")~any)*~ "\n"? ) }
+WHITESPACE = _{ " " | "\t" | "\n"}
+COMMENT = _{ ("/*" ~ (!"*/" ~ ANY)* ~ "*/") | ("//" ~(!("\n")~ANY)*~ "\n"? ) }
