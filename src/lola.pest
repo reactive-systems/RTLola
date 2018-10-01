@@ -12,7 +12,7 @@ Declaration = _{IncludeStatement | TypeDecl | ConstantStream | InputStream | Out
 /////////////////// Statements ///////////////////
 //////////////////////////////////////////////////
 
-ParamList = { "<"~ Type~ Ident~ ("," ~Type~ Ident)* ~">"}
+ParamList = { "<"~ Ident ~ ":" ~ Type~ ("," ~Ident ~ ":" ~ Type)* ~">"}
 
 TemplateSpec = { 
       "{" ~
@@ -25,11 +25,11 @@ IncludeStatement = { "include"~ StringLiteral}
 
 TypeDecl = { "Type"~ Ident ~"{" ~Type~ Ident~ ("," ~Type~ Ident)+ ~ "}"}
 
-ConstantStream = { "constant"~ Type ~Ident ~":=" ~Literal}
+ConstantStream = { "constant"~ Ident ~ ":" ~ Type ~":=" ~Literal}
 
-InputStream = { "input" ~Type ~Ident~ ParamList? ~(","~ Ident~ ParamList?)*}
+InputStream = { "input" ~Ident ~ ParamList? ~ ":" ~ Type ~(","~ Ident~ ParamList? ~ ":" ~ Type)*}
 
-OutputStream = { "output"~ Type ~Ident~ ParamList?~ TemplateSpec? ~":="~ Expr}
+OutputStream = { "output"~ Ident ~ ParamList?~ ":" ~ Type ~ TemplateSpec? ~":="~ Expr}
 
 Trigger = { "trigger"~ Ident?~ Expr~ StringLiteral?}
 

@@ -29,7 +29,7 @@ mod tests {
 
     #[test]
     fn test_parse_simple() {
-        let pairs = LolaParser::parse(Rule::Spec, "input Int32 in\noutput Int32 out := in\n")
+        let pairs = LolaParser::parse(Rule::Spec, "input in: Int\noutput out: Int := in\n")
             .unwrap_or_else(|e| panic!("{}", e));
     }
 
@@ -37,15 +37,15 @@ mod tests {
     fn parse_constant() {
         parses_to! {
             parser: LolaParser,
-            input:  "constant Int five := 5",
+            input:  "constant five : Int := 5",
             rule:   Rule::ConstantStream,
             tokens: [
-                ConstantStream(0, 22, [
-                    Type(9, 12, [
-                        Ident(9, 12, []),
+                ConstantStream(0, 24, [
+                    Ident(9, 13, []),
+                    Type(16, 19, [
+                        Ident(16, 19, []),
                     ]),
-                    Ident(13, 17, []),
-                    NumberLiteral(21, 22, []),
+                    NumberLiteral(23, 24, []),
                 ]),
             ]
         };
@@ -55,14 +55,14 @@ mod tests {
     fn parse_input() {
         parses_to! {
             parser: LolaParser,
-            input:  "input Int in",
+            input:  "input in: Int",
             rule:   Rule::InputStream,
             tokens: [
-                InputStream(0, 12, [
-                    Type(6, 9, [
-                        Ident(6, 9, []),
+                InputStream(0, 13, [
+                    Ident(6, 8, []),
+                    Type(10, 13, [
+                        Ident(10, 13, []),
                     ]),
-                    Ident(10, 12, [])
                 ]),
             ]
         };
@@ -72,18 +72,18 @@ mod tests {
     fn parse_output() {
         parses_to! {
             parser: LolaParser,
-            input:  "output Int out := in + 1",
+            input:  "output out: Int := in + 1",
             rule:   Rule::OutputStream,
             tokens: [
-                OutputStream(0, 24, [
-                    Type(7, 10, [
-                        Ident(7, 10, []),
+                OutputStream(0, 25, [
+                    Ident(7, 10, []),
+                    Type(12, 15, [
+                        Ident(12, 15, []),
                     ]),
-                    Ident(11, 14, []),
-                    Expr(18, 24, [
-                        Ident(18, 20, []),
-                        Add(21, 22, []),
-                        NumberLiteral(23, 24, []),
+                    Expr(19, 25, [
+                        Ident(19, 21, []),
+                        Add(22, 23, []),
+                        NumberLiteral(24, 25, []),
                     ]),
                 ]),
             ]
