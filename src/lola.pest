@@ -25,9 +25,9 @@ IncludeStatement = { "include"~ StringLiteral}
 
 TypeDecl = { "Type"~ Ident ~"{" ~Type~ Ident~ ("," ~Type~ Ident)+ ~ "}"}
 
-ConstantStream = { "constant"~ PType ~Ident ~":=" ~Literal}
+ConstantStream = { "constant"~ Type ~Ident ~":=" ~Literal}
 
-InputStream = { "input" ~PType ~Ident~ ParamList? ~(","~ Ident~ ParamList?)*}
+InputStream = { "input" ~Type ~Ident~ ParamList? ~(","~ Ident~ ParamList?)*}
 
 OutputStream = { "output"~ Type ~Ident~ ParamList?~ TemplateSpec? ~":="~ Expr}
 
@@ -129,21 +129,20 @@ FunctionSymbol = _{ UnaryFunctionSymbol | BinaryFunctionSymbol}
 //////////////////// Literals ////////////////////
 //////////////////////////////////////////////////
 
-NumberLiteral = { ("+" | "-")?~ Digit+~ ("."~ Digit*)?~ ("e"~ ("+" | "-")?~ Digit*)?}
+NumberLiteral = @{ ("+" | "-")?~ Digit+~ ("."~ Digit*)?~ ("e"~ ("+" | "-")?~ Digit*)?}
 
 StringLiteral = _{ "\""~ String~ "\""}
 String = @{("\\\""|!("\"") ~ ANY)*}
 
 TupleLiteral = { "(" ~(Literal ~(","~ Literal)*)?~ ")"}
-BooleanLiteral = { True | False}
-True = {"true"| "⊤"}
-False = {"false"  | "⊥"}
+BooleanLiteral = _{ True | False}
+True = @{"true"| "⊤"}
+False = @{"false"  | "⊥"}
 Literal = _{ StringLiteral | NumberLiteral | TupleLiteral | BooleanLiteral}
 
-IntegerLiteral = { Digit*}
+IntegerLiteral = @{ Digit*}
 
-PType = { "Int8" | "Int16" | "Int32" | "Int64" | "Bool" | "Double" | "String" }
-Type = {"("~ (Type ~(","~Type)*)?~ ")" | PType | Ident}
+Type = {"("~ (Type ~(","~Type)*)?~ ")" | Ident}
 
 //////////////////////////////////////////////////
 ////////////////// Time Related //////////////////
@@ -175,7 +174,7 @@ StreamInstance = { Ident ~("(" ~EffectiveConstant ~(","~ EffectiveConstant)* ~")
 //////////////////////////////////////////////////
 
 Letter = { 'a'..'z' | 'A'..'Z'}
-Digit = {'0'..'9'}
+Digit = _{'0'..'9'}
 Number = { '0'..'9'+ }
 WHITESPACE = _{ " " | "\t" | "\n"}
 COMMENT = _{ ("/*" ~ (!"*/" ~ ANY)* ~ "*/") | ("//" ~(!("\n")~ANY)*~ "\n"? ) }
