@@ -138,7 +138,7 @@ TupleLiteral = { "(" ~(Literal ~(","~ Literal)*)?~ ")"}
 BooleanLiteral = _{ True | False}
 True = @{"true"| "⊤"}
 False = @{"false"  | "⊥"}
-Literal = _{ StringLiteral | NumberLiteral | TupleLiteral | BooleanLiteral}
+Literal = { StringLiteral | NumberLiteral | TupleLiteral | BooleanLiteral}
 
 IntegerLiteral = @{ Digit*}
 

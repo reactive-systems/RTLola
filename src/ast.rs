@@ -6,11 +6,11 @@ use super::parse::{Ident, Span, Symbol, SymbolTable};
 #[derive(Debug)]
 pub struct LolaSpec {
     pub language: Option<LanguageSpec>,
-    constants: Vec<Constant>,
-    inputs: Vec<Input>,
-    outputs: Vec<Output>,
-    trigger: Vec<Trigger>,
-    symbols: SymbolTable,
+    pub constants: Vec<Constant>,
+    pub inputs: Vec<Input>,
+    pub outputs: Vec<Output>,
+    pub trigger: Vec<Trigger>,
+    pub(crate) symbols: SymbolTable,
 }
 
 impl LolaSpec {
@@ -51,10 +51,10 @@ impl<'a> From<&'a str> for LanguageSpec {
 /// A declaration of a constant (stream)
 #[derive(Debug)]
 pub struct Constant {
-    name: Ident,
-    ty: Type,
-    literal: Literal,
-    span: Span,
+    pub name: Ident,
+    pub ty: Type,
+    pub literal: Literal,
+    pub span: Span,
 }
 
 /// A declaration of an input stream
@@ -86,8 +86,32 @@ pub struct Trigger {
 
 #[derive(Debug)]
 pub struct Type {
-    name: Symbol,
+    kind: TypeKind,
     span: Span,
+}
+
+impl Type {
+    pub fn new_simple(name: Symbol, span: Span) -> Type {
+        Type {
+            kind: TypeKind::Simple(name),
+            span,
+        }
+    }
+
+    pub fn new_tuple(tuple: Vec<Box<Type>>, span: Span) -> Type {
+        Type {
+            kind: TypeKind::Tuple(tuple),
+            span,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum TypeKind {
+    /// A tuple type, e.g., (Int, Float)
+    Tuple(Vec<Box<Type>>),
+    /// A simple type, e.g., Int
+    Simple(Symbol),
 }
 
 /// An expression
@@ -99,10 +123,18 @@ pub struct Expression {
     span: Span,
 }
 
+impl Expression {
+    pub fn new(kind: ExpressionKind, span: Span) -> Expression {
+        Expression { kind, span }
+    }
+}
+
 #[derive(Debug)]
 pub enum ExpressionKind {
-    /// A literal (For example: `1`, `"foo"`)
+    /// A literal, e.g., `1`, `"foo"`
     Lit(Literal),
+    /// An identifier, e.g., `foo`
+    Ident(Ident),
     /// A default expression, e.g., ` a ? 0 `
     Default(Box<Expression>, Box<Literal>),
     /// A stream lookup with offset
@@ -125,12 +157,28 @@ pub struct Literal {
     span: Span,
 }
 
+impl Literal {
+    pub fn new_bool(val: bool, span: Span) -> Literal {
+        Literal {
+            kind: LitKind::Bool(val),
+            span,
+        }
+    }
+
+    pub fn new_int(val: i128, span: Span) -> Literal {
+        Literal {
+            kind: LitKind::Int(val),
+            span,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum LitKind {
     /// A string literal (`"foo"`)
     Str(Symbol),
     /// An integer literal (`1`)
-    Int(u128),
+    Int(i128),
     /// A float literal (`1f64` or `1E10f64`)
     Float(Symbol),
     /// A boolean literal
