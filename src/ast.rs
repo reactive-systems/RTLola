@@ -60,28 +60,27 @@ pub struct Constant {
 /// A declaration of an input stream
 #[derive(Debug)]
 pub struct Input {
-    name: Ident,
-    ty: Type,
-    expression: Expression,
-    span: Span,
+    pub name: Ident,
+    pub ty: Type,
+    pub span: Span,
 }
 
 /// A declaration of an output stream
 #[derive(Debug)]
 pub struct Output {
-    name: Ident,
-    ty: Type,
-    expression: Expression,
-    span: Span,
+    pub name: Ident,
+    pub ty: Type,
+    pub expression: Expression,
+    pub span: Span,
 }
 
 /// A declaration of a trigger
 #[derive(Debug)]
 pub struct Trigger {
-    name: Option<Ident>,
-    expression: Expression,
-    message: Option<Symbol>,
-    span: Span,
+    pub name: Option<Ident>,
+    pub expression: Expression,
+    pub message: Option<Symbol>,
+    pub span: Span,
 }
 
 #[derive(Debug)]
@@ -197,6 +196,8 @@ pub enum BinOp {
     Div,
     /// The `%` operator (modulus)
     Rem,
+    /// The `**` operator (power)
+    Pow,
     /// The `&&` operator (logical and)
     And,
     /// The `||` operator (logical or)

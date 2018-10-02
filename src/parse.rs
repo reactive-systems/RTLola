@@ -28,6 +28,10 @@ lazy_static! {
     };
 }
 
+/**
+ * Transforms a textual representation of a Lola specification into
+ * an AST representation.
+ */
 fn parse(content: &str) -> Result<LolaSpec, pest::error::Error<Rule>> {
     let pairs = LolaParser::parse(Rule::Spec, content)?;
     let mut spec = LolaSpec::new();
@@ -40,7 +44,16 @@ fn parse(content: &str) -> Result<LolaSpec, pest::error::Error<Rule>> {
                 let constant = parse_constant(&mut spec, pair);
                 spec.constants.push(constant);
             }
-            _ => unimplemented!(),
+            Rule::InputStream => {
+                let input = parse_inputs(&mut spec, pair);
+                spec.inputs.extend(input);
+            }
+            Rule::OutputStream => {
+                let output = parse_output(&mut spec, pair);
+                spec.outputs.push(output);
+            }
+            Rule::Trigger => unimplemented!(),
+            _ => unreachable!(),
         }
     }
     Ok(spec)
@@ -58,13 +71,83 @@ fn parse_constant(spec: &mut LolaSpec, pair: Pair<Rule>) -> Constant {
     assert_eq!(pair.as_rule(), Rule::ConstantStream);
     let span = pair.as_span().into();
     let mut pairs = pair.into_inner();
-    let ident = parse_ident(spec, pairs.next().expect("constants have exactly 3 pairs"));
-    let ty = parse_type(spec, pairs.next().expect("constants have exactly 3 pairs"));
-    let lit = parse_literal(spec, pairs.next().expect("constants have exactly 3 pairs"));
+    let name = parse_ident(
+        spec,
+        pairs.next().expect("mismatch between grammar and AST"),
+    );
+    let ty = parse_type(
+        spec,
+        pairs.next().expect("mismatch between grammar and AST"),
+    );
+    let literal = parse_literal(
+        spec,
+        pairs.next().expect("mismatch between grammar and AST"),
+    );
     Constant {
-        name: ident,
+        name,
         ty,
-        literal: lit,
+        literal,
+        span,
+    }
+}
+
+/**
+ * Transforms a `Rule::InputStrean` into `Input` AST node.
+ * Panics if input is not `Rule::InputStrean`.
+ * The input rule consists of non-empty sequences of following tokens:
+ * - Rule::Ident
+ * - (Rule::ParamList)?
+ * - Rule::Type
+ */
+fn parse_inputs(spec: &mut LolaSpec, pair: Pair<Rule>) -> Vec<Input> {
+    assert_eq!(pair.as_rule(), Rule::InputStream);
+    let mut inputs = Vec::new();
+    let mut pairs = pair.into_inner();
+    while let Some(pair) = pairs.next() {
+        let start = pair.as_span().start();
+        let name = parse_ident(spec, pair);
+
+        let pair = pairs.next().expect("mismatch between grammar and AST");
+        let end = pair.as_span().end();
+        let ty = parse_type(spec, pair);
+        inputs.push(Input {
+            name,
+            ty,
+            span: Span { start, end },
+        })
+    }
+
+    assert!(!inputs.is_empty());
+    inputs
+}
+
+/**
+ * Transforms a `Rule::OutputStrean` into `Output` AST node.
+ * Panics if input is not `Rule::OutputStrean`.
+ * The output rule consists of the following tokens:
+ * - Rule::Ident
+ * - Rule::Type
+ * - Rule::Expr
+ */
+fn parse_output(spec: &mut LolaSpec, pair: Pair<Rule>) -> Output {
+    assert_eq!(pair.as_rule(), Rule::OutputStream);
+    let span = pair.as_span().into();
+    let mut pairs = pair.into_inner();
+    let name = parse_ident(
+        spec,
+        pairs.next().expect("mismatch between grammar and AST"),
+    );
+    let ty = parse_type(
+        spec,
+        pairs.next().expect("mismatch between grammar and AST"),
+    );
+    let pair = pairs.next().expect("mismatch between grammar and AST");
+    let expr_span = pair.as_span();
+    let expression = build_expression_ast(spec, pair.into_inner(), expr_span.into());
+    Output {
+        name,
+        ty,
+        expression,
         span,
     }
 }
@@ -143,14 +226,30 @@ fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<Rule>, span: Span) -> 
                 let span = pair.as_span();
                 Expression::new(ExpressionKind::Ident(parse_ident(spec, pair)), span.into())
             }
+            Rule::DefaultExpr => unimplemented!(),
+            Rule::LookupExpr => unimplemented!(),
+            Rule::FunctionExpr => unimplemented!(),
+            Rule::UnaryExpr => unimplemented!(),
+            Rule::TernaryExpr => unimplemented!(),
+            Rule::Tuple => unimplemented!(),
             _ => unreachable!(),
         },
-        |lhs: Expression, op: Pair<Rule>, rhs: Expression| match op.as_rule() {
-            Rule::Add => Expression::new(
-                ExpressionKind::Binary(BinOp::Add, Box::new(lhs), Box::new(rhs)),
+        |lhs: Expression, op: Pair<Rule>, rhs: Expression| {
+            let op = match op.as_rule() {
+                Rule::Add => BinOp::Add,
+                Rule::Subtract => BinOp::Sub,
+                Rule::Multiply => BinOp::Mul,
+                Rule::Divide => BinOp::Div,
+                Rule::Mod => BinOp::Rem,
+                Rule::Power => BinOp::Pow,
+                Rule::And => BinOp::And,
+                Rule::Or => BinOp::Or,
+                _ => unreachable!(),
+            };
+            Expression::new(
+                ExpressionKind::Binary(op, Box::new(lhs), Box::new(rhs)),
                 span,
-            ),
-            _ => unreachable!(),
+            )
         },
     )
 }
@@ -294,6 +393,18 @@ mod tests {
     }
 
     #[test]
+    fn parse_input_ast() {
+        let pair = LolaParser::parse(Rule::InputStream, "input a: Int, b: Int, c: Bool")
+            .unwrap_or_else(|e| panic!("{}", e))
+            .next()
+            .unwrap();
+        let mut spec = LolaSpec::new();
+        let inputs = super::parse_inputs(&mut spec, pair);
+        println!("{:?}", inputs);
+        assert_eq!(inputs.len(), 3);
+    }
+
+    #[test]
     fn parse_output() {
         parses_to! {
             parser: LolaParser,
@@ -315,6 +426,18 @@ mod tests {
                 ]),
             ]
         };
+    }
+
+    #[test]
+    fn parse_output_ast() {
+        let pair = LolaParser::parse(Rule::OutputStream, "output out: Int := in + 1")
+            .unwrap_or_else(|e| panic!("{}", e))
+            .next()
+            .unwrap();
+        let mut spec = LolaSpec::new();
+        let ast = super::parse_output(&mut spec, pair);
+        let formatted = format!("{:?}", ast);
+        assert_eq!(formatted, "Output { name: Ident { name: Symbol(0), span: Span { start: 7, end: 10 } }, ty: Type { kind: Simple(Symbol(1)), span: Span { start: 12, end: 15 } }, expression: Expression { kind: Binary(Add, Expression { kind: Ident(Ident { name: Symbol(2), span: Span { start: 19, end: 21 } }), span: Span { start: 19, end: 21 } }, Expression { kind: Lit(Literal { kind: Int(1), span: Span { start: 24, end: 25 } }), span: Span { start: 24, end: 25 } }), span: Span { start: 19, end: 25 } }, span: Span { start: 0, end: 25 } }")
     }
 
     #[test]
