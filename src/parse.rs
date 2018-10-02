@@ -21,6 +21,8 @@ lazy_static! {
         PrecClimber::new(vec![
             Operator::new(Or, Left),
             Operator::new(And, Left),
+            Operator::new(Equal, Left) | Operator::new(NotEqual, Left),
+            Operator::new(LessThan, Left) | Operator::new(LessThanOrEqual, Left) | Operator::new(MoreThan, Left) | Operator::new(MoreThanOrEqual, Left),
             Operator::new(Add, Left) | Operator::new(Subtract, Left),
             Operator::new(Multiply, Left) | Operator::new(Divide, Left) | Operator::new(Mod, Left),
             Operator::new(Power, Right),
@@ -232,6 +234,10 @@ fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<Rule>, span: Span) -> 
             Rule::UnaryExpr => unimplemented!(),
             Rule::TernaryExpr => unimplemented!(),
             Rule::Tuple => unimplemented!(),
+            Rule::Expr => {
+                let span = pair.as_span();
+                build_expression_ast(spec, pair.into_inner(), span.into())
+            }
             _ => unreachable!(),
         },
         |lhs: Expression, op: Pair<Rule>, rhs: Expression| {
@@ -244,6 +250,12 @@ fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<Rule>, span: Span) -> 
                 Rule::Power => BinOp::Pow,
                 Rule::And => BinOp::And,
                 Rule::Or => BinOp::Or,
+                Rule::LessThan => BinOp::Lt,
+                Rule::LessThanOrEqual => BinOp::Le,
+                Rule::MoreThan => BinOp::Gt,
+                Rule::MoreThanOrEqual => BinOp::Ge,
+                Rule::Equal => BinOp::Eq,
+                Rule::NotEqual => BinOp::Ne,
                 _ => unreachable!(),
             };
             Expression::new(
@@ -451,6 +463,19 @@ mod tests {
         let ast = build_expression_ast(&mut spec, expr.into_inner(), span.into());
         let formatted = format!("{:?}", ast);
         assert_eq!(formatted, "Expression { kind: Binary(Add, Expression { kind: Ident(Ident { name: Symbol(0), span: Span { start: 0, end: 2 } }), span: Span { start: 0, end: 2 } }, Expression { kind: Lit(Literal { kind: Int(1), span: Span { start: 5, end: 6 } }), span: Span { start: 5, end: 6 } }), span: Span { start: 0, end: 6 } }")
+    }
+
+    #[test]
+    fn parse_expression_precedence() {
+        let expr = LolaParser::parse(Rule::Expr, "(a || b & c)")
+            .unwrap_or_else(|e| panic!("{}", e))
+            .next()
+            .unwrap();
+        let mut spec = LolaSpec::new();
+        let span = expr.as_span();
+        let ast = build_expression_ast(&mut spec, expr.into_inner(), span.into());
+        let formatted = format!("{:?}", ast);
+        assert_eq!(formatted, "Expression { kind: Binary(Or, Expression { kind: Ident(Ident { name: Symbol(0), span: Span { start: 1, end: 2 } }), span: Span { start: 1, end: 2 } }, Expression { kind: Binary(And, Expression { kind: Ident(Ident { name: Symbol(1), span: Span { start: 6, end: 7 } }), span: Span { start: 6, end: 7 } }, Expression { kind: Ident(Ident { name: Symbol(2), span: Span { start: 10, end: 11 } }), span: Span { start: 10, end: 11 } }), span: Span { start: 1, end: 11 } }), span: Span { start: 1, end: 11 } }")
     }
 
     #[test]

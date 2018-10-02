@@ -44,15 +44,15 @@ Trigger = { "trigger"~ Ident?~ Expr~ StringLiteral?}
 //      < CompExpr < AddExpr < MultiExpr < ExpoExpr < UnaryExpr < DefaultExpr 
 //      < FunctionExpr < LookupExpr < CompoundExpr
 
-Operation = _{ Add | Subtract | Power | Multiply | Divide | Mod | And | Or }
+Operation = _{ Add | Subtract | Power | Multiply | Divide | Mod | And | Or | CompOp }
     Add      = { "+"  }
     Subtract = { "-"  }
     Multiply = { "*"  }
     Divide   = { "/"  }
     Mod      = { "%"  }
     Power    = { "**" }
-    And      = { "∧" | "&" | "and" }
-    Or       = { "∨" | "|" | "or"  }
+    And      = { "∧" | "&"{1,2} | "and" }
+    Or       = { "∨" | "|"{1,2} | "or"  }
 
 Expr = { Term ~ (Operation ~ Term)* }
 // TODO Do we need Term to exist for the precedence climber?
@@ -95,7 +95,7 @@ MoreThan = {">"}
 MoreThanOrEqual = {">=" | "≥"}
 NotEqual = {"!=" | "≠"}
 Equal = {"="}
-CompOp = {LessThanOrEqual | MoreThanOrEqual | LessThan | MoreThan | NotEqual | Equal}
+CompOp = _{LessThanOrEqual | MoreThanOrEqual | LessThan | MoreThan | NotEqual | Equal}
 
 BinaryFunctionSymbol = {
       "nroot"
