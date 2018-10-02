@@ -155,6 +155,47 @@ fn parse_output(spec: &mut LolaSpec, pair: Pair<Rule>) -> Output {
 }
 
 /**
+ * Transforms a `Rule::Trigger` into `Trigger` AST node.
+ * Panics if input is not `Rule::Trigger`.
+ * The output rule consists of the following tokens:
+ * - (Rule::Ident)?
+ * - Rule::Expr
+ * - (Rule::StringLiteral)?
+ */
+fn parse_trigger(spec: &mut LolaSpec, pair: Pair<Rule>) -> Trigger {
+    assert_eq!(pair.as_rule(), Rule::Trigger);
+    let span = pair.as_span().into();
+    let mut pairs = pair.into_inner();
+
+    let mut name = None;
+    let mut message = None;
+
+    let mut pair = pairs.next().expect("mistmatch between grammar and AST");
+    // first token is either expression or identifier
+    match pair.as_rule() {
+        Rule::Ident => {
+            name = Some(parse_ident(spec, pair));
+            pair = pairs.next().expect("mistmatch between grammar and AST");
+        }
+        _ => (),
+    }
+    let expr_span = pair.as_span();
+    let expression = build_expression_ast(spec, pair.into_inner(), expr_span.into());
+
+    if let Some(pair) = pairs.next() {
+        assert_eq!(pair.as_rule(), Rule::String);
+        message = Some(spec.symbols.get_symbol_for(pair.as_str()));
+    }
+
+    Trigger {
+        name,
+        expression,
+        message,
+        span,
+    }
+}
+
+/**
  * Transforms a `Rule::Ident` into `Ident` AST node.
  * Panics if input is not `Rule::Ident`.
  */
@@ -351,8 +392,10 @@ mod tests {
 
     #[test]
     fn parse_simple() {
-        let pairs = LolaParser::parse(Rule::Spec, "input in: Int\noutput out: Int := in\n")
-            .unwrap_or_else(|e| panic!("{}", e));
+        let _ = LolaParser::parse(
+            Rule::Spec,
+            "input in: Int\noutput out: Int := in\ntrigger in != out",
+        ).unwrap_or_else(|e| panic!("{}", e));
     }
 
     #[test]
@@ -450,6 +493,37 @@ mod tests {
         let ast = super::parse_output(&mut spec, pair);
         let formatted = format!("{:?}", ast);
         assert_eq!(formatted, "Output { name: Ident { name: Symbol(0), span: Span { start: 7, end: 10 } }, ty: Type { kind: Simple(Symbol(1)), span: Span { start: 12, end: 15 } }, expression: Expression { kind: Binary(Add, Expression { kind: Ident(Ident { name: Symbol(2), span: Span { start: 19, end: 21 } }), span: Span { start: 19, end: 21 } }, Expression { kind: Lit(Literal { kind: Int(1), span: Span { start: 24, end: 25 } }), span: Span { start: 24, end: 25 } }), span: Span { start: 19, end: 25 } }, span: Span { start: 0, end: 25 } }")
+    }
+
+    #[test]
+    fn parse_trigger() {
+        parses_to! {
+            parser: LolaParser,
+            input:  "trigger in != out \"some message\"",
+            rule:   Rule::Trigger,
+            tokens: [
+                Trigger(0, 32, [
+                    Expr(8, 17, [
+                        Ident(8, 10, []),
+                        NotEqual(11, 13, []),
+                        Ident(14, 17, []),
+                    ]),
+                    String(19, 31, []),
+                ]),
+            ]
+        };
+    }
+
+    #[test]
+    fn parse_trigger_ast() {
+        let pair = LolaParser::parse(Rule::Trigger, "trigger in != out \"some message\"")
+            .unwrap_or_else(|e| panic!("{}", e))
+            .next()
+            .unwrap();
+        let mut spec = LolaSpec::new();
+        let ast = super::parse_trigger(&mut spec, pair);
+        let formatted = format!("{:?}", ast);
+        assert_eq!(formatted, "Trigger { name: None, expression: Expression { kind: Binary(Ne, Expression { kind: Ident(Ident { name: Symbol(0), span: Span { start: 8, end: 10 } }), span: Span { start: 8, end: 10 } }, Expression { kind: Ident(Ident { name: Symbol(1), span: Span { start: 14, end: 17 } }), span: Span { start: 14, end: 17 } }), span: Span { start: 8, end: 17 } }, message: Some(Symbol(2)), span: Span { start: 0, end: 32 } }")
     }
 
     #[test]

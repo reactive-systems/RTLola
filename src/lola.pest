@@ -31,7 +31,7 @@ InputStream = { "input" ~Ident ~ ParamList? ~ ":" ~ Type ~(","~ Ident~ ParamList
 
 OutputStream = { "output"~ Ident ~ ParamList?~ ":" ~ Type ~ TemplateSpec? ~":="~ Expr}
 
-Trigger = { "trigger"~ Ident?~ Expr~ StringLiteral?}
+Trigger = { "trigger"~ (Ident ~ ":=")? ~ Expr~ StringLiteral?}
 
 //////////////////////////////////////////////////
 ////////////////// Expressions ///////////////////
