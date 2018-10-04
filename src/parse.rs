@@ -9,7 +9,7 @@ use std::collections::HashMap;
 
 #[derive(Parser)]
 #[grammar = "lola.pest"]
-struct LolaParser;
+pub(crate) struct LolaParser;
 
 lazy_static! {
     // precedence taken from C/C++: https://en.wikipedia.org/wiki/Operators_in_C_and_C++

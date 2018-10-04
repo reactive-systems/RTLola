@@ -6,7 +6,9 @@ extern crate pest;
 extern crate pest_derive;
 #[macro_use]
 extern crate lazy_static;
+extern crate clap;
 
+pub mod app;
 mod ast;
 mod parse;
 
