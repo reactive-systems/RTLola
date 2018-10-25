@@ -1,13 +1,26 @@
-image: "rust:latest"
+stages:
+  - build
 
 # Install additional packages, like a C compiler and cmake
 #before_script:
 #- apt-get update -yqq
 #- apt-get install -yqq --no-install-recommends build-essential cmake
 
-# Use cargo to test the project
-test:cargo:
+# Use cargo to test the project on stable toolchain
+rust-latest:
+  stage: build
+  image: rust:latest
   script:
-  - rustc --version && cargo --version      # Print version info for debugging
-  - cargo test --all --verbose
+    - rustc --version && cargo --version      # Print version info for debugging
+    - cargo build --all --verbose
+    - cargo test --all --verbose
 
+# Use cargo to test the project on nightly toolchain
+rust-nightly:
+  stage: build
+  image: rustlang/rust:nightly
+  script:
+    - rustc --version && cargo --version      # Print version info for debugging
+    - cargo build --all --verbose
+    - cargo test --all --verbose
+  allow_failure: true
