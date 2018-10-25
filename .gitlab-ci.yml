@@ -1,5 +1,6 @@
 stages:
   - build
+  - test
 
 # Install additional packages, like a C compiler and cmake
 #before_script:
@@ -7,20 +8,27 @@ stages:
 #- apt-get install -yqq --no-install-recommends build-essential cmake
 
 # Use cargo to test the project on stable toolchain
-rust-latest:
-  stage: build
+cargo:test:
+  stage: test
   image: rust:latest
   script:
     - rustc --version && cargo --version      # Print version info for debugging
-    - cargo build --all --verbose
     - cargo test --all --verbose
 
+cargo:check-format:
+  stage: test
+  image: rust:latest
+  before_script:
+    - rustup component add rustfmt-preview
+  script:
+    - rustc --version && cargo --version      # Print version info for debugging
+    - cargo fmt --all --verbose -- --check
+
 # Use cargo to test the project on nightly toolchain
-rust-nightly:
-  stage: build
+cargo:test-nightly:
+  stage: test
   image: rustlang/rust:nightly
   script:
     - rustc --version && cargo --version      # Print version info for debugging
-    - cargo build --all --verbose
     - cargo test --all --verbose
   allow_failure: true
