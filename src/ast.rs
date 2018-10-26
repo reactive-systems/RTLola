@@ -118,6 +118,14 @@ pub struct Parenthesis {
     pub span: Span,
 }
 
+impl Parenthesis{
+    pub fn new(span: Span) -> Parenthesis {
+        Parenthesis{
+            span,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum TypeKind {
     /// A tuple type, e.g., (Int, Float)

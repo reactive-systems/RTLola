@@ -275,6 +275,37 @@ fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<Rule>, span: Span) -> 
             Rule::UnaryExpr => unimplemented!(),
             Rule::TernaryExpr => unimplemented!(),
             Rule::Tuple => unimplemented!(),
+            Rule::ParenthesizedExpression => {
+                let span = pair.as_span();
+                let mut inner = pair
+                    .into_inner();
+                let opp = inner.next().expect("Rule::ParenthesizedExpression has a token for the (potentialy missing) opening parenthesis");
+                let opening_parenthesis  = if let Rule::OpeningParenthesis = opp.as_rule() {
+                   Some(Box::new(Parenthesis::new(opp.as_span().into())))
+                }
+                else{
+                    None
+                };
+
+                let inner_expression = inner.next().expect("Rule::ParenthesizedExpression has a token for the contained expression");
+                
+                let closing = inner.next().expect("Rule::ParenthesizedExpression has a token for the (potentialy missing) closing parenthesis");
+                let closing_parenthesis  = if let Rule::ClosingParenthesis = closing.as_rule() {
+                   Some(Box::new(Parenthesis::new(closing.as_span().into())))
+                }
+                else{
+                    None
+                };
+                
+                let inner_span = inner_expression.as_span().into();
+                Expression::new(
+                    ExpressionKind::ParenthesizedExpression(
+                        opening_parenthesis, 
+                        Box::new(build_expression_ast(spec, inner_expression.into_inner(), inner_span)),
+                        closing_parenthesis
+                    ),
+                    span.into())
+            },
             Rule::Expr => {
                 let span = pair.as_span();
                 build_expression_ast(spec, pair.into_inner(), span.into())
@@ -431,7 +462,7 @@ mod tests {
         let mut spec = LolaSpec::new();
         let ast = super::parse_constant(&mut spec, pair);
         let formatted = format!("{:?}", ast);
-        assert_eq!(formatted, "Constant { name: Ident { name: Symbol(0), span: Span { start: 9, end: 13 } }, ty: Type { kind: Simple(Symbol(1)), span: Span { start: 16, end: 19 } }, literal: Literal { kind: Int(5), span: Span { start: 23, end: 24 } }, span: Span { start: 0, end: 24 } }")
+        assert_eq!(formatted, "Constant { name: Some(Ident { name: Symbol(0), span: Span { start: 9, end: 13 } }), ty: Some(Type { kind: Simple(Symbol(1)), span: Span { start: 16, end: 19 } }), literal: Some(Literal { kind: Int(5), span: Span { start: 23, end: 24 } }), span: Span { start: 0, end: 24 } }")
     }
 
     #[test]
@@ -496,7 +527,7 @@ mod tests {
         let mut spec = LolaSpec::new();
         let ast = super::parse_output(&mut spec, pair);
         let formatted = format!("{:?}", ast);
-        assert_eq!(formatted, "Output { name: Ident { name: Symbol(0), span: Span { start: 7, end: 10 } }, ty: Type { kind: Simple(Symbol(1)), span: Span { start: 12, end: 15 } }, expression: Expression { kind: Binary(Add, Expression { kind: Ident(Ident { name: Symbol(2), span: Span { start: 19, end: 21 } }), span: Span { start: 19, end: 21 } }, Expression { kind: Lit(Literal { kind: Int(1), span: Span { start: 24, end: 25 } }), span: Span { start: 24, end: 25 } }), span: Span { start: 19, end: 25 } }, span: Span { start: 0, end: 25 } }")
+        assert_eq!(formatted, "Output { name: Some(Ident { name: Symbol(0), span: Span { start: 7, end: 10 } }), ty: Some(Type { kind: Simple(Symbol(1)), span: Span { start: 12, end: 15 } }), expression: Expression { kind: Binary(Add, Expression { kind: Ident(Ident { name: Symbol(2), span: Span { start: 19, end: 21 } }), span: Span { start: 19, end: 21 } }, Expression { kind: Lit(Literal { kind: Int(1), span: Span { start: 24, end: 25 } }), span: Span { start: 24, end: 25 } }), span: Span { start: 19, end: 25 } }, span: Span { start: 0, end: 25 } }")
     }
 
     #[test]
@@ -553,7 +584,20 @@ mod tests {
         let span = expr.as_span();
         let ast = build_expression_ast(&mut spec, expr.into_inner(), span.into());
         let formatted = format!("{:?}", ast);
-        assert_eq!(formatted, "Expression { kind: Binary(Or, Expression { kind: Ident(Ident { name: Symbol(0), span: Span { start: 1, end: 2 } }), span: Span { start: 1, end: 2 } }, Expression { kind: Binary(And, Expression { kind: Ident(Ident { name: Symbol(1), span: Span { start: 6, end: 7 } }), span: Span { start: 6, end: 7 } }, Expression { kind: Ident(Ident { name: Symbol(2), span: Span { start: 10, end: 11 } }), span: Span { start: 10, end: 11 } }), span: Span { start: 1, end: 11 } }), span: Span { start: 1, end: 11 } }")
+        assert_eq!(formatted, "Expression { kind: ParenthesizedExpression(Some(Parenthesis { span: Span { start: 0, end: 1 } }), Expression { kind: Binary(Or, Expression { kind: Ident(Ident { name: Symbol(0), span: Span { start: 1, end: 2 } }), span: Span { start: 1, end: 2 } }, Expression { kind: Binary(And, Expression { kind: Ident(Ident { name: Symbol(1), span: Span { start: 6, end: 7 } }), span: Span { start: 6, end: 7 } }, Expression { kind: Ident(Ident { name: Symbol(2), span: Span { start: 10, end: 11 } }), span: Span { start: 10, end: 11 } }), span: Span { start: 1, end: 11 } }), span: Span { start: 1, end: 11 } }, Some(Parenthesis { span: Span { start: 11, end: 12 } })), span: Span { start: 0, end: 12 } }")
+    }
+
+    #[test]
+    fn parse_missing_closing_parenthesis() {
+        let expr = LolaParser::parse(Rule::Expr, "(a || b & c")
+            .unwrap_or_else(|e| panic!("{}", e))
+            .next()
+            .unwrap();
+        let mut spec = LolaSpec::new();
+        let span = expr.as_span();
+        let ast = build_expression_ast(&mut spec, expr.into_inner(), span.into());
+        let formatted = format!("{:?}", ast);
+        assert_eq!(formatted, "Expression { kind: ParenthesizedExpression(Some(Parenthesis { span: Span { start: 0, end: 1 } }), Expression { kind: Binary(Or, Expression { kind: Ident(Ident { name: Symbol(0), span: Span { start: 1, end: 2 } }), span: Span { start: 1, end: 2 } }, Expression { kind: Binary(And, Expression { kind: Ident(Ident { name: Symbol(1), span: Span { start: 6, end: 7 } }), span: Span { start: 6, end: 7 } }, Expression { kind: Ident(Ident { name: Symbol(2), span: Span { start: 10, end: 11 } }), span: Span { start: 10, end: 11 } }), span: Span { start: 1, end: 11 } }), span: Span { start: 1, end: 11 } }, None), span: Span { start: 0, end: 11 } }")
     }
 
     #[test]
