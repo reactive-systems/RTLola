@@ -86,9 +86,9 @@ fn parse_constant(spec: &mut LolaSpec, pair: Pair<Rule>) -> Constant {
         pairs.next().expect("mismatch between grammar and AST"),
     );
     Constant {
-        name,
-        ty,
-        literal,
+        name:Some(name),
+        ty:Some(ty),
+        literal:Some(literal),
         span,
     }
 }
@@ -113,8 +113,8 @@ fn parse_inputs(spec: &mut LolaSpec, pair: Pair<Rule>) -> Vec<Input> {
         let end = pair.as_span().end();
         let ty = parse_type(spec, pair);
         inputs.push(Input {
-            name,
-            ty,
+            name:Some(name),
+            ty:Some(ty),
             span: Span { start, end },
         })
     }
@@ -147,8 +147,8 @@ fn parse_output(spec: &mut LolaSpec, pair: Pair<Rule>) -> Output {
     let expr_span = pair.as_span();
     let expression = build_expression_ast(spec, pair.into_inner(), expr_span.into());
     Output {
-        name,
-        ty,
+        name:Some(name),
+        ty:Some(ty),
         expression,
         span,
     }
@@ -335,10 +335,14 @@ impl Ident {
 
 /// A span marks a range in a file.
 /// Start and end positions are *byte* offsets.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Span {
     start: usize,
     end: usize,
+    // TODO Do we need this here or do we want to keep a mapping from byte positions to lines in the LSP part. 
+    // line: usize,
+    // /// The LSP uses UTF-16 code units (2 bytes) as their unit for offsets.
+    // lineOffsetLSP: usize,
 }
 
 impl<'a> From<pest::Span<'a>> for Span {

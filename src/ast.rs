@@ -51,25 +51,25 @@ impl<'a> From<&'a str> for LanguageSpec {
 /// A declaration of a constant (stream)
 #[derive(Debug)]
 pub struct Constant {
-    pub name: Ident,
-    pub ty: Type,
-    pub literal: Literal,
+    pub name: Option<Ident>,
+    pub ty: Option<Type>,
+    pub literal: Option<Literal>,
     pub span: Span,
 }
 
 /// A declaration of an input stream
 #[derive(Debug)]
 pub struct Input {
-    pub name: Ident,
-    pub ty: Type,
+    pub name: Option<Ident>,
+    pub ty: Option<Type>,
     pub span: Span,
 }
 
 /// A declaration of an output stream
 #[derive(Debug)]
 pub struct Output {
-    pub name: Ident,
-    pub ty: Type,
+    pub name: Option<Ident>,
+    pub ty: Option<Type>,
     pub expression: Expression,
     pub span: Span,
 }
@@ -80,6 +80,14 @@ pub struct Trigger {
     pub name: Option<Ident>,
     pub expression: Expression,
     pub message: Option<Symbol>,
+    pub span: Span,
+}
+
+
+#[derive(Debug)]
+pub struct TypeDeclaration {
+    pub name: Option<Ident>,
+    pub kind: TypeKind,
     pub span: Span,
 }
 
@@ -106,16 +114,23 @@ impl Type {
 }
 
 #[derive(Debug)]
+pub struct Parenthesis {
+    pub span: Span,
+}
+
+#[derive(Debug)]
 pub enum TypeKind {
     /// A tuple type, e.g., (Int, Float)
     Tuple(Vec<Box<Type>>),
     /// A simple type, e.g., Int
     Simple(Symbol),
+    /// Malformed type, e.g, `mis$ing`
+    Malformed(String),
 }
 
 /// An expression
 ///
-/// inspired from https://doc.rust-lang.org/nightly/nightly-rustc/src/syntax/ast.rs.html
+/// inspired by https://doc.rust-lang.org/nightly/nightly-rustc/src/syntax/ast.rs.html
 #[derive(Debug)]
 pub struct Expression {
     kind: ExpressionKind,
@@ -148,6 +163,10 @@ pub enum ExpressionKind {
     Call(Literal, Vec<Box<Expression>>),
     /// An if-then-else expression
     Ite(Box<Expression>, Box<Expression>, Box<Expression>),
+    
+    ParenthesizedExpression(Option<Box<Parenthesis> >,Box<Expression>,Option<Box<Parenthesis>>),
+    /// An expression was expected, e.g., after an operator like `*`
+    MissingExpression(),
 }
 
 #[derive(Debug)]

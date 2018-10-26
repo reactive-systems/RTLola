@@ -4,7 +4,7 @@
 // Take a look at https://pest-parser.github.io/book/grammars/syntax.html
 // TODO we can probably mark some rules as atomic or hidden
 
-Spec = { SOI ~LanguageSpec? ~ Declaration* ~ EOI}
+Spec = { SOI ~ LanguageSpec? ~ Declaration* }
 LanguageSpec ={ "//!" ~("ClassicLola" | "Lola2.0" | "RTLola") }
 Declaration = _{IncludeStatement | TypeDecl | ConstantStream | InputStream | OutputStream | Trigger}
 
@@ -25,11 +25,11 @@ IncludeStatement = { "include"~ StringLiteral}
 
 TypeDecl = { "Type"~ Ident ~"{" ~Type~ Ident~ ("," ~Type~ Ident)+ ~ "}"}
 
-ConstantStream = { "constant"~ Ident ~ ":" ~ Type ~":=" ~Literal}
+ConstantStream = { "constant"~ Ident ~ (":" ~ Type)? ~":=" ~Literal}
 
-InputStream = { "input" ~Ident ~ ParamList? ~ ":" ~ Type ~(","~ Ident~ ParamList? ~ ":" ~ Type)*}
+InputStream = { "input" ~Ident ~ ParamList? ~ (":" ~ Type)? ~(","~ Ident~ ParamList? ~ ":" ~ Type)*}
 
-OutputStream = { "output"~ Ident ~ ParamList?~ ":" ~ Type ~ TemplateSpec? ~":="~ Expr}
+OutputStream = { "output"~ Ident ~ ParamList?~ (":" ~ Type)? ~ TemplateSpec? ~":="~ Expr}
 
 Trigger = { "trigger"~ (Ident ~ ":=")? ~ Expr~ StringLiteral?}
 
@@ -56,8 +56,14 @@ Operation = _{ Add | Subtract | Power | Multiply | Divide | Mod | And | Or | Com
 
 Expr = { Term ~ (Operation ~ Term)* }
 // TODO Do we need Term to exist for the precedence climber?
-Term = _{ Literal | "(" ~ Expr ~ ")" | CompoundExpr | DefaultExpr| LookupExpr | FunctionExpr | UnaryExpr | TernaryExpr | Ident | Tuple}
+Term = _{ Literal | ParenthesizedExpression | CompoundExpr | DefaultExpr| LookupExpr | FunctionExpr | UnaryExpr | TernaryExpr | MissingExpression | Ident | Tuple}
 
+ParenthesizedExpression = {OpeningParenthesis ~ Expr ~ ClosingParenthesis | OpeningParenthesis ~ Expr ~ MissingClosingParenthesis}
+OpeningParenthesis = {"("}
+ClosingParenthesis = {")"}
+
+MissingClosingParenthesis = {WHITESPACE* ~ &("then" | "else" |"output" | "input" | "trigger" | "constant" | "Type" | "include" | EOI)}
+MissingExpression = {WHITESPACE* ~ &("then" | "else" |")"|"output" | "input" | "trigger" | "constant" | "Type" | "include" | EOI)}
 
 CompoundExpr = {Ident~ "."~ Ident}
 
