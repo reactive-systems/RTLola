@@ -54,6 +54,9 @@ Operation = _{ Add | Subtract | Power | Multiply | Divide | Mod | And | Or | Com
     And      = { "∧" | "&"{1,2} | "and" }
     Or       = { "∨" | "|"{1,2} | "or"  }
 
+UnaryOperation = _{ Add | Subtract | Neg }
+    Neg      = { "!" | "¬" }
+
 Expr = { Term ~ (Operation ~ Term)* }
 // TODO Do we need Term to exist for the precedence climber?
 Term = _{ Literal | ParenthesizedExpression | CompoundExpr | DefaultExpr| LookupExpr | FunctionExpr | UnaryExpr | TernaryExpr | MissingExpression | Ident | Tuple}
@@ -68,7 +71,7 @@ MissingExpression = {WHITESPACE* ~ &("then" | "else" |")"|"output" | "input" | "
 CompoundExpr = {Ident~ "."~ Ident}
 
 LookupExpr = {
-      StreamInstance ~"["~ EffectiveConstant~ "]" 
+      StreamInstance ~"["~ Expr~ "]" 
     | StreamInstance ~"["~ Duration ~"," ~WindowOp~ "]"
     | StreamInstance ~"["~ Duration~ "]"}
 
@@ -80,10 +83,7 @@ DefaultExpr = {
       LookupExpr~ "?"~ Term}
 
 UnaryExpr = {
-      "+"~ Term
-    | "-"~ Term
-    | "!"~ Term}
-
+      UnaryOperation~ Term}
 
 TernaryExpr = {
       "if"~ Expr~ "then"~ Expr~ "else"~ Expr}  
@@ -125,8 +125,9 @@ Sum = {"Σ" | "sum"}
 Count = {"#"|"count"}
 Product = {"Π" | "prod"}
 Integral = {"∫"  | "integral"}
+Average = { "avg" }
 
-WindowOp = _{ Sum | Product | "avg" | Count | Integral}
+WindowOp = _{ Sum | Product | Average | Count | Integral}
 
 FunctionSymbol = _{ UnaryFunctionSymbol | BinaryFunctionSymbol}
 
@@ -140,7 +141,7 @@ NumberLiteral = @{ ("+" | "-")?~ Digit+~ ("."~ Digit*)?~ ("e"~ ("+" | "-")?~ Dig
 StringLiteral = _{ "\""~ String~ "\""}
 String = @{("\\\""|!("\"") ~ ANY)*}
 
-TupleLiteral = { "(" ~(Literal ~(","~ Literal)*)?~ ")"}
+TupleLiteral = { "(" ~(Literal ~(","~ Literal)+)?~ ")"}
 BooleanLiteral = _{ True | False}
 True = @{"true"| "⊤"}
 False = @{"false"  | "⊥"}
@@ -154,9 +155,9 @@ Type = {"("~ (Type ~(","~Type)*)?~ ")" | Ident}
 ////////////////// Time Related //////////////////
 //////////////////////////////////////////////////
 
-Duration = { NumberLiteral~ UnitOfTime}
+Duration = { Expr~ UnitOfTime}
 
-UnitOfTime = { "ns" | "μs" | "ms" | "s" | "min" | "h" | "d" | "w"}
+UnitOfTime = { "ns" | "μs" | "ms" | "s" | "min" | "h" | "d" | "w" | "a" }
 
 Frequency = { Duration | NumberLiteral ~UnitOfFreq}
 
@@ -171,9 +172,7 @@ Ident = @{  (Letter | "_") ~ (Letter | Digit | "_")*}
 
 Parameter = { Ident} // Semantic Category
 
-EffectiveConstant = _{ Parameter | Literal}
-
-StreamInstance = { Ident ~("(" ~EffectiveConstant ~(","~ EffectiveConstant)* ~")")?}
+StreamInstance = { Ident ~("(" ~Expr ~(","~ Expr)* ~")")?}
 
 //////////////////////////////////////////////////
 //////////////////// Symbols /////////////////////

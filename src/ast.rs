@@ -92,6 +92,12 @@ pub struct TypeDeclaration {
 }
 
 #[derive(Debug)]
+pub struct StreamInstance {
+    pub stream_identifier: Ident,
+    pub arguments: Vec<Box<Expression>>,
+}
+
+#[derive(Debug)]
 pub struct Type {
     kind: TypeKind,
     span: Span,
@@ -141,8 +147,8 @@ pub enum TypeKind {
 /// inspired by https://doc.rust-lang.org/nightly/nightly-rustc/src/syntax/ast.rs.html
 #[derive(Debug)]
 pub struct Expression {
-    kind: ExpressionKind,
-    span: Span,
+    pub kind: ExpressionKind,
+    pub span: Span,
 }
 
 impl Expression {
@@ -158,9 +164,9 @@ pub enum ExpressionKind {
     /// An identifier, e.g., `foo`
     Ident(Ident),
     /// A default expression, e.g., ` a ? 0 `
-    Default(Box<Expression>, Box<Literal>),
+    Default(Box<Expression>, Box<Expression>),
     /// A stream lookup with offset
-    Lookup(Literal, Offset),
+    Lookup(StreamInstance, Offset, Option<WindowOperation>),
     /// A tuple (`(a, b, c ,d)`)
     Tup(Vec<Box<Expression>>),
     /// A binary operation (For example: `a + b`, `a * b`)
@@ -171,13 +177,24 @@ pub enum ExpressionKind {
     Call(Literal, Vec<Box<Expression>>),
     /// An if-then-else expression
     Ite(Box<Expression>, Box<Expression>, Box<Expression>),
-    
+    /// An expression enveloped in parentheses
     ParenthesizedExpression(Option<Box<Parenthesis> >,Box<Expression>,Option<Box<Parenthesis>>),
     /// An expression was expected, e.g., after an operator like `*`
     MissingExpression(),
+    /// A tuple expression
+    Tuple(Vec<Box<Expression>>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum WindowOperation {
+    Sum,
+    Product,
+    Average,
+    Count,
+    Integral,
+}
+
+#[derive(Debug, Clone)]
 pub struct Literal {
     kind: LitKind,
     span: Span,
@@ -197,9 +214,16 @@ impl Literal {
             span,
         }
     }
+
+    pub fn new_tuple(vals: &Vec<Literal>, span: Span) -> Literal {
+        Literal {
+            kind: LitKind::Tuple(Box::new(vals.to_vec())),
+            span,
+        }
+    }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum LitKind {
     /// A string literal (`"foo"`)
     Str(Symbol),
@@ -207,8 +231,10 @@ pub enum LitKind {
     Int(i128),
     /// A float literal (`1f64` or `1E10f64`)
     Float(Symbol),
-    /// A boolean literal
+    /// A boolean literal (`true`)
     Bool(bool),
+    // A tuple literal (`(1, 2f64, "34as", 99)`)
+    Tuple(Box<Vec<Literal>>),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -264,8 +290,26 @@ pub enum UnOp {
 }
 
 /// Offset used in the lookup expression
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug)]
 pub enum Offset {
-    /// A constant offset, e.g., `0`, `-4`, or `42`
-    Constant(i32),
+    /// A discrete offset, e.g., `0`, `-4`, or `42`
+    DiscreteOffset(Box<Expression>),
+    /// A real-time offset, e.g., `3ms`, `4min`, `2.3h`
+    RealTimeOffset(Box<Expression>, TimeUnit),
+
+}
+
+/// Supported time unit for real time expressions
+#[derive(Debug, Clone, Copy)]
+pub enum TimeUnit {
+    NanoSecond,
+    MicroSecond,
+    MilliSecond,
+    Second,
+    Minute,
+    Hour,
+    Day,
+    Week,
+    /// Note: A year is always, *always*, 365 days long.
+    Year,
 }

@@ -175,7 +175,7 @@ fn parse_trigger(spec: &mut LolaSpec, pair: Pair<Rule>) -> Trigger {
     match pair.as_rule() {
         Rule::Ident => {
             name = Some(parse_ident(spec, pair));
-            pair = pairs.next().expect("mistmatch between grammar and AST");
+            pair = pairs.next().expect("mismatch between grammar and AST");
         }
         _ => (),
     }
@@ -246,11 +246,35 @@ fn parse_literal(spec: &mut LolaSpec, pair: Pair<Rule>) -> Literal {
             inner.as_str().parse::<i128>().unwrap(),
             inner.as_span().into(),
         ),
-        Rule::TupleLiteral => unimplemented!(),
+        Rule::TupleLiteral => {
+            let span = inner.as_span();
+            let elements = inner.into_inner();
+            let literals: Vec<Literal> = elements
+                .map(|pair| parse_literal(spec, pair))
+                .collect();
+            return Literal::new_tuple(&literals, span.into());
+        },
         Rule::True => Literal::new_bool(true, inner.as_span().into()),
         Rule::False => Literal::new_bool(false, inner.as_span().into()),
         _ => unreachable!(),
     }
+}
+
+fn parse_stream_instance(spec: &mut LolaSpec, instance: Pair<Rule>) -> StreamInstance {
+    let mut args = parse_expression_vec(spec, instance);
+    if let ExpressionKind::Ident(name) = args.remove(0).kind {
+        StreamInstance{ stream_identifier: name, arguments: args }
+    } else {
+        panic!("Stream instances need a stream identifier.");
+    }
+}
+
+fn parse_expression_vec(spec: &mut LolaSpec, pair: Pair<Rule>) -> Vec<Box<Expression>> {
+    let span = pair.as_span().into();
+    pair.into_inner()
+        .map(|expr| build_expression_ast(spec, expr.into_inner(), span))
+        .map(|expr| Box::new(expr))
+        .collect()
 }
 
 /**
@@ -259,60 +283,135 @@ fn parse_literal(spec: &mut LolaSpec, pair: Pair<Rule>) -> Literal {
 fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<Rule>, span: Span) -> Expression {
     println!("{:#?}", pairs);
     PREC_CLIMBER.climb(
-        pairs,
-        |pair: Pair<Rule>| match pair.as_rule() {
-            Rule::Literal => {
-                let span = pair.as_span();
-                Expression::new(ExpressionKind::Lit(parse_literal(spec, pair)), span.into())
-            }
-            Rule::Ident => {
-                let span = pair.as_span();
-                Expression::new(ExpressionKind::Ident(parse_ident(spec, pair)), span.into())
-            }
-            Rule::DefaultExpr => unimplemented!(),
-            Rule::LookupExpr => unimplemented!(),
-            Rule::FunctionExpr => unimplemented!(),
-            Rule::UnaryExpr => unimplemented!(),
-            Rule::TernaryExpr => unimplemented!(),
-            Rule::Tuple => unimplemented!(),
-            Rule::ParenthesizedExpression => {
-                let span = pair.as_span();
-                let mut inner = pair
-                    .into_inner();
-                let opp = inner.next().expect("Rule::ParenthesizedExpression has a token for the (potentialy missing) opening parenthesis");
-                let opening_parenthesis  = if let Rule::OpeningParenthesis = opp.as_rule() {
-                   Some(Box::new(Parenthesis::new(opp.as_span().into())))
+        pairs, 
+        |pair: Pair<Rule>| {
+            let span = pair.as_span();
+            match pair.as_rule() { // Map function from `Pair` to AST data structure `Expression`
+                Rule::Literal => {
+                    Expression::new(ExpressionKind::Lit(parse_literal(spec, pair)), span.into())
                 }
-                else{
-                    None
-                };
+                Rule::Ident => {
+                    Expression::new(ExpressionKind::Ident(parse_ident(spec, pair)), span.into())
+                }
+                Rule::ParenthesizedExpression => {
+                    let mut inner = pair
+                        .into_inner();
+                    let opp = inner.next().expect("Rule::ParenthesizedExpression has a token for the (potentialy missing) opening parenthesis");
+                    let opening_parenthesis  = if let Rule::OpeningParenthesis = opp.as_rule() {
+                    Some(Box::new(Parenthesis::new(opp.as_span().into())))
+                    }
+                    else{
+                        None
+                    };
 
-                let inner_expression = inner.next().expect("Rule::ParenthesizedExpression has a token for the contained expression");
-                
-                let closing = inner.next().expect("Rule::ParenthesizedExpression has a token for the (potentialy missing) closing parenthesis");
-                let closing_parenthesis  = if let Rule::ClosingParenthesis = closing.as_rule() {
-                   Some(Box::new(Parenthesis::new(closing.as_span().into())))
+                    let inner_expression = inner.next().expect("Rule::ParenthesizedExpression has a token for the contained expression");
+                    
+                    let closing = inner.next().expect("Rule::ParenthesizedExpression has a token for the (potentialy missing) closing parenthesis");
+                    let closing_parenthesis  = if let Rule::ClosingParenthesis = closing.as_rule() {
+                    Some(Box::new(Parenthesis::new(closing.as_span().into())))
+                    }
+                    else{
+                        None
+                    };
+                    
+                    let inner_span = inner_expression.as_span().into();
+                    Expression::new(
+                        ExpressionKind::ParenthesizedExpression(
+                            opening_parenthesis, 
+                            Box::new(build_expression_ast(spec, inner_expression.into_inner(), inner_span)),
+                            closing_parenthesis
+                        ),
+                        span.into())
+                },
+                Rule::DefaultExpr => {
+                    let mut children = parse_expression_vec(spec, pair);
+                    let lookup = children.remove(0);
+                    let default = children.remove(0);
+                    Expression::new(ExpressionKind::Default(lookup, default), span.into())
+                },
+                Rule::LookupExpr => {
+                    let mut children = pair.into_inner();
+                    let stream_instance = children.next().expect("Lookups need to have a target stream instance.");
+                    let stream_instance = parse_stream_instance(spec, stream_instance);
+                    let second_child = children.next().unwrap();
+                    let second_child_span = second_child.as_span();
+                    match second_child.as_rule() {
+                        Rule::Expr => { // Discrete offset
+                            let offset = build_expression_ast(spec, second_child.into_inner(), second_child_span.into());
+                            let offset = Offset::DiscreteOffset(Box::new(offset));
+                            Expression::new(ExpressionKind::Lookup(stream_instance, offset, None), span.into())
+                        }
+                        Rule::Duration => {
+                            let mut duration_children = second_child.into_inner();
+                            let time_interval = duration_children.next().expect("Duration needs a time span.");
+                            let time_interval_span = time_interval.as_span().into();
+                            let time_interval = build_expression_ast(spec, time_interval.into_inner(), time_interval_span);
+                            let unit_string = duration_children.next().expect("Duration needs a time unit.").as_str();
+                            let unit;
+                            match unit_string {
+                                "ns"  => unit = TimeUnit::NanoSecond,
+                                "μs"  => unit = TimeUnit::MicroSecond,
+                                "ms"  => unit = TimeUnit::MilliSecond,
+                                "s"   => unit = TimeUnit::Second,
+                                "min" => unit = TimeUnit::Minute,
+                                "h"   => unit = TimeUnit::Hour,
+                                "d"   => unit = TimeUnit::Day,
+                                "w"   => unit = TimeUnit::Week,
+                                "a"   => unit = TimeUnit::Year,
+                                _ => panic!("Should not happen!")
+                            }
+                            let offset = Offset::RealTimeOffset(Box::new(time_interval), unit);
+                            // Now check whether it is a window or not.
+                            let aggregation;
+                            match children.next().map(|x| x.as_rule()) {
+                                Some(Rule::Sum) => aggregation = Some(WindowOperation::Sum),
+                                Some(Rule::Product) => aggregation = Some(WindowOperation::Product),
+                                Some(Rule::Average) => aggregation = Some(WindowOperation::Average),
+                                Some(Rule::Count) => aggregation = Some(WindowOperation::Count),
+                                Some(Rule::Integral) => aggregation = Some(WindowOperation::Integral),
+                                None => aggregation = None,
+                                _ => panic!("Should not happen!")
+                            }
+                            Expression::new(ExpressionKind::Lookup(stream_instance, offset, aggregation), span.into())
+                        },
+                        _ => panic!("Should not happen!")
+                    }
                 }
-                else{
-                    None
-                };
-                
-                let inner_span = inner_expression.as_span().into();
-                Expression::new(
-                    ExpressionKind::ParenthesizedExpression(
-                        opening_parenthesis, 
-                        Box::new(build_expression_ast(spec, inner_expression.into_inner(), inner_span)),
-                        closing_parenthesis
-                    ),
-                    span.into())
-            },
-            Rule::Expr => {
-                let span = pair.as_span();
-                build_expression_ast(spec, pair.into_inner(), span.into())
+                Rule::FunctionExpr => unimplemented!(),
+                Rule::UnaryExpr => { // First child is the operator, second the operand.
+                    let mut children = pair.into_inner();
+                    let pest_operator = children.next().expect("Unary expressions need to have an operator.");
+                    let operand = children.next().expect("Unary expressions need to have an operand.");
+                    let op_span = operand.as_span().into();
+                    let operand = build_expression_ast(spec, operand.into_inner(), op_span);
+                    let operator;
+                    match pest_operator.as_rule() {
+                        Rule::Add => return operand, // Discard unary plus because it is semantically null.
+                        Rule::Subtract => operator = UnOp::Neg,
+                        Rule::Neg => operator = UnOp::Not,
+                        _ => unreachable!(),
+                    }
+                    Expression::new(ExpressionKind::Unary(operator, Box::new(operand)), span.into())
+                },
+                Rule::TernaryExpr => {
+                    let mut children = parse_expression_vec(spec, pair);
+                    assert_eq!(children.len(), 3, "A ternary expression needs exactly three children.");
+                    Expression::new(ExpressionKind::Ite(children.remove(0), children.remove(0), children.remove(0)), span.into())
+                },
+                Rule::Tuple => {
+                    let elements = parse_expression_vec(spec, pair);
+                    assert!(elements.len() != 1, "Tuples may not have exactly one element.");
+                    Expression::new(ExpressionKind::Tuple(elements), span.into())
+                },
+                Rule::Expr => {
+                    let span = pair.as_span();
+                    build_expression_ast(spec, pair.into_inner(), span.into())
+                }
+                Rule::FunctionExpr => unimplemented!(),
+                _ => unreachable!(),
             }
-            _ => unreachable!(),
         },
-        |lhs: Expression, op: Pair<Rule>, rhs: Expression| {
+        |lhs: Expression, op: Pair<Rule>, rhs: Expression| { // Reduce function combining `Expression`s to `Expression`s with the correct precs
             let op = match op.as_rule() {
                 Rule::Add => BinOp::Add,
                 Rule::Subtract => BinOp::Sub,
