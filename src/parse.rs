@@ -358,7 +358,7 @@ fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<Rule>, span: Span) -> 
                                 "d"   => unit = TimeUnit::Day,
                                 "w"   => unit = TimeUnit::Week,
                                 "a"   => unit = TimeUnit::Year,
-                                _ => panic!("Should not happen!")
+                                _ => unreachable!()
                             }
                             let offset = Offset::RealTimeOffset(Box::new(time_interval), unit);
                             // Now check whether it is a window or not.
@@ -370,14 +370,13 @@ fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<Rule>, span: Span) -> 
                                 Some(Rule::Count) => aggregation = Some(WindowOperation::Count),
                                 Some(Rule::Integral) => aggregation = Some(WindowOperation::Integral),
                                 None => aggregation = None,
-                                _ => panic!("Should not happen!")
+                                _ => unreachable!()
                             }
                             Expression::new(ExpressionKind::Lookup(stream_instance, offset, aggregation), span.into())
                         },
-                        _ => panic!("Should not happen!")
+                        _ => unreachable!()
                     }
                 }
-                Rule::FunctionExpr => unimplemented!(),
                 Rule::UnaryExpr => { // First child is the operator, second the operand.
                     let mut children = pair.into_inner();
                     let pest_operator = children.next().expect("Unary expressions need to have an operator.");
