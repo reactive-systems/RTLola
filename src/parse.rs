@@ -55,6 +55,7 @@ fn parse(content: &str) -> Result<LolaSpec, pest::error::Error<Rule>> {
                 spec.outputs.push(output);
             }
             Rule::Trigger => unimplemented!(),
+            Rule::EOI => {},
             _ => unreachable!(),
         }
     }

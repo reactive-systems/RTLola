@@ -4,7 +4,8 @@
 // Take a look at https://pest-parser.github.io/book/grammars/syntax.html
 // TODO we can probably mark some rules as atomic or hidden
 
-Spec = { SOI ~ LanguageSpec? ~ Declaration* }
+IncompleteSpec = { SOI ~ LanguageSpec? ~ Declaration* }
+Spec = { SOI ~ LanguageSpec? ~ Declaration* ~ EOI }
 LanguageSpec ={ "//!" ~("ClassicLola" | "Lola2.0" | "RTLola") }
 Declaration = _{IncludeStatement | TypeDecl | ConstantStream | InputStream | OutputStream | Trigger}
 
