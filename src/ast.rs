@@ -1,6 +1,6 @@
 //! This module contains the AST data structures for the Lola Language.
 
-use super::parse::{Ident, Span, Symbol, SymbolTable};
+use super::parse::{Ident, Span};
 
 /// The root Lola specification
 #[derive(Debug)]
@@ -10,7 +10,6 @@ pub struct LolaSpec {
     pub inputs: Vec<Input>,
     pub outputs: Vec<Output>,
     pub trigger: Vec<Trigger>,
-    pub(crate) symbols: SymbolTable,
 }
 
 impl LolaSpec {
@@ -21,7 +20,6 @@ impl LolaSpec {
             inputs: Vec::new(),
             outputs: Vec::new(),
             trigger: Vec::new(),
-            symbols: SymbolTable::new(),
         }
     }
 }
@@ -79,10 +77,9 @@ pub struct Output {
 pub struct Trigger {
     pub name: Option<Ident>,
     pub expression: Expression,
-    pub message: Option<Symbol>,
+    pub message: Option<String>,
     pub span: Span,
 }
-
 
 #[derive(Debug)]
 pub struct TypeDeclaration {
@@ -104,7 +101,7 @@ pub struct Type {
 }
 
 impl Type {
-    pub fn new_simple(name: Symbol, span: Span) -> Type {
+    pub fn new_simple(name: String, span: Span) -> Type {
         Type {
             kind: TypeKind::Simple(name),
             span,
@@ -124,11 +121,9 @@ pub struct Parenthesis {
     pub span: Span,
 }
 
-impl Parenthesis{
+impl Parenthesis {
     pub fn new(span: Span) -> Parenthesis {
-        Parenthesis{
-            span,
-        }
+        Parenthesis { span }
     }
 }
 
@@ -137,7 +132,7 @@ pub enum TypeKind {
     /// A tuple type, e.g., (Int, Float)
     Tuple(Vec<Box<Type>>),
     /// A simple type, e.g., Int
-    Simple(Symbol),
+    Simple(String),
     /// Malformed type, e.g, `mis$ing`
     Malformed(String),
 }
@@ -178,7 +173,11 @@ pub enum ExpressionKind {
     /// An if-then-else expression
     Ite(Box<Expression>, Box<Expression>, Box<Expression>),
     /// An expression enveloped in parentheses
-    ParenthesizedExpression(Option<Box<Parenthesis> >,Box<Expression>,Option<Box<Parenthesis>>),
+    ParenthesizedExpression(
+        Option<Box<Parenthesis>>,
+        Box<Expression>,
+        Option<Box<Parenthesis>>,
+    ),
     /// An expression was expected, e.g., after an operator like `*`
     MissingExpression(),
     /// A tuple expression
@@ -251,7 +250,7 @@ impl Literal {
 #[derive(Debug, Clone)]
 pub enum LitKind {
     /// A string literal (`"foo"`)
-    Str(Symbol),
+    Str(String),
     /// An integer literal (`1`)
     Int(i128),
     /// A float literal (`1f64` or `1E10f64`)
@@ -321,7 +320,6 @@ pub enum Offset {
     DiscreteOffset(Box<Expression>),
     /// A real-time offset, e.g., `3ms`, `4min`, `2.3h`
     RealTimeOffset(Box<Expression>, TimeUnit),
-
 }
 
 /// Supported time unit for real time expressions

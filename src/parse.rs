@@ -188,7 +188,7 @@ fn parse_trigger(spec: &mut LolaSpec, pair: Pair<Rule>) -> Trigger {
 
     if let Some(pair) = pairs.next() {
         assert_eq!(pair.as_rule(), Rule::String);
-        message = Some(spec.symbols.get_symbol_for(pair.as_str()));
+        message = Some(pair.as_str().to_string());
     }
 
     Trigger {
@@ -205,9 +205,8 @@ fn parse_trigger(spec: &mut LolaSpec, pair: Pair<Rule>) -> Trigger {
  */
 fn parse_ident(spec: &mut LolaSpec, pair: Pair<Rule>) -> Ident {
     assert_eq!(pair.as_rule(), Rule::Ident);
-    let name = pair.as_str();
-    let symbol = spec.symbols.get_symbol_for(name);
-    Ident::new(symbol, pair.as_span().into())
+    let name = pair.as_str().to_string();
+    Ident::new(name, pair.as_span().into())
 }
 
 /**
@@ -222,7 +221,7 @@ fn parse_type(spec: &mut LolaSpec, pair: Pair<Rule>) -> Type {
         match pair.as_rule() {
             Rule::Ident => {
                 let ty = Type::new_simple(
-                    spec.symbols.get_symbol_for(pair.as_str()),
+                    pair.as_str().to_string(),
                     pair.as_span().into(),
                 );
                 return ty;
@@ -476,28 +475,14 @@ fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<Rule>, span: Span) -> 
     )
 }
 
-/// A symbol is a reference to an entry in SymbolTable
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy)]
-pub struct Symbol(u32);
-
-impl Symbol {
-    pub fn new(name: u32) -> Symbol {
-        Symbol(name)
-    }
-
-    fn to_usize(&self) -> usize {
-        self.0 as usize
-    }
-}
-
 #[derive(Debug)]
 pub struct Ident {
-    pub name: Symbol,
+    pub name: String,
     pub span: Span,
 }
 
 impl Ident {
-    fn new(name: Symbol, span: Span) -> Ident {
+    fn new(name: String, span: Span) -> Ident {
         Ident { name, span }
     }
 }
@@ -520,41 +505,6 @@ impl<'a> From<pest::Span<'a>> for Span {
             start: span.start(),
             end: span.end(),
         }
-    }
-}
-
-/// A SymbolTable is a bi-directional mapping between strings and symbols
-#[derive(Debug)]
-pub(crate) struct SymbolTable {
-    names: HashMap<Box<str>, Symbol>,
-    strings: Vec<Box<str>>,
-}
-
-impl SymbolTable {
-    pub(crate) fn new() -> SymbolTable {
-        SymbolTable {
-            names: HashMap::new(),
-            strings: Vec::new(),
-        }
-    }
-
-    pub(crate) fn get_symbol_for(&mut self, string: &str) -> Symbol {
-        // check if already presents
-        if let Some(&name) = self.names.get(string) {
-            return name;
-        }
-
-        // insert in symboltable
-        let name = Symbol(self.strings.len() as u32);
-        let copy = string.to_string().into_boxed_str();
-        self.strings.push(copy.clone());
-        self.names.insert(copy, name);
-
-        name
-    }
-
-    pub(crate) fn get_string(&self, symbol: Symbol) -> &str {
-        self.strings[symbol.to_usize()].as_ref()
     }
 }
 
@@ -600,7 +550,7 @@ mod tests {
         let mut spec = LolaSpec::new();
         let ast = super::parse_constant(&mut spec, pair);
         let formatted = format!("{:?}", ast);
-        assert_eq!(formatted, "Constant { name: Some(Ident { name: Symbol(0), span: Span { start: 9, end: 13 } }), ty: Some(Type { kind: Simple(Symbol(1)), span: Span { start: 16, end: 19 } }), literal: Some(Literal { kind: Int(5), span: Span { start: 23, end: 24 } }), span: Span { start: 0, end: 24 } }")
+        assert_eq!(formatted, "Constant { name: Some(Ident { name: \"five\", span: Span { start: 9, end: 13 } }), ty: Some(Type { kind: Simple(\"Int\"), span: Span { start: 16, end: 19 } }), literal: Some(Literal { kind: Int(5), span: Span { start: 23, end: 24 } }), span: Span { start: 0, end: 24 } }")
     }
 
     #[test]
@@ -612,7 +562,7 @@ mod tests {
         let mut spec = LolaSpec::new();
         let ast = super::parse_constant(&mut spec, pair);
         let formatted = format!("{:?}", ast);
-        assert_eq!(formatted, "Constant { name: Some(Ident { name: Symbol(0), span: Span { start: 9, end: 15 } }), ty: Some(Type { kind: Simple(Symbol(1)), span: Span { start: 18, end: 24 } }), literal: Some(Literal { kind: Float(5.0), span: Span { start: 28, end: 31 } }), span: Span { start: 0, end: 31 } }")
+        assert_eq!(formatted, "Constant { name: Some(Ident { name: \"fiveoh\", span: Span { start: 9, end: 15 } }), ty: Some(Type { kind: Simple(\"Double\"), span: Span { start: 18, end: 24 } }), literal: Some(Literal { kind: Float(5.0), span: Span { start: 28, end: 31 } }), span: Span { start: 0, end: 31 } }")
     }
 
     #[test]
@@ -677,7 +627,7 @@ mod tests {
         let mut spec = LolaSpec::new();
         let ast = super::parse_output(&mut spec, pair);
         let formatted = format!("{:?}", ast);
-        assert_eq!(formatted, "Output { name: Some(Ident { name: Symbol(0), span: Span { start: 7, end: 10 } }), ty: Some(Type { kind: Simple(Symbol(1)), span: Span { start: 12, end: 15 } }), expression: Expression { kind: Binary(Add, Expression { kind: Ident(Ident { name: Symbol(2), span: Span { start: 19, end: 21 } }), span: Span { start: 19, end: 21 } }, Expression { kind: Lit(Literal { kind: Int(1), span: Span { start: 24, end: 25 } }), span: Span { start: 24, end: 25 } }), span: Span { start: 19, end: 25 } }, span: Span { start: 0, end: 25 } }")
+        assert_eq!(formatted, "Output { name: Some(Ident { name: \"out\", span: Span { start: 7, end: 10 } }), ty: Some(Type { kind: Simple(\"Int\"), span: Span { start: 12, end: 15 } }), expression: Expression { kind: Binary(Add, Expression { kind: Ident(Ident { name: \"in\", span: Span { start: 19, end: 21 } }), span: Span { start: 19, end: 21 } }, Expression { kind: Lit(Literal { kind: Int(1), span: Span { start: 24, end: 25 } }), span: Span { start: 24, end: 25 } }), span: Span { start: 19, end: 25 } }, span: Span { start: 0, end: 25 } }")
     }
 
     #[test]
@@ -708,7 +658,7 @@ mod tests {
         let mut spec = LolaSpec::new();
         let ast = super::parse_trigger(&mut spec, pair);
         let formatted = format!("{:?}", ast);
-        assert_eq!(formatted, "Trigger { name: None, expression: Expression { kind: Binary(Ne, Expression { kind: Ident(Ident { name: Symbol(0), span: Span { start: 8, end: 10 } }), span: Span { start: 8, end: 10 } }, Expression { kind: Ident(Ident { name: Symbol(1), span: Span { start: 14, end: 17 } }), span: Span { start: 14, end: 17 } }), span: Span { start: 8, end: 17 } }, message: Some(Symbol(2)), span: Span { start: 0, end: 32 } }")
+        assert_eq!(formatted, "Trigger { name: None, expression: Expression { kind: Binary(Ne, Expression { kind: Ident(Ident { name: \"in\", span: Span { start: 8, end: 10 } }), span: Span { start: 8, end: 10 } }, Expression { kind: Ident(Ident { name: \"out\", span: Span { start: 14, end: 17 } }), span: Span { start: 14, end: 17 } }), span: Span { start: 8, end: 17 } }, message: Some(\"some message\"), span: Span { start: 0, end: 32 } }")
     }
 
     #[test]
@@ -721,7 +671,7 @@ mod tests {
         let span = expr.as_span();
         let ast = build_expression_ast(&mut spec, expr.into_inner(), span.into());
         let formatted = format!("{:?}", ast);
-        assert_eq!(formatted, "Expression { kind: Binary(Add, Expression { kind: Ident(Ident { name: Symbol(0), span: Span { start: 0, end: 2 } }), span: Span { start: 0, end: 2 } }, Expression { kind: Lit(Literal { kind: Int(1), span: Span { start: 5, end: 6 } }), span: Span { start: 5, end: 6 } }), span: Span { start: 0, end: 6 } }")
+        assert_eq!(formatted, "Expression { kind: Binary(Add, Expression { kind: Ident(Ident { name: \"in\", span: Span { start: 0, end: 2 } }), span: Span { start: 0, end: 2 } }, Expression { kind: Lit(Literal { kind: Int(1), span: Span { start: 5, end: 6 } }), span: Span { start: 5, end: 6 } }), span: Span { start: 0, end: 6 } }")
     }
 
     #[test]
@@ -734,7 +684,7 @@ mod tests {
         let span = expr.as_span();
         let ast = build_expression_ast(&mut spec, expr.into_inner(), span.into());
         let formatted = format!("{:?}", ast);
-        assert_eq!(formatted, "Expression { kind: ParenthesizedExpression(Some(Parenthesis { span: Span { start: 0, end: 1 } }), Expression { kind: Binary(Or, Expression { kind: Ident(Ident { name: Symbol(0), span: Span { start: 1, end: 2 } }), span: Span { start: 1, end: 2 } }, Expression { kind: Binary(And, Expression { kind: Ident(Ident { name: Symbol(1), span: Span { start: 6, end: 7 } }), span: Span { start: 6, end: 7 } }, Expression { kind: Ident(Ident { name: Symbol(2), span: Span { start: 10, end: 11 } }), span: Span { start: 10, end: 11 } }), span: Span { start: 1, end: 11 } }), span: Span { start: 1, end: 11 } }, Some(Parenthesis { span: Span { start: 11, end: 12 } })), span: Span { start: 0, end: 12 } }")
+        assert_eq!(formatted, "Expression { kind: ParenthesizedExpression(Some(Parenthesis { span: Span { start: 0, end: 1 } }), Expression { kind: Binary(Or, Expression { kind: Ident(Ident { name: \"a\", span: Span { start: 1, end: 2 } }), span: Span { start: 1, end: 2 } }, Expression { kind: Binary(And, Expression { kind: Ident(Ident { name: \"b\", span: Span { start: 6, end: 7 } }), span: Span { start: 6, end: 7 } }, Expression { kind: Ident(Ident { name: \"c\", span: Span { start: 10, end: 11 } }), span: Span { start: 10, end: 11 } }), span: Span { start: 1, end: 11 } }), span: Span { start: 1, end: 11 } }, Some(Parenthesis { span: Span { start: 11, end: 12 } })), span: Span { start: 0, end: 12 } }")
     }
 
     #[test]
@@ -747,18 +697,7 @@ mod tests {
         let span = expr.as_span();
         let ast = build_expression_ast(&mut spec, expr.into_inner(), span.into());
         let formatted = format!("{:?}", ast);
-        assert_eq!(formatted, "Expression { kind: ParenthesizedExpression(Some(Parenthesis { span: Span { start: 0, end: 1 } }), Expression { kind: Binary(Or, Expression { kind: Ident(Ident { name: Symbol(0), span: Span { start: 1, end: 2 } }), span: Span { start: 1, end: 2 } }, Expression { kind: Binary(And, Expression { kind: Ident(Ident { name: Symbol(1), span: Span { start: 6, end: 7 } }), span: Span { start: 6, end: 7 } }, Expression { kind: Ident(Ident { name: Symbol(2), span: Span { start: 10, end: 11 } }), span: Span { start: 10, end: 11 } }), span: Span { start: 1, end: 11 } }), span: Span { start: 1, end: 11 } }, None), span: Span { start: 0, end: 11 } }")
-    }
-
-    #[test]
-    fn symbol_table() {
-        let mut symboltable = SymbolTable::new();
-        let sym_a = symboltable.get_symbol_for("a");
-        let sym_b = symboltable.get_symbol_for("b");
-        assert_ne!(sym_a, sym_b);
-        assert_eq!(sym_a, symboltable.get_symbol_for("a"));
-        assert_eq!(symboltable.get_string(sym_a), "a");
-        assert_eq!(symboltable.get_string(sym_b), "b");
+        assert_eq!(formatted, "Expression { kind: ParenthesizedExpression(Some(Parenthesis { span: Span { start: 0, end: 1 } }), Expression { kind: Binary(Or, Expression { kind: Ident(Ident { name: \"a\", span: Span { start: 1, end: 2 } }), span: Span { start: 1, end: 2 } }, Expression { kind: Binary(And, Expression { kind: Ident(Ident { name: \"b\", span: Span { start: 6, end: 7 } }), span: Span { start: 6, end: 7 } }, Expression { kind: Ident(Ident { name: \"c\", span: Span { start: 10, end: 11 } }), span: Span { start: 10, end: 11 } }), span: Span { start: 1, end: 11 } }), span: Span { start: 1, end: 11 } }, None), span: Span { start: 0, end: 11 } }")
     }
 
     #[test]
