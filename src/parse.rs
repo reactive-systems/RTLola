@@ -571,6 +571,18 @@ mod tests {
     }
 
     #[test]
+    fn parse_constant_double() {
+        let pair = LolaParser::parse(Rule::ConstantStream, "constant fiveoh : Double := 5.0")
+            .unwrap_or_else(|e| panic!("{}", e))
+            .next()
+            .unwrap();
+        let mut spec = LolaSpec::new();
+        let ast = super::parse_constant(&mut spec, pair);
+        let formatted = format!("{:?}", ast);
+        assert_eq!(formatted, "Constant { name: Some(Ident { name: Symbol(0), span: Span { start: 9, end: 15 } }), ty: Some(Type { kind: Simple(Symbol(1)), span: Span { start: 18, end: 24 } }), literal: Some(Literal { kind: Float(5.0), span: Span { start: 28, end: 31 } }), span: Span { start: 0, end: 31 } }")
+    }
+
+    #[test]
     fn parse_input() {
         parses_to! {
             parser: LolaParser,
@@ -715,4 +727,67 @@ mod tests {
         assert_eq!(symboltable.get_string(sym_a), "a");
         assert_eq!(symboltable.get_string(sym_b), "b");
     }
+
+    #[test]
+    #[ignore]
+    fn build_simple_ast() {
+        let spec = "input in: Int\noutput out: Int := in\ntrigger in != out";
+        let throw = |e| panic!("{}", e);
+        let ast = parse(spec).unwrap_or_else(throw);
+        assert_eq!(ast.inputs.len(), 1);
+        assert_eq!(ast.trigger.len(), 1);
+        assert_eq!(ast.outputs.len(), 1);
+    }
+
+    #[test]
+    fn build_ast_input() {
+        let spec = "input in: Int\ninput in2: Int\ninput in3: (Int, Bool)\ninput in4: Bool\n";
+        let throw = |e| panic!("{}", e);
+        let ast = parse(spec).unwrap_or_else(throw);
+        assert_eq!(ast.inputs.len(), 4);
+        assert_eq!(ast.trigger.len(), 0);
+        assert_eq!(ast.outputs.len(), 0);
+    }
+
+    #[test]
+    fn build_parenthesized_expression() {
+        let spec = "output s: Bool := (true | true)";
+        let throw = |e| panic!("{}", e);
+        let ast = parse(spec).unwrap_or_else(throw);
+        assert_eq!(ast.inputs.len(), 0);
+        assert_eq!(ast.trigger.len(), 0);
+        assert_eq!(ast.outputs.len(), 1);
+    }
+
+    #[test]
+    fn build_lookup_expression() {
+        let spec = "output s: Int := s[-1] ? (3 * 4)";
+        let throw = |e| panic!("{}", e);
+        let ast = parse(spec).unwrap_or_else(throw);
+        assert_eq!(ast.inputs.len(), 0);
+        assert_eq!(ast.trigger.len(), 0);
+        assert_eq!(ast.outputs.len(), 1);
+    }
+
+    #[test]
+    fn build_ternary_expression() {
+        let spec = "input in: Int\n output s: Int := if in = 3 then 4 else in + 2";
+        let throw = |e| panic!("{}", e);
+        let ast = parse(spec).unwrap_or_else(throw);
+        assert_eq!(ast.inputs.len(), 1);
+        assert_eq!(ast.trigger.len(), 0);
+        assert_eq!(ast.outputs.len(), 1);
+    }
+
+    #[test]
+    fn build_complex_expression() {
+        let spec = "output s: Double := if ¬((s[-1] ? (3 * 4) + -4) = 12) || true = false then 2.0 else 4.1";
+        let throw = |e| panic!("{}", e);
+        let ast = parse(spec).unwrap_or_else(throw);
+        assert_eq!(ast.inputs.len(), 0);
+        assert_eq!(ast.trigger.len(), 0);
+        assert_eq!(ast.outputs.len(), 1);
+    }
+
+
 }
