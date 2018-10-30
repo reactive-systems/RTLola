@@ -81,10 +81,10 @@ FunctionExpr = {
     | "π"~ "("~ IntegerLiteral ~","~ Ident~ ")"}
 
 DefaultExpr = { 
-      LookupExpr~ "?"~ Term}
+      LookupExpr~ "?"~ Expr}
 
 UnaryExpr = {
-      UnaryOperation~ Term}
+      UnaryOperation~ Expr}
 
 TernaryExpr = {
       "if"~ Expr~ "then"~ Expr~ "else"~ Expr}  
