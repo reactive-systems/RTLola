@@ -77,10 +77,9 @@ LookupExpr = {
     | StreamInstance ~"["~ Duration~ "]"}
 
 FunctionExpr = { 
-      FunctionSymbol~ "(" ~Expr ~("," ~Expr)*~ ")" 
-    | "π"~ "("~ IntegerLiteral ~","~ Ident~ ")"}
+      FunctionSymbol~ "(" ~Expr ~("," ~Expr)*~ ")" }
 
-DefaultExpr = { 
+DefaultExpr = {
       LookupExpr~ "?"~ Expr}
 
 UnaryExpr = {
@@ -113,7 +112,7 @@ UnaryFunctionSymbol = {
       "sin"
     | "cos"
     | "tan"
-    | "amrcsin"
+    | "arcsin"
     | "arccos"
     | "arctan"
     | "exp"

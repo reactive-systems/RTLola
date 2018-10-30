@@ -339,6 +339,28 @@ fn parse_lookup_expression(spec: &mut LolaSpec, pair: Pair<Rule>, span: Span) ->
     }
 }
 
+fn build_function_expression(spec: &mut LolaSpec, pair: Pair<Rule>, span: Span) -> Expression {
+    let mut children = pair.into_inner();
+    let name = children.next().unwrap().as_str();
+    let function_kind = match name {
+        "nroot" => FunctionKind::NthRoot,
+        "sqrt" => FunctionKind::Sqrt,
+        "π" => FunctionKind::Projection,
+        "sin" => FunctionKind::Sin,
+        "cos" => FunctionKind::Cos,
+        "tan" => FunctionKind::Tan,
+        "arcsin" => FunctionKind::Arcsin,
+        "arccos" => FunctionKind::Arccos,
+        "arctar" => FunctionKind::Arctan,
+        "exp" => FunctionKind::Exp,
+        "floor" => FunctionKind::Floor,
+        "ceil" => FunctionKind::Ceil,
+        _ => panic!("Unknown function symbol: {}.", name),
+    };
+    let args = parse_vec_of_expressions(spec, children);
+    Expression::new(ExpressionKind::Function(function_kind, args), span)
+}
+
 /**
  * Builds the Expr AST.
  */
@@ -424,7 +446,7 @@ fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<Rule>, span: Span) -> 
                     let span = pair.as_span();
                     build_expression_ast(spec, pair.into_inner(), span.into())
                 }
-                Rule::FunctionExpr => unimplemented!(),
+                Rule::FunctionExpr => build_function_expression(spec, pair, span.into()),
                 _ => panic!("Unexpected rule when parsing expression ast: {:?}", pair.as_rule()),
             }
         },
@@ -783,6 +805,16 @@ mod tests {
     #[test]
     fn build_ternary_expression() {
         let spec = "input in: Int\n output s: Int := if in = 3 then 4 else in + 2";
+        let throw = |e| panic!("{}", e);
+        let ast = parse(spec).unwrap_or_else(throw);
+        assert_eq!(ast.inputs.len(), 1);
+        assert_eq!(ast.trigger.len(), 0);
+        assert_eq!(ast.outputs.len(), 1);
+    }
+
+    #[test]
+    fn build_function_expression() {
+        let spec = "input in: (Int, Bool)\n output s: Int := nroot(1, π(1, in))";
         let throw = |e| panic!("{}", e);
         let ast = parse(spec).unwrap_or_else(throw);
         assert_eq!(ast.inputs.len(), 1);

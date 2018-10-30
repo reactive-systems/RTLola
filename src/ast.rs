@@ -183,6 +183,24 @@ pub enum ExpressionKind {
     MissingExpression(),
     /// A tuple expression
     Tuple(Vec<Box<Expression>>),
+    /// A function call
+    Function(FunctionKind, Vec<Box<Expression>>),
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum FunctionKind {
+    NthRoot,
+    Sqrt,
+    Projection,
+    Sin,
+    Cos,
+    Tan,
+    Arcsin,
+    Arccos,
+    Arctan,
+    Exp,
+    Floor,
+    Ceil,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
