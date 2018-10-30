@@ -242,10 +242,16 @@ fn parse_literal(spec: &mut LolaSpec, pair: Pair<Rule>) -> Literal {
         .expect("Rule::Literal has exactly one child");
     match inner.as_rule() {
         Rule::String => unimplemented!(),
-        Rule::NumberLiteral => Literal::new_int(
-            inner.as_str().parse::<i128>().unwrap(),
-            inner.as_span().into(),
-        ),
+        Rule::NumberLiteral => {
+            let str_rep = inner.as_str();
+            if let Result::Ok(i) = str_rep.parse::<i128>() {
+                return Literal::new_int(i, inner.as_span().into())
+            } else if let Result::Ok(f) = str_rep.parse::<f64>() {
+                return Literal::new_float(f, inner.as_span().into())
+            } else {
+                panic!("Number literal not valid in rust.")
+            }
+        },
         Rule::TupleLiteral => {
             let span = inner.as_span();
             let elements = inner.into_inner();

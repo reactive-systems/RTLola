@@ -221,6 +221,13 @@ impl Literal {
             span,
         }
     }
+
+    pub fn new_float(val: f64, span: Span) -> Literal {
+        Literal {
+            kind: LitKind::Float(val),
+            span,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -230,7 +237,7 @@ pub enum LitKind {
     /// An integer literal (`1`)
     Int(i128),
     /// A float literal (`1f64` or `1E10f64`)
-    Float(Symbol),
+    Float(f64),
     /// A boolean literal (`true`)
     Bool(bool),
     // A tuple literal (`(1, 2f64, "34as", 99)`)
