@@ -90,9 +90,9 @@ fn parse_constant(spec: &mut LolaSpec, pair: Pair<Rule>) -> Constant {
         pairs.next().expect("mismatch between grammar and AST"),
     );
     Constant {
-        name:Some(name),
+        name,
         ty:Some(ty),
-        literal:Some(literal),
+        literal,
         span,
     }
 }
@@ -117,8 +117,8 @@ fn parse_inputs(spec: &mut LolaSpec, pair: Pair<Rule>) -> Vec<Input> {
         let end = pair.as_span().end();
         let ty = parse_type(spec, pair);
         inputs.push(Input {
-            name:Some(name),
-            ty:Some(ty),
+            name,
+            ty,
             span: Span { start, end },
         })
     }
@@ -151,7 +151,7 @@ fn parse_output(spec: &mut LolaSpec, pair: Pair<Rule>) -> Output {
     let expr_span = pair.as_span();
     let expression = build_expression_ast(spec, pair.into_inner(), expr_span.into());
     Output {
-        name:Some(name),
+        name,
         ty:Some(ty),
         expression,
         span,
@@ -548,9 +548,8 @@ mod tests {
             .next()
             .unwrap();
         let mut spec = LolaSpec::new();
-        let ast = super::parse_constant(&mut spec, pair);
-        let formatted = format!("{:?}", ast);
-        assert_eq!(formatted, "Constant { name: Some(Ident { name: \"five\", span: Span { start: 9, end: 13 } }), ty: Some(Type { kind: Simple(\"Int\"), span: Span { start: 16, end: 19 } }), literal: Some(Literal { kind: Int(5), span: Span { start: 23, end: 24 } }), span: Span { start: 0, end: 24 } }")
+        let ast = super::parse_constant(&mut spec, pair);;
+        assert_eq!(format!("{}", ast), "constant five: Int := 5")
     }
 
     #[test]
@@ -561,8 +560,7 @@ mod tests {
             .unwrap();
         let mut spec = LolaSpec::new();
         let ast = super::parse_constant(&mut spec, pair);
-        let formatted = format!("{:?}", ast);
-        assert_eq!(formatted, "Constant { name: Some(Ident { name: \"fiveoh\", span: Span { start: 9, end: 15 } }), ty: Some(Type { kind: Simple(\"Double\"), span: Span { start: 18, end: 24 } }), literal: Some(Literal { kind: Float(5.0), span: Span { start: 28, end: 31 } }), span: Span { start: 0, end: 31 } }")
+        assert_eq!(format!("{}", ast), "constant fiveoh: Double := 5")
     }
 
     #[test]
@@ -592,6 +590,9 @@ mod tests {
         let inputs = super::parse_inputs(&mut spec, pair);
         println!("{:?}", inputs);
         assert_eq!(inputs.len(), 3);
+        assert_eq!(format!("{}", inputs[0]), "input a: Int");
+        assert_eq!(format!("{}", inputs[1]), "input b: Int");
+        assert_eq!(format!("{}", inputs[2]), "input c: Bool");
     }
 
     #[test]
@@ -626,8 +627,7 @@ mod tests {
             .unwrap();
         let mut spec = LolaSpec::new();
         let ast = super::parse_output(&mut spec, pair);
-        let formatted = format!("{:?}", ast);
-        assert_eq!(formatted, "Output { name: Some(Ident { name: \"out\", span: Span { start: 7, end: 10 } }), ty: Some(Type { kind: Simple(\"Int\"), span: Span { start: 12, end: 15 } }), expression: Expression { kind: Binary(Add, Expression { kind: Ident(Ident { name: \"in\", span: Span { start: 19, end: 21 } }), span: Span { start: 19, end: 21 } }, Expression { kind: Lit(Literal { kind: Int(1), span: Span { start: 24, end: 25 } }), span: Span { start: 24, end: 25 } }), span: Span { start: 19, end: 25 } }, span: Span { start: 0, end: 25 } }")
+        assert_eq!(format!("{}", ast), "output out: Int := in + 1")
     }
 
     #[test]
@@ -657,8 +657,7 @@ mod tests {
             .unwrap();
         let mut spec = LolaSpec::new();
         let ast = super::parse_trigger(&mut spec, pair);
-        let formatted = format!("{:?}", ast);
-        assert_eq!(formatted, "Trigger { name: None, expression: Expression { kind: Binary(Ne, Expression { kind: Ident(Ident { name: \"in\", span: Span { start: 8, end: 10 } }), span: Span { start: 8, end: 10 } }, Expression { kind: Ident(Ident { name: \"out\", span: Span { start: 14, end: 17 } }), span: Span { start: 14, end: 17 } }), span: Span { start: 8, end: 17 } }, message: Some(\"some message\"), span: Span { start: 0, end: 32 } }")
+        assert_eq!(format!("{}", ast), "trigger in != out \"some message\"")
     }
 
     #[test]
@@ -670,8 +669,7 @@ mod tests {
         let mut spec = LolaSpec::new();
         let span = expr.as_span();
         let ast = build_expression_ast(&mut spec, expr.into_inner(), span.into());
-        let formatted = format!("{:?}", ast);
-        assert_eq!(formatted, "Expression { kind: Binary(Add, Expression { kind: Ident(Ident { name: \"in\", span: Span { start: 0, end: 2 } }), span: Span { start: 0, end: 2 } }, Expression { kind: Lit(Literal { kind: Int(1), span: Span { start: 5, end: 6 } }), span: Span { start: 5, end: 6 } }), span: Span { start: 0, end: 6 } }")
+        assert_eq!(format!("{}", ast), "in + 1")
     }
 
     #[test]
@@ -683,8 +681,7 @@ mod tests {
         let mut spec = LolaSpec::new();
         let span = expr.as_span();
         let ast = build_expression_ast(&mut spec, expr.into_inner(), span.into());
-        let formatted = format!("{:?}", ast);
-        assert_eq!(formatted, "Expression { kind: ParenthesizedExpression(Some(Parenthesis { span: Span { start: 0, end: 1 } }), Expression { kind: Binary(Or, Expression { kind: Ident(Ident { name: \"a\", span: Span { start: 1, end: 2 } }), span: Span { start: 1, end: 2 } }, Expression { kind: Binary(And, Expression { kind: Ident(Ident { name: \"b\", span: Span { start: 6, end: 7 } }), span: Span { start: 6, end: 7 } }, Expression { kind: Ident(Ident { name: \"c\", span: Span { start: 10, end: 11 } }), span: Span { start: 10, end: 11 } }), span: Span { start: 1, end: 11 } }), span: Span { start: 1, end: 11 } }, Some(Parenthesis { span: Span { start: 11, end: 12 } })), span: Span { start: 0, end: 12 } }")
+        assert_eq!(format!("{}", ast), "(a || b && c)")
     }
 
     #[test]
@@ -696,8 +693,7 @@ mod tests {
         let mut spec = LolaSpec::new();
         let span = expr.as_span();
         let ast = build_expression_ast(&mut spec, expr.into_inner(), span.into());
-        let formatted = format!("{:?}", ast);
-        assert_eq!(formatted, "Expression { kind: ParenthesizedExpression(Some(Parenthesis { span: Span { start: 0, end: 1 } }), Expression { kind: Binary(Or, Expression { kind: Ident(Ident { name: \"a\", span: Span { start: 1, end: 2 } }), span: Span { start: 1, end: 2 } }, Expression { kind: Binary(And, Expression { kind: Ident(Ident { name: \"b\", span: Span { start: 6, end: 7 } }), span: Span { start: 6, end: 7 } }, Expression { kind: Ident(Ident { name: \"c\", span: Span { start: 10, end: 11 } }), span: Span { start: 10, end: 11 } }), span: Span { start: 1, end: 11 } }), span: Span { start: 1, end: 11 } }, None), span: Span { start: 0, end: 11 } }")
+        assert_eq!(format!("{}", ast), "(a || b && c")
     }
 
     #[test]

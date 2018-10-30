@@ -11,6 +11,7 @@ extern crate clap;
 pub mod app;
 mod ast;
 mod parse;
+mod print;
 
 // Re-export on the root level
 pub use ast::{LanguageSpec, LolaSpec};

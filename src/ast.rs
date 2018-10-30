@@ -49,24 +49,24 @@ impl<'a> From<&'a str> for LanguageSpec {
 /// A declaration of a constant (stream)
 #[derive(Debug)]
 pub struct Constant {
-    pub name: Option<Ident>,
+    pub name: Ident,
     pub ty: Option<Type>,
-    pub literal: Option<Literal>,
+    pub literal: Literal,
     pub span: Span,
 }
 
 /// A declaration of an input stream
 #[derive(Debug)]
 pub struct Input {
-    pub name: Option<Ident>,
-    pub ty: Option<Type>,
+    pub name: Ident,
+    pub ty: Type,
     pub span: Span,
 }
 
 /// A declaration of an output stream
 #[derive(Debug)]
 pub struct Output {
-    pub name: Option<Ident>,
+    pub name: Ident,
     pub ty: Option<Type>,
     pub expression: Expression,
     pub span: Span,
@@ -96,8 +96,8 @@ pub struct StreamInstance {
 
 #[derive(Debug)]
 pub struct Type {
-    kind: TypeKind,
-    span: Span,
+    pub kind: TypeKind,
+    pub span: Span,
 }
 
 impl Type {
@@ -213,8 +213,8 @@ pub enum WindowOperation {
 
 #[derive(Debug, Clone)]
 pub struct Literal {
-    kind: LitKind,
-    span: Span,
+    pub kind: LitKind,
+    pub span: Span,
 }
 
 impl Literal {
