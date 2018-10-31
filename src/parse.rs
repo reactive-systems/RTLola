@@ -177,7 +177,7 @@ fn parse_trigger(spec: &mut LolaSpec, pair: Pair<Rule>) -> Trigger {
     let mut name = None;
     let mut message = None;
 
-    let mut pair = pairs.next().expect("mistmatch between grammar and AST");
+    let mut pair = pairs.next().expect("mismatch between grammar and AST");
     // first token is either expression or identifier
     match pair.as_rule() {
         Rule::Ident => {
@@ -310,31 +310,29 @@ fn parse_lookup_expression(spec: &mut LolaSpec, pair: Pair<Rule>, span: Span) ->
             let time_interval_span = time_interval.as_span().into();
             let time_interval = build_expression_ast(spec, time_interval.into_inner(), time_interval_span);
             let unit_string = duration_children.next().expect("Duration needs a time unit.").as_str();
-            let unit;
-            match unit_string {
-                "ns"  => unit = TimeUnit::NanoSecond,
-                "μs"  => unit = TimeUnit::MicroSecond,
-                "ms"  => unit = TimeUnit::MilliSecond,
-                "s"   => unit = TimeUnit::Second,
-                "min" => unit = TimeUnit::Minute,
-                "h"   => unit = TimeUnit::Hour,
-                "d"   => unit = TimeUnit::Day,
-                "w"   => unit = TimeUnit::Week,
-                "a"   => unit = TimeUnit::Year,
+            let unit = match unit_string {
+                "ns"  => TimeUnit::NanoSecond,
+                "μs"  => TimeUnit::MicroSecond,
+                "ms"  => TimeUnit::MilliSecond,
+                "s"   => TimeUnit::Second,
+                "min" => TimeUnit::Minute,
+                "h"   => TimeUnit::Hour,
+                "d"   => TimeUnit::Day,
+                "w"   => TimeUnit::Week,
+                "a"   => TimeUnit::Year,
                 _ => unreachable!()
-            }
+            };
             let offset = Offset::RealTimeOffset(Box::new(time_interval), unit);
             // Now check whether it is a window or not.
-            let aggregation;
-            match children.next().map(|x| x.as_rule()) {
-                Some(Rule::Sum) => aggregation = Some(WindowOperation::Sum),
-                Some(Rule::Product) => aggregation = Some(WindowOperation::Product),
-                Some(Rule::Average) => aggregation = Some(WindowOperation::Average),
-                Some(Rule::Count) => aggregation = Some(WindowOperation::Count),
-                Some(Rule::Integral) => aggregation = Some(WindowOperation::Integral),
-                None => aggregation = None,
+            let aggregation = match children.next().map(|x| x.as_rule()) {
+                Some(Rule::Sum) => Some(WindowOperation::Sum),
+                Some(Rule::Product) => Some(WindowOperation::Product),
+                Some(Rule::Average) => Some(WindowOperation::Average),
+                Some(Rule::Count) => Some(WindowOperation::Count),
+                Some(Rule::Integral) => Some(WindowOperation::Integral),
+                None => None,
                 _ => unreachable!()
-            }
+            };
             Expression::new(ExpressionKind::Lookup(stream_instance, offset, aggregation), span.into())
         },
         _ => unreachable!()
@@ -425,13 +423,12 @@ fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<Rule>, span: Span) -> 
                     let operand = children.next().expect("Unary expressions need to have an operand.");
                     let op_span = operand.as_span().into();
                     let operand = build_expression_ast(spec, operand.into_inner(), op_span);
-                    let operator;
-                    match pest_operator.as_rule() {
+                    let operator= match pest_operator.as_rule() {
                         Rule::Add => return operand, // Discard unary plus because it is semantically null.
-                        Rule::Subtract => operator = UnOp::Neg,
-                        Rule::Neg => operator = UnOp::Not,
+                        Rule::Subtract => UnOp::Neg,
+                        Rule::Neg => UnOp::Not,
                         _ => unreachable!(),
-                    }
+                    };
                     Expression::new(ExpressionKind::Unary(operator, Box::new(operand)), span.into())
                 },
                 Rule::TernaryExpr => {
