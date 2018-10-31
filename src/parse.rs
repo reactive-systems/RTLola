@@ -57,7 +57,10 @@ fn parse(content: &str) -> Result<LolaSpec, pest::error::Error<Rule>> {
                 let output = parse_output(&mut spec, pair);
                 spec.outputs.push(output);
             }
-            Rule::Trigger => unimplemented!(),
+            Rule::Trigger => {
+                let trigger = parse_trigger(&mut spec, pair);
+                spec.trigger.push(trigger);
+            },
             Rule::EOI => {},
             _ => unreachable!(),
         }
@@ -697,7 +700,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn build_simple_ast() {
         let spec = "input in: Int\noutput out: Int := in\ntrigger in != out";
         let throw = |e| panic!("{}", e);
@@ -755,6 +757,16 @@ mod tests {
         assert_eq!(ast.inputs.len(), 1);
         assert_eq!(ast.trigger.len(), 0);
         assert_eq!(ast.outputs.len(), 1);
+    }
+
+    #[test]
+    fn build_trigger() {
+        let spec = "input in: Int\n trigger in > 5";
+        let throw = |e| panic!("{}", e);
+        let ast = parse(spec).unwrap_or_else(throw);
+        assert_eq!(ast.inputs.len(), 1);
+        assert_eq!(ast.trigger.len(), 1);
+        assert_eq!(ast.outputs.len(), 0);
     }
 
     #[test]

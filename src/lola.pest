@@ -86,7 +86,7 @@ UnaryExpr = {
       UnaryOperation~ Expr}
 
 TernaryExpr = {
-      "if"~ Expr~ "then"~ Expr~ "else"~ Expr}  
+      "if"~ Expr~ "then"~ Expr~ "else"~ Expr}
 
 Tuple = { "("~ (Expr~ (","~ Expr)+)?~ ")"}
 
