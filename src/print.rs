@@ -5,8 +5,14 @@ use super::parse::Ident;
 use std::fmt::{Display, Formatter, Result};
 
 struct PrintHelper {}
-impl PrintHelper  {
-    fn write<T: Display>(f: &mut Formatter, v: &Vec<T>, pref: &str, suff: &str, join: &str) -> Result {
+impl PrintHelper {
+    fn write<T: Display>(
+        f: &mut Formatter,
+        v: &Vec<T>,
+        pref: &str,
+        suff: &str,
+        join: &str,
+    ) -> Result {
         write!(f, "{}", pref)?;
         match v.first() {
             Some(e) => write!(f, "{}", e)?,
@@ -94,11 +100,15 @@ impl Display for Expression {
             ExpressionKind::Lit(l) => write!(f, "{}", l),
             ExpressionKind::Ident(ident) => write!(f, "{}", ident),
             ExpressionKind::Default(expr, val) => write!(f, "{} ? {}", expr, val),
-            ExpressionKind::Lookup(inst, offset, Some(aggr)) => write!(f, "{}[{}, {}]", inst, offset, aggr),
+            ExpressionKind::Lookup(inst, offset, Some(aggr)) => {
+                write!(f, "{}[{}, {}]", inst, offset, aggr)
+            }
             ExpressionKind::Lookup(inst, offset, None) => write!(f, "{}[{}]", inst, offset),
             ExpressionKind::Binary(op, lhs, rhs) => write!(f, "{} {} {}", lhs, op, rhs),
             ExpressionKind::Unary(operator, operand) => write!(f, "{}{}", operator, operand),
-            ExpressionKind::Ite(cond, cons, alt) => write!(f, "if {} then {} else {}", cond, cons, alt),
+            ExpressionKind::Ite(cond, cons, alt) => {
+                write!(f, "if {} then {} else {}", cond, cons, alt)
+            }
             ExpressionKind::ParenthesizedExpression(left, expr, right) => write!(
                 f,
                 "{}{}{}",
@@ -129,20 +139,24 @@ impl Display for StreamInstance {
 
 impl Display for FunctionKind {
     fn fmt(&self, f: &mut Formatter) -> Result {
-        write!(f, "{}", match self {
-            FunctionKind::NthRoot => "nroot",
-            FunctionKind::Sqrt => "sqrt",
-            FunctionKind::Projection => "π",
-            FunctionKind::Sin => "sin",
-            FunctionKind::Cos => "cos",
-            FunctionKind::Tan => "tan",
-            FunctionKind::Arcsin => "sin⁻¹",
-            FunctionKind::Arccos => "cos⁻¹",
-            FunctionKind::Arctan => "tan⁻¹",
-            FunctionKind::Exp => "exp",
-            FunctionKind::Floor => "floor",
-            FunctionKind::Ceil => "ceil",
-        })
+        write!(
+            f,
+            "{}",
+            match self {
+                FunctionKind::NthRoot => "nroot",
+                FunctionKind::Sqrt => "sqrt",
+                FunctionKind::Projection => "π",
+                FunctionKind::Sin => "sin",
+                FunctionKind::Cos => "cos",
+                FunctionKind::Tan => "tan",
+                FunctionKind::Arcsin => "sin⁻¹",
+                FunctionKind::Arccos => "cos⁻¹",
+                FunctionKind::Arctan => "tan⁻¹",
+                FunctionKind::Exp => "exp",
+                FunctionKind::Floor => "floor",
+                FunctionKind::Ceil => "ceil",
+            }
+        )
     }
 }
 
@@ -157,38 +171,50 @@ impl Display for Offset {
 
 impl Display for TimeUnit {
     fn fmt(&self, f: &mut Formatter) -> Result {
-        write!(f, "{}", match self {
-            TimeUnit::NanoSecond => "ns",
-            TimeUnit::MicroSecond => "ms",
-            TimeUnit::MilliSecond => "μs",
-            TimeUnit::Second => "s",
-            TimeUnit::Minute => "min",
-            TimeUnit::Hour => "h",
-            TimeUnit::Day => "d",
-            TimeUnit::Week => "w",
-            TimeUnit::Year => "a",
-        })
+        write!(
+            f,
+            "{}",
+            match self {
+                TimeUnit::NanoSecond => "ns",
+                TimeUnit::MicroSecond => "ms",
+                TimeUnit::MilliSecond => "μs",
+                TimeUnit::Second => "s",
+                TimeUnit::Minute => "min",
+                TimeUnit::Hour => "h",
+                TimeUnit::Day => "d",
+                TimeUnit::Week => "w",
+                TimeUnit::Year => "a",
+            }
+        )
     }
 }
 
 impl Display for WindowOperation {
     fn fmt(&self, f: &mut Formatter) -> Result {
-        write!(f, "{}", match self {
-            WindowOperation::Sum => "Σ",
-            WindowOperation::Product => "Π",
-            WindowOperation::Average => "avg",
-            WindowOperation::Count => "#",
-            WindowOperation::Integral => "∫",
-        })
+        write!(
+            f,
+            "{}",
+            match self {
+                WindowOperation::Sum => "Σ",
+                WindowOperation::Product => "Π",
+                WindowOperation::Average => "avg",
+                WindowOperation::Count => "#",
+                WindowOperation::Integral => "∫",
+            }
+        )
     }
 }
 
 impl Display for UnOp {
     fn fmt(&self, f: &mut Formatter) -> Result {
-        write!(f, "{}", match self {
-            UnOp::Not => "!",
-            UnOp::Neg => "-",
-        })
+        write!(
+            f,
+            "{}",
+            match self {
+                UnOp::Not => "!",
+                UnOp::Neg => "-",
+            }
+        )
     }
 }
 
@@ -198,9 +224,12 @@ impl Display for Literal {
             LitKind::Bool(val) => write!(f, "{}", val),
             LitKind::Int(i) => write!(f, "{}", i),
             LitKind::Float(fl) => {
-                if *fl == fl.round() { write!(f, "{:.1}", fl) }
-                else { write!(f, "{}", fl) }
-            },
+                if *fl == fl.round() {
+                    write!(f, "{:.1}", fl)
+                } else {
+                    write!(f, "{}", fl)
+                }
+            }
             LitKind::Str(s) => write!(f, "{}", s),
             LitKind::Tuple(vals) => PrintHelper::write(f, vals, "(", ")", ", "),
         }
@@ -246,18 +275,20 @@ impl Display for LanguageSpec {
 
 impl Display for LolaSpec {
     fn fmt(&self, f: &mut Formatter) -> Result {
-        if let Some(v) = &self.language { write!(f, "version {}", v)? }
+        if let Some(v) = &self.language {
+            write!(f, "version {}", v)?
+        }
         let mut first = true;
         if !self.constants.is_empty() {
             PrintHelper::write(f, &self.constants, if first { "" } else { " " }, "", " ")?;
             first = false;
         }
         if !self.inputs.is_empty() {
-            PrintHelper::write(f, &self.inputs, if first {""} else {" "}, "", " ")?;
+            PrintHelper::write(f, &self.inputs, if first { "" } else { " " }, "", " ")?;
             first = false;
         }
         if !self.outputs.is_empty() {
-            PrintHelper::write(f, &self.outputs, if first {""} else {" "}, "", " ")?;
+            PrintHelper::write(f, &self.outputs, if first { "" } else { " " }, "", " ")?;
             first = false;
         }
         if !self.trigger.is_empty() {

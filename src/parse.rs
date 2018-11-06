@@ -59,8 +59,8 @@ fn parse(content: &str) -> Result<LolaSpec, pest::error::Error<Rule>> {
             Rule::Trigger => {
                 let trigger = parse_trigger(&mut spec, pair);
                 spec.trigger.push(trigger);
-            },
-            Rule::EOI => {},
+            }
+            Rule::EOI => {}
             _ => unreachable!(),
         }
     }
@@ -93,7 +93,7 @@ fn parse_constant(spec: &mut LolaSpec, pair: Pair<Rule>) -> Constant {
     );
     Constant {
         name,
-        ty:Some(ty),
+        ty: Some(ty),
         literal,
         span,
     }
@@ -154,7 +154,7 @@ fn parse_output(spec: &mut LolaSpec, pair: Pair<Rule>) -> Output {
     let expression = build_expression_ast(spec, pair.into_inner(), expr_span.into());
     Output {
         name,
-        ty:Some(ty),
+        ty: Some(ty),
         expression,
         span,
     }
@@ -222,10 +222,7 @@ fn parse_type(spec: &mut LolaSpec, pair: Pair<Rule>) -> Type {
     for pair in pair.into_inner() {
         match pair.as_rule() {
             Rule::Ident => {
-                let ty = Type::new_simple(
-                    pair.as_str().to_string(),
-                    pair.as_span().into(),
-                );
+                let ty = Type::new_simple(pair.as_str().to_string(), pair.as_span().into());
                 return ty;
             }
             Rule::Type => tuple.push(Box::new(parse_type(spec, pair))),
@@ -250,21 +247,19 @@ fn parse_literal(spec: &mut LolaSpec, pair: Pair<Rule>) -> Literal {
         Rule::NumberLiteral => {
             let str_rep = inner.as_str();
             if let Result::Ok(i) = str_rep.parse::<i128>() {
-                return Literal::new_int(i, inner.as_span().into())
+                return Literal::new_int(i, inner.as_span().into());
             } else if let Result::Ok(f) = str_rep.parse::<f64>() {
-                return Literal::new_float(f, inner.as_span().into())
+                return Literal::new_float(f, inner.as_span().into());
             } else {
                 panic!("Number literal not valid in rust.")
             }
-        },
+        }
         Rule::TupleLiteral => {
             let span = inner.as_span();
             let elements = inner.into_inner();
-            let literals: Vec<Literal> = elements
-                .map(|pair| parse_literal(spec, pair))
-                .collect();
+            let literals: Vec<Literal> = elements.map(|pair| parse_literal(spec, pair)).collect();
             return Literal::new_tuple(&literals, span.into());
-        },
+        }
         Rule::True => Literal::new_bool(true, inner.as_span().into()),
         Rule::False => Literal::new_bool(false, inner.as_span().into()),
         _ => unreachable!(),
@@ -277,47 +272,64 @@ fn parse_stream_instance(spec: &mut LolaSpec, instance: Pair<Rule>) -> StreamIns
     let stream_ident = parse_ident(spec, children.next().unwrap());
     // Parse remaining children, aka the arguments.
     let mut args = parse_vec_of_expressions(spec, children);
-    StreamInstance{ stream_identifier: stream_ident, arguments: args }
+    StreamInstance {
+        stream_identifier: stream_ident,
+        arguments: args,
+    }
 }
 
 fn parse_vec_of_expressions(spec: &mut LolaSpec, pairs: Pairs<Rule>) -> Vec<Box<Expression>> {
-    pairs.map(|expr| {
+    pairs
+        .map(|expr| {
             let span = expr.as_span().into();
             build_expression_ast(spec, expr.into_inner(), span)
-        })
-        .map(|expr| Box::new(expr))
+        }).map(|expr| Box::new(expr))
         .collect()
 }
 
 fn parse_lookup_expression(spec: &mut LolaSpec, pair: Pair<Rule>, span: Span) -> Expression {
     let mut children = pair.into_inner();
-    let stream_instance = children.next().expect("Lookups need to have a target stream instance.");
+    let stream_instance = children
+        .next()
+        .expect("Lookups need to have a target stream instance.");
     let stream_instance = parse_stream_instance(spec, stream_instance);
     let second_child = children.next().unwrap();
     let second_child_span = second_child.as_span();
     match second_child.as_rule() {
-        Rule::Expr => { // Discrete offset
-            let offset = build_expression_ast(spec, second_child.into_inner(), second_child_span.into());
+        Rule::Expr => {
+            // Discrete offset
+            let offset =
+                build_expression_ast(spec, second_child.into_inner(), second_child_span.into());
             let offset = Offset::DiscreteOffset(Box::new(offset));
-            Expression::new(ExpressionKind::Lookup(stream_instance, offset, None), span.into())
+            Expression::new(
+                ExpressionKind::Lookup(stream_instance, offset, None),
+                span.into(),
+            )
         }
-        Rule::Duration => { // Real time offset
+        Rule::Duration => {
+            // Real time offset
             let mut duration_children = second_child.into_inner();
-            let time_interval = duration_children.next().expect("Duration needs a time span.");
+            let time_interval = duration_children
+                .next()
+                .expect("Duration needs a time span.");
             let time_interval_span = time_interval.as_span().into();
-            let time_interval = build_expression_ast(spec, time_interval.into_inner(), time_interval_span);
-            let unit_string = duration_children.next().expect("Duration needs a time unit.").as_str();
+            let time_interval =
+                build_expression_ast(spec, time_interval.into_inner(), time_interval_span);
+            let unit_string = duration_children
+                .next()
+                .expect("Duration needs a time unit.")
+                .as_str();
             let unit = match unit_string {
-                "ns"  => TimeUnit::NanoSecond,
-                "μs"  => TimeUnit::MicroSecond,
-                "ms"  => TimeUnit::MilliSecond,
-                "s"   => TimeUnit::Second,
+                "ns" => TimeUnit::NanoSecond,
+                "μs" => TimeUnit::MicroSecond,
+                "ms" => TimeUnit::MilliSecond,
+                "s" => TimeUnit::Second,
                 "min" => TimeUnit::Minute,
-                "h"   => TimeUnit::Hour,
-                "d"   => TimeUnit::Day,
-                "w"   => TimeUnit::Week,
-                "a"   => TimeUnit::Year,
-                _ => unreachable!()
+                "h" => TimeUnit::Hour,
+                "d" => TimeUnit::Day,
+                "w" => TimeUnit::Week,
+                "a" => TimeUnit::Year,
+                _ => unreachable!(),
             };
             let offset = Offset::RealTimeOffset(Box::new(time_interval), unit);
             // Now check whether it is a window or not.
@@ -328,11 +340,14 @@ fn parse_lookup_expression(spec: &mut LolaSpec, pair: Pair<Rule>, span: Span) ->
                 Some(Rule::Count) => Some(WindowOperation::Count),
                 Some(Rule::Integral) => Some(WindowOperation::Integral),
                 None => None,
-                _ => unreachable!()
+                _ => unreachable!(),
             };
-            Expression::new(ExpressionKind::Lookup(stream_instance, offset, aggregation), span.into())
-        },
-        _ => unreachable!()
+            Expression::new(
+                ExpressionKind::Lookup(stream_instance, offset, aggregation),
+                span.into(),
+            )
+        }
+        _ => unreachable!(),
     }
 }
 
@@ -489,7 +504,7 @@ impl Ident {
 pub struct Span {
     start: usize,
     end: usize,
-    // TODO Do we need this here or do we want to keep a mapping from byte positions to lines in the LSP part. 
+    // TODO Do we need this here or do we want to keep a mapping from byte positions to lines in the LSP part.
     // line: usize,
     // /// The LSP uses UTF-16 code units (2 bytes) as their unit for offsets.
     // lineOffsetLSP: usize,
@@ -760,6 +775,5 @@ mod tests {
         let ast = parse(spec).unwrap_or_else(throw);
         cmp_ast_spec(ast, spec);
     }
-
 
 }
