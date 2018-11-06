@@ -9,6 +9,7 @@ use clap::{App, Arg, SubCommand};
 use pest::Parser;
 
 use super::super::parse::{LolaParser, Rule};
+use super::super::analysis;
 
 enum Analysis {
     Parse,
