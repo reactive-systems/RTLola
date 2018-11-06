@@ -33,7 +33,7 @@ lazy_static! {
  * Transforms a textual representation of a Lola specification into
  * an AST representation.
  */
-fn parse(content: &str) -> Result<LolaSpec, pest::error::Error<Rule>> {
+pub(crate) fn parse(content: &str) -> Result<LolaSpec, pest::error::Error<Rule>> {
     let mut pairs = LolaParser::parse(Rule::Spec, content)?;
     let mut spec = LolaSpec::new();
     assert!(pairs.clone().count() == 1, "Spec must not be empty.");
@@ -374,10 +374,7 @@ fn build_function_expression(spec: &mut LolaSpec, pair: Pair<Rule>, span: Span) 
         _ => panic!("Unknown function symbol: {}.", name),
     };
     let args = parse_vec_of_expressions(spec, children);
-    Expression::new(
-        ExpressionKind::Function(function_kind, args),
-        span,
-    )
+    Expression::new(ExpressionKind::Function(function_kind, args), span)
 }
 
 /**
