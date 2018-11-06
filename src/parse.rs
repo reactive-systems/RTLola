@@ -509,6 +509,12 @@ mod tests {
 
     use super::*;
 
+    fn cmp_ast_spec(ast: LolaSpec, spec: &str) -> bool {
+        // Todo: Make more robust, e.g. against changes in whitespace.
+        assert_eq!(format!("{}", ast), spec.replace("\n", " "));
+        true
+    }
+
     #[test]
     fn parse_simple() {
         let _ = LolaParser::parse(
@@ -544,19 +550,19 @@ mod tests {
             .next()
             .unwrap();
         let mut spec = LolaSpec::new();
-        let ast = super::parse_constant(&mut spec, pair);;
+        let ast = super::parse_constant(&mut spec, pair);
         assert_eq!(format!("{}", ast), "constant five: Int := 5")
     }
 
     #[test]
     fn parse_constant_double() {
-        let pair = LolaParser::parse(Rule::ConstantStream, "constant fiveoh : Double := 5.0")
+        let pair = LolaParser::parse(Rule::ConstantStream, "constant fiveoh: Double := 5.0")
             .unwrap_or_else(|e| panic!("{}", e))
             .next()
             .unwrap();
         let mut spec = LolaSpec::new();
         let ast = super::parse_constant(&mut spec, pair);
-        assert_eq!(format!("{}", ast), "constant fiveoh: Double := 5")
+        assert_eq!(format!("{}", ast), "constant fiveoh: Double := 5.0")
     }
 
     #[test]
@@ -669,26 +675,26 @@ mod tests {
 
     #[test]
     fn parse_expression_precedence() {
-        let expr = LolaParser::parse(Rule::Expr, "(a || b & c)")
+        let expr = LolaParser::parse(Rule::Expr, "(a ∨ b ∧ c)")
             .unwrap_or_else(|e| panic!("{}", e))
             .next()
             .unwrap();
         let mut spec = LolaSpec::new();
         let span = expr.as_span();
         let ast = build_expression_ast(&mut spec, expr.into_inner(), span.into());
-        assert_eq!(format!("{}", ast), "(a || b && c)")
+        assert_eq!(format!("{}", ast), "(a ∨ b ∧ c)")
     }
 
     #[test]
     fn parse_missing_closing_parenthesis() {
-        let expr = LolaParser::parse(Rule::Expr, "(a || b & c")
+        let expr = LolaParser::parse(Rule::Expr, "(a ∨ b ∧ c")
             .unwrap_or_else(|e| panic!("{}", e))
             .next()
             .unwrap();
         let mut spec = LolaSpec::new();
         let span = expr.as_span();
         let ast = build_expression_ast(&mut spec, expr.into_inner(), span.into());
-        assert_eq!(format!("{}", ast), "(a || b && c")
+        assert_eq!(format!("{}", ast), "(a ∨ b ∧ c")
     }
 
     #[test]
@@ -696,29 +702,23 @@ mod tests {
         let spec = "input in: Int\noutput out: Int := in\ntrigger in != out";
         let throw = |e| panic!("{}", e);
         let ast = parse(spec).unwrap_or_else(throw);
-        assert_eq!(ast.inputs.len(), 1);
-        assert_eq!(ast.trigger.len(), 1);
-        assert_eq!(ast.outputs.len(), 1);
+        cmp_ast_spec(ast, spec);
     }
 
     #[test]
     fn build_ast_input() {
-        let spec = "input in: Int\ninput in2: Int\ninput in3: (Int, Bool)\ninput in4: Bool\n";
+        let spec = "input in: Int\ninput in2: Int\ninput in3: (Int, Bool)\ninput in4: Bool";
         let throw = |e| panic!("{}", e);
         let ast = parse(spec).unwrap_or_else(throw);
-        assert_eq!(ast.inputs.len(), 4);
-        assert_eq!(ast.trigger.len(), 0);
-        assert_eq!(ast.outputs.len(), 0);
+        cmp_ast_spec(ast, spec);
     }
 
     #[test]
     fn build_parenthesized_expression() {
-        let spec = "output s: Bool := (true | true)";
+        let spec = "output s: Bool := (true ∨ true)";
         let throw = |e| panic!("{}", e);
         let ast = parse(spec).unwrap_or_else(throw);
-        assert_eq!(ast.inputs.len(), 0);
-        assert_eq!(ast.trigger.len(), 0);
-        assert_eq!(ast.outputs.len(), 1);
+        cmp_ast_spec(ast, spec);
     }
 
     #[test]
@@ -726,49 +726,39 @@ mod tests {
         let spec = "output s: Int := s[-1] ? (3 * 4)";
         let throw = |e| panic!("{}", e);
         let ast = parse(spec).unwrap_or_else(throw);
-        assert_eq!(ast.inputs.len(), 0);
-        assert_eq!(ast.trigger.len(), 0);
-        assert_eq!(ast.outputs.len(), 1);
+        cmp_ast_spec(ast, spec);
     }
 
     #[test]
     fn build_ternary_expression() {
-        let spec = "input in: Int\n output s: Int := if in = 3 then 4 else in + 2";
+        let spec = "input in: Int\noutput s: Int := if in = 3 then 4 else in + 2";
         let throw = |e| panic!("{}", e);
         let ast = parse(spec).unwrap_or_else(throw);
-        assert_eq!(ast.inputs.len(), 1);
-        assert_eq!(ast.trigger.len(), 0);
-        assert_eq!(ast.outputs.len(), 1);
+        cmp_ast_spec(ast, spec);
     }
 
     #[test]
     fn build_function_expression() {
-        let spec = "input in: (Int, Bool)\n output s: Int := nroot(1, π(1, in))";
+        let spec = "input in: (Int, Bool)\noutput s: Int := nroot(1, π(1, in))";
         let throw = |e| panic!("{}", e);
         let ast = parse(spec).unwrap_or_else(throw);
-        assert_eq!(ast.inputs.len(), 1);
-        assert_eq!(ast.trigger.len(), 0);
-        assert_eq!(ast.outputs.len(), 1);
+        cmp_ast_spec(ast, spec);
     }
 
     #[test]
     fn build_trigger() {
-        let spec = "input in: Int\n trigger in > 5";
+        let spec = "input in: Int\ntrigger in > 5";
         let throw = |e| panic!("{}", e);
         let ast = parse(spec).unwrap_or_else(throw);
-        assert_eq!(ast.inputs.len(), 1);
-        assert_eq!(ast.trigger.len(), 1);
-        assert_eq!(ast.outputs.len(), 0);
+        cmp_ast_spec(ast, spec);
     }
 
     #[test]
     fn build_complex_expression() {
-        let spec = "output s: Double := if ¬((s[-1] ? (3 * 4) + -4) = 12) || true = false then 2.0 else 4.1";
+        let spec = "output s: Double := if !((s[-1] ? (3 * 4) + -4) = 12) ∨ true = false then 2.0 else 4.1";
         let throw = |e| panic!("{}", e);
         let ast = parse(spec).unwrap_or_else(throw);
-        assert_eq!(ast.inputs.len(), 0);
-        assert_eq!(ast.trigger.len(), 0);
-        assert_eq!(ast.outputs.len(), 1);
+        cmp_ast_spec(ast, spec);
     }
 
 
