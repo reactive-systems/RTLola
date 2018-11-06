@@ -77,6 +77,7 @@ impl NodeId {
 /// A declaration of a constant (stream)
 #[derive(Debug)]
 pub struct Constant {
+    pub(crate) id: NodeId,
     pub name: Ident,
     pub ty: Option<Type>,
     pub literal: Literal,
@@ -86,6 +87,7 @@ pub struct Constant {
 /// A declaration of an input stream
 #[derive(Debug)]
 pub struct Input {
+    pub(crate) id: NodeId,
     pub name: Ident,
     pub ty: Type,
     pub span: Span,
@@ -94,6 +96,7 @@ pub struct Input {
 /// A declaration of an output stream
 #[derive(Debug)]
 pub struct Output {
+    pub(crate) id: NodeId,
     pub name: Ident,
     pub ty: Option<Type>,
     pub expression: Expression,
@@ -103,6 +106,7 @@ pub struct Output {
 /// A declaration of a trigger
 #[derive(Debug)]
 pub struct Trigger {
+    pub(crate) id: NodeId,
     pub name: Option<Ident>,
     pub expression: Expression,
     pub message: Option<String>,
@@ -176,8 +180,8 @@ pub struct Expression {
 }
 
 impl Expression {
-    pub fn new(id: NodeId, kind: ExpressionKind, span: Span) -> Expression {
-        Expression { id, kind, span }
+    pub fn new(kind: ExpressionKind, span: Span) -> Expression {
+        Expression { id: NodeId::DUMMY, kind, span }
     }
 }
 
@@ -361,3 +365,4 @@ pub enum TimeUnit {
     /// Note: A year is always, *always*, 365 days long.
     Year,
 }
+
