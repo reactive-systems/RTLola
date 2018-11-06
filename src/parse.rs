@@ -302,6 +302,7 @@ fn parse_lookup_expression(spec: &mut LolaSpec, pair: Pair<Rule>, span: Span) ->
                 build_expression_ast(spec, second_child.into_inner(), second_child_span.into());
             let offset = Offset::DiscreteOffset(Box::new(offset));
             Expression::new(
+                NodeId::DUMMY,
                 ExpressionKind::Lookup(stream_instance, offset, None),
                 span.into(),
             )
@@ -343,6 +344,7 @@ fn parse_lookup_expression(spec: &mut LolaSpec, pair: Pair<Rule>, span: Span) ->
                 _ => unreachable!(),
             };
             Expression::new(
+                NodeId::DUMMY,
                 ExpressionKind::Lookup(stream_instance, offset, aggregation),
                 span.into(),
             )
@@ -370,7 +372,11 @@ fn build_function_expression(spec: &mut LolaSpec, pair: Pair<Rule>, span: Span) 
         _ => panic!("Unknown function symbol: {}.", name),
     };
     let args = parse_vec_of_expressions(spec, children);
-    Expression::new(ExpressionKind::Function(function_kind, args), span)
+    Expression::new(
+        NodeId::DUMMY,
+        ExpressionKind::Function(function_kind, args),
+        span,
+    )
 }
 
 /**
@@ -383,10 +389,10 @@ fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<Rule>, span: Span) -> 
             let span = pair.as_span();
             match pair.as_rule() { // Map function from `Pair` to AST data structure `Expression`
                 Rule::Literal => {
-                    Expression::new(ExpressionKind::Lit(parse_literal(spec, pair)), span.into())
+                    Expression::new(NodeId::DUMMY,ExpressionKind::Lit(parse_literal(spec, pair)), span.into())
                 }
                 Rule::Ident => {
-                    Expression::new(ExpressionKind::Ident(parse_ident(spec, pair)), span.into())
+                    Expression::new(NodeId::DUMMY,ExpressionKind::Ident(parse_ident(spec, pair)), span.into())
                 }
                 Rule::ParenthesizedExpression => {
                     let mut inner = pair
@@ -409,7 +415,7 @@ fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<Rule>, span: Span) -> 
                     };
 
                     let inner_span = inner_expression.as_span().into();
-                    Expression::new(
+                    Expression::new(NodeId::DUMMY,
                         ExpressionKind::ParenthesizedExpression(
                             opening_parenthesis,
                             Box::new(build_expression_ast(spec, inner_expression.into_inner(), inner_span)),
@@ -425,7 +431,7 @@ fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<Rule>, span: Span) -> 
                     let default_span = default.as_span().into();
                     let lookup = parse_lookup_expression(spec, lookup, lookup_span);
                     let default = build_expression_ast(spec, default.into_inner(), default_span);
-                    Expression::new(ExpressionKind::Default(Box::new(lookup), Box::new(default)), span.into())
+                    Expression::new(NodeId::DUMMY,ExpressionKind::Default(Box::new(lookup), Box::new(default)), span.into())
                 },
                 Rule::LookupExpr => parse_lookup_expression(spec, pair, span.into()),
                 Rule::UnaryExpr => { // First child is the operator, second the operand.
@@ -434,23 +440,23 @@ fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<Rule>, span: Span) -> 
                     let operand = children.next().expect("Unary expressions need to have an operand.");
                     let op_span = operand.as_span().into();
                     let operand = build_expression_ast(spec, operand.into_inner(), op_span);
-                    let operator= match pest_operator.as_rule() {
+                    let operator = match pest_operator.as_rule() {
                         Rule::Add => return operand, // Discard unary plus because it is semantically null.
                         Rule::Subtract => UnOp::Neg,
                         Rule::Neg => UnOp::Not,
                         _ => unreachable!(),
                     };
-                    Expression::new(ExpressionKind::Unary(operator, Box::new(operand)), span.into())
+                    Expression::new(NodeId::DUMMY, ExpressionKind::Unary(operator, Box::new(operand)), span.into())
                 },
                 Rule::TernaryExpr => {
                     let mut children = parse_vec_of_expressions(spec, pair.into_inner());
                     assert_eq!(children.len(), 3, "A ternary expression needs exactly three children.");
-                    Expression::new(ExpressionKind::Ite(children.remove(0), children.remove(0), children.remove(0)), span.into())
+                    Expression::new(NodeId::DUMMY,ExpressionKind::Ite(children.remove(0), children.remove(0), children.remove(0)), span.into())
                 },
                 Rule::Tuple => {
                     let elements = parse_vec_of_expressions(spec, pair.into_inner());
                     assert!(elements.len() != 1, "Tuples may not have exactly one element.");
-                    Expression::new(ExpressionKind::Tuple(elements), span.into())
+                    Expression::new(NodeId::DUMMY,ExpressionKind::Tuple(elements), span.into())
                 },
                 Rule::Expr => {
                     let span = pair.as_span();
@@ -479,6 +485,7 @@ fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<Rule>, span: Span) -> 
                 _ => unreachable!(),
             };
             Expression::new(
+                NodeId::DUMMY,
                 ExpressionKind::Binary(op, Box::new(lhs), Box::new(rhs)),
                 span,
             )

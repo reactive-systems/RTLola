@@ -46,6 +46,34 @@ impl<'a> From<&'a str> for LanguageSpec {
     }
 }
 
+/// Every node in the AST gets a unique id, represented by a 32bit unsiged integer.
+/// They are used in the later analysis phases to store information about AST nodes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct NodeId(u32);
+
+impl NodeId {
+    pub fn new(x: usize) -> NodeId {
+        assert!(x < (std::u32::MAX as usize));
+        NodeId(x as u32)
+    }
+
+    pub fn from_u32(x: u32) -> NodeId {
+        NodeId(x)
+    }
+
+    pub fn as_usize(&self) -> usize {
+        self.0 as usize
+    }
+
+    pub fn as_u32(&self) -> u32 {
+        self.0
+    }
+
+    /// When parsing, we initially give all AST nodes this AST node id.
+    /// Then later, in the renumber pass, we renumber them to have small, positive ids.
+    pub const DUMMY: NodeId = NodeId(!0);
+}
+
 /// A declaration of a constant (stream)
 #[derive(Debug)]
 pub struct Constant {
@@ -142,13 +170,14 @@ pub enum TypeKind {
 /// inspired by https://doc.rust-lang.org/nightly/nightly-rustc/src/syntax/ast.rs.html
 #[derive(Debug)]
 pub struct Expression {
-    pub kind: ExpressionKind,
-    pub span: Span,
+    pub(crate) id: NodeId,
+    pub(crate) kind: ExpressionKind,
+    span: Span,
 }
 
 impl Expression {
-    pub fn new(kind: ExpressionKind, span: Span) -> Expression {
-        Expression { kind, span }
+    pub fn new(id: NodeId, kind: ExpressionKind, span: Span) -> Expression {
+        Expression { id, kind, span }
     }
 }
 

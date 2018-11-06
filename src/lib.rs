@@ -8,6 +8,7 @@ extern crate pest_derive;
 extern crate lazy_static;
 extern crate clap;
 
+mod analysis;
 pub mod app;
 mod ast;
 mod parse;
