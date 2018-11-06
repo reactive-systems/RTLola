@@ -162,14 +162,10 @@ pub enum ExpressionKind {
     Default(Box<Expression>, Box<Expression>),
     /// A stream lookup with offset
     Lookup(StreamInstance, Offset, Option<WindowOperation>),
-    /// A tuple (`(a, b, c ,d)`)
-    Tup(Vec<Box<Expression>>),
     /// A binary operation (For example: `a + b`, `a * b`)
     Binary(BinOp, Box<Expression>, Box<Expression>),
     /// A unary operation (For example: `!x`, `*x`)
     Unary(UnOp, Box<Expression>),
-    /// A function call
-    Call(Literal, Vec<Box<Expression>>),
     /// An if-then-else expression
     Ite(Box<Expression>, Box<Expression>, Box<Expression>),
     /// An expression enveloped in parentheses
