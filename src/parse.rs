@@ -363,7 +363,7 @@ fn build_function_expression(spec: &mut LolaSpec, pair: Pair<Rule>, span: Span) 
  */
 fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<Rule>, span: Span) -> Expression {
     PREC_CLIMBER.climb(
-        pairs, 
+        pairs,
         |pair: Pair<Rule>| {
             let span = pair.as_span();
             match pair.as_rule() { // Map function from `Pair` to AST data structure `Expression`
