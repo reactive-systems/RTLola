@@ -5,7 +5,6 @@ use pest;
 use pest::iterators::{Pair, Pairs};
 use pest::prec_climber::{Assoc, Operator, PrecClimber};
 use pest::Parser;
-use std::collections::HashMap;
 
 #[derive(Parser)]
 #[grammar = "lola.pest"]
@@ -273,7 +272,6 @@ fn parse_literal(spec: &mut LolaSpec, pair: Pair<Rule>) -> Literal {
 }
 
 fn parse_stream_instance(spec: &mut LolaSpec, instance: Pair<Rule>) -> StreamInstance {
-    println!("parse_stream_instance: {:?}", instance);
     let mut children = instance.into_inner();
     // Parse the stream identifier in isolation.
     let stream_ident = parse_ident(spec, children.next().unwrap());
@@ -283,7 +281,6 @@ fn parse_stream_instance(spec: &mut LolaSpec, instance: Pair<Rule>) -> StreamIns
 }
 
 fn parse_vec_of_expressions(spec: &mut LolaSpec, pairs: Pairs<Rule>) -> Vec<Box<Expression>> {
-    println!("parse_vec_of_expressions: {:?}", pairs);
     pairs.map(|expr| {
             let span = expr.as_span().into();
             build_expression_ast(spec, expr.into_inner(), span)
@@ -365,7 +362,6 @@ fn build_function_expression(spec: &mut LolaSpec, pair: Pair<Rule>, span: Span) 
  * Builds the Expr AST.
  */
 fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<Rule>, span: Span) -> Expression {
-    println!("{:#?}", pairs);
     PREC_CLIMBER.climb(
         pairs, 
         |pair: Pair<Rule>| {
@@ -588,7 +584,6 @@ mod tests {
             .unwrap();
         let mut spec = LolaSpec::new();
         let inputs = super::parse_inputs(&mut spec, pair);
-        println!("{:?}", inputs);
         assert_eq!(inputs.len(), 3);
         assert_eq!(format!("{}", inputs[0]), "input a: Int");
         assert_eq!(format!("{}", inputs[1]), "input b: Int");
