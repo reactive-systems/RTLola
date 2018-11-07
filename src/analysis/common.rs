@@ -1,4 +1,3 @@
-
 #[derive(Debug, Eq, PartialEq, Clone, Copy, Hash)]
 pub enum BuiltinType {
     Int8,
@@ -7,5 +6,5 @@ pub enum BuiltinType {
     Int64,
     Bool,
     Double,
-    String
+    String,
 }

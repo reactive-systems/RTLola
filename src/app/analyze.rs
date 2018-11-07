@@ -8,8 +8,8 @@ use std::process;
 use clap::{App, Arg, SubCommand};
 use pest::Parser;
 
-use super::super::parse::{LolaParser, Rule};
 use super::super::analysis;
+use super::super::parse::{LolaParser, Rule};
 
 enum Analysis {
     Parse,

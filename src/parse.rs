@@ -83,9 +83,7 @@ fn parse_constant(spec: &mut LolaSpec, pair: Pair<Rule>) -> Constant {
     assert_eq!(pair.as_rule(), Rule::ConstantStream);
     let span = pair.as_span().into();
     let mut pairs = pair.into_inner();
-    let name = parse_ident(
-        &pairs.next().expect("mismatch between grammar and AST"),
-    );
+    let name = parse_ident(&pairs.next().expect("mismatch between grammar and AST"));
     let ty = parse_type(
         spec,
         pairs.next().expect("mismatch between grammar and AST"),
@@ -146,9 +144,7 @@ fn parse_output(spec: &mut LolaSpec, pair: Pair<Rule>) -> Output {
     assert_eq!(pair.as_rule(), Rule::OutputStream);
     let span = pair.as_span().into();
     let mut pairs = pair.into_inner();
-    let name = parse_ident(
-        &pairs.next().expect("mismatch between grammar and AST"),
-    );
+    let name = parse_ident(&pairs.next().expect("mismatch between grammar and AST"));
     let ty = parse_type(
         spec,
         pairs.next().expect("mismatch between grammar and AST"),
@@ -214,7 +210,6 @@ fn parse_ident(pair: &Pair<Rule>) -> Ident {
     Ident::new(name, pair.as_span().into())
 }
 
-
 /**
  * Transforms a `Rule::TypeDecl` into `TypeDeclaration` AST node.
  * Panics if input is not `Rule::TypeDecl`.
@@ -223,10 +218,7 @@ fn parse_type_declaration(spec: &mut LolaSpec, pair: Pair<Rule>) -> TypeDeclarat
     assert_eq!(pair.as_rule(), Rule::TypeDecl);
     let span = pair.as_span().into();
     let mut pairs = pair.into_inner();
-    let name = parse_ident(
-        spec,
-        pairs.next().expect("mismatch between grammar and AST"),
-    );
+    let name = parse_ident(&pairs.next().expect("mismatch between grammar and AST"));
     let mut fields = Vec::new();
     while let Some(pair) = pairs.next() {
         let field_name = pair.as_str().to_string();
@@ -234,7 +226,10 @@ fn parse_type_declaration(spec: &mut LolaSpec, pair: Pair<Rule>) -> TypeDeclarat
             spec,
             pairs.next().expect("mismatch between grammar and AST"),
         );
-        fields.push(Box::new(TypeDeclField{name:field_name, ty}));
+        fields.push(Box::new(TypeDeclField {
+            name: field_name,
+            ty,
+        }));
     }
     let kind = TypeKind::UserDefined(fields);
     TypeDeclaration {
@@ -334,10 +329,7 @@ fn parse_lookup_expression(spec: &mut LolaSpec, pair: Pair<Rule>, span: Span) ->
             let offset =
                 build_expression_ast(spec, second_child.into_inner(), second_child_span.into());
             let offset = Offset::DiscreteOffset(Box::new(offset));
-            Expression::new(
-                ExpressionKind::Lookup(stream_instance, offset, None),
-                span,
-            )
+            Expression::new(ExpressionKind::Lookup(stream_instance, offset, None), span)
         }
         Rule::Duration => {
             // Real time offset

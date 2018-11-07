@@ -3,8 +3,8 @@
 //! In detail,
 //! * `naming` provides boundedness analysis for identifiers used in the Lola Specification
 
-mod id_assignment;
 mod common;
+mod id_assignment;
 mod naming;
 
 use super::LolaSpec;
@@ -18,7 +18,7 @@ pub struct Report {
 
 pub fn analyze(spec: &mut LolaSpec) -> Report {
     id_assignment::assign_ids(spec);
-    let mut naming_analyzer= naming::NamingAnalysis::new();
+    let mut naming_analyzer = naming::NamingAnalysis::new();
     naming_analyzer.check(spec);
     unimplemented!();
 }

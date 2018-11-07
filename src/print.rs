@@ -6,15 +6,9 @@ use std::fmt::{Display, Formatter, Result};
 
 struct PrintHelper {}
 impl PrintHelper {
-    fn write<T: Display>(
-        f: &mut Formatter,
-        v: &[T],
-        pref: &str,
-        suff: &str,
-        join: &str,
-    ) -> Result {
+    fn write<T: Display>(f: &mut Formatter, v: &[T], pref: &str, suff: &str, join: &str) -> Result {
         write!(f, "{}", pref)?;
-        if let Some(e) = v.first(){
+        if let Some(e) = v.first() {
             write!(f, "{}", e)?;
             for b in &v[1..] {
                 write!(f, "{}{}", join, b)?;
@@ -85,11 +79,9 @@ impl Display for Trigger {
 
 impl Display for Type {
     fn fmt(&self, f: &mut Formatter) -> Result {
-        write!(f,"{}",self.kind)
+        write!(f, "{}", self.kind)
     }
 }
-
-
 
 impl Display for TypeKind {
     fn fmt(&self, f: &mut Formatter) -> Result {
@@ -102,7 +94,7 @@ impl Display for TypeKind {
     }
 }
 
-impl Display for TypeDeclField{
+impl Display for TypeDeclField {
     fn fmt(&self, f: &mut Formatter) -> Result {
         write!(f, "{}: {}", &self.name, &self.ty)
     }
@@ -110,11 +102,16 @@ impl Display for TypeDeclField{
 
 impl Display for TypeDeclaration {
     fn fmt(&self, f: &mut Formatter) -> Result {
-        write!(f, "type {} {{ {} }}", if let Some(name) = &self.name {
-            format!("{}", name)
-        } else {
-            String::new()
-        }, self.kind)
+        write!(
+            f,
+            "type {} {{ {} }}",
+            if let Some(name) = &self.name {
+                format!("{}", name)
+            } else {
+                String::new()
+            },
+            self.kind
+        )
     }
 }
 
@@ -304,7 +301,13 @@ impl Display for LolaSpec {
         }
         let mut first = true;
         if !self.type_declarations.is_empty() {
-            PrintHelper::write(f, &self.type_declarations, if first { "" } else { " " }, "", " ")?;
+            PrintHelper::write(
+                f,
+                &self.type_declarations,
+                if first { "" } else { " " },
+                "",
+                " ",
+            )?;
             first = false;
         }
         if !self.constants.is_empty() {

@@ -108,7 +108,7 @@ pub(crate) enum Declaration<'a> {
     In(&'a Input),
     Out(&'a Output),
     UserDefinedType(&'a TypeDeclField),
-    BuiltinType( super::common::BuiltinType)
+    BuiltinType(super::common::BuiltinType),
 }
 
 impl<'a> Into<Declaration<'a>> for &'a Constant {
