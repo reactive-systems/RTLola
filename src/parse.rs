@@ -497,7 +497,7 @@ pub struct Ident {
 }
 
 impl Ident {
-    fn new(name: String, span: Span) -> Ident {
+    pub fn new(name: String, span: Span) -> Ident {
         Ident { name, span }
     }
 }
@@ -506,8 +506,8 @@ impl Ident {
 /// Start and end positions are *byte* offsets.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Span {
-    start: usize,
-    end: usize,
+    pub start: usize,
+    pub end: usize,
     // TODO Do we need this here or do we want to keep a mapping from byte positions to lines in the LSP part.
     // line: usize,
     // /// The LSP uses UTF-16 code units (2 bytes) as their unit for offsets.
