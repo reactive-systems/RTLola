@@ -194,7 +194,11 @@ pub struct Expression {
 
 impl Expression {
     pub fn new(kind: ExpressionKind, span: Span) -> Expression {
-        Expression { id: NodeId::DUMMY, kind, span }
+        Expression {
+            id: NodeId::DUMMY,
+            kind,
+            span,
+        }
     }
 }
 
@@ -378,4 +382,3 @@ pub enum TimeUnit {
     /// Note: A year is always, *always*, 365 days long.
     Year,
 }
-

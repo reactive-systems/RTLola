@@ -1,6 +1,5 @@
-
-use super::super::LolaSpec;
 use super::super::ast::*;
+use super::super::LolaSpec;
 
 pub(crate) fn assign_ids(spec: &mut LolaSpec) {
     let mut free_id = 0;
@@ -37,17 +36,22 @@ pub(crate) fn assign_ids(spec: &mut LolaSpec) {
     }
 }
 
-fn assign_ids_expr<E>(exp: &mut Expression, next_id: &mut E) where E: FnMut() -> NodeId {
+fn assign_ids_expr<E>(exp: &mut Expression, next_id: &mut E)
+where
+    E: FnMut() -> NodeId,
+{
     exp.id = next_id();
     match &mut exp.kind {
-        ExpressionKind::Lit(_) => {},
-        ExpressionKind::Ident(_) => {},
+        ExpressionKind::Lit(_) => {}
+        ExpressionKind::Ident(_) => {}
         ExpressionKind::Default(lhs, rhs) => {
             assign_ids_expr(lhs, next_id);
             assign_ids_expr(rhs, next_id);
-        },
+        }
         ExpressionKind::Lookup(inst, offset, _winop) => {
-            inst.arguments.iter_mut().for_each(|e| assign_ids_expr(e, next_id));
+            inst.arguments
+                .iter_mut()
+                .for_each(|e| assign_ids_expr(e, next_id));
             match offset {
                 Offset::DiscreteOffset(expr) => assign_ids_expr(expr, next_id),
                 Offset::RealTimeOffset(expr, _) => assign_ids_expr(expr, next_id),
@@ -56,68 +60,86 @@ fn assign_ids_expr<E>(exp: &mut Expression, next_id: &mut E) where E: FnMut() ->
         ExpressionKind::Binary(_, lhs, rhs) => {
             assign_ids_expr(lhs, next_id);
             assign_ids_expr(rhs, next_id)
-        },
+        }
         ExpressionKind::Unary(_, operand) => assign_ids_expr(operand, next_id),
         ExpressionKind::Ite(cond, cons, alt) => {
             assign_ids_expr(cond, next_id);
             assign_ids_expr(cons, next_id);
             assign_ids_expr(alt, next_id)
         }
-        ExpressionKind::ParenthesizedExpression(_, e, _) => {
-            assign_ids_expr(e, next_id)
+        ExpressionKind::ParenthesizedExpression(_, e, _) => assign_ids_expr(e, next_id),
+        ExpressionKind::MissingExpression() => {}
+        ExpressionKind::Tuple(exprs) => exprs.iter_mut().for_each(|e| assign_ids_expr(e, next_id)),
+        ExpressionKind::Function(_, args) => {
+            args.iter_mut().for_each(|e| assign_ids_expr(e, next_id))
         }
-        ExpressionKind::MissingExpression() => {},
-        ExpressionKind::Tuple(exprs) =>
-            exprs.iter_mut().for_each(|e| assign_ids_expr(e, next_id)),
-        ExpressionKind::Function(_, args) =>
-            args.iter_mut().for_each(|e| assign_ids_expr(e, next_id)),
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use super::super::super::parse::{Span, Ident};
     use super::super::super::ast::Input;
+    use super::super::super::parse::{Ident, Span};
+    use super::*;
 
     fn get_id_o(s: Option<&Output>) -> NodeId {
         if let Some(o) = s {
             if let Some(ref ty) = o.ty {
                 ty.id
-            } else { unimplemented!() }
-        } else { unimplemented!() }
+            } else {
+                panic!("Assigning ids must not remove types!")
+            }
+        } else {
+            panic!("Assigning ids must not remove streams!")
+        }
     }
     fn get_id_c(s: Option<&Constant>) -> NodeId {
         if let Some(o) = s {
             if let Some(ref ty) = o.ty {
                 ty.id
-            } else { unimplemented!() }
-        } else { unimplemented!() }
+            } else {
+                panic!("Assigning ids must not remove types!")
+            }
+        } else {
+            panic!("Assigning ids must not remove streams!")
+        }
     }
 
-    fn span() -> Span { Span { start: 0, end: 0 } }
-    fn ty() -> Type { Type::new_simple(String::from("something"), span()) }
-    fn ident() -> Ident { Ident::new(String::from("Something"), span()) }
-    fn input() -> Input { Input {
-        id: NodeId::DUMMY,
-        name: Ident::new(String::from("Something"), span()),
-        ty: Type::new_simple(String::from("something"), span()),
-        span: span()
-        } }
-    fn constant() -> Constant { Constant {
-        id: NodeId::DUMMY,
-        name: ident(),
-        ty: Some(ty()),
-        literal: Literal::new_bool(false, span()),
-        span: span(),
-        } }
-    fn output(expr: Expression) -> Output { Output {
-        id: NodeId::DUMMY,
-        name: ident(),
-        ty: Some(ty()),
-        expression: expr,
-        span: span(),
-        } }
+    fn span() -> Span {
+        Span { start: 0, end: 0 }
+    }
+    fn ty() -> Type {
+        Type::new_simple(String::from("something"), span())
+    }
+    fn ident() -> Ident {
+        Ident::new(String::from("Something"), span())
+    }
+    fn input() -> Input {
+        Input {
+            id: NodeId::DUMMY,
+            name: Ident::new(String::from("Something"), span()),
+            ty: Type::new_simple(String::from("something"), span()),
+            span: span(),
+        }
+    }
+    fn constant() -> Constant {
+        Constant {
+            id: NodeId::DUMMY,
+            name: ident(),
+            ty: Some(ty()),
+            literal: Literal::new_bool(false, span()),
+            span: span(),
+        }
+    }
+    fn output(expr: Expression) -> Output {
+        Output {
+            id: NodeId::DUMMY,
+            name: ident(),
+            ty: Some(ty()),
+            expression: expr,
+            span: span(),
+        }
+    }
 
     #[test]
     fn assign_atomic() {
@@ -148,20 +170,20 @@ mod tests {
         let mut v = vec![
             spec.inputs[0].ty.id,
             spec.inputs[0].id,
-
             spec.inputs[1].ty.id,
             spec.inputs[1].id,
-
             get_id_c(spec.constants.get(0)),
             spec.constants[0].id,
-
             get_id_o(spec.outputs.get(0)),
             spec.outputs[0].id,
             spec.outputs[0].expression.id,
         ];
         v.dedup();
         assert_eq!(v.len(), 9, "Some ids occur multiple times.");
-        assert!(v.iter().all(|id| *id != NodeId::DUMMY), "No node should have a dummy id anymore.");
+        assert!(
+            v.iter().all(|id| *id != NodeId::DUMMY),
+            "No node should have a dummy id anymore."
+        );
     }
 
     #[test]
@@ -180,7 +202,10 @@ mod tests {
         let mut spec = LolaSpec::new();
         let lhs = Expression::new(ExpressionKind::Ident(ident()), span());
         let rhs = Expression::new(ExpressionKind::Ident(ident()), span());
-        let expr = Expression::new(ExpressionKind::Binary(BinOp::Div, Box::new(lhs), Box::new(rhs)), span());
+        let expr = Expression::new(
+            ExpressionKind::Binary(BinOp::Div, Box::new(lhs), Box::new(rhs)),
+            span(),
+        );
         spec.outputs.push(output(expr));
         assign_ids(&mut spec);
         let mut v = vec![
@@ -188,13 +213,20 @@ mod tests {
             spec.outputs[0].id,
             spec.outputs[0].expression.id,
         ];
-        if let ExpressionKind::Binary(BinOp::Div, ref lhs, ref rhs) = spec.outputs[0].expression.kind {
+        if let ExpressionKind::Binary(BinOp::Div, ref lhs, ref rhs) =
+            spec.outputs[0].expression.kind
+        {
             v.push(rhs.id);
             v.push(lhs.id);
-        } else { panic!("Assigning ids must not change the ast in any other way.") }
+        } else {
+            panic!("Assigning ids must not change the ast in any other way.")
+        }
         v.dedup();
 
         assert_eq!(v.len(), 5, "Some ids occur multiple times.");
-        assert!(v.iter().all(|id| *id != NodeId::DUMMY), "No node should have a dummy id anymore.");
+        assert!(
+            v.iter().all(|id| *id != NodeId::DUMMY),
+            "No node should have a dummy id anymore."
+        );
     }
 }
