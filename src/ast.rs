@@ -3,7 +3,7 @@
 use super::parse::{Ident, Span};
 
 /// The root Lola specification
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct LolaSpec {
     pub language: Option<LanguageSpec>,
     pub constants: Vec<Constant>,
@@ -43,7 +43,7 @@ pub enum LanguageSpec {
 }
 
 impl<'a> From<&'a str> for LanguageSpec {
-    fn from(string: &str) -> Self {
+    fn from(_string: &str) -> Self {
         unimplemented!();
     }
 }
@@ -63,11 +63,11 @@ impl NodeId {
         NodeId(x)
     }
 
-    pub fn as_usize(&self) -> usize {
+    pub fn as_usize(self) -> usize {
         self.0 as usize
     }
 
-    pub fn as_u32(&self) -> u32 {
+    pub fn as_u32(self) -> u32 {
         self.0
     }
 
@@ -278,9 +278,9 @@ impl Literal {
         }
     }
 
-    pub fn new_tuple(vals: &Vec<Literal>, span: Span) -> Literal {
+    pub fn new_tuple(vals: &[Literal], span: Span) -> Literal {
         Literal {
-            kind: LitKind::Tuple(Box::new(vals.to_vec())),
+            kind: LitKind::Tuple(vals.to_vec()),
             span,
         }
     }
@@ -304,7 +304,7 @@ pub enum LitKind {
     /// A boolean literal (`true`)
     Bool(bool),
     // A tuple literal (`(1, 2f64, "34as", 99)`)
-    Tuple(Box<Vec<Literal>>),
+    Tuple(Vec<Literal>),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]

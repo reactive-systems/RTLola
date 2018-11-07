@@ -84,8 +84,7 @@ fn parse_constant(spec: &mut LolaSpec, pair: Pair<Rule>) -> Constant {
     let span = pair.as_span().into();
     let mut pairs = pair.into_inner();
     let name = parse_ident(
-        spec,
-        pairs.next().expect("mismatch between grammar and AST"),
+        &pairs.next().expect("mismatch between grammar and AST"),
     );
     let ty = parse_type(
         spec,
@@ -118,7 +117,7 @@ fn parse_inputs(spec: &mut LolaSpec, pair: Pair<Rule>) -> Vec<Input> {
     let mut pairs = pair.into_inner();
     while let Some(pair) = pairs.next() {
         let start = pair.as_span().start();
-        let name = parse_ident(spec, pair);
+        let name = parse_ident(&pair);
 
         let pair = pairs.next().expect("mismatch between grammar and AST");
         let end = pair.as_span().end();
@@ -148,8 +147,7 @@ fn parse_output(spec: &mut LolaSpec, pair: Pair<Rule>) -> Output {
     let span = pair.as_span().into();
     let mut pairs = pair.into_inner();
     let name = parse_ident(
-        spec,
-        pairs.next().expect("mismatch between grammar and AST"),
+        &pairs.next().expect("mismatch between grammar and AST"),
     );
     let ty = parse_type(
         spec,
@@ -185,12 +183,9 @@ fn parse_trigger(spec: &mut LolaSpec, pair: Pair<Rule>) -> Trigger {
 
     let mut pair = pairs.next().expect("mismatch between grammar and AST");
     // first token is either expression or identifier
-    match pair.as_rule() {
-        Rule::Ident => {
-            name = Some(parse_ident(spec, pair));
-            pair = pairs.next().expect("mismatch between grammar and AST");
-        }
-        _ => (),
+    if let Rule::Ident = pair.as_rule() {
+        name = Some(parse_ident(&pair));
+        pair = pairs.next().expect("mismatch between grammar and AST");
     }
     let expr_span = pair.as_span();
     let expression = build_expression_ast(spec, pair.into_inner(), expr_span.into());
@@ -213,7 +208,7 @@ fn parse_trigger(spec: &mut LolaSpec, pair: Pair<Rule>) -> Trigger {
  * Transforms a `Rule::Ident` into `Ident` AST node.
  * Panics if input is not `Rule::Ident`.
  */
-fn parse_ident(spec: &mut LolaSpec, pair: Pair<Rule>) -> Ident {
+fn parse_ident(pair: &Pair<Rule>) -> Ident {
     assert_eq!(pair.as_rule(), Rule::Ident);
     let name = pair.as_str().to_string();
     Ident::new(name, pair.as_span().into())
@@ -307,9 +302,9 @@ fn parse_literal(spec: &mut LolaSpec, pair: Pair<Rule>) -> Literal {
 fn parse_stream_instance(spec: &mut LolaSpec, instance: Pair<Rule>) -> StreamInstance {
     let mut children = instance.into_inner();
     // Parse the stream identifier in isolation.
-    let stream_ident = parse_ident(spec, children.next().unwrap());
+    let stream_ident = parse_ident(&children.next().unwrap());
     // Parse remaining children, aka the arguments.
-    let mut args = parse_vec_of_expressions(spec, children);
+    let args = parse_vec_of_expressions(spec, children);
     StreamInstance {
         stream_identifier: stream_ident,
         arguments: args,
@@ -321,7 +316,7 @@ fn parse_vec_of_expressions(spec: &mut LolaSpec, pairs: Pairs<Rule>) -> Vec<Box<
         .map(|expr| {
             let span = expr.as_span().into();
             build_expression_ast(spec, expr.into_inner(), span)
-        }).map(|expr| Box::new(expr))
+        }).map(Box::new)
         .collect()
 }
 
@@ -341,7 +336,7 @@ fn parse_lookup_expression(spec: &mut LolaSpec, pair: Pair<Rule>, span: Span) ->
             let offset = Offset::DiscreteOffset(Box::new(offset));
             Expression::new(
                 ExpressionKind::Lookup(stream_instance, offset, None),
-                span.into(),
+                span,
             )
         }
         Rule::Duration => {
@@ -382,7 +377,7 @@ fn parse_lookup_expression(spec: &mut LolaSpec, pair: Pair<Rule>, span: Span) ->
             };
             Expression::new(
                 ExpressionKind::Lookup(stream_instance, offset, aggregation),
-                span.into(),
+                span,
             )
         }
         _ => unreachable!(),
@@ -424,7 +419,7 @@ fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<Rule>, span: Span) -> 
                     Expression::new(ExpressionKind::Lit(parse_literal(spec, pair)), span.into())
                 }
                 Rule::Ident => {
-                    Expression::new(ExpressionKind::Ident(parse_ident(spec, pair)), span.into())
+                    Expression::new(ExpressionKind::Ident(parse_ident(&pair)), span.into())
                 }
                 Rule::ParenthesizedExpression => {
                     let mut inner = pair

@@ -8,7 +8,7 @@ struct PrintHelper {}
 impl PrintHelper {
     fn write<T: Display>(
         f: &mut Formatter,
-        v: &Vec<T>,
+        v: &[T],
         pref: &str,
         suff: &str,
         join: &str,
@@ -248,7 +248,7 @@ impl Display for Literal {
             LitKind::Bool(val) => write!(f, "{}", val),
             LitKind::Int(i) => write!(f, "{}", i),
             LitKind::Float(fl) => {
-                if *fl == fl.round() {
+                if fl.fract() == 0.0 {
                     write!(f, "{:.1}", fl)
                 } else {
                     write!(f, "{}", fl)

@@ -1,5 +1,6 @@
 //! Parser for the Lola language.
 
+#[allow(unused_imports)]
 #[macro_use]
 extern crate pest;
 #[macro_use]

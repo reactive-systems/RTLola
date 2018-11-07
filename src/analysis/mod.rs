@@ -6,3 +6,19 @@
 mod id_assignment;
 mod common;
 mod naming;
+
+use super::LolaSpec;
+
+pub trait AnalysisError: std::fmt::Debug {}
+
+#[derive(Debug)]
+pub struct Report {
+    errors: Vec<Box<AnalysisError>>,
+}
+
+pub fn analyze(spec: &mut LolaSpec) -> Report {
+    id_assignment::assign_ids(spec);
+    let mut naming_analyzer= naming::NamingAnalysis::new();
+    naming_analyzer.check(spec);
+    unimplemented!();
+}

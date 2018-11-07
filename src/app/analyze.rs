@@ -8,13 +8,14 @@ use std::process;
 use clap::{App, Arg, SubCommand};
 use pest::Parser;
 
-use super::super::analysis;
 use super::super::parse::{LolaParser, Rule};
+use super::super::analysis;
 
 enum Analysis {
     Parse,
     AST,
     Prettyprint,
+    Analyze,
 }
 
 pub struct Config {
@@ -97,6 +98,19 @@ impl Config {
                     filename,
                 }
             }
+            ("analyze", Some(parse_matches)) => {
+                // Now we have a reference to clone's matches
+                let filename = parse_matches
+                    .value_of("INPUT")
+                    .map(|s| s.to_string())
+                    .unwrap();
+                eprintln!("Input file `{}`", filename);
+
+                Config {
+                    which: Analysis::Analyze,
+                    filename,
+                }
+            }
             ("", None) => {
                 println!("No subcommand was used");
                 println!("{}", matches.usage());
@@ -126,6 +140,12 @@ impl Config {
             Analysis::Prettyprint => {
                 let spec = crate::parse::parse(&contents).unwrap_or_else(|e| panic!("{}", e));
                 println!("{}", spec);
+                Ok(())
+            }
+            Analysis::Analyze => {
+                let mut spec = crate::parse::parse(&contents).unwrap_or_else(|e| panic!("{}", e));
+                let report = analysis::analyze(&mut spec);
+                println!("{:?}", report);
                 Ok(())
             }
         }
