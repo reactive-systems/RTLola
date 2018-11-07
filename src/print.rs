@@ -85,11 +85,36 @@ impl Display for Trigger {
 
 impl Display for Type {
     fn fmt(&self, f: &mut Formatter) -> Result {
-        match &self.kind {
+        write!(f,"{}",self.kind)
+    }
+}
+
+
+
+impl Display for TypeKind {
+    fn fmt(&self, f: &mut Formatter) -> Result {
+        match &self {
             TypeKind::Simple(name) => write!(f, "{}", name),
             TypeKind::Malformed(s) => write!(f, "{}", s),
             TypeKind::Tuple(types) => PrintHelper::write(f, types, "(", ")", ", "),
+            TypeKind::UserDefined(fields) => PrintHelper::write(f, fields, "", "", ", "),
         }
+    }
+}
+
+impl Display for TypeDeclField{
+    fn fmt(&self, f: &mut Formatter) -> Result {
+        write!(f, "{}: {}", &self.name, &self.ty)
+    }
+}
+
+impl Display for TypeDeclaration {
+    fn fmt(&self, f: &mut Formatter) -> Result {
+        write!(f, "type {} {{ {} }}", if let Some(name) = &self.name {
+            format!("{}", name)
+        } else {
+            String::new()
+        }, self.kind)
     }
 }
 
@@ -278,6 +303,10 @@ impl Display for LolaSpec {
             write!(f, "version {}", v)?
         }
         let mut first = true;
+        if !self.type_declarations.is_empty() {
+            PrintHelper::write(f, &self.type_declarations, if first { "" } else { " " }, "", " ")?;
+            first = false;
+        }
         if !self.constants.is_empty() {
             PrintHelper::write(f, &self.constants, if first { "" } else { " " }, "", " ")?;
             first = false;

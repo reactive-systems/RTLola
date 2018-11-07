@@ -60,6 +60,10 @@ pub(crate) fn parse(content: &str) -> Result<LolaSpec, pest::error::Error<Rule>>
                 let trigger = parse_trigger(&mut spec, pair);
                 spec.trigger.push(trigger);
             }
+            Rule::TypeDecl => {
+                let type_decl = parse_type_declaration(&mut spec, pair);
+                spec.type_declarations.push(type_decl);
+            }
             Rule::EOI => {}
             _ => unreachable!(),
         }
@@ -215,6 +219,36 @@ fn parse_ident(spec: &mut LolaSpec, pair: Pair<Rule>) -> Ident {
     Ident::new(name, pair.as_span().into())
 }
 
+
+/**
+ * Transforms a `Rule::TypeDecl` into `TypeDeclaration` AST node.
+ * Panics if input is not `Rule::TypeDecl`.
+ */
+fn parse_type_declaration(spec: &mut LolaSpec, pair: Pair<Rule>) -> TypeDeclaration {
+    assert_eq!(pair.as_rule(), Rule::TypeDecl);
+    let span = pair.as_span().into();
+    let mut pairs = pair.into_inner();
+    let name = parse_ident(
+        spec,
+        pairs.next().expect("mismatch between grammar and AST"),
+    );
+    let mut fields = Vec::new();
+    while let Some(pair) = pairs.next() {
+        let field_name = pair.as_str().to_string();
+        let ty = parse_type(
+            spec,
+            pairs.next().expect("mismatch between grammar and AST"),
+        );
+        fields.push(Box::new(TypeDeclField{name:field_name, ty}));
+    }
+    let kind = TypeKind::UserDefined(fields);
+    TypeDeclaration {
+        name: Some(name),
+        kind,
+        span,
+    }
+}
+
 /**
  * Transforms a `Rule::Type` into `Type` AST node.
  * Panics if input is not `Rule::Type`.
@@ -262,7 +296,7 @@ fn parse_literal(spec: &mut LolaSpec, pair: Pair<Rule>) -> Literal {
             let span = inner.as_span();
             let elements = inner.into_inner();
             let literals: Vec<Literal> = elements.map(|pair| parse_literal(spec, pair)).collect();
-            return Literal::new_tuple(&literals, span.into());
+            Literal::new_tuple(&literals, span.into())
         }
         Rule::True => Literal::new_bool(true, inner.as_span().into()),
         Rule::False => Literal::new_bool(false, inner.as_span().into()),
@@ -780,4 +814,11 @@ mod tests {
         cmp_ast_spec(ast, spec);
     }
 
+    #[test]
+    fn build_type_declaration() {
+        let spec = "type VerifiedUser { name: String }";
+        let throw = |e| panic!("{}", e);
+        let ast = parse(spec).unwrap_or_else(throw);
+        cmp_ast_spec(ast, spec);
+    }
 }

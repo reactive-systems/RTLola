@@ -24,7 +24,7 @@ TemplateSpec = {
 
 IncludeStatement = { "include"~ StringLiteral}
 
-TypeDecl = { "Type"~ Ident ~"{" ~Type~ Ident~ ("," ~Type~ Ident)+ ~ "}"}
+TypeDecl = { "type"~ Ident ~"{" ~Ident~ ":"~Type~ ("," ~Ident~ ":"~Type)* ~ "}"}
 
 ConstantStream = { "constant"~ Ident ~ (":" ~ Type)? ~":=" ~Literal}
 

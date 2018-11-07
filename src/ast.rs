@@ -10,6 +10,7 @@ pub struct LolaSpec {
     pub inputs: Vec<Input>,
     pub outputs: Vec<Output>,
     pub trigger: Vec<Trigger>,
+    pub type_declarations: Vec<TypeDeclaration>
 }
 
 impl LolaSpec {
@@ -20,6 +21,7 @@ impl LolaSpec {
             inputs: Vec::new(),
             outputs: Vec::new(),
             trigger: Vec::new(),
+            type_declarations: Vec::new()
         }
     }
 }
@@ -120,6 +122,13 @@ pub struct TypeDeclaration {
     pub span: Span,
 }
 
+
+#[derive(Debug)]
+pub struct TypeDeclField {
+    pub ty: Type,
+    pub name: String,
+}
+
 #[derive(Debug)]
 pub struct StreamInstance {
     pub stream_identifier: Ident,
@@ -170,6 +179,7 @@ pub enum TypeKind {
     Simple(String),
     /// Malformed type, e.g, `mis$ing`
     Malformed(String),
+    UserDefined(Vec<Box<TypeDeclField>>)
 }
 
 /// An expression
