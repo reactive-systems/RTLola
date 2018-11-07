@@ -128,6 +128,7 @@ pub struct StreamInstance {
 
 #[derive(Debug)]
 pub struct Type {
+    pub id: NodeId,
     pub kind: TypeKind,
     pub span: Span,
 }
@@ -135,6 +136,7 @@ pub struct Type {
 impl Type {
     pub fn new_simple(name: String, span: Span) -> Type {
         Type {
+            id: NodeId::DUMMY,
             kind: TypeKind::Simple(name),
             span,
         }
@@ -142,6 +144,7 @@ impl Type {
 
     pub fn new_tuple(tuple: Vec<Box<Type>>, span: Span) -> Type {
         Type {
+            id: NodeId::DUMMY,
             kind: TypeKind::Tuple(tuple),
             span,
         }

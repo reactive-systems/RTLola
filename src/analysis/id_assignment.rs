@@ -13,14 +13,21 @@ pub(crate) fn assign_ids(spec: &mut LolaSpec) {
     for mut c in &mut spec.constants {
         assert_eq!(c.id, NodeId::DUMMY, "Ids already assigned.");
         c.id = next_id();
+        if let Some(ref mut t) = c.ty {
+            t.id = next_id();
+        }
     }
     for mut i in &mut spec.inputs {
         assert_eq!(i.id, NodeId::DUMMY, "Ids already assigned.");
         i.id = next_id();
+        i.ty.id = next_id();
     }
     for mut o in &mut spec.outputs {
         assert_eq!(o.id, NodeId::DUMMY, "Ids already assigned.");
         o.id = next_id();
+        if let Some(ref mut t) = o.ty {
+            t.id = next_id();
+        }
         assign_ids_expr(&mut o.expression, &mut next_id);
     }
     for mut t in &mut spec.trigger {
@@ -28,7 +35,6 @@ pub(crate) fn assign_ids(spec: &mut LolaSpec) {
         t.id = next_id();
         assign_ids_expr(&mut t.expression, &mut next_id);
     }
-
 }
 
 fn assign_ids_expr<E>(exp: &mut Expression, next_id: &mut E) where E: FnMut() -> NodeId {
