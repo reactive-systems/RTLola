@@ -14,12 +14,11 @@ impl PrintHelper {
         join: &str,
     ) -> Result {
         write!(f, "{}", pref)?;
-        match v.first() {
-            Some(e) => write!(f, "{}", e)?,
-            None => return Ok(()),
-        }
-        for b in &v[1..] {
-            write!(f, "{}{}", join, b)?;
+        if let Some(e) = v.first(){
+            write!(f, "{}", e)?;
+            for b in &v[1..] {
+                write!(f, "{}{}", join, b)?;
+            }
         }
         write!(f, "{}", suff)?;
         Ok(())
