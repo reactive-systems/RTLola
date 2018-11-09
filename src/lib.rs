@@ -8,6 +8,9 @@ extern crate pest_derive;
 #[macro_use]
 extern crate lazy_static;
 extern crate clap;
+extern crate strum;
+#[macro_use]
+extern crate strum_macros;
 
 mod analysis;
 pub mod app;

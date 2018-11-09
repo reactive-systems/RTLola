@@ -133,8 +133,8 @@ fn parse_inputs(spec: &mut LolaSpec, pair: Pair<Rule>) -> Vec<Input> {
 }
 
 /**
- * Transforms a `Rule::OutputStrean` into `Output` AST node.
- * Panics if input is not `Rule::OutputStrean`.
+ * Transforms a `Rule::OutputStream` into `Output` AST node.
+ * Panics if input is not `Rule::OutputStream`.
  * The output rule consists of the following tokens:
  * - Rule::Ident
  * - Rule::Type

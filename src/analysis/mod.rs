@@ -8,12 +8,13 @@ mod id_assignment;
 mod naming;
 
 use super::LolaSpec;
+use parse::Ident;
 
-pub trait AnalysisError: std::fmt::Debug {}
+pub trait AnalysisError<'a>: std::fmt::Debug {}
 
 #[derive(Debug)]
-pub struct Report {
-    errors: Vec<Box<AnalysisError>>,
+pub struct Report<'a> {
+    errors: Vec<Box<AnalysisError<'a>>>,
 }
 
 pub fn analyze(spec: &mut LolaSpec) -> Report {
@@ -22,3 +23,13 @@ pub fn analyze(spec: &mut LolaSpec) -> Report {
     naming_analyzer.check(spec);
     unimplemented!();
 }
+
+#[allow(dead_code)]
+#[derive(Debug)]
+pub enum NamingError<'a> {
+    // TODO we first need a common trait for the AST nodes
+    NameNotFound(&'a Ident),
+    NameAlreadyUsed(&'a Ident, &'a Ident), // current, previous use
+}
+
+impl<'a> AnalysisError<'a> for NamingError<'a> {}
