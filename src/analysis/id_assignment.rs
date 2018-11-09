@@ -136,6 +136,8 @@ mod tests {
             id: NodeId::DUMMY,
             name: ident(),
             ty: Some(ty()),
+            params: Vec::new(),
+            template_spec: None,
             expression: expr,
             span: span(),
         }

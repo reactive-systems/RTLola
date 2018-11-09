@@ -13,14 +13,25 @@ Declaration = _{IncludeStatement | TypeDecl | ConstantStream | InputStream | Out
 /////////////////// Statements ///////////////////
 //////////////////////////////////////////////////
 
-ParamList = { "<"~ Ident ~ ":" ~ Type~ ("," ~Ident ~ ":" ~ Type)* ~">"}
+ParamList = { "<" ~(ParameterDecl ~("," ~ParameterDecl)*)? ~">"}
+ParameterDecl = { Ident ~ ":" ~ Type? }
 
 TemplateSpec = { 
       "{" ~
-        ("invoke" ~Expr ~("if" | "unless")~ Expr)? ~
-        ("extend" ~Expr?~ ("@"~ Frequency)?)?~
-        ("terminate" ~Expr)?~
+        InvokeDecl? ~
+        ExtendDecl? ~
+        TerminateDecl? ~
       "}"}
+
+InvokeDecl = { "invoke" ~Expr ~(InvokeIf | InvokeUnless)? }
+InvokeIf = { "if" ~Expr }
+InvokeUnless = { "unless" ~Expr }
+
+ExtendDecl = { "extend" ~(("@" ~ FrequencyDecl) | (Expr ~("@" ~ FrequencyDecl)?)) }
+
+FrequencyDecl = _{ Frequency | Duration }
+
+TerminateDecl = { "terminate" ~Expr }
 
 IncludeStatement = { "include"~ StringLiteral}
 
@@ -159,9 +170,9 @@ Duration = { Expr~ UnitOfTime}
 
 UnitOfTime = { "ns" | "μs" | "ms" | "s" | "min" | "h" | "d" | "w" | "a" }
 
-Frequency = { Duration | NumberLiteral ~UnitOfFreq}
+Frequency = { Expr ~UnitOfFreq}
 
-UnitOfFreq = { "μHz" | "mHz" | "Hz" | "kHz" | "MHz"}
+UnitOfFreq = { "μHz" | "mHz" | "Hz" | "kHz" | "MHz" | "GHz" }
 
 
 //////////////////////////////////////////////////

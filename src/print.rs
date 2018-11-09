@@ -17,6 +17,18 @@ impl PrintHelper {
         write!(f, "{}", suff)?;
         Ok(())
     }
+
+    fn format_opt<T: Display>(opt: &Option<T>, pref: &str, suff: &str) -> String {
+        if let Some(ref e) = opt {
+            format!("{}{}{}", pref, e, suff)
+        } else {
+            String::new()
+        }
+    }
+
+    fn format_type(ty: &Option<Type>) -> String {
+        PrintHelper::format_opt(ty, ": ", "")
+    }
 }
 
 impl Display for Constant {
@@ -25,11 +37,7 @@ impl Display for Constant {
             f,
             "constant {}{} := {}",
             self.name,
-            if let Some(ty) = &self.ty {
-                format!(": {}", ty)
-            } else {
-                String::new()
-            },
+            PrintHelper::format_type(&self.ty),
             self.literal
         )
     }
@@ -43,17 +51,80 @@ impl Display for Input {
 
 impl Display for Output {
     fn fmt(&self, f: &mut Formatter) -> Result {
+        write!(f, "output {}", self.name)?;
+        if !self.params.is_empty() {
+            PrintHelper::write(f, &self.params, " <", ">", ", ")?;
+        }
         write!(
             f,
-            "output {}{} := {}",
-            self.name,
-            if let Some(ty) = &self.ty {
-                format!(": {}", ty)
-            } else {
-                String::new()
-            },
+            "{}{} := {}",
+            PrintHelper::format_type(&self.ty),
+            PrintHelper::format_opt(&self.template_spec, " ", ""),
             self.expression
         )
+    }
+}
+
+impl Display for TemplateSpec {
+    fn fmt(&self, f: &mut Formatter) -> Result {
+        let mut vec = Vec::new();
+        if let Some(ref i) = self.inv {
+            vec.push(format!("{}", i));
+        }
+        if let Some(ref e) = self.ext {
+            vec.push(format!("{}", e));
+        }
+        if let Some(ref t) = self.ter {
+            vec.push(format!("{}", t));
+        }
+        PrintHelper::write(f, &vec, "{ ", " }", " ")
+    }
+}
+
+impl Display for Parameter {
+    fn fmt(&self, f: &mut Formatter) -> Result {
+        write!(f, "{}{}", self.name, PrintHelper::format_type(&self.ty))
+    }
+}
+
+impl Display for InvokeSpec {
+    fn fmt(&self, f: &mut Formatter) -> Result {
+        match self.condition {
+            Some(ref c) => write!(
+                f,
+                "invoke {} {} {}",
+                self.target,
+                if self.is_if { "if" } else { "unless" },
+                c,
+            ),
+            None => write!(f, "invoke {}", self.target),
+        }
+    }
+}
+
+impl Display for ExtendSpec {
+    fn fmt(&self, f: &mut Formatter) -> Result {
+        write!(
+            f,
+            "extend {}{}",
+            PrintHelper::format_opt(&self.target, "", ""),
+            PrintHelper::format_opt(&self.freq, " @ ", ""),
+        )
+    }
+}
+
+impl Display for ExtendRate {
+    fn fmt(&self, f: &mut Formatter) -> Result {
+        match self {
+            ExtendRate::Frequency(e, fu) => write!(f, "{}{}", e, fu),
+            ExtendRate::Duration(e, tu) => write!(f, "{}{}", e, tu),
+        }
+    }
+}
+
+impl Display for TerminateSpec {
+    fn fmt(&self, f: &mut Formatter) -> Result {
+        write!(f, "terminate {}", self.target)
     }
 }
 
@@ -62,17 +133,9 @@ impl Display for Trigger {
         write!(
             f,
             "trigger{} {}{}",
-            if let Some(name) = &self.name {
-                format!(" {} :=", name)
-            } else {
-                String::new()
-            },
+            PrintHelper::format_opt(&self.name, " ", " :="),
             self.expression,
-            if let Some(msg) = &self.message {
-                format!(" \"{}\"", msg)
-            } else {
-                String::new()
-            }
+            PrintHelper::format_opt(&self.message, " \"", "\""),
         )
     }
 }
@@ -105,11 +168,7 @@ impl Display for TypeDeclaration {
         write!(
             f,
             "type {} {{ {} }}",
-            if let Some(name) = &self.name {
-                format!("{}", name)
-            } else {
-                String::new()
-            },
+            PrintHelper::format_opt(&self.name, "", ""),
             self.kind
         )
     }
@@ -205,6 +264,23 @@ impl Display for TimeUnit {
                 TimeUnit::Day => "d",
                 TimeUnit::Week => "w",
                 TimeUnit::Year => "a",
+            }
+        )
+    }
+}
+
+impl Display for FreqUnit {
+    fn fmt(&self, f: &mut Formatter) -> Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                FreqUnit::MicroHertz => "μHz",
+                FreqUnit::MilliHertz => "mHz",
+                FreqUnit::Hertz => "Hz",
+                FreqUnit::KiloHertz => "kHz",
+                FreqUnit::MegaHertz => "MHz",
+                FreqUnit::GigaHertz => "GHz",
             }
         )
     }

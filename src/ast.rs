@@ -101,8 +101,47 @@ pub struct Output {
     pub(crate) id: NodeId,
     pub name: Ident,
     pub ty: Option<Type>,
+    pub params: Vec<Parameter>,
+    pub template_spec: Option<TemplateSpec>,
     pub expression: Expression,
     pub span: Span,
+}
+
+#[derive(Debug)]
+pub struct Parameter {
+    pub name: Ident,
+    pub ty: Option<Type>,
+}
+
+#[derive(Debug)]
+pub struct TemplateSpec {
+    pub inv: Option<InvokeSpec>,
+    pub ext: Option<ExtendSpec>,
+    pub ter: Option<TerminateSpec>,
+}
+
+#[derive(Debug)]
+pub struct InvokeSpec {
+    pub target: Expression,
+    pub condition: Option<Expression>,
+    pub is_if: bool,
+}
+
+#[derive(Debug)]
+pub struct ExtendSpec {
+    pub target: Option<Expression>,
+    pub freq: Option<ExtendRate>,
+}
+
+#[derive(Debug)]
+pub enum ExtendRate {
+    Frequency(Box<Expression>, FreqUnit),
+    Duration(Box<Expression>, TimeUnit),
+}
+
+#[derive(Debug)]
+pub struct TerminateSpec {
+    pub target: Expression,
 }
 
 /// A declaration of a trigger
@@ -368,7 +407,7 @@ pub enum Offset {
 }
 
 /// Supported time unit for real time expressions
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TimeUnit {
     NanoSecond,
     MicroSecond,
@@ -380,4 +419,15 @@ pub enum TimeUnit {
     Week,
     /// Note: A year is always, *always*, 365 days long.
     Year,
+}
+
+/// Supported frequencies for sliding windows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FreqUnit {
+    MicroHertz, // ~11 Days
+    MilliHertz, // ~16 Minutes
+    Hertz,
+    KiloHertz,
+    MegaHertz,
+    GigaHertz,
 }

@@ -145,19 +145,170 @@ fn parse_output(spec: &mut LolaSpec, pair: Pair<Rule>) -> Output {
     let span = pair.as_span().into();
     let mut pairs = pair.into_inner();
     let name = parse_ident(&pairs.next().expect("mismatch between grammar and AST"));
-    let ty = parse_type(
-        spec,
-        pairs.next().expect("mismatch between grammar and AST"),
-    );
-    let pair = pairs.next().expect("mismatch between grammar and AST");
+
+    let mut pair = pairs.next().expect("mismatch between grammar and AST");
+    let params = if let Rule::ParamList = pair.as_rule() {
+        let res = parse_parameter_list(spec, pair.into_inner());
+        pair = pairs.next().expect("mismatch between grammar and AST");
+        res
+    } else {
+        Vec::new()
+    };
+
+    let mut ty = None;
+    if let Rule::Type = pair.as_rule() {
+        ty = Some(parse_type(spec, pair));
+        pair = pairs.next().expect("mismatch between grammar and AST");
+    }
+
+    let mut tspec = None;
+    if let Rule::TemplateSpec = pair.as_rule() {
+        tspec = Some(parse_template_spec(spec, pair));
+        pair = pairs.next().expect("mismatch between grammar and AST");
+    };
+
+    // Parse expression
     let expr_span = pair.as_span();
     let expression = build_expression_ast(spec, pair.into_inner(), expr_span.into());
     Output {
         id: NodeId::DUMMY,
         name,
-        ty: Some(ty),
+        ty,
+        params,
+        template_spec: tspec,
         expression,
         span,
+    }
+}
+
+fn parse_parameter_list(spec: &mut LolaSpec, param_list: Pairs<Rule>) -> Vec<Parameter> {
+    let mut params = Vec::new();
+    for param_decl in param_list {
+        assert_eq!(Rule::ParameterDecl, param_decl.as_rule());
+        let mut decl = param_decl.into_inner();
+        let name = parse_ident(&decl.next().expect("mismatch between grammar and AST"));
+        let ty = if let Some(type_pair) = decl.next() {
+            assert_eq!(Rule::Type, type_pair.as_rule());
+            Some(parse_type(spec, type_pair))
+        } else {
+            None
+        };
+        params.push(Parameter { name, ty });
+    }
+    params
+}
+
+fn parse_template_spec(spec: &mut LolaSpec, pair: Pair<Rule>) -> TemplateSpec {
+    let mut decls = pair.into_inner();
+    let mut pair = decls.next();
+    let mut rule = pair.as_ref().map(|p| p.as_rule());
+
+    let mut inv_spec = None;
+    if let Some(Rule::InvokeDecl) = rule {
+        inv_spec = Some(parse_inv_spec(spec, pair.unwrap()));
+        pair = decls.next();
+        rule = pair.as_ref().map(|p| p.as_rule());
+    }
+    let mut ext_spec = None;
+    if let Some(Rule::ExtendDecl) = rule {
+        ext_spec = Some(parse_ext_spec(spec, pair.unwrap()));
+        pair = decls.next();
+        rule = pair.as_ref().map(|p| p.as_rule());
+    }
+    let mut ter_spec = None;
+    if let Some(Rule::TerminateDecl) = rule {
+        let expr = pair
+            .unwrap()
+            .into_inner()
+            .next()
+            .expect("mismatch between grammar and AST");
+        let expr_span = expr.as_span().into();
+        let expr = build_expression_ast(spec, expr.into_inner(), expr_span);
+        ter_spec = Some(TerminateSpec { target: expr });
+    }
+    TemplateSpec {
+        inv: inv_spec,
+        ext: ext_spec,
+        ter: ter_spec,
+    }
+}
+
+fn parse_frequency(spec: &mut LolaSpec, freq: Pair<Rule>) -> ExtendRate {
+    let freq_rule = freq.as_rule();
+    let mut children = freq.into_inner();
+    let expr = children.next().expect("mismatch between grammar and AST");
+    let span = expr.as_span().into();
+    let expr = build_expression_ast(spec, expr.into_inner(), span);
+    let unit_pair = children.next().expect("mismatch between grammar and AST");
+    let unit_str = unit_pair.as_str();
+    match freq_rule {
+        Rule::Frequency => {
+            assert_eq!(unit_pair.as_rule(), Rule::UnitOfFreq);
+            let unit = parse_frequency_unit(unit_str);
+            ExtendRate::Frequency(Box::new(expr), unit)
+        }
+        Rule::Duration => {
+            assert_eq!(unit_pair.as_rule(), Rule::UnitOfTime);
+            let unit = parse_duration_unit(unit_str);
+            ExtendRate::Duration(Box::new(expr), unit)
+        }
+        _ => unreachable!(),
+    }
+}
+
+fn parse_ext_spec(spec: &mut LolaSpec, ext_pair: Pair<Rule>) -> ExtendSpec {
+    let mut children = ext_pair.into_inner();
+    let first_child = children.next().expect("mismatch between grammar and ast");
+
+    let mut freq = None;
+    let mut target = None;
+    match first_child.as_rule() {
+        Rule::Frequency | Rule::Duration => freq = Some(parse_frequency(spec, first_child)),
+        Rule::Expr => {
+            let span = first_child.as_span().into();
+            target = Some(build_expression_ast(spec, first_child.into_inner(), span));
+            if let Some(freq_pair) = children.next() {
+                freq = Some(parse_frequency(spec, freq_pair));
+            }
+        }
+        _ => unreachable!(),
+    }
+
+    assert!(freq.is_some() || target.is_some());
+    ExtendSpec { target, freq }
+}
+
+fn parse_inv_spec(spec: &mut LolaSpec, inv_pair: Pair<Rule>) -> InvokeSpec {
+    let mut inv_children = inv_pair.into_inner();
+    let expr_pair = inv_children
+        .next()
+        .expect("mismatch between grammar and AST");
+    let expr_span = expr_pair.as_span().into();
+    let inv_target = build_expression_ast(spec, expr_pair.into_inner(), expr_span);
+    // Compute invocation condition:
+    let mut is_if = false;
+    let mut cond_expr = None;
+    if let Some(inv_cond_pair) = inv_children.next() {
+        is_if = match inv_cond_pair.as_rule() {
+            Rule::InvokeIf => true,
+            Rule::InvokeUnless => false,
+            _ => unreachable!(),
+        };
+        let condition = inv_cond_pair
+            .into_inner()
+            .next()
+            .expect("mismatch between grammar and AST");
+        let cond_expr_span = condition.as_span().into();
+        cond_expr = Some(build_expression_ast(
+            spec,
+            condition.into_inner(),
+            cond_expr_span,
+        ))
+    }
+    InvokeSpec {
+        condition: cond_expr,
+        is_if,
+        target: inv_target,
     }
 }
 
@@ -315,6 +466,33 @@ fn parse_vec_of_expressions(spec: &mut LolaSpec, pairs: Pairs<Rule>) -> Vec<Box<
         .collect()
 }
 
+fn parse_duration_unit(str: &str) -> TimeUnit {
+    match str {
+        "ns" => TimeUnit::NanoSecond,
+        "μs" => TimeUnit::MicroSecond,
+        "ms" => TimeUnit::MilliSecond,
+        "s" => TimeUnit::Second,
+        "min" => TimeUnit::Minute,
+        "h" => TimeUnit::Hour,
+        "d" => TimeUnit::Day,
+        "w" => TimeUnit::Week,
+        "a" => TimeUnit::Year,
+        _ => unreachable!(),
+    }
+}
+
+fn parse_frequency_unit(str: &str) -> FreqUnit {
+    match str {
+        "μHz" => FreqUnit::MicroHertz,
+        "mHz" => FreqUnit::MilliHertz,
+        "Hz" => FreqUnit::Hertz,
+        "kHz" => FreqUnit::KiloHertz,
+        "MHz" => FreqUnit::MegaHertz,
+        "GHz" => FreqUnit::GigaHertz,
+        _ => unreachable!(),
+    }
+}
+
 fn parse_lookup_expression(spec: &mut LolaSpec, pair: Pair<Rule>, span: Span) -> Expression {
     let mut children = pair.into_inner();
     let stream_instance = children
@@ -344,18 +522,7 @@ fn parse_lookup_expression(spec: &mut LolaSpec, pair: Pair<Rule>, span: Span) ->
                 .next()
                 .expect("Duration needs a time unit.")
                 .as_str();
-            let unit = match unit_string {
-                "ns" => TimeUnit::NanoSecond,
-                "μs" => TimeUnit::MicroSecond,
-                "ms" => TimeUnit::MilliSecond,
-                "s" => TimeUnit::Second,
-                "min" => TimeUnit::Minute,
-                "h" => TimeUnit::Hour,
-                "d" => TimeUnit::Day,
-                "w" => TimeUnit::Week,
-                "a" => TimeUnit::Year,
-                _ => unreachable!(),
-            };
+            let unit = parse_duration_unit(unit_string);
             let offset = Offset::RealTimeOffset(Box::new(time_interval), unit);
             // Now check whether it is a window or not.
             let aggregation = match children.next().map(|x| x.as_rule()) {
@@ -804,6 +971,22 @@ mod tests {
     #[test]
     fn build_type_declaration() {
         let spec = "type VerifiedUser { name: String }";
+        let throw = |e| panic!("{}", e);
+        let ast = parse(spec).unwrap_or_else(throw);
+        cmp_ast_spec(ast, spec);
+    }
+
+    #[test]
+    fn build_parameter_list() {
+        let spec = "output s <a: B, c: D>: E := 3";
+        let throw = |e| panic!("{}", e);
+        let ast = parse(spec).unwrap_or_else(throw);
+        cmp_ast_spec(ast, spec);
+    }
+
+    #[test]
+    fn build_template_spec() {
+        let spec = "output s: Int { invoke inp unless 3 > 5 extend b @ 5GHz terminate false } := 3";
         let throw = |e| panic!("{}", e);
         let ast = parse(spec).unwrap_or_else(throw);
         cmp_ast_spec(ast, spec);
