@@ -8,7 +8,7 @@ mod id_assignment;
 mod naming;
 
 use super::LolaSpec;
-use parse::Ident;
+use crate::parse::Ident;
 
 pub trait AnalysisError<'a>: std::fmt::Debug {}
 

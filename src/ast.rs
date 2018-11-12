@@ -1,6 +1,8 @@
 //! This module contains the AST data structures for the Lola Language.
 
-use super::parse::{Ident, Span};
+use super::parse::Ident;
+use ast_node::NodeId;
+use ast_node::Span;
 
 /// The root Lola specification
 #[derive(Debug, Default)]
@@ -48,86 +50,52 @@ impl<'a> From<&'a str> for LanguageSpec {
     }
 }
 
-/// Every node in the AST gets a unique id, represented by a 32bit unsiged integer.
-/// They are used in the later analysis phases to store information about AST nodes.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct NodeId(u32);
-
-impl NodeId {
-    pub fn new(x: usize) -> NodeId {
-        assert!(x < (std::u32::MAX as usize));
-        NodeId(x as u32)
-    }
-
-    pub fn from_u32(x: u32) -> NodeId {
-        NodeId(x)
-    }
-
-    pub fn as_usize(self) -> usize {
-        self.0 as usize
-    }
-
-    pub fn as_u32(self) -> u32 {
-        self.0
-    }
-
-    /// When parsing, we initially give all AST nodes this AST node id.
-    /// Then later, in the renumber pass, we renumber them to have small, positive ids.
-    pub const DUMMY: NodeId = NodeId(!0);
-}
-
 /// A declaration of a constant (stream)
-#[derive(Debug)]
+#[ast_node]
 pub struct Constant {
-    pub(crate) id: NodeId,
     pub name: Ident,
     pub ty: Option<Type>,
     pub literal: Literal,
-    pub span: Span,
 }
 
 /// A declaration of an input stream
-#[derive(Debug)]
+#[ast_node]
 pub struct Input {
-    pub(crate) id: NodeId,
     pub name: Ident,
     pub ty: Type,
-    pub span: Span,
 }
 
 /// A declaration of an output stream
-#[derive(Debug)]
+#[ast_node]
 pub struct Output {
-    pub(crate) id: NodeId,
     pub name: Ident,
     pub ty: Option<Type>,
     pub params: Vec<Parameter>,
     pub template_spec: Option<TemplateSpec>,
     pub expression: Expression,
-    pub span: Span,
 }
 
-#[derive(Debug)]
+#[ast_node]
 pub struct Parameter {
     pub name: Ident,
     pub ty: Option<Type>,
 }
 
-#[derive(Debug)]
+#[ast_node]
 pub struct TemplateSpec {
     pub inv: Option<InvokeSpec>,
     pub ext: Option<ExtendSpec>,
     pub ter: Option<TerminateSpec>,
 }
 
-#[derive(Debug)]
+#[ast_node]
 pub struct InvokeSpec {
     pub target: Expression,
     pub condition: Option<Expression>,
     pub is_if: bool,
 }
 
-#[derive(Debug)]
+#[ast_node]
 pub struct ExtendSpec {
     pub target: Option<Expression>,
     pub freq: Option<ExtendRate>,
@@ -139,73 +107,69 @@ pub enum ExtendRate {
     Duration(Box<Expression>, TimeUnit),
 }
 
-#[derive(Debug)]
+#[ast_node]
 pub struct TerminateSpec {
     pub target: Expression,
 }
 
 /// A declaration of a trigger
-#[derive(Debug)]
+#[ast_node]
 pub struct Trigger {
-    pub(crate) id: NodeId,
     pub name: Option<Ident>,
     pub expression: Expression,
     pub message: Option<String>,
-    pub span: Span,
 }
 
-#[derive(Debug)]
+#[ast_node]
 pub struct TypeDeclaration {
     pub name: Option<Ident>,
     pub kind: TypeKind,
-    pub span: Span,
 }
 
-#[derive(Debug)]
+#[ast_node]
 pub struct TypeDeclField {
     pub ty: Type,
     pub name: String,
 }
 
-#[derive(Debug)]
+#[ast_node]
 pub struct StreamInstance {
     pub stream_identifier: Ident,
     pub arguments: Vec<Box<Expression>>,
 }
 
-#[derive(Debug)]
+#[ast_node]
 pub struct Type {
-    pub id: NodeId,
     pub kind: TypeKind,
-    pub span: Span,
 }
 
 impl Type {
     pub fn new_simple(name: String, span: Span) -> Type {
         Type {
-            id: NodeId::DUMMY,
+            _id: NodeId::DUMMY,
             kind: TypeKind::Simple(name),
-            span,
+            _span: span,
         }
     }
 
     pub fn new_tuple(tuple: Vec<Box<Type>>, span: Span) -> Type {
         Type {
-            id: NodeId::DUMMY,
+            _id: NodeId::DUMMY,
             kind: TypeKind::Tuple(tuple),
-            span,
+            _span: span,
         }
     }
 }
 
-#[derive(Debug)]
-pub struct Parenthesis {
-    pub span: Span,
-}
+#[ast_node]
+pub struct Parenthesis {}
 
 impl Parenthesis {
     pub fn new(span: Span) -> Parenthesis {
-        Parenthesis { span }
+        Parenthesis {
+            _id: NodeId::DUMMY,
+            _span: span,
+        }
     }
 }
 
@@ -223,19 +187,17 @@ pub enum TypeKind {
 /// An expression
 ///
 /// inspired by https://doc.rust-lang.org/nightly/nightly-rustc/src/syntax/ast.rs.html
-#[derive(Debug)]
+#[ast_node]
 pub struct Expression {
-    pub(crate) id: NodeId,
     pub(crate) kind: ExpressionKind,
-    span: Span,
 }
 
 impl Expression {
     pub fn new(kind: ExpressionKind, span: Span) -> Expression {
         Expression {
-            id: NodeId::DUMMY,
+            _id: NodeId::DUMMY,
             kind,
-            span,
+            _span: span,
         }
     }
 }
@@ -295,38 +257,42 @@ pub enum WindowOperation {
     Integral,
 }
 
-#[derive(Debug, Clone)]
+#[ast_node]
+#[derive(Clone)]
 pub struct Literal {
     pub kind: LitKind,
-    pub span: Span,
 }
 
 impl Literal {
     pub fn new_bool(val: bool, span: Span) -> Literal {
         Literal {
+            _id: NodeId::DUMMY,
             kind: LitKind::Bool(val),
-            span,
+            _span: span,
         }
     }
 
     pub fn new_int(val: i128, span: Span) -> Literal {
         Literal {
+            _id: NodeId::DUMMY,
             kind: LitKind::Int(val),
-            span,
+            _span: span,
         }
     }
 
     pub fn new_tuple(vals: &[Literal], span: Span) -> Literal {
         Literal {
+            _id: NodeId::DUMMY,
             kind: LitKind::Tuple(vals.to_vec()),
-            span,
+            _span: span,
         }
     }
 
     pub fn new_float(val: f64, span: Span) -> Literal {
         Literal {
+            _id: NodeId::DUMMY,
             kind: LitKind::Float(val),
-            span,
+            _span: span,
         }
     }
 }

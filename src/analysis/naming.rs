@@ -3,8 +3,9 @@
 use super::super::ast::*;
 use super::super::LolaSpec;
 use super::AnalysisError;
-use ast::Offset::DiscreteOffset;
-use ast::Offset::RealTimeOffset;
+use ast_node::NodeId;
+use crate::ast::Offset::DiscreteOffset;
+use crate::ast::Offset::RealTimeOffset;
 use std::collections::HashMap;
 use strum::AsStaticRef;
 use strum::IntoEnumIterator;
@@ -225,12 +226,12 @@ impl<'a> NamingAnalysis<'a> {
         match &expression.kind {
             Ident(ident) => {
                 if let Some(decl) = self.declarations.get_decl_for(&ident.name) {
-                    assert!(expression.id != NodeId::DUMMY);
+                    assert!(expression._id != NodeId::DUMMY);
                     // TODO check that the declaration is not a type
                     if declaration_is_type(&decl) {
                         unimplemented!();
                     } else {
-                        self.result.insert(expression.id, decl);
+                        self.result.insert(expression._id, decl);
                     }
                 } else {
                     // TODO unbounded variable, store error to display to user
@@ -338,9 +339,8 @@ impl<'a> Into<Declaration<'a>> for &'a Output {
 mod tests {
 
     use super::*;
-    use analysis::id_assignment;
-    use analysis::naming;
-    use parse::parse;
+    use crate::analysis::id_assignment;
+    use crate::parse::parse;
 
     // TODO: implement test cases
     #[test]

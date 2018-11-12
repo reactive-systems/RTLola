@@ -1,0 +1,18 @@
+[package]
+name = "ast_node_derive"
+version = "0.1.0"
+authors = [
+    "Malte Schledjewski <schledjewski@react.uni-saarland.de>",
+    "Maximilian Schwenger <schwenger@react.uni-saarland.de>",
+    "Leander Tentrup <tentrup@react.uni-saarland.de>"
+]
+
+[lib]
+proc-macro = true
+
+[dependencies]
+quote = "0.6.10"
+
+[dependencies.syn]
+version = "0.15.20"
+features = ["full"]

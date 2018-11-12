@@ -1,6 +1,8 @@
 //! This module contains the parser for the Lola Language.
 
-use ast::*;
+use ast_node::NodeId;
+use ast_node::Span;
+use crate::ast::*;
 use pest;
 use pest::iterators::{Pair, Pairs};
 use pest::prec_climber::{Assoc, Operator, PrecClimber};
@@ -93,11 +95,11 @@ fn parse_constant(spec: &mut LolaSpec, pair: Pair<Rule>) -> Constant {
         pairs.next().expect("mismatch between grammar and AST"),
     );
     Constant {
-        id: NodeId::DUMMY,
+        _id: NodeId::DUMMY,
         name,
         ty: Some(ty),
         literal,
-        span,
+        _span: span,
     }
 }
 
@@ -121,10 +123,10 @@ fn parse_inputs(spec: &mut LolaSpec, pair: Pair<Rule>) -> Vec<Input> {
         let end = pair.as_span().end();
         let ty = parse_type(spec, pair);
         inputs.push(Input {
-            id: NodeId::DUMMY,
+            _id: NodeId::DUMMY,
             name,
             ty,
-            span: Span { start, end },
+            _span: Span { start, end },
         })
     }
 
@@ -171,13 +173,13 @@ fn parse_output(spec: &mut LolaSpec, pair: Pair<Rule>) -> Output {
     let expr_span = pair.as_span();
     let expression = build_expression_ast(spec, pair.into_inner(), expr_span.into());
     Output {
-        id: NodeId::DUMMY,
+        _id: NodeId::DUMMY,
         name,
         ty,
         params,
         template_spec: tspec,
         expression,
-        span,
+        _span: span,
     }
 }
 
@@ -185,6 +187,7 @@ fn parse_parameter_list(spec: &mut LolaSpec, param_list: Pairs<Rule>) -> Vec<Par
     let mut params = Vec::new();
     for param_decl in param_list {
         assert_eq!(Rule::ParameterDecl, param_decl.as_rule());
+        let span = param_decl.as_span().into();
         let mut decl = param_decl.into_inner();
         let name = parse_ident(&decl.next().expect("mismatch between grammar and AST"));
         let ty = if let Some(type_pair) = decl.next() {
@@ -193,12 +196,18 @@ fn parse_parameter_list(spec: &mut LolaSpec, param_list: Pairs<Rule>) -> Vec<Par
         } else {
             None
         };
-        params.push(Parameter { name, ty });
+        params.push(Parameter {
+            name,
+            ty,
+            _id: NodeId::DUMMY,
+            _span: span,
+        });
     }
     params
 }
 
 fn parse_template_spec(spec: &mut LolaSpec, pair: Pair<Rule>) -> TemplateSpec {
+    let span = pair.as_span().into();
     let mut decls = pair.into_inner();
     let mut pair = decls.next();
     let mut rule = pair.as_ref().map(|p| p.as_rule());
@@ -217,19 +226,26 @@ fn parse_template_spec(spec: &mut LolaSpec, pair: Pair<Rule>) -> TemplateSpec {
     }
     let mut ter_spec = None;
     if let Some(Rule::TerminateDecl) = rule {
-        let expr = pair
-            .unwrap()
+        let exp = pair.unwrap();
+        let span_ter = exp.as_span().into();
+        let expr = exp
             .into_inner()
             .next()
             .expect("mismatch between grammar and AST");
         let expr_span = expr.as_span().into();
         let expr = build_expression_ast(spec, expr.into_inner(), expr_span);
-        ter_spec = Some(TerminateSpec { target: expr });
+        ter_spec = Some(TerminateSpec {
+            target: expr,
+            _id: NodeId::DUMMY,
+            _span: span_ter,
+        });
     }
     TemplateSpec {
         inv: inv_spec,
         ext: ext_spec,
         ter: ter_spec,
+        _id: NodeId::DUMMY,
+        _span: span,
     }
 }
 
@@ -257,11 +273,13 @@ fn parse_frequency(spec: &mut LolaSpec, freq: Pair<Rule>) -> ExtendRate {
 }
 
 fn parse_ext_spec(spec: &mut LolaSpec, ext_pair: Pair<Rule>) -> ExtendSpec {
+    let span_ext = ext_pair.as_span().into();
     let mut children = ext_pair.into_inner();
-    let first_child = children.next().expect("mismatch between grammar and ast");
 
+    let first_child = children.next().expect("mismatch between grammar and ast");
     let mut freq = None;
     let mut target = None;
+
     match first_child.as_rule() {
         Rule::Frequency | Rule::Duration => freq = Some(parse_frequency(spec, first_child)),
         Rule::Expr => {
@@ -273,12 +291,17 @@ fn parse_ext_spec(spec: &mut LolaSpec, ext_pair: Pair<Rule>) -> ExtendSpec {
         }
         _ => unreachable!(),
     }
-
     assert!(freq.is_some() || target.is_some());
-    ExtendSpec { target, freq }
+    ExtendSpec {
+        target,
+        freq,
+        _id: NodeId::DUMMY,
+        _span: span_ext,
+    }
 }
 
 fn parse_inv_spec(spec: &mut LolaSpec, inv_pair: Pair<Rule>) -> InvokeSpec {
+    let span_inv = inv_pair.as_span().into();
     let mut inv_children = inv_pair.into_inner();
     let expr_pair = inv_children
         .next()
@@ -309,6 +332,8 @@ fn parse_inv_spec(spec: &mut LolaSpec, inv_pair: Pair<Rule>) -> InvokeSpec {
         condition: cond_expr,
         is_if,
         target: inv_target,
+        _id: NodeId::DUMMY,
+        _span: span_inv,
     }
 }
 
@@ -343,11 +368,11 @@ fn parse_trigger(spec: &mut LolaSpec, pair: Pair<Rule>) -> Trigger {
     }
 
     Trigger {
-        id: NodeId::DUMMY,
+        _id: NodeId::DUMMY,
         name,
         expression,
         message,
-        span,
+        _span: span,
     }
 }
 
@@ -380,13 +405,16 @@ fn parse_type_declaration(spec: &mut LolaSpec, pair: Pair<Rule>) -> TypeDeclarat
         fields.push(Box::new(TypeDeclField {
             name: field_name,
             ty,
+            _id: NodeId::DUMMY,
+            _span: pair.as_span().into(),
         }));
     }
     let kind = TypeKind::UserDefined(fields);
     TypeDeclaration {
         name: Some(name),
         kind,
-        span,
+        _span: span,
+        _id: NodeId::DUMMY,
     }
 }
 
@@ -446,6 +474,7 @@ fn parse_literal(spec: &mut LolaSpec, pair: Pair<Rule>) -> Literal {
 }
 
 fn parse_stream_instance(spec: &mut LolaSpec, instance: Pair<Rule>) -> StreamInstance {
+    let span = instance.as_span().into();
     let mut children = instance.into_inner();
     // Parse the stream identifier in isolation.
     let stream_ident = parse_ident(&children.next().unwrap());
@@ -454,6 +483,8 @@ fn parse_stream_instance(spec: &mut LolaSpec, instance: Pair<Rule>) -> StreamIns
     StreamInstance {
         stream_identifier: stream_ident,
         arguments: args,
+        _id: NodeId::DUMMY,
+        _span: span,
     }
 }
 
@@ -687,27 +718,6 @@ pub struct Ident {
 impl Ident {
     pub fn new(name: String, span: Span) -> Ident {
         Ident { name, span }
-    }
-}
-
-/// A span marks a range in a file.
-/// Start and end positions are *byte* offsets.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Span {
-    pub start: usize,
-    pub end: usize,
-    // TODO Do we need this here or do we want to keep a mapping from byte positions to lines in the LSP part.
-    // line: usize,
-    // /// The LSP uses UTF-16 code units (2 bytes) as their unit for offsets.
-    // lineOffsetLSP: usize,
-}
-
-impl<'a> From<pest::Span<'a>> for Span {
-    fn from(span: pest::Span<'a>) -> Self {
-        Span {
-            start: span.start(),
-            end: span.end(),
-        }
     }
 }
 

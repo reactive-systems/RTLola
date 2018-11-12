@@ -1,5 +1,5 @@
 [package]
-name = "lola-parser"
+name = "ast_node"
 version = "0.1.0"
 authors = [
     "Malte Schledjewski <schledjewski@react.uni-saarland.de>",
@@ -10,9 +10,3 @@ authors = [
 [dependencies]
 pest = "^2.0"         # parser generator
 pest_derive = "^2.0"
-lazy_static = "1.1.0" # lazy_static! macro
-clap = "2.32.0"  # command line parsing
-strum = "0.11.0" # enhance enums with strings
-strum_macros = "0.11.0"
-ast_node = {path = "ast_node"}
-ast_node_derive = {path = "ast_node_derive"}

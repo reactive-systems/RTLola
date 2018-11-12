@@ -1,5 +1,6 @@
 use super::super::ast::*;
 use super::super::LolaSpec;
+use ast_node::NodeId;
 
 pub(crate) fn assign_ids(spec: &mut LolaSpec) {
     let mut free_id = 0;
@@ -10,28 +11,28 @@ pub(crate) fn assign_ids(spec: &mut LolaSpec) {
     };
 
     for mut c in &mut spec.constants {
-        assert_eq!(c.id, NodeId::DUMMY, "Ids already assigned.");
-        c.id = next_id();
+        assert_eq!(c._id, NodeId::DUMMY, "Ids already assigned.");
+        c._id = next_id();
         if let Some(ref mut t) = c.ty {
-            t.id = next_id();
+            t._id = next_id();
         }
     }
     for mut i in &mut spec.inputs {
-        assert_eq!(i.id, NodeId::DUMMY, "Ids already assigned.");
-        i.id = next_id();
-        i.ty.id = next_id();
+        assert_eq!(i._id, NodeId::DUMMY, "Ids already assigned.");
+        i._id = next_id();
+        i.ty._id = next_id();
     }
     for mut o in &mut spec.outputs {
-        assert_eq!(o.id, NodeId::DUMMY, "Ids already assigned.");
-        o.id = next_id();
+        assert_eq!(o._id, NodeId::DUMMY, "Ids already assigned.");
+        o._id = next_id();
         if let Some(ref mut t) = o.ty {
-            t.id = next_id();
+            t._id = next_id();
         }
         assign_ids_expr(&mut o.expression, &mut next_id);
     }
     for mut t in &mut spec.trigger {
-        assert_eq!(t.id, NodeId::DUMMY, "Ids already assigned.");
-        t.id = next_id();
+        assert_eq!(t._id, NodeId::DUMMY, "Ids already assigned.");
+        t._id = next_id();
         assign_ids_expr(&mut t.expression, &mut next_id);
     }
 }
@@ -40,7 +41,7 @@ fn assign_ids_expr<E>(exp: &mut Expression, next_id: &mut E)
 where
     E: FnMut() -> NodeId,
 {
-    exp.id = next_id();
+    exp._id = next_id();
     match &mut exp.kind {
         ExpressionKind::Lit(_) => {}
         ExpressionKind::Ident(_) => {}
@@ -79,13 +80,14 @@ where
 #[cfg(test)]
 mod tests {
     use super::super::super::ast::Input;
-    use super::super::super::parse::{Ident, Span};
+    use super::super::super::parse::Ident;
     use super::*;
+    use ast_node::Span;
 
     fn get_id_o(s: Option<&Output>) -> NodeId {
         if let Some(o) = s {
             if let Some(ref ty) = o.ty {
-                ty.id
+                ty._id
             } else {
                 panic!("Assigning ids must not remove types!")
             }
@@ -96,7 +98,7 @@ mod tests {
     fn get_id_c(s: Option<&Constant>) -> NodeId {
         if let Some(o) = s {
             if let Some(ref ty) = o.ty {
-                ty.id
+                ty._id
             } else {
                 panic!("Assigning ids must not remove types!")
             }
@@ -116,30 +118,30 @@ mod tests {
     }
     fn input() -> Input {
         Input {
-            id: NodeId::DUMMY,
+            _id: NodeId::DUMMY,
             name: Ident::new(String::from("Something"), span()),
             ty: Type::new_simple(String::from("something"), span()),
-            span: span(),
+            _span: span(),
         }
     }
     fn constant() -> Constant {
         Constant {
-            id: NodeId::DUMMY,
+            _id: NodeId::DUMMY,
             name: ident(),
             ty: Some(ty()),
             literal: Literal::new_bool(false, span()),
-            span: span(),
+            _span: span(),
         }
     }
     fn output(expr: Expression) -> Output {
         Output {
-            id: NodeId::DUMMY,
+            _id: NodeId::DUMMY,
             name: ident(),
             ty: Some(ty()),
             params: Vec::new(),
             template_spec: None,
             expression: expr,
-            span: span(),
+            _span: span(),
         }
     }
 
@@ -148,8 +150,8 @@ mod tests {
         let mut spec = LolaSpec::new();
         spec.inputs.push(input());
         assign_ids(&mut spec);
-        assert_ne!(spec.inputs[0].id, NodeId::DUMMY);
-        assert_ne!(spec.inputs[0].ty.id, NodeId::DUMMY);
+        assert_ne!(spec.inputs[0]._id, NodeId::DUMMY);
+        assert_ne!(spec.inputs[0].ty._id, NodeId::DUMMY);
     }
 
     #[test]
@@ -157,7 +159,7 @@ mod tests {
         let mut spec = LolaSpec::new();
         spec.inputs.push(input());
         assign_ids(&mut spec);
-        assert_ne!(spec.inputs[0].ty.id, spec.inputs[0].id);
+        assert_ne!(spec.inputs[0].ty._id, spec.inputs[0]._id);
     }
 
     #[test]
@@ -170,15 +172,15 @@ mod tests {
         spec.outputs.push(output(expr));
         assign_ids(&mut spec);
         let mut v = vec![
-            spec.inputs[0].ty.id,
-            spec.inputs[0].id,
-            spec.inputs[1].ty.id,
-            spec.inputs[1].id,
+            spec.inputs[0].ty._id,
+            spec.inputs[0]._id,
+            spec.inputs[1].ty._id,
+            spec.inputs[1]._id,
             get_id_c(spec.constants.get(0)),
-            spec.constants[0].id,
+            spec.constants[0]._id,
             get_id_o(spec.outputs.get(0)),
-            spec.outputs[0].id,
-            spec.outputs[0].expression.id,
+            spec.outputs[0]._id,
+            spec.outputs[0].expression._id,
         ];
         v.dedup();
         assert_eq!(v.len(), 9, "Some ids occur multiple times.");
@@ -193,7 +195,7 @@ mod tests {
     fn already_assigned() {
         let mut spec = LolaSpec::new();
         let mut input = input();
-        input.id = NodeId::from_u32(42);
+        input._id = NodeId::from_u32(42);
         spec.inputs.push(input);
         // Should panic:
         assign_ids(&mut spec);
@@ -212,14 +214,14 @@ mod tests {
         assign_ids(&mut spec);
         let mut v = vec![
             get_id_o(spec.outputs.get(0)),
-            spec.outputs[0].id,
-            spec.outputs[0].expression.id,
+            spec.outputs[0]._id,
+            spec.outputs[0].expression._id,
         ];
         if let ExpressionKind::Binary(BinOp::Div, ref lhs, ref rhs) =
             spec.outputs[0].expression.kind
         {
-            v.push(rhs.id);
-            v.push(lhs.id);
+            v.push(rhs._id);
+            v.push(lhs._id);
         } else {
             panic!("Assigning ids must not change the ast in any other way.")
         }
