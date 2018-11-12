@@ -3,16 +3,17 @@
 use super::super::ast::*;
 use super::super::LolaSpec;
 use super::AnalysisError;
-use ast_node::NodeId;
-use crate::ast::Offset::DiscreteOffset;
-use crate::ast::Offset::RealTimeOffset;
+use ast_node::{NodeId, AstNode};
+use super::super::ast::Offset::*;
 use std::collections::HashMap;
 use strum::AsStaticRef;
 use strum::IntoEnumIterator;
 
+pub(crate) type DeclarationTable<'a> = HashMap<NodeId, Declaration<'a>>;
+
 pub(crate) struct NamingAnalysis<'a> {
     declarations: ScopedDecl<'a>,
-    result: HashMap<NodeId, Declaration<'a>>,
+    result: DeclarationTable<'a>,
     #[allow(dead_code)]
     errors: Vec<Box<AnalysisError<'a>>>,
     // TODO: need some kind of error reporting, probably stored in a vector
@@ -65,7 +66,6 @@ impl<'a> NamingAnalysis<'a> {
             TypeKind::Tuple(ref elements) => elements.iter().for_each(|ty| {
                 self.check_type(ty);
             }),
-            TypeKind::UserDefined(_) => unreachable!(),
         }
     }
 
@@ -165,18 +165,14 @@ impl<'a> NamingAnalysis<'a> {
         for type_decl in &spec.type_declarations {
             self.declarations.push();
             // check children
-            match type_decl.kind {
-                TypeKind::UserDefined(ref fields) => {
-                    fields.iter().for_each(|field| {
-                        self.check_type(&field.ty);
-                    });
+            type_decl.fields.iter().for_each(|field| {
+                self.check_type(&field.ty);
+            });
 
-                    fields.iter().for_each(|_field| {
-                        // TODO check the names
-                    });
-                }
-                _ => unreachable!(),
-            }
+            type_decl.fields.iter().for_each(|_field| {
+                // TODO check the names
+            });
+
             self.declarations.pop();
 
             // only add the new type name after checking all fields
@@ -226,12 +222,12 @@ impl<'a> NamingAnalysis<'a> {
         match &expression.kind {
             Ident(ident) => {
                 if let Some(decl) = self.declarations.get_decl_for(&ident.name) {
-                    assert!(expression._id != NodeId::DUMMY);
+                    assert!(*expression.id() != NodeId::DUMMY);
                     // TODO check that the declaration is not a type
                     if declaration_is_type(&decl) {
                         unimplemented!();
                     } else {
-                        self.result.insert(expression._id, decl);
+                        self.result.insert(*expression.id(), decl);
                     }
                 } else {
                     // TODO unbounded variable, store error to display to user

@@ -2,7 +2,7 @@
 
 use ast_node::NodeId;
 use ast_node::Span;
-use crate::ast::*;
+use super::ast::*;
 use pest;
 use pest::iterators::{Pair, Pairs};
 use pest::prec_climber::{Assoc, Operator, PrecClimber};
@@ -409,12 +409,12 @@ fn parse_type_declaration(spec: &mut LolaSpec, pair: Pair<Rule>) -> TypeDeclarat
             _span: pair.as_span().into(),
         }));
     }
-    let kind = TypeKind::UserDefined(fields);
+
     TypeDeclaration {
         name: Some(name),
-        kind,
         _span: span,
         _id: NodeId::DUMMY,
+        fields,
     }
 }
 

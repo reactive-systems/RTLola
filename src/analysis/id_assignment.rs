@@ -1,6 +1,7 @@
 use super::super::ast::*;
 use super::super::LolaSpec;
-use ast_node::NodeId;
+extern crate ast_node;
+use ast_node::{AstNode, NodeId};
 
 pub(crate) fn assign_ids(spec: &mut LolaSpec) {
     let mut free_id = 0;
@@ -10,29 +11,41 @@ pub(crate) fn assign_ids(spec: &mut LolaSpec) {
         NodeId::from_u32(res)
     };
 
+    for mut td in &mut spec.type_declarations {
+        assert_eq!(*td.id(), NodeId::DUMMY, "Ids already assigned.");
+        td.set_id(next_id());
+        for mut field in &mut td.fields {
+            assert_eq!(*field.ty.id(), NodeId::DUMMY, "Ids already assigned.");
+            field.ty.set_id(next_id());
+        }
+    }
     for mut c in &mut spec.constants {
-        assert_eq!(c._id, NodeId::DUMMY, "Ids already assigned.");
-        c._id = next_id();
+        assert_eq!(*c.id(), NodeId::DUMMY, "Ids already assigned.");
+        c.set_id(next_id());
         if let Some(ref mut t) = c.ty {
-            t._id = next_id();
+            assert_eq!(*t.id(), NodeId::DUMMY, "Ids already assigned.");
+            t.set_id(next_id());
         }
     }
     for mut i in &mut spec.inputs {
-        assert_eq!(i._id, NodeId::DUMMY, "Ids already assigned.");
-        i._id = next_id();
-        i.ty._id = next_id();
+        assert_eq!(*i.id(), NodeId::DUMMY, "Ids already assigned.");
+        i.set_id(next_id());
+        assert_eq!(*i.ty.id(), NodeId::DUMMY, "Ids already assigned.");
+        i.set_id(next_id());
+
     }
     for mut o in &mut spec.outputs {
-        assert_eq!(o._id, NodeId::DUMMY, "Ids already assigned.");
-        o._id = next_id();
+        assert_eq!(*o.id(), NodeId::DUMMY, "Ids already assigned.");
+        o.set_id(next_id());
         if let Some(ref mut t) = o.ty {
-            t._id = next_id();
+            assert_eq!(*t.id(), NodeId::DUMMY, "Ids already assigned.");
+            t.set_id(next_id());
         }
         assign_ids_expr(&mut o.expression, &mut next_id);
     }
     for mut t in &mut spec.trigger {
-        assert_eq!(t._id, NodeId::DUMMY, "Ids already assigned.");
-        t._id = next_id();
+        assert_eq!(*t.id(), NodeId::DUMMY, "Ids already assigned.");
+        t.set_id(next_id());
         assign_ids_expr(&mut t.expression, &mut next_id);
     }
 }
@@ -41,7 +54,7 @@ fn assign_ids_expr<E>(exp: &mut Expression, next_id: &mut E)
 where
     E: FnMut() -> NodeId,
 {
-    exp._id = next_id();
+    exp.set_id(next_id());
     match &mut exp.kind {
         ExpressionKind::Lit(_) => {}
         ExpressionKind::Ident(_) => {}
@@ -82,12 +95,12 @@ mod tests {
     use super::super::super::ast::Input;
     use super::super::super::parse::Ident;
     use super::*;
-    use ast_node::Span;
+    use ast_node::{Span, NodeId};
 
-    fn get_id_o(s: Option<&Output>) -> NodeId {
+    fn get_id_o(s: Option<&Output>) -> &NodeId {
         if let Some(o) = s {
             if let Some(ref ty) = o.ty {
-                ty._id
+                ty.id()
             } else {
                 panic!("Assigning ids must not remove types!")
             }
@@ -95,10 +108,10 @@ mod tests {
             panic!("Assigning ids must not remove streams!")
         }
     }
-    fn get_id_c(s: Option<&Constant>) -> NodeId {
+    fn get_id_c(s: Option<&Constant>) -> &NodeId {
         if let Some(o) = s {
             if let Some(ref ty) = o.ty {
-                ty._id
+                ty.id()
             } else {
                 panic!("Assigning ids must not remove types!")
             }
@@ -150,8 +163,8 @@ mod tests {
         let mut spec = LolaSpec::new();
         spec.inputs.push(input());
         assign_ids(&mut spec);
-        assert_ne!(spec.inputs[0]._id, NodeId::DUMMY);
-        assert_ne!(spec.inputs[0].ty._id, NodeId::DUMMY);
+        assert_ne!(*spec.inputs[0].id(), NodeId::DUMMY);
+        assert_ne!(*spec.inputs[0].ty.id(), NodeId::DUMMY);
     }
 
     #[test]
@@ -159,7 +172,7 @@ mod tests {
         let mut spec = LolaSpec::new();
         spec.inputs.push(input());
         assign_ids(&mut spec);
-        assert_ne!(spec.inputs[0].ty._id, spec.inputs[0]._id);
+        assert_ne!(*spec.inputs[0].ty.id(), *spec.inputs[0].id());
     }
 
     #[test]
@@ -172,15 +185,15 @@ mod tests {
         spec.outputs.push(output(expr));
         assign_ids(&mut spec);
         let mut v = vec![
-            spec.inputs[0].ty._id,
-            spec.inputs[0]._id,
-            spec.inputs[1].ty._id,
-            spec.inputs[1]._id,
-            get_id_c(spec.constants.get(0)),
-            spec.constants[0]._id,
-            get_id_o(spec.outputs.get(0)),
-            spec.outputs[0]._id,
-            spec.outputs[0].expression._id,
+            *spec.inputs[0].ty.id(),
+            *spec.inputs[0].id(),
+            *spec.inputs[1].ty.id(),
+            *spec.inputs[1].id(),
+            *get_id_c(spec.constants.get(0)),
+            *spec.constants[0].id(),
+            *get_id_o(spec.outputs.get(0)),
+            *spec.outputs[0].id(),
+            *spec.outputs[0].expression.id(),
         ];
         v.dedup();
         assert_eq!(v.len(), 9, "Some ids occur multiple times.");
@@ -195,7 +208,7 @@ mod tests {
     fn already_assigned() {
         let mut spec = LolaSpec::new();
         let mut input = input();
-        input._id = NodeId::from_u32(42);
+        input.set_id(NodeId::from_u32(42));
         spec.inputs.push(input);
         // Should panic:
         assign_ids(&mut spec);
@@ -213,15 +226,15 @@ mod tests {
         spec.outputs.push(output(expr));
         assign_ids(&mut spec);
         let mut v = vec![
-            get_id_o(spec.outputs.get(0)),
-            spec.outputs[0]._id,
-            spec.outputs[0].expression._id,
+            *get_id_o(spec.outputs.get(0)),
+            *spec.outputs[0].id(),
+            *spec.outputs[0].expression.id(),
         ];
         if let ExpressionKind::Binary(BinOp::Div, ref lhs, ref rhs) =
             spec.outputs[0].expression.kind
         {
-            v.push(rhs._id);
-            v.push(lhs._id);
+            v.push(*rhs.id());
+            v.push(*lhs.id());
         } else {
             panic!("Assigning ids must not change the ast in any other way.")
         }

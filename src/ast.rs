@@ -123,7 +123,7 @@ pub struct Trigger {
 #[ast_node]
 pub struct TypeDeclaration {
     pub name: Option<Ident>,
-    pub kind: TypeKind,
+    pub fields: Vec<Box<TypeDeclField>>,
 }
 
 #[ast_node]
@@ -181,7 +181,6 @@ pub enum TypeKind {
     Simple(String),
     /// Malformed type, e.g, `mis$ing`
     Malformed(String),
-    UserDefined(Vec<Box<TypeDeclField>>),
 }
 
 /// An expression

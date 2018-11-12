@@ -152,7 +152,6 @@ impl Display for TypeKind {
             TypeKind::Simple(name) => write!(f, "{}", name),
             TypeKind::Malformed(s) => write!(f, "{}", s),
             TypeKind::Tuple(types) => PrintHelper::write(f, types, "(", ")", ", "),
-            TypeKind::UserDefined(fields) => PrintHelper::write(f, fields, "", "", ", "),
         }
     }
 }
@@ -165,12 +164,8 @@ impl Display for TypeDeclField {
 
 impl Display for TypeDeclaration {
     fn fmt(&self, f: &mut Formatter) -> Result {
-        write!(
-            f,
-            "type {} {{ {} }}",
-            PrintHelper::format_opt(&self.name, "", ""),
-            self.kind
-        )
+        write!(f, "type {}", PrintHelper::format_opt(&self.name, "", ""))?;
+        PrintHelper::write(f, &self.fields, " { ", " }", ", ")
     }
 }
 
