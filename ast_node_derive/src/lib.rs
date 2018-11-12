@@ -34,7 +34,11 @@ fn impl_ast_node(ast: &syn::DeriveInput) -> TokenStream {
             }
 
             fn span(&'a self) -> &'a Span {
-                & self._span
+                &self._span
+            }
+
+            fn set_id(&'a mut self, id: NodeId){
+                self._id = id
             }
         }
     })

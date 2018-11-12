@@ -55,5 +55,6 @@ impl<'a> From<pest::Span<'a>> for Span {
 
 pub trait AstNode<'a> {
     fn id(&'a self) -> &'a NodeId;
+    fn set_id(&'a mut self, id: NodeId);
     fn span(&'a self) -> &'a Span;
 }
