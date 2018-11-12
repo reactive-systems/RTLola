@@ -31,7 +31,7 @@ pub(crate) fn assign_ids(spec: &mut LolaSpec) {
         assert_eq!(*i.id(), NodeId::DUMMY, "Ids already assigned.");
         i.set_id(next_id());
         assert_eq!(*i.ty.id(), NodeId::DUMMY, "Ids already assigned.");
-        i.set_id(next_id());
+        i.ty.set_id(next_id());
 
     }
     for mut o in &mut spec.outputs {
