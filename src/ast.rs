@@ -51,54 +51,68 @@ impl<'a> From<&'a str> for LanguageSpec {
 }
 
 /// A declaration of a constant (stream)
-#[ast_node]
+#[derive(AstNode, Debug)]
 pub struct Constant {
     pub name: Ident,
     pub ty: Option<Type>,
     pub literal: Literal,
+    pub(crate) _id: NodeId,
+    pub(crate) _span: Span,
 }
 
 /// A declaration of an input stream
-#[ast_node]
+#[derive(AstNode, Debug)]
 pub struct Input {
     pub name: Ident,
     pub ty: Type,
+    pub(crate) _id: NodeId,
+    pub(crate) _span: Span,
 }
 
 /// A declaration of an output stream
-#[ast_node]
+#[derive(AstNode, Debug)]
 pub struct Output {
     pub name: Ident,
     pub ty: Option<Type>,
     pub params: Vec<Parameter>,
     pub template_spec: Option<TemplateSpec>,
     pub expression: Expression,
+    pub(crate) _id: NodeId,
+    pub(crate) _span: Span,
 }
 
-#[ast_node]
+#[derive(AstNode, Debug)]
 pub struct Parameter {
     pub name: Ident,
     pub ty: Option<Type>,
+    pub(crate) _id: NodeId,
+    pub(crate) _span: Span,
 }
 
-#[ast_node]
+#[derive(AstNode, Debug)]
 pub struct TemplateSpec {
     pub inv: Option<InvokeSpec>,
     pub ext: Option<ExtendSpec>,
     pub ter: Option<TerminateSpec>,
+    pub(crate) _id: NodeId,
+    pub(crate) _span: Span,
 }
 
-#[ast_node]
+#[derive(AstNode, Debug)]
 pub struct InvokeSpec {
     pub target: Expression,
     pub condition: Option<Expression>,
     pub is_if: bool,
+    pub(crate) _id: NodeId,
+    pub(crate) _span: Span,
 }
 
-#[ast_node]
+#[derive(AstNode, Debug)]
 pub struct ExtendSpec {
     pub target: Option<Expression>,
     pub freq: Option<ExtendRate>,
+    pub(crate) _id: NodeId,
+    pub(crate) _span: Span,
 }
 
 #[derive(Debug)]
@@ -107,40 +121,52 @@ pub enum ExtendRate {
     Duration(Box<Expression>, TimeUnit),
 }
 
-#[ast_node]
+#[derive(AstNode, Debug)]
 pub struct TerminateSpec {
     pub target: Expression,
+    pub(crate) _id: NodeId,
+    pub(crate) _span: Span,
 }
 
 /// A declaration of a trigger
-#[ast_node]
+#[derive(AstNode, Debug)]
 pub struct Trigger {
     pub name: Option<Ident>,
     pub expression: Expression,
     pub message: Option<String>,
+    pub(crate) _id: NodeId,
+    pub(crate) _span: Span,
 }
 
-#[ast_node]
+#[derive(AstNode, Debug)]
 pub struct TypeDeclaration {
     pub name: Option<Ident>,
     pub fields: Vec<Box<TypeDeclField>>,
+    pub(crate) _id: NodeId,
+    pub(crate) _span: Span,
 }
 
-#[ast_node]
+#[derive(AstNode, Debug)]
 pub struct TypeDeclField {
     pub ty: Type,
     pub name: String,
+    pub(crate) _id: NodeId,
+    pub(crate) _span: Span,
 }
 
-#[ast_node]
+#[derive(AstNode, Debug)]
 pub struct StreamInstance {
     pub stream_identifier: Ident,
     pub arguments: Vec<Box<Expression>>,
+    pub(crate) _id: NodeId,
+    pub(crate) _span: Span,
 }
 
-#[ast_node]
+#[derive(AstNode, Debug)]
 pub struct Type {
     pub kind: TypeKind,
+    pub(crate) _id: NodeId,
+    pub(crate) _span: Span,
 }
 
 impl Type {
@@ -161,8 +187,11 @@ impl Type {
     }
 }
 
-#[ast_node]
-pub struct Parenthesis {}
+#[derive(AstNode, Debug)]
+pub struct Parenthesis {
+    pub(crate) _id: NodeId,
+    pub(crate) _span: Span,
+}
 
 impl Parenthesis {
     pub fn new(span: Span) -> Parenthesis {
@@ -186,9 +215,11 @@ pub enum TypeKind {
 /// An expression
 ///
 /// inspired by https://doc.rust-lang.org/nightly/nightly-rustc/src/syntax/ast.rs.html
-#[ast_node]
+#[derive(AstNode, Debug)]
 pub struct Expression {
     pub(crate) kind: ExpressionKind,
+    pub(crate) _id: NodeId,
+    pub(crate) _span: Span,
 }
 
 impl Expression {
@@ -256,10 +287,12 @@ pub enum WindowOperation {
     Integral,
 }
 
-#[ast_node]
+#[derive(AstNode, Debug)]
 #[derive(Clone)]
 pub struct Literal {
     pub kind: LitKind,
+    pub(crate) _id: NodeId,
+    pub(crate) _span: Span,
 }
 
 impl Literal {
