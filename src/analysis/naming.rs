@@ -1,7 +1,6 @@
 //! This module provides naming analysis for a given Lola AST.
 
 use super::super::ast::*;
-use super::super::LolaSpec;
 use super::AnalysisError;
 use ast_node::{NodeId, AstNode};
 use super::super::ast::Offset::*;
@@ -33,10 +32,10 @@ impl<'a> NamingAnalysis<'a> {
     pub(crate) fn new() -> Self {
         let mut scoped_decls = ScopedDecl::new();
 
-        for builtin_type in super::common::BuiltinType::iter() {
+        for (name, ty) in super::common::BuiltinType::all() {
             scoped_decls.add_decl_for(
-                builtin_type.as_static(),
-                Declaration::BuiltinType(builtin_type),
+                name,
+                Declaration::BuiltinType(ty),
             );
         }
 

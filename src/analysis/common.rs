@@ -1,27 +1,30 @@
-#[derive(AsStaticStr, Debug, Eq, PartialEq, Clone, Copy, Hash, EnumIter)]
+
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub enum BuiltinType {
-    #[strum(serialize = "Int8")]
-    Int8,
-    #[strum(serialize = "Int16")]
-    Int16,
-    #[strum(serialize = "Int32")]
-    Int32,
-    #[strum(serialize = "Int64")]
-    Int64,
-    #[strum(serialize = "UInt8")]
-    UInt8,
-    #[strum(serialize = "UInt16")]
-    UInt16,
-    #[strum(serialize = "UInt32")]
-    UInt32,
-    #[strum(serialize = "UInt64")]
-    UInt64,
-    #[strum(serialize = "Bool")]
-    Bool,
-    #[strum(serialize = "Float32")]
-    Float32,
-    #[strum(serialize = "Float64")]
-    Float64,
-    #[strum(serialize = "String")]
+    Int(u8),
+    UInt(u8),
+    Float(u8),
     String,
+    Bool,
 }
+
+impl BuiltinType {
+    pub fn all() -> Vec<(&'static str, BuiltinType)> {
+        vec![
+            ("Int8", BuiltinType::Int(8)),
+            ("Int16", BuiltinType::Int(16)),
+            ("Int32", BuiltinType::Int(32)),
+            ("Int64", BuiltinType::Int(64)),
+            ("UInt8", BuiltinType::UInt(8)),
+            ("UInt16", BuiltinType::UInt(16)),
+            ("UInt32", BuiltinType::UInt(32)),
+            ("UInt64", BuiltinType::UInt(64)),
+            ("Float32", BuiltinType::Float(32)),
+            ("Float64", BuiltinType::Float(64)),
+            ("String", BuiltinType::String),
+            ("Bool", BuiltinType::Bool),
+        ]
+    }
+}
+

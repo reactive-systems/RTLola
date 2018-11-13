@@ -1,5 +1,4 @@
 use super::super::ast::*;
-use super::super::LolaSpec;
 extern crate ast_node;
 use ast_node::{AstNode, NodeId};
 
