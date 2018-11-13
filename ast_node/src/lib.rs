@@ -2,7 +2,7 @@
 extern crate pest;
 #[macro_use]
 extern crate pest_derive;
-//use pest;
+use std::fmt::Debug;
 
 /// Every node in the AST gets a unique id, represented by a 32bit unsiged integer.
 /// They are used in the later analysis phases to store information about AST nodes.
@@ -53,7 +53,7 @@ impl<'a> From<pest::Span<'a>> for Span {
     }
 }
 
-pub trait AstNode<'a> {
+pub trait AstNode<'a>: Debug {
     fn id(&'a self) -> &'a NodeId;
     fn set_id(&'a mut self, id: NodeId);
     fn span(&'a self) -> &'a Span;
