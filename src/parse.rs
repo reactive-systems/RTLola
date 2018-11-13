@@ -7,6 +7,7 @@ use pest;
 use pest::iterators::{Pair, Pairs};
 use pest::prec_climber::{Assoc, Operator, PrecClimber};
 use pest::Parser;
+use std::str::FromStr;
 
 #[derive(Parser)]
 #[grammar = "lola.pest"]
@@ -260,12 +261,18 @@ fn parse_frequency(spec: &mut LolaSpec, freq: Pair<Rule>) -> ExtendRate {
     match freq_rule {
         Rule::Frequency => {
             assert_eq!(unit_pair.as_rule(), Rule::UnitOfFreq);
-            let unit = parse_frequency_unit(unit_str);
+            let unit = match FreqUnit::from_str(unit_str) {
+                Ok(frequency_unit) => frequency_unit,
+                Err(_err) => panic!("Unknown frequency unit: {}.", unit_str),
+            };
             ExtendRate::Frequency(Box::new(expr), unit)
         }
         Rule::Duration => {
             assert_eq!(unit_pair.as_rule(), Rule::UnitOfTime);
-            let unit = parse_duration_unit(unit_str);
+            let unit = match TimeUnit::from_str(unit_str) {
+                Ok(time_unit) => time_unit,
+                Err(_err) => panic!("Unknown time unit: {}.", unit_str),
+            };
             ExtendRate::Duration(Box::new(expr), unit)
         }
         _ => unreachable!(),
@@ -497,33 +504,6 @@ fn parse_vec_of_expressions(spec: &mut LolaSpec, pairs: Pairs<Rule>) -> Vec<Box<
         .collect()
 }
 
-fn parse_duration_unit(str: &str) -> TimeUnit {
-    match str {
-        "ns" => TimeUnit::NanoSecond,
-        "μs" => TimeUnit::MicroSecond,
-        "ms" => TimeUnit::MilliSecond,
-        "s" => TimeUnit::Second,
-        "min" => TimeUnit::Minute,
-        "h" => TimeUnit::Hour,
-        "d" => TimeUnit::Day,
-        "w" => TimeUnit::Week,
-        "a" => TimeUnit::Year,
-        _ => unreachable!(),
-    }
-}
-
-fn parse_frequency_unit(str: &str) -> FreqUnit {
-    match str {
-        "μHz" => FreqUnit::MicroHertz,
-        "mHz" => FreqUnit::MilliHertz,
-        "Hz" => FreqUnit::Hertz,
-        "kHz" => FreqUnit::KiloHertz,
-        "MHz" => FreqUnit::MegaHertz,
-        "GHz" => FreqUnit::GigaHertz,
-        _ => unreachable!(),
-    }
-}
-
 fn parse_lookup_expression(spec: &mut LolaSpec, pair: Pair<Rule>, span: Span) -> Expression {
     let mut children = pair.into_inner();
     let stream_instance = children
@@ -553,7 +533,10 @@ fn parse_lookup_expression(spec: &mut LolaSpec, pair: Pair<Rule>, span: Span) ->
                 .next()
                 .expect("Duration needs a time unit.")
                 .as_str();
-            let unit = parse_duration_unit(unit_string);
+            let unit = match TimeUnit::from_str(unit_string) {
+                Ok(time_unit) => time_unit,
+                Err(_err) => panic!("Unknown time unit: {}.", unit_string),
+            };
             let offset = Offset::RealTimeOffset(Box::new(time_interval), unit);
             // Now check whether it is a window or not.
             let aggregation = match children.next().map(|x| x.as_rule()) {
@@ -577,20 +560,9 @@ fn parse_lookup_expression(spec: &mut LolaSpec, pair: Pair<Rule>, span: Span) ->
 fn build_function_expression(spec: &mut LolaSpec, pair: Pair<Rule>, span: Span) -> Expression {
     let mut children = pair.into_inner();
     let name = children.next().unwrap().as_str();
-    let function_kind = match name {
-        "nroot" => FunctionKind::NthRoot,
-        "sqrt" => FunctionKind::Sqrt,
-        "π" => FunctionKind::Projection,
-        "sin" => FunctionKind::Sin,
-        "cos" => FunctionKind::Cos,
-        "tan" => FunctionKind::Tan,
-        "arcsin" => FunctionKind::Arcsin,
-        "arccos" => FunctionKind::Arccos,
-        "arctar" => FunctionKind::Arctan,
-        "exp" => FunctionKind::Exp,
-        "floor" => FunctionKind::Floor,
-        "ceil" => FunctionKind::Ceil,
-        _ => panic!("Unknown function symbol: {}.", name),
+    let function_kind = match FunctionKind::from_str(name) {
+        Ok(function) => function,
+        Err(_err) => panic!("Unknown function symbol: {}.", name),
     };
     let args = parse_vec_of_expressions(spec, children);
     Expression::new(ExpressionKind::Function(function_kind, args), span)
@@ -869,13 +841,13 @@ mod tests {
 
     #[test]
     fn parse_trigger_ast() {
-        let pair = LolaParser::parse(Rule::Trigger, "trigger in != out \"some message\"")
+        let pair = LolaParser::parse(Rule::Trigger, "trigger in ≠ out \"some message\"")
             .unwrap_or_else(|e| panic!("{}", e))
             .next()
             .unwrap();
         let mut spec = LolaSpec::new();
         let ast = super::parse_trigger(&mut spec, pair);
-        assert_eq!(format!("{}", ast), "trigger in != out \"some message\"")
+        assert_eq!(format!("{}", ast), "trigger in ≠ out \"some message\"")
     }
 
     #[test]
@@ -916,7 +888,7 @@ mod tests {
 
     #[test]
     fn build_simple_ast() {
-        let spec = "input in: Int\noutput out: Int := in\ntrigger in != out";
+        let spec = "input in: Int\noutput out: Int := in\ntrigger in ≠ out";
         let throw = |e| panic!("{}", e);
         let ast = parse(spec).unwrap_or_else(throw);
         cmp_ast_spec(ast, spec);
@@ -949,14 +921,6 @@ mod tests {
     #[test]
     fn build_ternary_expression() {
         let spec = "input in: Int\noutput s: Int := if in = 3 then 4 else in + 2";
-        let throw = |e| panic!("{}", e);
-        let ast = parse(spec).unwrap_or_else(throw);
-        cmp_ast_spec(ast, spec);
-    }
-
-    #[test]
-    fn build_function_expression() {
-        let spec = "input in: (Int, Bool)\noutput s: Int := nroot(1, π(1, in))";
         let throw = |e| panic!("{}", e);
         let ast = parse(spec).unwrap_or_else(throw);
         cmp_ast_spec(ast, spec);

@@ -80,7 +80,7 @@ pub(crate) const KEYWORDS: [&str; 76] = [
     "w",
     "a",
     "μhz",
-    "uz",
+    "uhz",
     "mhz",
     "hz",
     "khz",

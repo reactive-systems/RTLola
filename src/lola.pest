@@ -111,12 +111,13 @@ LessThanOrEqual = {"<=" | "≤"}
 MoreThan = {">"}
 MoreThanOrEqual = {">=" | "≥"}
 NotEqual = {"!=" | "≠"}
-Equal = {"="}
+Equal = {"="|"=="}
 CompOp = _{LessThanOrEqual | MoreThanOrEqual | LessThan | MoreThan | NotEqual | Equal}
 
 BinaryFunctionSymbol = {
       "nroot"
     | "π" // Tuple Projection
+    | "proj"
     }
 
 UnaryFunctionSymbol = {
@@ -168,11 +169,11 @@ Type = {"("~ (Type ~(","~Type)*)?~ ")" | Ident}
 
 Duration = { Expr~ UnitOfTime}
 
-UnitOfTime = { "ns" | "μs" | "ms" | "s" | "min" | "h" | "d" | "w" | "a" }
+UnitOfTime = { "ns" | "μs" | "us" | "ms" | "s" | "min" | "h" | "d" | "w" | "a" }
 
 Frequency = { Expr ~UnitOfFreq}
 
-UnitOfFreq = { "μHz" | "mHz" | "Hz" | "kHz" | "MHz" | "GHz" }
+UnitOfFreq = { "μHz" | "uHz" | "mHz" | "Hz" | "kHz" | "MHz" | "GHz" }
 
 
 //////////////////////////////////////////////////
