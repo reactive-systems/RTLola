@@ -2,6 +2,8 @@
 //!
 //! In detail,
 //! * `naming` provides boundedness analysis for identifiers used in the Lola Specification
+//! * `id_assignment` assigns unique ids to all nodes of the AST
+//! * `type_checker` checks whether components of the AST have a valid type
 
 mod common;
 mod id_assignment;

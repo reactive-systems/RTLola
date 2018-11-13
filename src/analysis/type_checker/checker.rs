@@ -6,10 +6,12 @@ use std::collections::HashMap;
 extern crate ast_node;
 use super::candidates::*;
 use super::type_error::*;
+use super::TypeCheckResult;
 use ast_node::{AstNode, NodeId, Span};
 
 // TODO: Remove?
-struct TypeTable {
+#[derive(Debug)]
+pub struct TypeTable {
     map: HashMap<NodeId, Candidates>,
 }
 
@@ -41,8 +43,6 @@ pub(crate) struct TypeChecker<'a> {
     errors: Vec<Box<AnalysisError<'a> + 'a>>,
 }
 
-pub(crate) struct TypeCheckResult {}
-
 impl<'a> TypeChecker<'a> {
     pub(crate) fn new(dt: &'a DeclarationTable, spec: &'a LolaSpec) -> TypeChecker<'a> {
         TypeChecker {
@@ -53,7 +53,7 @@ impl<'a> TypeChecker<'a> {
         }
     }
 
-    pub(crate) fn check(self) -> TypeCheckResult {
+    pub(crate) fn check(self) -> TypeCheckResult<'a> {
         unimplemented!()
     }
 
