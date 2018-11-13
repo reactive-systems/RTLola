@@ -8,6 +8,7 @@ mod id_assignment;
 mod lola_version;
 mod naming;
 mod reporting;
+mod type_checker;
 
 use self::lola_version::LolaVersionAnalysis;
 use self::naming::NamingAnalysis;

@@ -4,9 +4,9 @@ use super::ast::*;
 use super::parse::Ident;
 use std::fmt::{Display, Formatter, Result};
 
-struct PrintHelper {}
+pub(crate) struct PrintHelper {}
 impl PrintHelper {
-    fn write<T: Display>(f: &mut Formatter, v: &[T], pref: &str, suff: &str, join: &str) -> Result {
+    pub(crate) fn write<T: Display>(f: &mut Formatter, v: &[T], pref: &str, suff: &str, join: &str) -> Result {
         write!(f, "{}", pref)?;
         if let Some(e) = v.first() {
             write!(f, "{}", e)?;
@@ -18,7 +18,7 @@ impl PrintHelper {
         Ok(())
     }
 
-    fn format_opt<T: Display>(opt: &Option<T>, pref: &str, suff: &str) -> String {
+    pub(crate) fn format_opt<T: Display>(opt: &Option<T>, pref: &str, suff: &str) -> String {
         if let Some(ref e) = opt {
             format!("{}{}{}", pref, e, suff)
         } else {
@@ -26,7 +26,7 @@ impl PrintHelper {
         }
     }
 
-    fn format_type(ty: &Option<Type>) -> String {
+    pub(crate) fn format_type(ty: &Option<Type>) -> String {
         PrintHelper::format_opt(ty, ": ", "")
     }
 }
