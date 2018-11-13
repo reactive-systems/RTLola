@@ -7,7 +7,7 @@ mod common;
 mod id_assignment;
 mod naming;
 
-use super::LolaSpec;
+use super::ast::LolaSpec;
 use analysis::naming::Declaration;
 use ast_node::AstNode;
 
