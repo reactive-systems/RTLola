@@ -1,8 +1,8 @@
 //! This module contains the parser for the Lola Language.
 
+use super::ast::*;
 use ast_node::NodeId;
 use ast_node::Span;
-use super::ast::*;
 use pest;
 use pest::iterators::{Pair, Pairs};
 use pest::prec_climber::{Assoc, Operator, PrecClimber};

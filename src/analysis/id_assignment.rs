@@ -31,7 +31,6 @@ pub(crate) fn assign_ids(spec: &mut LolaSpec) {
         i.set_id(next_id());
         assert_eq!(*i.ty.id(), NodeId::DUMMY, "Ids already assigned.");
         i.ty.set_id(next_id());
-
     }
     for mut o in &mut spec.outputs {
         assert_eq!(*o.id(), NodeId::DUMMY, "Ids already assigned.");
@@ -94,7 +93,7 @@ mod tests {
     use super::super::super::ast::Input;
     use super::super::super::parse::Ident;
     use super::*;
-    use ast_node::{Span, NodeId};
+    use ast_node::{NodeId, Span};
 
     fn get_id_o(s: Option<&Output>) -> &NodeId {
         if let Some(o) = s {

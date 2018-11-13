@@ -287,8 +287,7 @@ pub enum WindowOperation {
     Integral,
 }
 
-#[derive(AstNode, Debug)]
-#[derive(Clone)]
+#[derive(AstNode, Debug, Clone)]
 pub struct Literal {
     pub kind: LitKind,
     pub(crate) _id: NodeId,

@@ -1,21 +1,18 @@
 //! This module provides naming analysis for a given Lola AST.
 
+use super::super::ast::Offset::*;
 use super::super::ast::*;
 use super::AnalysisError;
-use ast_node::{NodeId, AstNode};
-use super::super::ast::Offset::*;
+use analysis::*;
+use ast_node::{AstNode, NodeId};
 use std::collections::HashMap;
-use strum::AsStaticRef;
-use strum::IntoEnumIterator;
 
 pub(crate) type DeclarationTable<'a> = HashMap<NodeId, Declaration<'a>>;
 
 pub(crate) struct NamingAnalysis<'a> {
     declarations: ScopedDecl<'a>,
-    result: DeclarationTable<'a>,
-    #[allow(dead_code)]
-    errors: Vec<Box<AnalysisError<'a>>>,
-    // TODO: need some kind of error reporting, probably stored in a vector
+    pub result: DeclarationTable<'a>,
+    pub errors: Vec<Box<AnalysisError<'a> + 'a>>,
 }
 
 fn declaration_is_type(decl: &Declaration) -> bool {
@@ -28,15 +25,27 @@ fn declaration_is_type(decl: &Declaration) -> bool {
     }
 }
 
+fn declaration_is_lookup_target(decl: &Declaration) -> bool {
+    match decl {
+        Declaration::In(_) | Declaration::Out(_) => true,
+        Declaration::Const(_)
+        | Declaration::UserDefinedType(_)
+        | Declaration::BuiltinType(_)
+        | Declaration::StreamParameter(_) => false,
+    }
+}
+
+fn is_malformed_name(_name: &str) -> bool {
+    // TODO check for malformed
+    false
+}
+
 impl<'a> NamingAnalysis<'a> {
     pub(crate) fn new() -> Self {
         let mut scoped_decls = ScopedDecl::new();
 
         for (name, ty) in super::common::BuiltinType::all() {
-            scoped_decls.add_decl_for(
-                name,
-                Declaration::BuiltinType(ty),
-            );
+            scoped_decls.add_decl_for(name, Declaration::BuiltinType(ty));
         }
 
         NamingAnalysis {
@@ -46,20 +55,32 @@ impl<'a> NamingAnalysis<'a> {
         }
     }
 
-    fn check_type(&mut self, ty: &Type) {
+    fn add_decl_for(&mut self, name: &'a str, decl: Declaration<'a>, node: &'a AstNode<'a>) {
+        // check for keyword
+        let lower = name.to_lowercase();
+        if common::KEYWORDS.contains(&lower.as_str()) {
+            self.errors
+                .push(Box::new(NamingError::ReservedKeyword(node)));
+        }
+
+        if is_malformed_name(name) {
+            self.errors.push(Box::new(NamingError::MalformedName(node)));
+        }
+        self.declarations.add_decl_for(name, decl);
+    }
+
+    fn check_type(&mut self, ty: &'a Type) {
         match ty.kind {
-            TypeKind::Malformed(ref _name) => {
-                // TODO warn about wrong name
-            }
-            TypeKind::Simple(ref name) => {
+            TypeKind::Simple(ref name) | TypeKind::Malformed(ref name) => {
                 if let Some(decl) = self.declarations.get_decl_for(&name) {
                     if !declaration_is_type(&decl) {
-                        // TODO it is NOT a type
-                        unimplemented!();
+                        self.errors.push(Box::new(NamingError::NotAType(ty)));
+                    } else {
+                        self.result.insert(*ty.id(), decl);
                     }
                 } else {
                     // it does not exist
-                    unimplemented!()
+                    self.errors.push(Box::new(NamingError::TypeNotFound(ty)));
                 }
             }
             TypeKind::Tuple(ref elements) => elements.iter().for_each(|ty| {
@@ -72,13 +93,18 @@ impl<'a> NamingAnalysis<'a> {
         // check the name
         if let Some(decl) = self.declarations.get_decl_for(&param.name.name) {
             if declaration_is_type(&decl) {
-                // TODO it is a type
-                unimplemented!();
+                self.errors
+                    .push(Box::new(NamingError::TypeNotAllowedHere(param)));
+            } else if let Some(decl) = self
+                .declarations
+                .get_decl_in_current_scope_for(&param.name.name)
+            {
+                self.errors
+                    .push(Box::new(NamingError::NameAlreadyUsed(param, decl)));
             }
         } else {
             // it does not exist
-            self.declarations
-                .add_decl_for(&param.name.name, Declaration::StreamParameter(param));
+            self.add_decl_for(&param.name.name, Declaration::StreamParameter(param), param);
         }
 
         // check the type
@@ -98,9 +124,33 @@ impl<'a> NamingAnalysis<'a> {
     }
 
     fn check_triggers(&mut self, spec: &'a LolaSpec) -> () {
+        let mut trigger_names: Vec<(&'a String, &'a Trigger)> = Vec::new();
         for trigger in &spec.trigger {
             self.declarations.push();
-            // TODO
+            if let Some(ident) = &trigger.name {
+                if let Some(decl) = self.declarations.get_decl_for(&ident.name) {
+                    self.errors
+                        .push(Box::new(NamingError::NameAlreadyUsed(trigger, decl)));
+                }
+                let mut found = false;
+                for previous_entry in trigger_names.iter() {
+                    match previous_entry {
+                        (ref name, ref previous_trigger) => {
+                            if ident.name == **name {
+                                found = true;
+                                self.errors.push(Box::new(NamingError::TriggerWithSameName(
+                                    trigger,
+                                    *previous_trigger,
+                                )));
+                                break;
+                            }
+                        }
+                    }
+                }
+                if !found {
+                    trigger_names.push((&ident.name, trigger))
+                }
+            }
             self.check_expression(&trigger.expression);
             self.declarations.pop();
         }
@@ -110,25 +160,24 @@ impl<'a> NamingAnalysis<'a> {
         // recurse into expressions and check them
         for output in &spec.outputs {
             self.declarations.push();
-            self.check_expression(&output.expression);
             output
                 .params
                 .iter()
                 .for_each(|param| self.check_param(&param));
+            self.check_expression(&output.expression);
             self.declarations.pop();
         }
     }
 
     fn add_outputs(&mut self, spec: &'a LolaSpec) {
         for output in &spec.outputs {
-            if let Some(_decl) = self.declarations.get_decl_for(&output.name.name) {
-                // TODO error based on the existing declaration and the current one
-                unimplemented!();
+            if let Some(decl) = self.declarations.get_decl_for(&output.name.name) {
+                self.errors
+                    .push(Box::new(NamingError::NameAlreadyUsed(output, decl)));
             } else {
-                self.declarations
-                    .add_decl_for(&output.name.name, output.into());
+                self.add_decl_for(&output.name.name, output.into(), output);
             }
-            if let Some(ty) = &output.ty {
+            if let Some(ref ty) = &output.ty {
                 self.check_type(ty);
             }
         }
@@ -136,27 +185,27 @@ impl<'a> NamingAnalysis<'a> {
 
     fn add_inputs(&mut self, spec: &'a LolaSpec) {
         for input in &spec.inputs {
-            if let Some(_decl) = self.declarations.get_decl_for(&input.name.name) {
-                // TODO error based on the existing declaration and the current one
-                unimplemented!();
+            if let Some(decl) = self.declarations.get_decl_for(&input.name.name) {
+                self.errors
+                    .push(Box::new(NamingError::NameAlreadyUsed(input, decl)));
             } else {
-                self.declarations
-                    .add_decl_for(&input.name.name, input.into());
+                self.add_decl_for(&input.name.name, input.into(), input);
             }
-            // TODO check type
+            self.check_type(&input.ty);
         }
     }
 
     fn add_constants(&mut self, spec: &'a LolaSpec) {
         for constant in &spec.constants {
-            if let Some(_decl) = self.declarations.get_decl_for(&constant.name.name) {
-                // TODO error based on the existing declaration and the current one
-                unimplemented!();
+            if let Some(decl) = self.declarations.get_decl_for(&constant.name.name) {
+                self.errors
+                    .push(Box::new(NamingError::NameAlreadyUsed(constant, decl)));
             } else {
-                self.declarations
-                    .add_decl_for(&constant.name.name, constant.into());
+                self.add_decl_for(&constant.name.name, constant.into(), constant);
             }
-            // TODO check type
+            if let Some(ref ty) = constant.ty {
+                self.check_type(&ty);
+            }
         }
     }
 
@@ -164,44 +213,72 @@ impl<'a> NamingAnalysis<'a> {
         for type_decl in &spec.type_declarations {
             self.declarations.push();
             // check children
+            let mut field_names: Vec<(&'a String, &'a TypeDeclField)> = Vec::new();
             type_decl.fields.iter().for_each(|field| {
                 self.check_type(&field.ty);
             });
 
-            type_decl.fields.iter().for_each(|_field| {
-                // TODO check the names
+            type_decl.fields.iter().for_each(|field| {
+                let mut found = false;
+                for previous_entry in field_names.iter() {
+                    match previous_entry {
+                        (ref name, ref previous_field) => {
+                            if field.name == **name {
+                                found = true;
+                                self.errors.push(Box::new(NamingError::FieldWithSameName(
+                                    &**field,
+                                    *previous_field,
+                                )));
+                                break;
+                            }
+                        }
+                    }
+                }
+                if !found {
+                    field_names.push((&field.name, &**field));
+                    if is_malformed_name(&field.name) {
+                        self.errors
+                            .push(Box::new(NamingError::MalformedName(&**field)));
+                    }
+                }
             });
 
             self.declarations.pop();
 
             // only add the new type name after checking all fields
             if let Some(ref name) = &type_decl.name {
-                if let Some(_decl) = self.declarations.get_decl_for(&name.name) {
-                    // TODO error based on the existing declaration and the current one
-                    unimplemented!();
+                if let Some(decl) = self.declarations.get_decl_for(&name.name) {
+                    self.errors
+                        .push(Box::new(NamingError::NameAlreadyUsed(type_decl, decl)));
                 } else {
-                    self.declarations
-                        .add_decl_for(&name.name, Declaration::UserDefinedType(type_decl));
+                    self.add_decl_for(
+                        &name.name,
+                        Declaration::UserDefinedType(type_decl),
+                        type_decl,
+                    );
                 }
             } else {
-                // TODO error unnamed type declaration
+                self.errors
+                    .push(Box::new(NamingError::UnnamedTypeDeclaration(type_decl)));
             }
         }
     }
 
     fn check_stream_instance(&mut self, instance: &'a StreamInstance) {
-        // TODO check that the look up target exists
         if let Some(decl) = self
             .declarations
             .get_decl_for(&instance.stream_identifier.name)
         {
-            if declaration_is_type(&decl) {
-                // TODO it is a type
-                unimplemented!();
+            if !declaration_is_lookup_target(&decl) {
+                self.errors
+                    .push(Box::new(NamingError::NotAStream(instance)));
+            } else {
+                self.result.insert(*instance.id(), decl);
             }
         } else {
             // it does not exist
-            unimplemented!()
+            self.errors
+                .push(Box::new(NamingError::NameNotFound(instance)));
         }
         // check paramterization
         instance.arguments.iter().for_each(|param| {
@@ -222,15 +299,15 @@ impl<'a> NamingAnalysis<'a> {
             Ident(ident) => {
                 if let Some(decl) = self.declarations.get_decl_for(&ident.name) {
                     assert!(*expression.id() != NodeId::DUMMY);
-                    // TODO check that the declaration is not a type
                     if declaration_is_type(&decl) {
-                        unimplemented!();
+                        self.errors
+                            .push(Box::new(NamingError::TypeNotAllowedHere(expression)));
                     } else {
                         self.result.insert(*expression.id(), decl);
                     }
                 } else {
-                    // TODO unbounded variable, store error to display to user
-                    unimplemented!();
+                    self.errors
+                        .push(Box::new(NamingError::NameNotFound(expression)))
                 }
             }
             Binary(_, left, right) => {
@@ -294,16 +371,21 @@ impl<'a> ScopedDecl<'a> {
         None
     }
 
+    fn get_decl_in_current_scope_for(&self, name: &'a str) -> Option<Declaration<'a>> {
+        match self.scopes.last().unwrap().get(name) {
+            Some(&decl) => Some(decl),
+            None => None,
+        }
+    }
+
     fn add_decl_for(&mut self, name: &'a str, decl: Declaration<'a>) {
         assert!(self.scopes.last().is_some());
-        // TODO check for double declaration
-        // TODO check for keyword
         self.scopes.last_mut().unwrap().insert(name, decl);
     }
 }
 
 #[derive(Debug, Copy, Clone)]
-pub(crate) enum Declaration<'a> {
+pub enum Declaration<'a> {
     Const(&'a Constant),
     In(&'a Input),
     Out(&'a Output),
@@ -339,13 +421,156 @@ mod tests {
 
     // TODO: implement test cases
     #[test]
-    #[ignore]
-    fn build_parameter_list() {
-        let spec = "output s <a: B, c: D>: E := 3";
+    fn unknown_types_are_reported() {
+        let spec = "output test<ab: B, c: D>: E := 3";
         let throw = |e| panic!("{}", e);
         let mut ast = parse(spec).unwrap_or_else(throw);
         id_assignment::assign_ids(&mut ast);
         let mut naming_analyzer = NamingAnalysis::new();
         naming_analyzer.check(&mut ast);
+        assert_eq!(3, naming_analyzer.errors.len());
+    }
+
+    #[test]
+    fn unknown_identifiers_are_reported() {
+        let spec = "output test: Int8 := A";
+        let throw = |e| panic!("{}", e);
+        let mut ast = parse(spec).unwrap_or_else(throw);
+        id_assignment::assign_ids(&mut ast);
+        let mut naming_analyzer = NamingAnalysis::new();
+        naming_analyzer.check(&mut ast);
+        assert_eq!(1, naming_analyzer.errors.len());
+    }
+
+    #[test]
+    fn int8_is_a_known_type() {
+        let spec = "output test: Int8 := 3";
+        let throw = |e| panic!("{}", e);
+        let mut ast = parse(spec).unwrap_or_else(throw);
+        id_assignment::assign_ids(&mut ast);
+        let mut naming_analyzer = NamingAnalysis::new();
+        naming_analyzer.check(&mut ast);
+        assert_eq!(0, naming_analyzer.errors.len());
+    }
+
+    #[test]
+    fn int16_is_a_known_type() {
+        let spec = "output test: Int16 := 3";
+        let throw = |e| panic!("{}", e);
+        let mut ast = parse(spec).unwrap_or_else(throw);
+        id_assignment::assign_ids(&mut ast);
+        let mut naming_analyzer = NamingAnalysis::new();
+        naming_analyzer.check(&mut ast);
+        assert_eq!(0, naming_analyzer.errors.len());
+    }
+
+    #[test]
+    fn int32_is_a_known_type() {
+        let spec = "output test: Int32 := 3";
+        let throw = |e| panic!("{}", e);
+        let mut ast = parse(spec).unwrap_or_else(throw);
+        id_assignment::assign_ids(&mut ast);
+        let mut naming_analyzer = NamingAnalysis::new();
+        naming_analyzer.check(&mut ast);
+        assert_eq!(0, naming_analyzer.errors.len());
+    }
+
+    #[test]
+    fn int64_is_a_known_type() {
+        let spec = "output test: Int64 := 3";
+        let throw = |e| panic!("{}", e);
+        let mut ast = parse(spec).unwrap_or_else(throw);
+        id_assignment::assign_ids(&mut ast);
+        let mut naming_analyzer = NamingAnalysis::new();
+        naming_analyzer.check(&mut ast);
+        assert_eq!(0, naming_analyzer.errors.len());
+    }
+
+    #[test]
+    fn float32_is_a_known_type() {
+        let spec = "output test: Float32 := 3";
+        let throw = |e| panic!("{}", e);
+        let mut ast = parse(spec).unwrap_or_else(throw);
+        id_assignment::assign_ids(&mut ast);
+        let mut naming_analyzer = NamingAnalysis::new();
+        naming_analyzer.check(&mut ast);
+        assert_eq!(0, naming_analyzer.errors.len());
+    }
+
+    #[test]
+    fn float64_is_a_known_type() {
+        let spec = "output test: Float64 := 3";
+        let throw = |e| panic!("{}", e);
+        let mut ast = parse(spec).unwrap_or_else(throw);
+        id_assignment::assign_ids(&mut ast);
+        let mut naming_analyzer = NamingAnalysis::new();
+        naming_analyzer.check(&mut ast);
+        assert_eq!(0, naming_analyzer.errors.len());
+    }
+
+    #[test]
+    fn bool_is_a_known_type() {
+        let spec = "output test: Bool := 3";
+        let throw = |e| panic!("{}", e);
+        let mut ast = parse(spec).unwrap_or_else(throw);
+        id_assignment::assign_ids(&mut ast);
+        let mut naming_analyzer = NamingAnalysis::new();
+        naming_analyzer.check(&mut ast);
+        assert_eq!(0, naming_analyzer.errors.len());
+    }
+
+    #[test]
+    fn string_is_a_known_type() {
+        let spec = "output test: String := 3";
+        let throw = |e| panic!("{}", e);
+        let mut ast = parse(spec).unwrap_or_else(throw);
+        id_assignment::assign_ids(&mut ast);
+        let mut naming_analyzer = NamingAnalysis::new();
+        naming_analyzer.check(&mut ast);
+        assert_eq!(0, naming_analyzer.errors.len());
+    }
+
+    #[test]
+    fn duplicate_names_at_the_same_level_are_reported() {
+        let spec = "output test: String := 3\noutput test: String := 3";
+        let throw = |e| panic!("{}", e);
+        let mut ast = parse(spec).unwrap_or_else(throw);
+        id_assignment::assign_ids(&mut ast);
+        let mut naming_analyzer = NamingAnalysis::new();
+        naming_analyzer.check(&mut ast);
+        assert_eq!(1, naming_analyzer.errors.len());
+    }
+
+    #[test]
+    fn streams_declared_type_is_in_the_result() {
+        let spec = "output test: Int8 := 3";
+        let throw = |e| panic!("{}", e);
+        let mut ast = parse(spec).unwrap_or_else(throw);
+        id_assignment::assign_ids(&mut ast);
+        let mut naming_analyzer = NamingAnalysis::new();
+        naming_analyzer.check(&mut ast);
+        assert_eq!(1, naming_analyzer.result.len());
+    }
+
+    #[test]
+    fn duplicate_parameters_are_not_allowed() {
+        let spec = "output test<ab: Int8, ab: Int8> := 3";
+        let throw = |e| panic!("{}", e);
+        let mut ast = parse(spec).unwrap_or_else(throw);
+        id_assignment::assign_ids(&mut ast);
+        let mut naming_analyzer = NamingAnalysis::new();
+        naming_analyzer.check(&mut ast);
+        assert_eq!(1, naming_analyzer.errors.len());
+    }
+
+    #[test]
+    fn keyword_are_not_valid_names() {
+        let spec = "output Int128 := 3";
+        let throw = |e| panic!("{}", e);
+        let mut ast = parse(spec).unwrap_or_else(throw);
+        id_assignment::assign_ids(&mut ast);
+        let mut naming_analyzer = NamingAnalysis::new();
+        naming_analyzer.check(&mut ast);
+        assert_eq!(1, naming_analyzer.errors.len());
     }
 }
