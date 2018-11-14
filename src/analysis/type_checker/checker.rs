@@ -132,12 +132,65 @@ impl<'a> TypeChecker<'a> {
                     )),
                 }
             }
-            ExpressionKind::Unary(ref operator, ref operand) => unimplemented!(),
-            ExpressionKind::Ite(ref cond, ref cons, ref alt) => unimplemented!(),
-            ExpressionKind::ParenthesizedExpression(_, ref expr, _) => unimplemented!(),
-            ExpressionKind::MissingExpression() => unimplemented!(),
-            ExpressionKind::Tuple(ref exprs) => unimplemented!(),
-            ExpressionKind::Function(ref kind, ref args) => unimplemented!(),
+            ExpressionKind::Unary(ref operator, ref operand) => {
+                let op_type = self.get_candidates(operand)?;
+                let res_type = match operator {
+                    UnOp::Neg if op_type.is_numeric() => Some(op_type.clone().into_signed()),
+                    UnOp::Not if op_type.is_logic() => Some(op_type.clone()),
+                    _ => None,
+                };
+                match res_type {
+                    Some(cand) => self.reg_cand(*e.id(), cand),
+                    None => self.reg_error(TypeError::IncompatibleTypes(
+                        e,
+                        format!(
+                            "Unary operator {} cannot be applied to type {}.",
+                            operator, op_type
+                        ),
+                    )),
+                }
+            }
+            ExpressionKind::Ite(ref cond, ref cons, ref alt) => {
+                let cond = self.get_candidates(cond)?;
+                let cons = self.get_candidates(cons)?;
+                let alt = self.get_candidates(alt)?;
+                if !cond.is_logic() {
+                    return self.reg_error(TypeError::IncompatibleTypes(
+                        e,
+                        format!(
+                            "Expected boolean value in condition of `if` expression but got {}.",
+                            cond
+                        ),
+                    ));
+                }
+                let res_type = cons.meet(&alt);
+                if res_type.is_none() {
+                    self.reg_error(TypeError::IncompatibleTypes(
+                        e,
+                        format!(
+                            "Arms of if` expression have incompatible types {} and {}.",
+                            cond, alt
+                        ),
+                    ))
+                } else {
+                    self.reg_cand(*e.id(), res_type)
+                }
+            }
+            ExpressionKind::ParenthesizedExpression(_, ref expr, _) => {
+                let res = self.get_candidates(expr)?;
+                self.reg_cand(*e.id(), res)
+            }
+            ExpressionKind::MissingExpression() => self.reg_error(TypeError::MissingExpression(e)),
+            ExpressionKind::Tuple(ref exprs) => {
+                let cands: Vec<Candidates> =
+                    exprs.iter().flat_map(|e| self.get_candidates(e)).collect();
+                if cands.len() < exprs.len() {
+                    None
+                } else {
+                    self.reg_cand(*e.id(), Candidates::Tuple(cands))
+                }
+            }
+            ExpressionKind::Function(ref kind, ref args) => self.check_function(e, *kind, args),
         }
     }
 
