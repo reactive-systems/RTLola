@@ -263,7 +263,7 @@ pub enum ExpressionKind {
     Function(FunctionKind, Vec<Box<Expression>>),
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum FunctionKind {
     NthRoot,
     Sqrt,

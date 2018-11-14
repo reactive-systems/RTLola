@@ -104,39 +104,32 @@ impl<'a> TypeChecker<'a> {
                 )
             }
             ExpressionKind::Binary(op, ref lhs, ref rhs) => {
-                let gen_inv_type_err =
-                    |op_spec: String, lhs: Candidates, rhs: Candidates| -> TypeError {
-                        TypeError::InvalidType(
-                            e,
-                            format!(
-                                "{} is not defined for values of types {} and {}.",
-                                op_spec, lhs, rhs
-                            ),
-                        )
-                    };
                 let lhs_type = self.get_candidates(lhs)?;
                 let rhs_type = self.get_candidates(rhs)?;
-                match op {
-                    BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div | BinOp::Rem | BinOp::Pow => {
-                        let res_type = lhs_type.meet(&rhs_type);
-                        if !lhs_type.is_numeric() || !rhs_type.is_numeric() {
-                            self.reg_error(gen_inv_type_err(
-                                format!("Binary operator {}", op),
-                                lhs_type,
-                                rhs_type,
-                            ))
-                        } else if res_type.is_none() {
-                            // This should be impossible to reach when both types are numeric, right?
-                            // TODO No! cannot add float and non-float.
-                            unreachable!()
-                        } else {
-                            self.reg_cand(*e.id(), res_type)
-                        }
+                let meet_type = lhs_type.meet(&rhs_type);
+                let res = match op {
+                    BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div | BinOp::Rem | BinOp::Pow
+                        if meet_type.is_numeric() =>
+                    {
+                        Some(meet_type)
                     }
-                    BinOp::And | BinOp::Or => unimplemented!(),
-                    BinOp::Eq | BinOp::Lt | BinOp::Le | BinOp::Ne | BinOp::Ge | BinOp::Gt => {
-                        unimplemented!()
+                    BinOp::And | BinOp::Or if meet_type.is_logic() => Some(meet_type),
+                    BinOp::Eq | BinOp::Lt | BinOp::Le | BinOp::Ne | BinOp::Ge | BinOp::Gt
+                        if meet_type.is_none() =>
+                    {
+                        Some(Candidates::Concrete(BuiltinType::Bool))
                     }
+                    _ => None,
+                };
+                match res {
+                    Some(cand) => self.reg_cand(*e.id(), cand),
+                    None => self.reg_error(TypeError::IncompatibleTypes(
+                        e,
+                        format!(
+                            "Binary operator {} applied to types {} and {}.",
+                            op, lhs, rhs
+                        ),
+                    )),
                 }
             }
             ExpressionKind::Unary(ref operator, ref operand) => unimplemented!(),
