@@ -10,26 +10,25 @@ pub struct NumConfig {
 }
 
 impl NumConfig {
-    pub fn new_float(w: u8) -> NumConfig {
-        NumConfig{ width: w, def_float: true, def_signed: true }
+    pub fn new_float(w: Option<u8>) -> NumConfig {
+        NumConfig{ width: w.unwrap_or(32), def_float: true, def_signed: true }
     }
 
-    pub fn new_signed(w: u8) -> NumConfig {
-        NumConfig{ width: w, def_float: false, def_signed: true }
+    pub fn new_signed(w: Option<u8>) -> NumConfig {
+        NumConfig{ width: w.unwrap_or(8), def_float: false, def_signed: true }
     }
 
-    pub fn new_any(w: u8) -> NumConfig {
-        NumConfig{ width: w, def_float: false, def_signed: false }
+    pub fn new_unsigned(w: Option<u8>) -> NumConfig {
+        NumConfig{ width: w.unwrap_or(8), def_float: false, def_signed: false }
     }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub enum Candidates {
     Numeric(NumConfig),
-    String,
+    Concrete(BuiltinType),
     Tuple(Vec<Candidates>),
     Defined(Vec<Candidates>),
-    Logic,
     Any,
     None,
 }
@@ -42,10 +41,9 @@ impl Display for Candidates {
             Candidates::Numeric(cfg) if cfg.def_float => write!(f, "Float≥{}", cfg.width),
             Candidates::Numeric(cfg) if cfg.def_signed => write!(f, "(Float|Int)≥{}", cfg.width),
             Candidates::Numeric(cfg) => write!(f, "(Float|Int|UInt)>{}", cfg.width),
-            Candidates::String => write!(f, "String"),
             Candidates::Tuple(cands) => PrintHelper::write(f, cands, "{ ", " }", " ,"),
             Candidates::Defined(fields) => PrintHelper::write(f, fields, "{ ", " }", " ,"),
-            Candidates::Logic => write!(f, "Bool"),
+            Candidates::Concrete(ty) => write!(f, "{:?}", ty), // TODO: implement Display for builtin types.
             Candidates::Any => write!(f, "⊤"),
             Candidates::None => write!(f, "⊥"),
         }
@@ -76,8 +74,31 @@ impl Candidates {
                 } else {
                     Candidates::Tuple(res)
                 }
+            },
+            (Candidates::Concrete(c), Candidates::Numeric(cfg)) | (Candidates::Numeric(cfg), Candidates::Concrete(c)) => {
+                Candidates::meet_conc_abs(*c, *cfg)
             }
+            (Candidates::Concrete(t0), Candidates::Concrete(t1)) => Candidates::meet_builtin(*t0, *t1),
             (left, right) if left == right => left.clone(),
+            _ => Candidates::None,
+        }
+    }
+
+    fn meet_conc_abs(conc: BuiltinType, abs: NumConfig) -> Candidates {
+        match conc {
+            BuiltinType::UInt(_) if (abs.def_signed || abs.def_float) => Candidates::None,
+            BuiltinType::Int(_) if abs.def_float => Candidates::None,
+            BuiltinType::UInt(w) | BuiltinType::Int(w) | BuiltinType::Float(w) if w < abs.width => Candidates::None,
+            _ => Candidates::Concrete(conc),
+        }
+    }
+
+    fn meet_builtin(t0: BuiltinType, t1: BuiltinType) -> Candidates {
+        match (t0, t1) {
+            (BuiltinType::Float(w0), BuiltinType::Float(w1)) => Candidates::Concrete(BuiltinType::Float(std::cmp::max(w0, w1))),
+            (BuiltinType::Int(w0), BuiltinType::Int(w1)) => Candidates::Concrete(BuiltinType::Int(std::cmp::max(w0, w1))),
+            (BuiltinType::UInt(w0), BuiltinType::UInt(w1)) => Candidates::Concrete(BuiltinType::UInt(std::cmp::max(w0, w1))),
+            (a, b) if a == b => Candidates::Concrete(a),
             _ => Candidates::None,
         }
     }
@@ -85,13 +106,49 @@ impl Candidates {
     pub fn is_none(&self) -> bool {
         *self == Candidates::None
     }
-    pub fn is_numeric(&self) -> bool { self.num_cfg().is_some() }
-    pub fn is_logic(&self) -> bool { *self == Candidates::Logic }
-
-    pub fn num_cfg(&self) -> Option<NumConfig> {
+    pub fn is_tuple(&self) -> bool {
         match self {
-            Candidates::Numeric(cfg) => Some(*cfg),
-            _ => None,
+            Candidates::Tuple(_) => true,
+            _ => false,
+        }
+    }
+    pub fn is_numeric(&self) -> bool {
+        match self {
+            Candidates::Numeric(_) | Candidates::Concrete(BuiltinType::Float(_)) | Candidates::Concrete(BuiltinType::UInt(_)) | Candidates::Concrete(BuiltinType::Int(_)) => true,
+            Candidates::Any => true, // TODO For type inference, we need to change this and propagate requirements backwards.
+            _ => false,
+        }
+    }
+    pub fn is_integer(&self) -> bool {
+        match self {
+            Candidates::Numeric(cfg) if !cfg.def_float => true,
+            Candidates::Concrete(BuiltinType::UInt(_)) | Candidates::Concrete(BuiltinType::Int(_)) => true,
+            Candidates::Any => true, // TODO For type inference, we need to change this and propagate requirements backwards.
+            _ => false,
+        }
+    }
+    pub fn is_unsigned(&self) -> bool {
+        match self {
+            Candidates::Numeric(cfg) if !cfg.def_signed=> true,
+            Candidates::Concrete(BuiltinType::UInt(_)) => true,
+            Candidates::Any => true, // TODO For type inference, we need to change this and propagate requirements backwards.
+            _ => false,
+        }
+    }
+    pub fn is_logic(&self) -> bool {
+        match self {
+            Candidates::Concrete(BuiltinType::Bool) => true,
+            Candidates::Any => true, // TODO For type inference, we need to change this and propagate requirements backwards.
+            _ => false,
+        }
+    }
+
+    pub fn into_signed(self) -> Candidates {
+        match self {
+            Candidates::Numeric(cfg) => Candidates::Numeric(NumConfig { width: cfg.width, def_signed: true, def_float: cfg.def_float }),
+            Candidates::Concrete(BuiltinType::UInt(w)) => Candidates::Concrete(BuiltinType::Int(w)),
+            _ if self.is_numeric() => self.clone(),
+            _ => panic!("A non-numeric type cannot be signed!"),
         }
     }
 
@@ -132,19 +189,18 @@ impl<'a> From<&'a Literal> for Candidates {
             32
         }
         match &lit.kind {
-            LitKind::Str(_) => Candidates::String,
+            LitKind::Str(_) => Candidates::Concrete(BuiltinType::String),
             LitKind::Int(i) => {
                 let width = find_required_bits(*i);
                 assert!(width.count_ones() == 1 && width <= 128 && width >= 8);
-                let config = if *i < 0 {
-                    NumConfig::new_signed(width)
+                if *i < 0 {
+                    Candidates::Numeric(NumConfig::new_signed(Some(width)))
                 } else {
-                    NumConfig::new_any(width)
-                };
-                Candidates::Numeric(config)
+                    Candidates::Numeric(NumConfig::new_unsigned(Some(width)))
+                }
             }
-            LitKind::Float(f) => Candidates::Numeric(NumConfig::new_float(find_required_bits_f(*f))),
-            LitKind::Bool(_) => Candidates::Logic,
+            LitKind::Float(f) => Candidates::Numeric(NumConfig::new_float(Some(find_required_bits_f(*f)))),
+            LitKind::Bool(_) => Candidates::Concrete(BuiltinType::Bool),
             LitKind::Tuple(lits) => Candidates::Tuple(lits.iter().map(Candidates::from).collect()),
         }
     }
@@ -170,10 +226,6 @@ impl<'a> From<&'a TypeDeclaration> for Candidates {
 
 impl<'a> From<&'a BuiltinType> for Candidates {
     fn from(t: &'a BuiltinType) -> Self {
-        match t {
-            BuiltinType::String => Candidates::String,
-            BuiltinType::Bool => Candidates::Logic,
-            _ => unimplemented!(), // Wait for change in builtin types.
-        }
+        Candidates::Concrete(*t)
     }
 }

@@ -80,8 +80,7 @@ impl<'a> TypeChecker<'a> {
                 }
                 let op = op.unwrap();
                 // For all window operations, the source stream needs to be numeric.
-                let cfg = target_stream_type.num_cfg();
-                if cfg.is_none() {
+                if target_stream_type.is_numeric() {
                     return self.reg_error(TypeError::IncompatibleTypes(
                         e,
                         format!(
@@ -90,27 +89,16 @@ impl<'a> TypeChecker<'a> {
                         ),
                     ));
                 }
-                let cfg = cfg.unwrap();
 
                 self.reg_cand(
                     *e.id(),
                     match op {
-                        WindowOperation::Sum | WindowOperation::Product => Candidates::Numeric(cfg),
+                        WindowOperation::Sum | WindowOperation::Product => target_stream_type,
                         WindowOperation::Average | WindowOperation::Integral => {
-                            let cfg = NumConfig {
-                                width: cfg.width,
-                                def_float: true,
-                                def_signed: true,
-                            };
-                            Candidates::Numeric(cfg)
+                            Candidates::Numeric(NumConfig::new_float(None))
                         }
                         WindowOperation::Count => {
-                            let cfg = NumConfig {
-                                width: cfg.width,
-                                def_float: false,
-                                def_signed: false,
-                            };
-                            Candidates::Numeric(cfg)
+                            Candidates::Numeric(NumConfig::new_unsigned(None))
                         }
                     },
                 )
@@ -170,22 +158,19 @@ impl<'a> TypeChecker<'a> {
         if cand.is_none() {
             return true;
         } // Error is already reported, so pretend everything is dandy.
+        let cand = cand.unwrap();
 
-        let cfg = cand.unwrap().num_cfg();
-        let err = match cfg {
-            None if is_discrete => TypeError::IncompatibleTypes(
+        let err = match (is_discrete, cand.is_numeric(), cand.is_integer()) {
+            (true, _, true) => return true,
+            (true, _, false) => TypeError::IncompatibleTypes(
                 origin,
                 String::from("A discrete offset must be an integer value."),
             ),
-            Some(cfg) if cfg.def_float && is_discrete => TypeError::IncompatibleTypes(
-                origin,
-                String::from("A discrete offset must be an integer value."),
-            ),
-            None if !is_discrete => TypeError::IncompatibleTypes(
+            (false, true, _) => return true,
+            (false, false, _) => TypeError::IncompatibleTypes(
                 origin,
                 String::from("A real-time offset must be a numeric value."),
             ),
-            _ => return true,
         };
         self.reg_error(err);
         false
