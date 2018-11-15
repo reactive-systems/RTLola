@@ -53,8 +53,44 @@ impl<'a> TypeChecker<'a> {
         }
     }
 
-    pub(crate) fn check(self) -> TypeCheckResult<'a> {
-        unimplemented!()
+    // TODO:
+    // TODO: Instead of returning None, return something like Candidates::Any to continue.
+    // Meet should return None in case of a problem, get_candidates should return Any?
+    pub(crate) fn check(mut self) -> TypeCheckResult<'a> {
+        for input in &self.spec.inputs {
+            self.reg_cand(*input.id(), Candidates::from(&input.ty));
+        }
+        for constant in &self.spec.constants {
+            let was = Candidates::from(&constant.literal);
+            let declared = Candidates::from(&constant.ty);
+            if declared.meet(&was).is_none() {
+                self.reg_error(TypeError::IncompatibleTypes(constant, format!("Expected {} but got {}.", declared, was)));
+            }
+            self.reg_cand(*constant.id(), declared);
+        }
+        for td in &self.spec.type_declarations {
+            unimplemented!();
+        }
+        for output in &self.spec.outputs {
+            for param in &output.params {
+                self.reg_cand(*param.id(), Candidates::from(&param.ty));
+            }
+            let was = self.get_candidates(&output.expression).unwrap_or(Candidates::None);
+            let declared = Candidates::from(&output.ty);
+            if declared.meet(&was).is_none() {
+                self.reg_error(TypeError::IncompatibleTypes(output, format!("Expected {} but got {}.", declared, was)));
+            }
+            self.reg_cand(*output.id(), declared);
+        }
+        for trigger in &self.spec.trigger {
+            let was = self.get_candidates(&trigger.expression).unwrap_or(Candidates::None);
+            if !was.is_logic() {
+                // TODO: bool display
+                self.reg_error(TypeError::IncompatibleTypes(trigger, format!("Expected {:?} but got {}.", BuiltinType::Bool, was)));
+            }
+        }
+
+        unimplemented!();
     }
 
     fn get_candidates(&mut self, e: &'a Expression) -> Option<Candidates> {
