@@ -30,7 +30,7 @@ impl BuiltinType {
 
 // These MUST all be lowercase
 // TODO add an static assertion for this
-pub(crate) const KEYWORDS: [&str; 42] = [
+pub(crate) const KEYWORDS: [&str; 27] = [
     "input",
     "output",
     "trigger",
@@ -54,21 +54,6 @@ pub(crate) const KEYWORDS: [&str; 42] = [
     "any",
     "true",
     "false",
-    "int8",
-    "int16",
-    "int32",
-    "int64",
-    "int128",
-    "uint8",
-    "uint16",
-    "uint32",
-    "uint64",
-    "uint128",
-    "float16",
-    "float32",
-    "float64",
-    "string",
-    "bool",
     "arithmetic_error",
     "error",
     "overflow_error",

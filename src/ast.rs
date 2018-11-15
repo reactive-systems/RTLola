@@ -29,21 +29,18 @@ impl LolaSpec {
 }
 
 /// Versions and Extensions of the Lola language
-#[derive(Debug, EnumString, Display, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum LanguageSpec {
     /// The original Lola specification language,
     /// see ``LOLA: Runtime Monitoring of Synchronous Systems'' (https://ieeexplore.ieee.org/document/1443364)
-    #[strum(to_string = "ClassicLola")]
     Classic,
 
     /// Extension of Lola to parameterized streams,
     /// see ``A Stream-based Specification Language for Network Monitoring'' (https://link.springer.com/chapter/10.1007%2F978-3-319-46982-9_10)
-    #[strum(to_string = "Lola 2.0")]
     Lola2,
 
     /// Extension of Lola to real-time specifications,
     /// see ``Real-time Stream-based Monitoring'' (https://arxiv.org/abs/1711.03829)
-    #[strum(to_string = "RTLola")]
     RTLola,
 }
 
@@ -266,45 +263,28 @@ pub enum ExpressionKind {
     Function(FunctionKind, Vec<Box<Expression>>),
 }
 
-#[derive(Debug, PartialEq, Eq, EnumString, Display)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum FunctionKind {
-    #[strum(to_string = "nroot")]
     NthRoot,
-    #[strum(to_string = "sqrt")]
     Sqrt,
-    #[strum(to_string = "π", serialize = "proj")]
     Projection,
-    #[strum(to_string = "sin")]
     Sin,
-    #[strum(to_string = "cos")]
     Cos,
-    #[strum(to_string = "tan")]
     Tan,
-    #[strum(to_string = "arcsin")]
     Arcsin,
-    #[strum(to_string = "arccos")]
     Arccos,
-    #[strum(to_string = "arctan")]
     Arctan,
-    #[strum(to_string = "exp")]
     Exp,
-    #[strum(to_string = "floor")]
     Floor,
-    #[strum(to_string = "ceil")]
     Ceil,
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy, EnumString, Display)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum WindowOperation {
-    #[strum(to_string = "Σ", serialize = "sum")]
     Sum,
-    #[strum(to_string = "Π", serialize = "prod")]
     Product,
-    #[strum(to_string = "avg")]
     Average,
-    #[strum(to_string = "#", serialize = "count")]
     Count,
-    #[strum(to_string = "∫", serialize = "integral")]
     Integral,
 }
 
@@ -332,14 +312,6 @@ impl Literal {
         }
     }
 
-    pub fn new_tuple(vals: &[Literal], span: Span) -> Literal {
-        Literal {
-            _id: NodeId::DUMMY,
-            kind: LitKind::Tuple(vals.to_vec()),
-            _span: span,
-        }
-    }
-
     pub fn new_float(val: f64, span: Span) -> Literal {
         Literal {
             _id: NodeId::DUMMY,
@@ -359,35 +331,25 @@ pub enum LitKind {
     Float(f64),
     /// A boolean literal (`true`)
     Bool(bool),
-    // A tuple literal (`(1, 2f64, "34as", 99)`)
-    Tuple(Vec<Literal>),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, EnumString, Display)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum BinOp {
     /// The `+` operator (addition)
-    #[strum(to_string = "+")]
     Add,
     /// The `-` operator (subtraction)
-    #[strum(to_string = "-")]
     Sub,
     /// The `*` operator (multiplication)
-    #[strum(to_string = "*")]
     Mul,
     /// The `/` operator (division)
-    #[strum(to_string = "/")]
     Div,
     /// The `%` operator (modulus)
-    #[strum(to_string = "%")]
     Rem,
     /// The `**` operator (power)
-    #[strum(to_string = "**")]
     Pow,
     /// The `&&` operator (logical and)
-    #[strum(to_string = "∧", serialize = "&&")]
     And,
     /// The `||` operator (logical or)
-    #[strum(to_string = "∨", serialize = "||")]
     Or,
     /*
     /// The `^` operator (bitwise xor)
@@ -402,32 +364,24 @@ pub enum BinOp {
     Shr,
     */
     /// The `==` operator (equality)
-    #[strum(to_string = "=", serialize = "==")]
     Eq,
     /// The `<` operator (less than)
-    #[strum(to_string = "<")]
     Lt,
     /// The `<=` operator (less than or equal to)
-    #[strum(to_string = "≤", serialize = "<=")]
     Le,
     /// The `!=` operator (not equal to)
-    #[strum(to_string = "≠", serialize = "!=")]
     Ne,
     /// The `>=` operator (greater than or equal to)
-    #[strum(to_string = "≥", serialize = ">=")]
     Ge,
     /// The `>` operator (greater than)
-    #[strum(to_string = ">")]
     Gt,
 }
 
-#[derive(Debug, Clone, Copy, EnumString, Display)]
+#[derive(Debug, Clone, Copy)]
 pub enum UnOp {
     /// The `!` operator for logical inversion
-    #[strum(to_string = "!")]
     Not,
     /// The `-` operator for negation
-    #[strum(to_string = "-")]
     Neg,
 }
 
@@ -441,42 +395,27 @@ pub enum Offset {
 }
 
 /// Supported time unit for real time expressions
-#[derive(Debug, Clone, Copy, PartialEq, Eq, EnumString, Display)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TimeUnit {
-    #[strum(to_string = "ns")]
     NanoSecond,
-    #[strum(to_string = "μs", serialize = "us")]
     MicroSecond,
-    #[strum(to_string = "ms")]
     MilliSecond,
-    #[strum(to_string = "s")]
     Second,
-    #[strum(to_string = "min")]
     Minute,
-    #[strum(to_string = "h")]
     Hour,
-    #[strum(to_string = "d")]
     Day,
-    #[strum(to_string = "w")]
     Week,
     /// Note: A year is always, *always*, 365 days long.
-    #[strum(to_string = "a")]
     Year,
 }
 
 /// Supported frequencies for sliding windows.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, EnumString, Display)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FreqUnit {
-    #[strum(to_string = "μHz", serialize = "uHz")]
     MicroHertz, // ~11 Days
-    #[strum(to_string = "mHz")]
     MilliHertz, // ~16 Minutes
-    #[strum(to_string = "Hz")]
     Hertz,
-    #[strum(to_string = "kHz")]
     KiloHertz,
-    #[strum(to_string = "MHz")]
     MegaHertz,
-    #[strum(to_string = "GHz")]
     GigaHertz,
 }

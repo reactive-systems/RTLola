@@ -120,11 +120,6 @@ where
     E: FnMut() -> NodeId,
 {
     lit.set_id(next_id());
-    if let LitKind::Tuple(ref mut elements) = lit.kind {
-        for element in elements.iter_mut() {
-            assign_ids_literal(element, next_id);
-        }
-    }
 }
 
 fn assign_ids_type<E>(ty: &mut Type, next_id: &mut E)

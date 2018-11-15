@@ -111,7 +111,7 @@ LessThanOrEqual = {"<=" | "≤"}
 MoreThan = {">"}
 MoreThanOrEqual = {">=" | "≥"}
 NotEqual = {"!=" | "≠"}
-Equal = {"="|"=="}
+Equal = { "="{1,2} }
 CompOp = _{LessThanOrEqual | MoreThanOrEqual | LessThan | MoreThan | NotEqual | Equal}
 
 BinaryFunctionSymbol = {
@@ -153,11 +153,10 @@ NumberLiteral = @{ ("+" | "-")?~ Digit+~ ("."~ Digit*)?~ ("e"~ ("+" | "-")?~ Dig
 StringLiteral = _{ "\""~ String~ "\""}
 String = @{("\\\""|!("\"") ~ ANY)*}
 
-TupleLiteral = { "(" ~(Literal ~(","~ Literal)+)?~ ")"}
 BooleanLiteral = _{ True | False}
 True = @{"true"| "⊤"}
 False = @{"false"  | "⊥"}
-Literal = { StringLiteral | NumberLiteral | TupleLiteral | BooleanLiteral}
+Literal = { StringLiteral | NumberLiteral | BooleanLiteral}
 
 IntegerLiteral = @{ Digit*}
 

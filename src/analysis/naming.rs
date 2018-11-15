@@ -618,7 +618,7 @@ mod tests {
 
     #[test]
     fn keyword_are_not_valid_names() {
-        let spec = "output Int128 := 3";
+        let spec = "output if := 3";
         let throw = |e| panic!("{}", e);
         let mut ast = parse(spec).unwrap_or_else(throw);
         id_assignment::assign_ids(&mut ast);

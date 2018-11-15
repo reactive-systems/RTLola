@@ -7,7 +7,6 @@ use pest;
 use pest::iterators::{Pair, Pairs};
 use pest::prec_climber::{Assoc, Operator, PrecClimber};
 use pest::Parser;
-use std::str::FromStr;
 
 #[derive(Parser)]
 #[grammar = "lola.pest"]
@@ -91,10 +90,7 @@ fn parse_constant(spec: &mut LolaSpec, pair: Pair<Rule>) -> Constant {
         spec,
         pairs.next().expect("mismatch between grammar and AST"),
     );
-    let literal = parse_literal(
-        spec,
-        pairs.next().expect("mismatch between grammar and AST"),
-    );
+    let literal = parse_literal(pairs.next().expect("mismatch between grammar and AST"));
     Constant {
         _id: NodeId::DUMMY,
         name,
@@ -269,18 +265,12 @@ fn parse_frequency(spec: &mut LolaSpec, freq: Pair<Rule>) -> ExtendRate {
     match freq_rule {
         Rule::Frequency => {
             assert_eq!(unit_pair.as_rule(), Rule::UnitOfFreq);
-            let unit = match FreqUnit::from_str(unit_str) {
-                Ok(frequency_unit) => frequency_unit,
-                Err(_err) => panic!("Unknown frequency unit: {}.", unit_str),
-            };
+            let unit = parse_frequency_unit(unit_str);
             ExtendRate::Frequency(Box::new(expr), unit)
         }
         Rule::Duration => {
             assert_eq!(unit_pair.as_rule(), Rule::UnitOfTime);
-            let unit = match TimeUnit::from_str(unit_str) {
-                Ok(time_unit) => time_unit,
-                Err(_err) => panic!("Unknown time unit: {}.", unit_str),
-            };
+            let unit = parse_duration_unit(unit_str);
             ExtendRate::Duration(Box::new(expr), unit)
         }
         _ => unreachable!(),
@@ -458,7 +448,7 @@ fn parse_type(spec: &mut LolaSpec, pair: Pair<Rule>) -> Type {
  * Transforms a `Rule::Literal` into `Literal` AST node.
  * Panics if input is not `Rule::Literal`.
  */
-fn parse_literal(spec: &mut LolaSpec, pair: Pair<Rule>) -> Literal {
+fn parse_literal(pair: Pair<Rule>) -> Literal {
     assert_eq!(pair.as_rule(), Rule::Literal);
     let inner = pair
         .into_inner()
@@ -475,12 +465,6 @@ fn parse_literal(spec: &mut LolaSpec, pair: Pair<Rule>) -> Literal {
             } else {
                 panic!("Number literal not valid in rust.")
             }
-        }
-        Rule::TupleLiteral => {
-            let span = inner.as_span();
-            let elements = inner.into_inner();
-            let literals: Vec<Literal> = elements.map(|pair| parse_literal(spec, pair)).collect();
-            Literal::new_tuple(&literals, span.into())
         }
         Rule::True => Literal::new_bool(true, inner.as_span().into()),
         Rule::False => Literal::new_bool(false, inner.as_span().into()),
@@ -512,6 +496,33 @@ fn parse_vec_of_expressions(spec: &mut LolaSpec, pairs: Pairs<Rule>) -> Vec<Box<
         .collect()
 }
 
+fn parse_duration_unit(str: &str) -> TimeUnit {
+    match str {
+        "ns" => TimeUnit::NanoSecond,
+        "μs" | "us" => TimeUnit::MicroSecond,
+        "ms" => TimeUnit::MilliSecond,
+        "s" => TimeUnit::Second,
+        "min" => TimeUnit::Minute,
+        "h" => TimeUnit::Hour,
+        "d" => TimeUnit::Day,
+        "w" => TimeUnit::Week,
+        "a" => TimeUnit::Year,
+        _ => unreachable!(),
+    }
+}
+
+fn parse_frequency_unit(str: &str) -> FreqUnit {
+    match str {
+        "μHz" | "uHz" => FreqUnit::MicroHertz,
+        "mHz" => FreqUnit::MilliHertz,
+        "Hz" => FreqUnit::Hertz,
+        "kHz" => FreqUnit::KiloHertz,
+        "MHz" => FreqUnit::MegaHertz,
+        "GHz" => FreqUnit::GigaHertz,
+        _ => unreachable!(),
+    }
+}
+
 fn parse_lookup_expression(spec: &mut LolaSpec, pair: Pair<Rule>, span: Span) -> Expression {
     let mut children = pair.into_inner();
     let stream_instance = children
@@ -541,10 +552,7 @@ fn parse_lookup_expression(spec: &mut LolaSpec, pair: Pair<Rule>, span: Span) ->
                 .next()
                 .expect("Duration needs a time unit.")
                 .as_str();
-            let unit = match TimeUnit::from_str(unit_string) {
-                Ok(time_unit) => time_unit,
-                Err(_err) => panic!("Unknown time unit: {}.", unit_string),
-            };
+            let unit = parse_duration_unit(unit_string);
             let offset = Offset::RealTimeOffset(Box::new(time_interval), unit);
             // Now check whether it is a window or not.
             let aggregation = match children.next().map(|x| x.as_rule()) {
@@ -568,9 +576,21 @@ fn parse_lookup_expression(spec: &mut LolaSpec, pair: Pair<Rule>, span: Span) ->
 fn build_function_expression(spec: &mut LolaSpec, pair: Pair<Rule>, span: Span) -> Expression {
     let mut children = pair.into_inner();
     let name = children.next().unwrap().as_str();
-    let function_kind = match FunctionKind::from_str(name) {
-        Ok(function) => function,
-        Err(_err) => panic!("Unknown function symbol: {}.", name),
+    let function_kind = match name {
+        "nroot" => FunctionKind::NthRoot,
+        "sqrt" => FunctionKind::Sqrt,
+        "π" => FunctionKind::Projection,
+        "proj" => FunctionKind::Projection,
+        "sin" => FunctionKind::Sin,
+        "cos" => FunctionKind::Cos,
+        "tan" => FunctionKind::Tan,
+        "arcsin" => FunctionKind::Arcsin,
+        "arccos" => FunctionKind::Arccos,
+        "arctar" => FunctionKind::Arctan,
+        "exp" => FunctionKind::Exp,
+        "floor" => FunctionKind::Floor,
+        "ceil" => FunctionKind::Ceil,
+        _ => panic!("Unknown function symbol: {}.", name),
     };
     let args = parse_vec_of_expressions(spec, children);
     Expression::new(ExpressionKind::Function(function_kind, args), span)
@@ -586,7 +606,7 @@ fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<Rule>, span: Span) -> 
             let span = pair.as_span();
             match pair.as_rule() { // Map function from `Pair` to AST data structure `Expression`
                 Rule::Literal => {
-                    Expression::new(ExpressionKind::Lit(parse_literal(spec, pair)), span.into())
+                    Expression::new(ExpressionKind::Lit(parse_literal(pair)), span.into())
                 }
                 Rule::Ident => {
                     Expression::new(ExpressionKind::Ident(parse_ident(&pair)), span.into())
@@ -860,13 +880,13 @@ mod tests {
 
     #[test]
     fn parse_trigger_ast() {
-        let pair = LolaParser::parse(Rule::Trigger, "trigger in ≠ out \"some message\"")
+        let pair = LolaParser::parse(Rule::Trigger, "trigger in != out \"some message\"")
             .unwrap_or_else(|e| panic!("{}", e))
             .next()
             .unwrap();
         let mut spec = LolaSpec::new();
         let ast = super::parse_trigger(&mut spec, pair);
-        assert_eq!(format!("{}", ast), "trigger in ≠ out \"some message\"")
+        assert_eq!(format!("{}", ast), "trigger in != out \"some message\"")
     }
 
     #[test]
@@ -907,7 +927,7 @@ mod tests {
 
     #[test]
     fn build_simple_ast() {
-        let spec = "input in: Int\noutput out: Int := in\ntrigger in ≠ out";
+        let spec = "input in: Int\noutput out: Int := in\ntrigger in != out";
         let throw = |e| panic!("{}", e);
         let ast = parse(spec).unwrap_or_else(throw);
         cmp_ast_spec(&ast, spec);
@@ -940,6 +960,14 @@ mod tests {
     #[test]
     fn build_ternary_expression() {
         let spec = "input in: Int\noutput s: Int := if in = 3 then 4 else in + 2";
+        let throw = |e| panic!("{}", e);
+        let ast = parse(spec).unwrap_or_else(throw);
+        cmp_ast_spec(&ast, spec);
+    }
+
+    #[test]
+    fn build_function_expression() {
+        let spec = "input in: (Int, Bool)\noutput s: Int := nroot(1, π(1, in))";
         let throw = |e| panic!("{}", e);
         let ast = parse(spec).unwrap_or_else(throw);
         cmp_ast_spec(&ast, spec);

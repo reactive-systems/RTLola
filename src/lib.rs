@@ -1,5 +1,6 @@
 //! Parser for the Lola language.
 
+#![deny(unsafe_code)] // disallow unsafe code by default
 #[allow(unused_imports)]
 #[macro_use]
 extern crate pest;
@@ -8,9 +9,6 @@ extern crate pest_derive;
 #[macro_use]
 extern crate lazy_static;
 extern crate clap;
-extern crate strum;
-#[macro_use]
-extern crate strum_macros;
 
 extern crate ast_node;
 #[macro_use]

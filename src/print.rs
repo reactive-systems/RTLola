@@ -216,12 +216,101 @@ impl Display for StreamInstance {
     }
 }
 
+impl Display for FunctionKind {
+    fn fmt(&self, f: &mut Formatter) -> Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                FunctionKind::NthRoot => "nroot",
+                FunctionKind::Sqrt => "sqrt",
+                FunctionKind::Projection => "π",
+                FunctionKind::Sin => "sin",
+                FunctionKind::Cos => "cos",
+                FunctionKind::Tan => "tan",
+                FunctionKind::Arcsin => "sin⁻¹",
+                FunctionKind::Arccos => "cos⁻¹",
+                FunctionKind::Arctan => "tan⁻¹",
+                FunctionKind::Exp => "exp",
+                FunctionKind::Floor => "floor",
+                FunctionKind::Ceil => "ceil",
+            }
+        )
+    }
+}
+
 impl Display for Offset {
     fn fmt(&self, f: &mut Formatter) -> Result {
         match self {
             Offset::DiscreteOffset(e) => write!(f, "{}", e),
             Offset::RealTimeOffset(e, u) => write!(f, "{}{}", e, u),
         }
+    }
+}
+
+impl Display for TimeUnit {
+    fn fmt(&self, f: &mut Formatter) -> Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                TimeUnit::NanoSecond => "ns",
+                TimeUnit::MicroSecond => "ms",
+                TimeUnit::MilliSecond => "μs",
+                TimeUnit::Second => "s",
+                TimeUnit::Minute => "min",
+                TimeUnit::Hour => "h",
+                TimeUnit::Day => "d",
+                TimeUnit::Week => "w",
+                TimeUnit::Year => "a",
+            }
+        )
+    }
+}
+
+impl Display for FreqUnit {
+    fn fmt(&self, f: &mut Formatter) -> Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                FreqUnit::MicroHertz => "μHz",
+                FreqUnit::MilliHertz => "mHz",
+                FreqUnit::Hertz => "Hz",
+                FreqUnit::KiloHertz => "kHz",
+                FreqUnit::MegaHertz => "MHz",
+                FreqUnit::GigaHertz => "GHz",
+            }
+        )
+    }
+}
+
+impl Display for WindowOperation {
+    fn fmt(&self, f: &mut Formatter) -> Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                WindowOperation::Sum => "Σ",
+                WindowOperation::Product => "Π",
+                WindowOperation::Average => "avg",
+                WindowOperation::Count => "#",
+                WindowOperation::Integral => "∫",
+            }
+        )
+    }
+}
+
+impl Display for UnOp {
+    fn fmt(&self, f: &mut Formatter) -> Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                UnOp::Not => "!",
+                UnOp::Neg => "-",
+            }
+        )
     }
 }
 
@@ -238,7 +327,6 @@ impl Display for Literal {
                 }
             }
             LitKind::Str(s) => write!(f, "{}", s),
-            LitKind::Tuple(vals) => PrintHelper::write(f, vals, "(", ")", ", "),
         }
     }
 }
@@ -246,6 +334,37 @@ impl Display for Literal {
 impl Display for Ident {
     fn fmt(&self, f: &mut Formatter) -> Result {
         write!(f, "{}", self.name)
+    }
+}
+
+impl Display for BinOp {
+    fn fmt(&self, f: &mut Formatter) -> Result {
+        match &self {
+            BinOp::Add => write!(f, "+"),
+            BinOp::Sub => write!(f, "-"),
+            BinOp::Mul => write!(f, "*"),
+            BinOp::Div => write!(f, "/"),
+            BinOp::Rem => write!(f, "%"),
+            BinOp::Pow => write!(f, "**"),
+            BinOp::And => write!(f, "∧"),
+            BinOp::Or => write!(f, "∨"),
+            BinOp::Eq => write!(f, "="),
+            BinOp::Lt => write!(f, "<"),
+            BinOp::Le => write!(f, "≤"),
+            BinOp::Ne => write!(f, "!="),
+            BinOp::Gt => write!(f, ">"),
+            BinOp::Ge => write!(f, "≥"),
+        }
+    }
+}
+
+impl Display for LanguageSpec {
+    fn fmt(&self, f: &mut Formatter) -> Result {
+        match &self {
+            LanguageSpec::Classic => write!(f, "ClassicLola"),
+            LanguageSpec::Lola2 => write!(f, "Lola 2.0"),
+            LanguageSpec::RTLola => write!(f, "RTLola"),
+        }
     }
 }
 

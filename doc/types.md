@@ -15,7 +15,7 @@ All type names are supposed to be capitalized.
   by the bit-width
   * integers can have a width of `8`, `16`, `32`, or `64`
   * floating point numbers can have a width of either `32` or `64`
-  * examples: `Float32`, `UInt8`, Int`16`
+  * examples: `Float32`, `UInt8`, `Int16`
   * overflow operations and arithmetically invalid operations such as division by `0` have no specified numeric result
   * there is a guarantee that no arithmetic operation will result in a panic/crash
   * an implicit `Bool`-typed stream with name `error` indicates that an operation without specified result was taken out:
