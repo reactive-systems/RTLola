@@ -5,6 +5,7 @@ pub enum BuiltinType {
     Float(u8),
     String,
     Bool,
+    InvocationTime,
 }
 
 impl BuiltinType {
@@ -22,6 +23,7 @@ impl BuiltinType {
             ("Float64", BuiltinType::Float(64)),
             ("String", BuiltinType::String),
             ("Bool", BuiltinType::Bool),
+            ("InvocationTime", BuiltinType::InvocationTime),
         ]
     }
 }
