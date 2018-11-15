@@ -9,38 +9,36 @@ use super::type_error::*;
 use super::TypeCheckResult;
 use ast_node::{AstNode, NodeId, Span};
 
-// TODO: Remove?
-#[derive(Debug)]
-pub struct TypeTable {
-    map: HashMap<NodeId, Candidates>,
-}
-
-impl TypeTable {
-    fn new() -> Self {
-        TypeTable {
-            map: HashMap::new(),
-        }
-    }
-
-    fn meet(&mut self, target: NodeId, candidates: &Candidates) -> Candidates {
-        let res = {
-            let current = self.map.get(&target).unwrap_or(&Candidates::Any);
-            current.meet(candidates)
-        }; // Drops `current`, such that there no burrow to `self.map` anymore.
-        self.map.insert(target, res.clone());
-        res
-    }
-
-    fn get(&self, target: NodeId) -> Option<&Candidates> {
-        self.map.get(&target)
-    }
-}
+//// TODO: Remove?
+//#[derive(Debug)]
+//pub struct TypeTable {
+//    map: HashMap<NodeId, Candidates>,
+//}
+//
+//impl TypeTable {
+//    fn new() -> Self {
+//        TypeTable { map: HashMap::new() }
+//    }
+//
+//    fn meet(&mut self, target: NodeId, candidates: &Candidates) -> Candidates {
+//        let res = {
+//            let current = self.map.get(&target).unwrap_or(&Candidates::Any);
+//            current.meet(candidates)
+//        }; // Drops `current`, such that there no burrow to `self.map` anymore.
+//        self.map.insert(target, res.clone());
+//        res
+//    }
+//
+//    fn get(&self, target: NodeId) -> Option<&Candidates> {
+//        self.map.get(&target)
+//    }
+//}
 
 pub(crate) struct TypeChecker<'a> {
     declarations: &'a DeclarationTable<'a>,
     spec: &'a LolaSpec,
-    tt: TypeTable,
-    errors: Vec<Box<AnalysisError<'a> + 'a>>,
+    tt: HashMap<NodeId, Candidates>,
+    errors: Vec<Box<TypeError<'a>>>,
 }
 
 impl<'a> TypeChecker<'a> {
@@ -48,7 +46,7 @@ impl<'a> TypeChecker<'a> {
         TypeChecker {
             declarations: dt,
             spec,
-            tt: TypeTable::new(),
+            tt: HashMap::new(),
             errors: Vec::new(),
         }
     }
@@ -64,7 +62,10 @@ impl<'a> TypeChecker<'a> {
             let was = Candidates::from(&constant.literal);
             let declared = Candidates::from(&constant.ty);
             if declared.meet(&was).is_none() {
-                self.reg_error(TypeError::IncompatibleTypes(constant, format!("Expected {} but got {}.", declared, was)));
+                self.reg_error(TypeError::IncompatibleTypes(
+                    constant,
+                    format!("Expected {} but got {}.", declared, was),
+                ));
             }
             self.reg_cand(*constant.id(), declared);
         }
@@ -75,22 +76,37 @@ impl<'a> TypeChecker<'a> {
             for param in &output.params {
                 self.reg_cand(*param.id(), Candidates::from(&param.ty));
             }
-            let was = self.get_candidates(&output.expression).unwrap_or(Candidates::None);
+            let was = self
+                .get_candidates(&output.expression)
+                .unwrap_or(Candidates::None);
             let declared = Candidates::from(&output.ty);
             if declared.meet(&was).is_none() {
-                self.reg_error(TypeError::IncompatibleTypes(output, format!("Expected {} but got {}.", declared, was)));
+                self.reg_error(TypeError::IncompatibleTypes(
+                    output,
+                    format!("Expected {} but got {}.", declared, was),
+                ));
             }
             self.reg_cand(*output.id(), declared);
         }
         for trigger in &self.spec.trigger {
-            let was = self.get_candidates(&trigger.expression).unwrap_or(Candidates::None);
+            let was = self
+                .get_candidates(&trigger.expression)
+                .unwrap_or(Candidates::None);
             if !was.is_logic() {
                 // TODO: bool display
-                self.reg_error(TypeError::IncompatibleTypes(trigger, format!("Expected {:?} but got {}.", BuiltinType::Bool, was)));
+                self.reg_error(TypeError::IncompatibleTypes(
+                    trigger,
+                    format!("Expected {:?} but got {}.", BuiltinType::Bool, was),
+                ));
             }
         }
 
-        unimplemented!();
+        let type_table = unimplemented!();
+
+        TypeCheckResult {
+            errors: self.errors,
+            type_table,
+        }
     }
 
     fn get_candidates(&mut self, e: &'a Expression) -> Option<Candidates> {
@@ -230,7 +246,12 @@ impl<'a> TypeChecker<'a> {
         }
     }
 
-    fn check_function(&mut self, e: &'a Expression, kind: FunctionKind, args: &'a Vec<Box<Expression>>) -> Option<Candidates> {
+    fn check_function(
+        &mut self,
+        e: &'a Expression,
+        kind: FunctionKind,
+        args: &'a Vec<Box<Expression>>,
+    ) -> Option<Candidates> {
         let cands: Vec<Candidates> = args.iter().flat_map(|a| self.get_candidates(a)).collect();
         if cands.len() < args.len() {
             return None; // TODO: Pretend everything's fine and return the respective type instead.
@@ -243,15 +264,17 @@ impl<'a> TypeChecker<'a> {
             FunctionKind::NthRoot => {
                 let expected: Vec<(Box<Fn(&Candidates) -> bool>, &str)> = vec![
                     (integer_check, "integer value"),
-                    (numeric_check, "numeric value")];
+                    (numeric_check, "numeric value"),
+                ];
                 self.check_n_ary_fn(e, args, expected, &cands);
                 self.reg_cand(*e.id(), Candidates::Numeric(NumConfig::new_float(None)))
-            },
+            }
             FunctionKind::Sqrt => {
-                let expected: Vec<(Box<Fn(&Candidates) -> bool>, &str)> = vec![(numeric_check, "numeric value")];
+                let expected: Vec<(Box<Fn(&Candidates) -> bool>, &str)> =
+                    vec![(numeric_check, "numeric value")];
                 self.check_n_ary_fn(e, args, expected, &cands);
                 self.reg_cand(*e.id(), Candidates::Numeric(NumConfig::new_float(None)))
-            },
+            }
             FunctionKind::Projection => {
                 if cands.len() < 2 {
                     self.reg_error(TypeError::inv_num_of_args(e, 2, cands.len() as u8));
@@ -262,43 +285,85 @@ impl<'a> TypeChecker<'a> {
                 match cands[1] {
                     Candidates::Tuple(ref v) => {
                         match TypeChecker::convert_to_constant(args[1]) {
-                            Some(n) if n < v.len() =>  // No way to recover from here.
-                                self.reg_error(TypeError::inv_argument(e, args[1], format!("Projection index {} exceeds tuple dimension {}.", n, v.len()))),
+                            Some(n) if n < v.len() =>
+                            // No way to recover from here.
+                            {
+                                self.reg_error(TypeError::inv_argument(
+                                    e,
+                                    args[1],
+                                    format!(
+                                        "Projection index {} exceeds tuple dimension {}.",
+                                        n,
+                                        v.len()
+                                    ),
+                                ))
+                            }
                             Some(n) => self.reg_cand(*e.id(), cands[n].clone()),
                             None => self.reg_error(TypeError::ConstantValueRequired(e, args[1])),
                         }
-                    },
-                    _ => self.reg_error(TypeError::inv_argument(e, args[1], format!("Projection requires a tuple as second argument but found {}.", cands[1]))),
+                    }
+                    _ => self.reg_error(TypeError::inv_argument(
+                        e,
+                        args[1],
+                        format!(
+                            "Projection requires a tuple as second argument but found {}.",
+                            cands[1]
+                        ),
+                    )),
                 }
-            },
-            FunctionKind::Sin | FunctionKind::Cos | FunctionKind::Tan | FunctionKind::Arcsin
-                | FunctionKind::Arccos | FunctionKind::Arctan => {
-                let expected: Vec<(Box<Fn(&Candidates) -> bool>, &str)> = vec![(numeric_check, "numeric value")];
+            }
+            FunctionKind::Sin
+            | FunctionKind::Cos
+            | FunctionKind::Tan
+            | FunctionKind::Arcsin
+            | FunctionKind::Arccos
+            | FunctionKind::Arctan => {
+                let expected: Vec<(Box<Fn(&Candidates) -> bool>, &str)> =
+                    vec![(numeric_check, "numeric value")];
                 self.check_n_ary_fn(e, args, expected, &cands);
                 self.reg_cand(*e.id(), Candidates::Numeric(NumConfig::new_float(None)))
             }
             FunctionKind::Exp => {
-                let expected: Vec<(Box<Fn(&Candidates) -> bool>, &str)> = vec![(numeric_check, "numeric value")];
+                let expected: Vec<(Box<Fn(&Candidates) -> bool>, &str)> =
+                    vec![(numeric_check, "numeric value")];
                 self.check_n_ary_fn(e, args, expected, &cands);
                 self.reg_cand(*e.id(), Candidates::Numeric(NumConfig::new_float(None)))
-            },
+            }
             FunctionKind::Floor => {
-                let expected: Vec<(Box<Fn(&Candidates) -> bool>, &str)> = vec![(float_check, "float value")];
-                self.check_n_ary_fn(e, args,expected, &cands);
-                self.reg_cand(*e.id(), Candidates::Numeric(NumConfig::new_signed(cands[0].width())))
-            },
+                let expected: Vec<(Box<Fn(&Candidates) -> bool>, &str)> =
+                    vec![(float_check, "float value")];
+                self.check_n_ary_fn(e, args, expected, &cands);
+                self.reg_cand(
+                    *e.id(),
+                    Candidates::Numeric(NumConfig::new_signed(cands[0].width())),
+                )
+            }
             FunctionKind::Ceil => unimplemented!(),
         }
     }
 
-    fn check_n_ary_fn(&mut self, call: &'a Expression, args: Vec<&'a Expression>, expected: Vec<(Box<Fn(&Candidates) -> bool>, &str)>, was: &Vec<Candidates>) {
+    fn check_n_ary_fn(
+        &mut self,
+        call: &'a Expression,
+        args: Vec<&'a Expression>,
+        expected: Vec<(Box<Fn(&Candidates) -> bool>, &str)>,
+        was: &Vec<Candidates>,
+    ) {
         assert_eq!(args.len(), expected.len(), "Should be checked earlier.");
         if was.len() != expected.len() {
-            self.reg_error(TypeError::inv_num_of_args(call, expected.len() as u8, was.len() as u8));
+            self.reg_error(TypeError::inv_num_of_args(
+                call,
+                expected.len() as u8,
+                was.len() as u8,
+            ));
         }
         for (((pred, str), ty), arg) in expected.iter().zip(was).zip(args) {
             if !pred(ty) {
-                self.reg_error(TypeError::inv_argument(call, arg, format!("Required {} but found {}.", str, ty)));
+                self.reg_error(TypeError::inv_argument(
+                    call,
+                    arg,
+                    format!("Required {} but found {}.", str, ty),
+                ));
             }
         }
     }
@@ -310,7 +375,12 @@ impl<'a> TypeChecker<'a> {
         }
     }
 
-    fn check_root(&mut self, e: &'a Expression, deg: Option<(&'a Expression, Candidates)>, content: (&'a Expression, Candidates)) -> Option<Candidates> {
+    fn check_root(
+        &mut self,
+        e: &'a Expression,
+        deg: Option<(&'a Expression, Candidates)>,
+        content: (&'a Expression, Candidates),
+    ) -> Option<Candidates> {
         if let Some((deg, ty)) = deg {
             if !ty.is_integer() {
                 let msg = format!("`nthRoot` requires an integer root, but found {}.", ty);
