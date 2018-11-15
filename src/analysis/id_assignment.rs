@@ -10,15 +10,15 @@ pub(crate) fn assign_ids(spec: &mut LolaSpec) {
         NodeId::from_u32(res)
     };
 
-    for mut td in &mut spec.type_declarations {
+    for td in &mut spec.type_declarations {
         assert_eq!(*td.id(), NodeId::DUMMY, "Ids already assigned.");
         td.set_id(next_id());
-        for mut field in &mut td.fields {
+        for field in &mut td.fields {
             assert_eq!(*field.ty.id(), NodeId::DUMMY, "Ids already assigned.");
             field.ty.set_id(next_id());
         }
     }
-    for mut c in &mut spec.constants {
+    for c in &mut spec.constants {
         assert_eq!(*c.id(), NodeId::DUMMY, "Ids already assigned.");
         c.set_id(next_id());
         if let Some(ref mut t) = c.ty {
@@ -26,13 +26,13 @@ pub(crate) fn assign_ids(spec: &mut LolaSpec) {
             t.set_id(next_id());
         }
     }
-    for mut i in &mut spec.inputs {
+    for i in &mut spec.inputs {
         assert_eq!(*i.id(), NodeId::DUMMY, "Ids already assigned.");
         i.set_id(next_id());
         assert_eq!(*i.ty.id(), NodeId::DUMMY, "Ids already assigned.");
         i.ty.set_id(next_id());
     }
-    for mut o in &mut spec.outputs {
+    for o in &mut spec.outputs {
         assert_eq!(*o.id(), NodeId::DUMMY, "Ids already assigned.");
         o.set_id(next_id());
         if let Some(ref mut t) = o.ty {
@@ -41,7 +41,7 @@ pub(crate) fn assign_ids(spec: &mut LolaSpec) {
         }
         assign_ids_expr(&mut o.expression, &mut next_id);
     }
-    for mut t in &mut spec.trigger {
+    for t in &mut spec.trigger {
         assert_eq!(*t.id(), NodeId::DUMMY, "Ids already assigned.");
         t.set_id(next_id());
         assign_ids_expr(&mut t.expression, &mut next_id);

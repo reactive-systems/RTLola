@@ -706,7 +706,7 @@ mod tests {
 
     use super::*;
 
-    fn cmp_ast_spec(ast: LolaSpec, spec: &str) -> bool {
+    fn cmp_ast_spec(ast: &LolaSpec, spec: &str) -> bool {
         // Todo: Make more robust, e.g. against changes in whitespace.
         assert_eq!(format!("{}", ast), spec.replace("\n", " "));
         true
@@ -720,6 +720,7 @@ mod tests {
         ).unwrap_or_else(|e| panic!("{}", e));
     }
 
+    //    #[allow(clippy::cyclomatic_complexity)]
     #[test]
     fn parse_constant() {
         parses_to! {
@@ -798,9 +799,10 @@ mod tests {
         let spec = "input in <ab: Int8>: Int8";
         let throw = |e| panic!("{}", e);
         let ast = parse(spec).unwrap_or_else(throw);
-        cmp_ast_spec(ast, spec);
+        cmp_ast_spec(&ast, spec);
     }
 
+    //    #[allow(clippy::cyclomatic_complexity)]
     #[test]
     fn parse_output() {
         parses_to! {
@@ -836,6 +838,7 @@ mod tests {
         assert_eq!(format!("{}", ast), "output out: Int := in + 1")
     }
 
+    //    #[allow(clippy::cyclomatic_complexity)]
     #[test]
     fn parse_trigger() {
         parses_to! {
@@ -907,7 +910,7 @@ mod tests {
         let spec = "input in: Int\noutput out: Int := in\ntrigger in ≠ out";
         let throw = |e| panic!("{}", e);
         let ast = parse(spec).unwrap_or_else(throw);
-        cmp_ast_spec(ast, spec);
+        cmp_ast_spec(&ast, spec);
     }
 
     #[test]
@@ -915,7 +918,7 @@ mod tests {
         let spec = "input in: Int\ninput in2: Int\ninput in3: (Int, Bool)\ninput in4: Bool";
         let throw = |e| panic!("{}", e);
         let ast = parse(spec).unwrap_or_else(throw);
-        cmp_ast_spec(ast, spec);
+        cmp_ast_spec(&ast, spec);
     }
 
     #[test]
@@ -923,7 +926,7 @@ mod tests {
         let spec = "output s: Bool := (true ∨ true)";
         let throw = |e| panic!("{}", e);
         let ast = parse(spec).unwrap_or_else(throw);
-        cmp_ast_spec(ast, spec);
+        cmp_ast_spec(&ast, spec);
     }
 
     #[test]
@@ -931,7 +934,7 @@ mod tests {
         let spec = "output s: Int := s[-1] ? (3 * 4)";
         let throw = |e| panic!("{}", e);
         let ast = parse(spec).unwrap_or_else(throw);
-        cmp_ast_spec(ast, spec);
+        cmp_ast_spec(&ast, spec);
     }
 
     #[test]
@@ -939,7 +942,7 @@ mod tests {
         let spec = "input in: Int\noutput s: Int := if in = 3 then 4 else in + 2";
         let throw = |e| panic!("{}", e);
         let ast = parse(spec).unwrap_or_else(throw);
-        cmp_ast_spec(ast, spec);
+        cmp_ast_spec(&ast, spec);
     }
 
     #[test]
@@ -947,7 +950,7 @@ mod tests {
         let spec = "input in: Int\ntrigger in > 5";
         let throw = |e| panic!("{}", e);
         let ast = parse(spec).unwrap_or_else(throw);
-        cmp_ast_spec(ast, spec);
+        cmp_ast_spec(&ast, spec);
     }
 
     #[test]
@@ -955,7 +958,7 @@ mod tests {
         let spec = "output s: Double := if !((s[-1] ? (3 * 4) + -4) = 12) ∨ true = false then 2.0 else 4.1";
         let throw = |e| panic!("{}", e);
         let ast = parse(spec).unwrap_or_else(throw);
-        cmp_ast_spec(ast, spec);
+        cmp_ast_spec(&ast, spec);
     }
 
     #[test]
@@ -963,7 +966,7 @@ mod tests {
         let spec = "type VerifiedUser { name: String }";
         let throw = |e| panic!("{}", e);
         let ast = parse(spec).unwrap_or_else(throw);
-        cmp_ast_spec(ast, spec);
+        cmp_ast_spec(&ast, spec);
     }
 
     #[test]
@@ -971,7 +974,7 @@ mod tests {
         let spec = "output s <a: B, c: D>: E := 3";
         let throw = |e| panic!("{}", e);
         let ast = parse(spec).unwrap_or_else(throw);
-        cmp_ast_spec(ast, spec);
+        cmp_ast_spec(&ast, spec);
     }
 
     #[test]
@@ -979,6 +982,6 @@ mod tests {
         let spec = "output s: Int { invoke inp unless 3 > 5 extend b @ 5GHz terminate false } := 3";
         let throw = |e| panic!("{}", e);
         let ast = parse(spec).unwrap_or_else(throw);
-        cmp_ast_spec(ast, spec);
+        cmp_ast_spec(&ast, spec);
     }
 }

@@ -125,7 +125,7 @@ impl<'a> NamingAnalysis<'a> {
         self.check_triggers(&spec)
     }
 
-    fn check_triggers(&mut self, spec: &'a LolaSpec) -> () {
+    fn check_triggers(&mut self, spec: &'a LolaSpec) {
         let mut trigger_names: Vec<(&'a String, &'a Trigger)> = Vec::new();
         for trigger in &spec.trigger {
             self.declarations.push();
@@ -446,7 +446,7 @@ mod tests {
         let mut ast = parse(spec).unwrap_or_else(throw);
         id_assignment::assign_ids(&mut ast);
         let mut naming_analyzer = NamingAnalysis::new();
-        naming_analyzer.check(&mut ast);
+        naming_analyzer.check(&ast);
         assert_eq!(3, naming_analyzer.errors.len());
     }
 
@@ -457,7 +457,7 @@ mod tests {
         let mut ast = parse(spec).unwrap_or_else(throw);
         id_assignment::assign_ids(&mut ast);
         let mut naming_analyzer = NamingAnalysis::new();
-        naming_analyzer.check(&mut ast);
+        naming_analyzer.check(&ast);
         assert_eq!(1, naming_analyzer.errors.len());
     }
 
@@ -468,7 +468,7 @@ mod tests {
         let mut ast = parse(spec).unwrap_or_else(throw);
         id_assignment::assign_ids(&mut ast);
         let mut naming_analyzer = NamingAnalysis::new();
-        naming_analyzer.check(&mut ast);
+        naming_analyzer.check(&ast);
         assert_eq!(0, naming_analyzer.errors.len());
     }
 
@@ -479,7 +479,7 @@ mod tests {
         let mut ast = parse(spec).unwrap_or_else(throw);
         id_assignment::assign_ids(&mut ast);
         let mut naming_analyzer = NamingAnalysis::new();
-        naming_analyzer.check(&mut ast);
+        naming_analyzer.check(&ast);
         assert_eq!(0, naming_analyzer.errors.len());
     }
 
@@ -490,7 +490,7 @@ mod tests {
         let mut ast = parse(spec).unwrap_or_else(throw);
         id_assignment::assign_ids(&mut ast);
         let mut naming_analyzer = NamingAnalysis::new();
-        naming_analyzer.check(&mut ast);
+        naming_analyzer.check(&ast);
         assert_eq!(0, naming_analyzer.errors.len());
     }
 
@@ -501,7 +501,7 @@ mod tests {
         let mut ast = parse(spec).unwrap_or_else(throw);
         id_assignment::assign_ids(&mut ast);
         let mut naming_analyzer = NamingAnalysis::new();
-        naming_analyzer.check(&mut ast);
+        naming_analyzer.check(&ast);
         assert_eq!(0, naming_analyzer.errors.len());
     }
 
@@ -512,7 +512,7 @@ mod tests {
         let mut ast = parse(spec).unwrap_or_else(throw);
         id_assignment::assign_ids(&mut ast);
         let mut naming_analyzer = NamingAnalysis::new();
-        naming_analyzer.check(&mut ast);
+        naming_analyzer.check(&ast);
         assert_eq!(0, naming_analyzer.errors.len());
     }
 
@@ -523,7 +523,7 @@ mod tests {
         let mut ast = parse(spec).unwrap_or_else(throw);
         id_assignment::assign_ids(&mut ast);
         let mut naming_analyzer = NamingAnalysis::new();
-        naming_analyzer.check(&mut ast);
+        naming_analyzer.check(&ast);
         assert_eq!(0, naming_analyzer.errors.len());
     }
 
@@ -534,7 +534,7 @@ mod tests {
         let mut ast = parse(spec).unwrap_or_else(throw);
         id_assignment::assign_ids(&mut ast);
         let mut naming_analyzer = NamingAnalysis::new();
-        naming_analyzer.check(&mut ast);
+        naming_analyzer.check(&ast);
         assert_eq!(0, naming_analyzer.errors.len());
     }
 
@@ -545,7 +545,7 @@ mod tests {
         let mut ast = parse(spec).unwrap_or_else(throw);
         id_assignment::assign_ids(&mut ast);
         let mut naming_analyzer = NamingAnalysis::new();
-        naming_analyzer.check(&mut ast);
+        naming_analyzer.check(&ast);
         assert_eq!(0, naming_analyzer.errors.len());
     }
 
@@ -556,7 +556,7 @@ mod tests {
         let mut ast = parse(spec).unwrap_or_else(throw);
         id_assignment::assign_ids(&mut ast);
         let mut naming_analyzer = NamingAnalysis::new();
-        naming_analyzer.check(&mut ast);
+        naming_analyzer.check(&ast);
         assert_eq!(1, naming_analyzer.errors.len());
     }
 
@@ -567,7 +567,7 @@ mod tests {
         let mut ast = parse(spec).unwrap_or_else(throw);
         id_assignment::assign_ids(&mut ast);
         let mut naming_analyzer = NamingAnalysis::new();
-        naming_analyzer.check(&mut ast);
+        naming_analyzer.check(&ast);
         assert_eq!(1, naming_analyzer.result.len());
     }
 
@@ -578,7 +578,7 @@ mod tests {
         let mut ast = parse(spec).unwrap_or_else(throw);
         id_assignment::assign_ids(&mut ast);
         let mut naming_analyzer = NamingAnalysis::new();
-        naming_analyzer.check(&mut ast);
+        naming_analyzer.check(&ast);
         assert_eq!(1, naming_analyzer.errors.len());
     }
 
@@ -589,7 +589,7 @@ mod tests {
         let mut ast = parse(spec).unwrap_or_else(throw);
         id_assignment::assign_ids(&mut ast);
         let mut naming_analyzer = NamingAnalysis::new();
-        naming_analyzer.check(&mut ast);
+        naming_analyzer.check(&ast);
         assert_eq!(1, naming_analyzer.errors.len());
     }
 
@@ -600,7 +600,7 @@ mod tests {
         let mut ast = parse(spec).unwrap_or_else(throw);
         id_assignment::assign_ids(&mut ast);
         let mut naming_analyzer = NamingAnalysis::new();
-        naming_analyzer.check(&mut ast);
+        naming_analyzer.check(&ast);
         assert_eq!(1, naming_analyzer.errors.len());
     }
 }

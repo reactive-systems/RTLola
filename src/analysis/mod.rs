@@ -9,8 +9,8 @@ mod lola_version;
 mod naming;
 
 use super::ast::LolaSpec;
+use crate::analysis::lola_version::LolaVersionAnalysis;
 use crate::analysis::naming::Declaration;
-use analysis::lola_version::LolaVersionAnalysis;
 use ast_node::AstNode;
 
 pub trait AnalysisError<'a>: std::fmt::Debug {}
