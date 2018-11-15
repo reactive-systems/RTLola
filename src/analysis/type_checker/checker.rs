@@ -194,6 +194,101 @@ impl<'a> TypeChecker<'a> {
         }
     }
 
+    fn check_function(&mut self, e: &'a Expression, kind: FunctionKind, args: &'a Vec<Box<Expression>>) -> Option<Candidates> {
+        let cands: Vec<Candidates> = args.iter().flat_map(|a| self.get_candidates(a)).collect();
+        if cands.len() < args.len() {
+            return None; // TODO: Pretend everything's fine and return the respective type instead.
+        }
+        let numeric_check = Box::new(|c: &Candidates| c.is_numeric());
+        let integer_check = Box::new(|c: &Candidates| c.is_integer());
+        let float_check = Box::new(|c: &Candidates| c.is_float());
+        let args = args.iter().map(|a| a.as_ref()).collect();
+        match kind {
+            FunctionKind::NthRoot => {
+                let expected: Vec<(Box<Fn(&Candidates) -> bool>, &str)> = vec![
+                    (integer_check, "integer value"),
+                    (numeric_check, "numeric value")];
+                self.check_n_ary_fn(e, args, expected, &cands);
+                self.reg_cand(*e.id(), Candidates::Numeric(NumConfig::new_float(None)))
+            },
+            FunctionKind::Sqrt => {
+                let expected: Vec<(Box<Fn(&Candidates) -> bool>, &str)> = vec![(numeric_check, "numeric value")];
+                self.check_n_ary_fn(e, args, expected, &cands);
+                self.reg_cand(*e.id(), Candidates::Numeric(NumConfig::new_float(None)))
+            },
+            FunctionKind::Projection => {
+                if cands.len() < 2 {
+                    self.reg_error(TypeError::inv_num_of_args(e, 2, cands.len() as u8));
+                }
+                if !cands[0].is_unsigned() {
+                    self.reg_error(TypeError::inv_argument(e, args[0], format!("Projection requires an unsigned integer as first argument but found {}.", cands[0])));
+                }
+                match cands[1] {
+                    Candidates::Tuple(ref v) => {
+                        match TypeChecker::convert_to_constant(args[1]) {
+                            Some(n) if n < v.len() =>  // No way to recover from here.
+                                self.reg_error(TypeError::inv_argument(e, args[1], format!("Projection index {} exceeds tuple dimension {}.", n, v.len()))),
+                            Some(n) => self.reg_cand(*e.id(), cands[n].clone()),
+                            None => self.reg_error(TypeError::ConstantValueRequired(e, args[1])),
+                        }
+                    },
+                    _ => self.reg_error(TypeError::inv_argument(e, args[1], format!("Projection requires a tuple as second argument but found {}.", cands[1]))),
+                }
+            },
+            FunctionKind::Sin | FunctionKind::Cos | FunctionKind::Tan | FunctionKind::Arcsin
+                | FunctionKind::Arccos | FunctionKind::Arctan => {
+                let expected: Vec<(Box<Fn(&Candidates) -> bool>, &str)> = vec![(numeric_check, "numeric value")];
+                self.check_n_ary_fn(e, args, expected, &cands);
+                self.reg_cand(*e.id(), Candidates::Numeric(NumConfig::new_float(None)))
+            }
+            FunctionKind::Exp => {
+                let expected: Vec<(Box<Fn(&Candidates) -> bool>, &str)> = vec![(numeric_check, "numeric value")];
+                self.check_n_ary_fn(e, args, expected, &cands);
+                self.reg_cand(*e.id(), Candidates::Numeric(NumConfig::new_float(None)))
+            },
+            FunctionKind::Floor => {
+                let expected: Vec<(Box<Fn(&Candidates) -> bool>, &str)> = vec![(float_check, "float value")];
+                self.check_n_ary_fn(e, args,expected, &cands);
+                self.reg_cand(*e.id(), Candidates::Numeric(NumConfig::new_signed(cands[0].width())))
+            },
+            FunctionKind::Ceil => unimplemented!(),
+        }
+    }
+
+    fn check_n_ary_fn(&mut self, call: &'a Expression, args: Vec<&'a Expression>, expected: Vec<(Box<Fn(&Candidates) -> bool>, &str)>, was: &Vec<Candidates>) {
+        assert_eq!(args.len(), expected.len(), "Should be checked earlier.");
+        if was.len() != expected.len() {
+            self.reg_error(TypeError::inv_num_of_args(call, expected.len() as u8, was.len() as u8));
+        }
+        for (((pred, str), ty), arg) in expected.iter().zip(was).zip(args) {
+            if !pred(ty) {
+                self.reg_error(TypeError::inv_argument(call, arg, format!("Required {} but found {}.", str, ty)));
+            }
+        }
+    }
+
+    fn convert_to_constant(e: &'a Expression) -> Option<usize> {
+        match e.kind {
+            ExpressionKind::Ident(_) => unimplemented!(), // Here, we should check the declaration. If it is a constant -> fine.
+            _ => unimplemented!(),
+        }
+    }
+
+    fn check_root(&mut self, e: &'a Expression, deg: Option<(&'a Expression, Candidates)>, content: (&'a Expression, Candidates)) -> Option<Candidates> {
+        if let Some((deg, ty)) = deg {
+            if !ty.is_integer() {
+                let msg = format!("`nthRoot` requires an integer root, but found {}.", ty);
+                self.reg_error(TypeError::inv_argument(e, deg, msg));
+            }
+        }
+        let (content, ty) = content;
+        if !ty.is_numeric() {
+            let msg = format!("Cannot take the root of non-numeric type {}.", ty);
+            self.reg_error(TypeError::inv_argument(e, content, msg));
+        }
+        Some(Candidates::Numeric(NumConfig::new_float(None)))
+    }
+
     fn check_offset(&mut self, offset: &'a Offset, origin: &'a Expression) -> bool {
         let (expr, is_discrete) = match offset {
             Offset::DiscreteOffset(e) => (e, true),

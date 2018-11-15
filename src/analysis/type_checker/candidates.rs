@@ -127,6 +127,14 @@ impl Candidates {
             _ => false,
         }
     }
+    pub fn is_float(&self) -> bool {
+        match self {
+            Candidates::Numeric(_) | Candidates::Concrete(BuiltinType::Float(_)) => true,
+            Candidates::Any => true, // TODO For type inference, we need to change this and propagate requirements backwards.
+            _ => false,
+        }
+    }
+
     pub fn is_unsigned(&self) -> bool {
         match self {
             Candidates::Numeric(cfg) if !cfg.def_signed=> true,
@@ -149,6 +157,15 @@ impl Candidates {
             Candidates::Concrete(BuiltinType::UInt(w)) => Candidates::Concrete(BuiltinType::Int(w)),
             _ if self.is_numeric() => self.clone(),
             _ => panic!("A non-numeric type cannot be signed!"),
+        }
+    }
+
+    pub fn width(&self) -> Option<u8> {
+        match self {
+            Candidates::Numeric(cfg) => Some(cfg.width),
+            Candidates::Concrete(BuiltinType::UInt(w)) | Candidates::Concrete(BuiltinType::Int(w))
+                | Candidates::Concrete(BuiltinType::Float(w)) => Some(*w),
+            _ => None,
         }
     }
 
