@@ -3,7 +3,7 @@
 use super::super::ast::Offset::*;
 use super::super::ast::*;
 use super::AnalysisError;
-use analysis::*;
+use crate::analysis::*;
 use ast_node::{AstNode, NodeId};
 use std::collections::HashMap;
 
@@ -99,8 +99,10 @@ impl<'a> NamingAnalysis<'a> {
                 .declarations
                 .get_decl_in_current_scope_for(&param.name.name)
             {
-                self.errors
-                    .push(Box::new(NamingError::NameAlreadyUsed(param, decl)));
+                self.errors.push(Box::new(NamingError::NameAlreadyUsed {
+                    current: param,
+                    previous: decl,
+                }));
             }
         } else {
             // it does not exist
@@ -129,8 +131,10 @@ impl<'a> NamingAnalysis<'a> {
             self.declarations.push();
             if let Some(ident) = &trigger.name {
                 if let Some(decl) = self.declarations.get_decl_for(&ident.name) {
-                    self.errors
-                        .push(Box::new(NamingError::NameAlreadyUsed(trigger, decl)));
+                    self.errors.push(Box::new(NamingError::NameAlreadyUsed {
+                        current: trigger,
+                        previous: decl,
+                    }));
                 }
                 let mut found = false;
                 for previous_entry in trigger_names.iter() {
@@ -138,10 +142,10 @@ impl<'a> NamingAnalysis<'a> {
                         (ref name, ref previous_trigger) => {
                             if ident.name == **name {
                                 found = true;
-                                self.errors.push(Box::new(NamingError::TriggerWithSameName(
-                                    trigger,
-                                    *previous_trigger,
-                                )));
+                                self.errors.push(Box::new(NamingError::TriggerWithSameName {
+                                    current: trigger,
+                                    previous: *previous_trigger,
+                                }));
                                 break;
                             }
                         }
@@ -172,8 +176,10 @@ impl<'a> NamingAnalysis<'a> {
     fn add_outputs(&mut self, spec: &'a LolaSpec) {
         for output in &spec.outputs {
             if let Some(decl) = self.declarations.get_decl_for(&output.name.name) {
-                self.errors
-                    .push(Box::new(NamingError::NameAlreadyUsed(output, decl)));
+                self.errors.push(Box::new(NamingError::NameAlreadyUsed {
+                    current: output,
+                    previous: decl,
+                }));
             } else {
                 self.add_decl_for(&output.name.name, output.into(), output);
             }
@@ -186,20 +192,31 @@ impl<'a> NamingAnalysis<'a> {
     fn add_inputs(&mut self, spec: &'a LolaSpec) {
         for input in &spec.inputs {
             if let Some(decl) = self.declarations.get_decl_for(&input.name.name) {
-                self.errors
-                    .push(Box::new(NamingError::NameAlreadyUsed(input, decl)));
+                self.errors.push(Box::new(NamingError::NameAlreadyUsed {
+                    current: input,
+                    previous: decl,
+                }));
             } else {
                 self.add_decl_for(&input.name.name, input.into(), input);
             }
             self.check_type(&input.ty);
+
+            self.declarations.push();
+            input
+                .params
+                .iter()
+                .for_each(|param| self.check_param(&param));
+            self.declarations.pop();
         }
     }
 
     fn add_constants(&mut self, spec: &'a LolaSpec) {
         for constant in &spec.constants {
             if let Some(decl) = self.declarations.get_decl_for(&constant.name.name) {
-                self.errors
-                    .push(Box::new(NamingError::NameAlreadyUsed(constant, decl)));
+                self.errors.push(Box::new(NamingError::NameAlreadyUsed {
+                    current: constant,
+                    previous: decl,
+                }));
             } else {
                 self.add_decl_for(&constant.name.name, constant.into(), constant);
             }
@@ -225,10 +242,10 @@ impl<'a> NamingAnalysis<'a> {
                         (ref name, ref previous_field) => {
                             if field.name == **name {
                                 found = true;
-                                self.errors.push(Box::new(NamingError::FieldWithSameName(
-                                    &**field,
-                                    *previous_field,
-                                )));
+                                self.errors.push(Box::new(NamingError::FieldWithSameName {
+                                    current: &**field,
+                                    previous: *previous_field,
+                                }));
                                 break;
                             }
                         }
@@ -248,8 +265,10 @@ impl<'a> NamingAnalysis<'a> {
             // only add the new type name after checking all fields
             if let Some(ref name) = &type_decl.name {
                 if let Some(decl) = self.declarations.get_decl_for(&name.name) {
-                    self.errors
-                        .push(Box::new(NamingError::NameAlreadyUsed(type_decl, decl)));
+                    self.errors.push(Box::new(NamingError::NameAlreadyUsed {
+                        current: type_decl,
+                        previous: decl,
+                    }));
                 } else {
                     self.add_decl_for(
                         &name.name,
@@ -553,8 +572,19 @@ mod tests {
     }
 
     #[test]
-    fn duplicate_parameters_are_not_allowed() {
+    fn duplicate_parameters_are_not_allowed_for_outputs() {
         let spec = "output test<ab: Int8, ab: Int8> := 3";
+        let throw = |e| panic!("{}", e);
+        let mut ast = parse(spec).unwrap_or_else(throw);
+        id_assignment::assign_ids(&mut ast);
+        let mut naming_analyzer = NamingAnalysis::new();
+        naming_analyzer.check(&mut ast);
+        assert_eq!(1, naming_analyzer.errors.len());
+    }
+
+    #[test]
+    fn duplicate_parameters_are_not_allowed_for_inputs() {
+        let spec = "input test<ab: Int8, ab: Int8> : Int8";
         let throw = |e| panic!("{}", e);
         let mut ast = parse(spec).unwrap_or_else(throw);
         id_assignment::assign_ids(&mut ast);

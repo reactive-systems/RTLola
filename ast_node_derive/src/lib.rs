@@ -1,15 +1,12 @@
 extern crate proc_macro;
 
-#[macro_use]
+//#[macro_use]
 extern crate syn;
 #[macro_use]
 extern crate quote;
 
 use proc_macro::TokenStream;
 
-use syn::parse::{Parse, ParseStream, Result};
-use syn::punctuated::Punctuated;
-use syn::spanned::Spanned;
 use syn::{parse_macro_input, DeriveInput};
 
 #[proc_macro_derive(AstNode)]

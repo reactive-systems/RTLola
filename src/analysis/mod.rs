@@ -5,10 +5,12 @@
 
 mod common;
 mod id_assignment;
+mod lola_version;
 mod naming;
 
 use super::ast::LolaSpec;
-use analysis::naming::Declaration;
+use crate::analysis::naming::Declaration;
+use analysis::lola_version::LolaVersionAnalysis;
 use ast_node::AstNode;
 
 pub trait AnalysisError<'a>: std::fmt::Debug {}
@@ -22,6 +24,8 @@ pub fn analyze(spec: &mut LolaSpec) -> Report {
     id_assignment::assign_ids(spec);
     let mut naming_analyzer = naming::NamingAnalysis::new();
     naming_analyzer.check(spec);
+    let mut version_analyzer = LolaVersionAnalysis::new();
+    let version_result = version_analyzer.analyse(spec);
     unimplemented!();
 }
 
@@ -36,9 +40,18 @@ pub enum NamingError<'a> {
     TypeNotAllowedHere(&'a AstNode<'a>),
     NotAStream(&'a AstNode<'a>),
     UnnamedTypeDeclaration(&'a AstNode<'a>),
-    NameAlreadyUsed(&'a AstNode<'a>, Declaration<'a>), // current, previous use
-    TriggerWithSameName(&'a AstNode<'a>, &'a AstNode<'a>), // current, previous use
-    FieldWithSameName(&'a AstNode<'a>, &'a AstNode<'a>), // current, previous use
+    NameAlreadyUsed {
+        current: &'a AstNode<'a>,
+        previous: Declaration<'a>,
+    },
+    TriggerWithSameName {
+        current: &'a AstNode<'a>,
+        previous: &'a AstNode<'a>,
+    },
+    FieldWithSameName {
+        current: &'a AstNode<'a>,
+        previous: &'a AstNode<'a>,
+    },
 }
 
 impl<'a> std::fmt::Debug for NamingError<'a> {
@@ -60,19 +73,19 @@ impl<'a> std::fmt::Debug for NamingError<'a> {
             NamingError::UnnamedTypeDeclaration(node) => {
                 write!(f, "Declared type has no name: {:?}", node.span())
             }
-            NamingError::NameAlreadyUsed(current, previous) => write!(
+            NamingError::NameAlreadyUsed { current, previous } => write!(
                 f,
                 "Name {:?} was already used at the same level at {:?}",
                 current.span(),
                 previous
             ),
-            NamingError::TriggerWithSameName(current, previous) => write!(
+            NamingError::TriggerWithSameName { current, previous } => write!(
                 f,
                 "Name {:?} was already used for another trigger {:?}",
                 current.span(),
                 previous.span()
             ),
-            NamingError::FieldWithSameName(current, previous) => write!(
+            NamingError::FieldWithSameName { current, previous } => write!(
                 f,
                 "Name {:?} was already used for another field {:?} in the same type declaration",
                 current.span(),
