@@ -329,7 +329,7 @@ impl<'a> TypeChecker<'a> {
                 self.check_n_ary_fn(e, args, expected, &cands);
                 self.reg_cand(*e.id(), Candidates::Numeric(NumConfig::new_float(None)))
             }
-            FunctionKind::Floor => {
+            FunctionKind::Floor | FunctionKind::Ceil => {
                 let expected: Vec<(Box<Fn(&Candidates) -> bool>, &str)> =
                     vec![(float_check, "float value")];
                 self.check_n_ary_fn(e, args, expected, &cands);
@@ -338,7 +338,6 @@ impl<'a> TypeChecker<'a> {
                     Candidates::Numeric(NumConfig::new_signed(cands[0].width())),
                 )
             }
-            FunctionKind::Ceil => unimplemented!(),
         }
     }
 
@@ -356,13 +355,14 @@ impl<'a> TypeChecker<'a> {
                 expected.len() as u8,
                 was.len() as u8,
             ));
+            return;
         }
-        for (((pred, str), ty), arg) in expected.iter().zip(was).zip(args) {
+        for ((pred, desc), ty, arg) in izip!(expected, was, args) {
             if !pred(ty) {
                 self.reg_error(TypeError::inv_argument(
                     call,
                     arg,
-                    format!("Required {} but found {}.", str, ty),
+                    format!("Required {} but found {}.", desc, ty),
                 ));
             }
         }
@@ -370,6 +370,10 @@ impl<'a> TypeChecker<'a> {
 
     fn convert_to_constant(e: &'a Expression) -> Option<usize> {
         match e.kind {
+            ExpressionKind::Lit(ref lit) => match lit.kind {
+                LitKind::Int(i) => Some(i as usize),
+                _ => unimplemented!(),
+            },
             ExpressionKind::Ident(_) => unimplemented!(), // Here, we should check the declaration. If it is a constant -> fine.
             _ => unimplemented!(),
         }
@@ -407,20 +411,21 @@ impl<'a> TypeChecker<'a> {
         } // Error is already reported, so pretend everything is dandy.
         let cand = cand.unwrap();
 
-        let err = match (is_discrete, cand.is_numeric(), cand.is_integer()) {
-            (true, _, true) => return true,
-            (true, _, false) => TypeError::IncompatibleTypes(
-                origin,
-                String::from("A discrete offset must be an integer value."),
-            ),
-            (false, true, _) => return true,
-            (false, false, _) => TypeError::IncompatibleTypes(
-                origin,
-                String::from("A real-time offset must be a numeric value."),
-            ),
-        };
-        self.reg_error(err);
-        false
+        match (is_discrete, cand.is_numeric(), cand.is_integer()) {
+            (true, _, true) | (false, true, _) => {} // fine
+            (true, _, false) => {
+                self.reg_error(TypeError::IncompatibleTypes(
+                    origin,
+                    String::from("A discrete offset must be an integer value."),
+                ));
+            }
+            (false, false, _) => {
+                self.reg_error(TypeError::IncompatibleTypes(
+                    origin,
+                    String::from("A real-time offset must be a numeric value."),
+                ));
+            }
+        }
     }
 
     fn check_stream_instance(
@@ -452,10 +457,11 @@ impl<'a> TypeChecker<'a> {
                         self.reg_error(TypeError::IncompatibleTypes(origin, String::from("")));
                     }
                 }
-            } // The error was already reported, so just go on as if everything is dandy.
+            }
+            // Independent of all checks, pretend everything worked fine.
             self.reg_cand(*origin.id(), inst_candidates)
         } else {
-            self.reg_error(TypeError::UnknownIdentifier(inst))
+            self.reg_error(TypeError::UnknownIdentifier(inst)) // Unknown output, return Candidates::None.
         }
     }
 
@@ -476,10 +482,7 @@ impl<'a> TypeChecker<'a> {
                 let cand = self.get_from_tt(*o.id());
                 self.reg_cand(nid, cand)
             }
-            Some(Declaration::UserDefinedType(td)) => {
-                let cand = self.get_from_tt(*td.id());
-                self.reg_cand(nid, cand)
-            }
+            Some(Declaration::UserDefinedType(td)) => unimplemented!(),
             Some(Declaration::BuiltinType(ref b)) => self.reg_cand(nid, Candidates::from(b)),
             Some(Declaration::Param(ref p)) => self.reg_cand(nid, Candidates::from(&p.ty)),
             None => self.reg_error(TypeError::UnknownIdentifier(ident)),
