@@ -1,6 +1,7 @@
 use ::ast::*;
 use super::super::common::BuiltinType;
 use std::fmt::{Display, Result, Formatter};
+use super::super::common::{Type as OType};
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct NumConfig {
@@ -28,7 +29,7 @@ pub enum Candidates {
     Numeric(NumConfig),
     Concrete(BuiltinType),
     Tuple(Vec<Candidates>),
-    Defined(Vec<Candidates>),
+//    Defined(Vec<Candidates>),
     Any,
     None,
 }
@@ -42,7 +43,7 @@ impl Display for Candidates {
             Candidates::Numeric(cfg) if cfg.def_signed => write!(f, "(Float|Int)≥{}", cfg.width),
             Candidates::Numeric(cfg) => write!(f, "(Float|Int|UInt)>{}", cfg.width),
             Candidates::Tuple(cands) => PrintHelper::write(f, cands, "{ ", " }", " ,"),
-            Candidates::Defined(fields) => PrintHelper::write(f, fields, "{ ", " }", " ,"),
+//            Candidates::Defined(fields) => PrintHelper::write(f, fields, "{ ", " }", " ,"),
             Candidates::Concrete(ty) => write!(f, "{:?}", ty), // TODO: implement Display for builtin types.
             Candidates::Any => write!(f, "⊤"),
             Candidates::None => write!(f, "⊥"),
@@ -237,12 +238,49 @@ impl<'a> From<&'a Option<Type>> for Candidates {
 impl<'a> From<&'a TypeDeclaration> for Candidates {
     fn from(td: &'a TypeDeclaration) -> Self {
         let subs: Vec<Candidates> = td.fields.iter().map(|field| Candidates::from(&field.ty)).collect();
-        Candidates::Defined(subs)
+//        Candidates::Defined(subs)
+        unimplemented!()
     }
 }
 
 impl<'a> From<&'a BuiltinType> for Candidates {
     fn from(t: &'a BuiltinType) -> Self {
         Candidates::Concrete(*t)
+    }
+}
+
+// TODO: Discuss.
+impl<'a> From<&'a Candidates> for OType {
+    fn from(cand: &'a Candidates) -> Self {
+        match cand {
+            Candidates::Any => unreachable!(), // Explicit type annotations should make this case impossible.
+            Candidates::Concrete(t) => OType::BuiltIn(*t),
+            Candidates::Numeric(cfg) =>
+                if cfg.def_signed {
+                    let width = if cfg.width >= 32 {
+                        cfg.width
+                    } else { 32 };
+                    OType::BuiltIn(BuiltinType::Float(width))
+                } else if cfg.def_signed {
+                    let width = if cfg.width >= 32 {
+                        cfg.width
+                    } else { 32 };
+                    OType::BuiltIn(BuiltinType::Int(width))
+                } else {
+                    let width = if cfg.width >= 32 {
+                        cfg.width
+                    } else { 32 };
+                    OType::BuiltIn(BuiltinType::Int(width))
+                },
+            Candidates::Tuple(v) => {
+                let mut vec = Vec::new();
+                for (i, elem) in v.iter().enumerate() {
+                    let ot: OType = elem.into();
+                    vec.push((i.to_string(), Box::new(ot)));
+                }
+                OType::Composite(vec)
+            }
+            Candidates::None => unreachable!(),
+        }
     }
 }

@@ -4,7 +4,7 @@ use std::fmt::{Display, Result, Formatter};
 use ::ast::Parameter;
 use super::super::AnalysisError;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum TypeError<'a> {
     UnknownIdentifier(&'a AstNode<'a>),
     IncompatibleTypes(&'a AstNode<'a>, String),

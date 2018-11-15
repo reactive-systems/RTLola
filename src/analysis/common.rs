@@ -28,6 +28,12 @@ impl BuiltinType {
     }
 }
 
+#[derive(Debug)]
+pub enum Type {
+    BuiltIn(BuiltinType),
+    Composite(Vec<(String, Box<Type>)>),
+}
+
 // These MUST all be lowercase
 // TODO add an static assertion for this
 pub(crate) const KEYWORDS: [&str; 28] = [
