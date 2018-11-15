@@ -14,30 +14,37 @@ pub(crate) fn assign_ids(spec: &mut LolaSpec) {
         assert_eq!(*td.id(), NodeId::DUMMY, "Ids already assigned.");
         td.set_id(next_id());
         for field in &mut td.fields {
-            assert_eq!(*field.ty.id(), NodeId::DUMMY, "Ids already assigned.");
-            field.ty.set_id(next_id());
+            field.set_id(next_id());
+            assign_ids_type(&mut field.ty, &mut next_id);
         }
     }
     for c in &mut spec.constants {
         assert_eq!(*c.id(), NodeId::DUMMY, "Ids already assigned.");
         c.set_id(next_id());
         if let Some(ref mut t) = c.ty {
-            assert_eq!(*t.id(), NodeId::DUMMY, "Ids already assigned.");
-            t.set_id(next_id());
+            assign_ids_type(t, &mut next_id);
         }
+        assign_ids_literal(&mut c.literal, &mut next_id);
     }
     for i in &mut spec.inputs {
         assert_eq!(*i.id(), NodeId::DUMMY, "Ids already assigned.");
         i.set_id(next_id());
-        assert_eq!(*i.ty.id(), NodeId::DUMMY, "Ids already assigned.");
-        i.ty.set_id(next_id());
+        assign_ids_type(&mut i.ty, &mut next_id);
+        for param in i.params.iter_mut() {
+            assign_ids_parameter(param, &mut next_id);
+        }
     }
     for o in &mut spec.outputs {
         assert_eq!(*o.id(), NodeId::DUMMY, "Ids already assigned.");
         o.set_id(next_id());
         if let Some(ref mut t) = o.ty {
-            assert_eq!(*t.id(), NodeId::DUMMY, "Ids already assigned.");
-            t.set_id(next_id());
+            assign_ids_type(t, &mut next_id);
+        }
+        for param in o.params.iter_mut() {
+            assign_ids_parameter(param, &mut next_id);
+        }
+        if let Some(ref mut ts) = o.template_spec {
+            assign_ids_template_spec(ts, &mut next_id);
         }
         assign_ids_expr(&mut o.expression, &mut next_id);
     }
@@ -48,19 +55,106 @@ pub(crate) fn assign_ids(spec: &mut LolaSpec) {
     }
 }
 
+fn assign_ids_invoke_spec<E>(ts: &mut InvokeSpec, next_id: &mut E)
+where
+    E: FnMut() -> NodeId,
+{
+    ts.set_id(next_id());
+    assign_ids_expr(&mut ts.target, next_id);
+    if let Some(ref mut cond) = ts.condition {
+        assign_ids_expr(cond, next_id);
+    }
+}
+fn assign_ids_extend_spec<E>(ts: &mut ExtendSpec, next_id: &mut E)
+where
+    E: FnMut() -> NodeId,
+{
+    ts.set_id(next_id());
+    if let Some(ref mut target) = ts.target {
+        assign_ids_expr(target, next_id);
+    }
+    if let Some(ref mut freq) = ts.freq {
+        match freq {
+            ExtendRate::Duration(expr, _) | ExtendRate::Frequency(expr, _) => {
+                assign_ids_expr(expr, next_id);
+            }
+        }
+    }
+}
+fn assign_ids_terminate_spec<E>(ts: &mut TerminateSpec, next_id: &mut E)
+where
+    E: FnMut() -> NodeId,
+{
+    ts.set_id(next_id());
+    assign_ids_expr(&mut ts.target, next_id);
+}
+
+fn assign_ids_template_spec<E>(ts: &mut TemplateSpec, next_id: &mut E)
+where
+    E: FnMut() -> NodeId,
+{
+    ts.set_id(next_id());
+    if let Some(ref mut inv) = ts.inv {
+        assign_ids_invoke_spec(inv, next_id);
+    }
+    if let Some(ref mut ext) = ts.ext {
+        assign_ids_extend_spec(ext, next_id);
+    }
+    if let Some(ref mut ter) = ts.ter {
+        assign_ids_terminate_spec(ter, next_id);
+    }
+}
+
+fn assign_ids_parameter<E>(param: &mut Parameter, next_id: &mut E)
+where
+    E: FnMut() -> NodeId,
+{
+    param.set_id(next_id());
+    if let Some(ref mut t) = param.ty {
+        assign_ids_type(t, next_id);
+    }
+}
+
+fn assign_ids_literal<E>(lit: &mut Literal, next_id: &mut E)
+where
+    E: FnMut() -> NodeId,
+{
+    lit.set_id(next_id());
+    if let LitKind::Tuple(ref mut elements) = lit.kind {
+        for element in elements.iter_mut() {
+            assign_ids_literal(element, next_id);
+        }
+    }
+}
+
+fn assign_ids_type<E>(ty: &mut Type, next_id: &mut E)
+where
+    E: FnMut() -> NodeId,
+{
+    ty.set_id(next_id());
+    if let TypeKind::Tuple(ref mut elements) = ty.kind {
+        for element in elements.iter_mut() {
+            assign_ids_type(element, next_id);
+        }
+    }
+}
+
 fn assign_ids_expr<E>(exp: &mut Expression, next_id: &mut E)
 where
     E: FnMut() -> NodeId,
 {
     exp.set_id(next_id());
     match &mut exp.kind {
-        ExpressionKind::Lit(_) => {}
+        ExpressionKind::Lit(lit) => {
+            assign_ids_literal(lit, next_id);
+        }
         ExpressionKind::Ident(_) => {}
         ExpressionKind::Default(lhs, rhs) => {
             assign_ids_expr(lhs, next_id);
             assign_ids_expr(rhs, next_id);
         }
         ExpressionKind::Lookup(inst, offset, _winop) => {
+            inst.set_id(next_id());
             inst.arguments
                 .iter_mut()
                 .for_each(|e| assign_ids_expr(e, next_id));
@@ -79,7 +173,15 @@ where
             assign_ids_expr(cons, next_id);
             assign_ids_expr(alt, next_id)
         }
-        ExpressionKind::ParenthesizedExpression(_, e, _) => assign_ids_expr(e, next_id),
+        ExpressionKind::ParenthesizedExpression(open, e, close) => {
+            assign_ids_expr(e, next_id);
+            if let Some(ref mut paren) = open {
+                paren.set_id(next_id());
+            }
+            if let Some(ref mut paren) = close {
+                paren.set_id(next_id());
+            }
+        }
         ExpressionKind::MissingExpression() => {}
         ExpressionKind::Tuple(exprs) => exprs.iter_mut().for_each(|e| assign_ids_expr(e, next_id)),
         ExpressionKind::Function(_, args) => {
