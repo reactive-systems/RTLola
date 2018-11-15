@@ -168,6 +168,29 @@ impl<'a> NamingAnalysis<'a> {
                 .params
                 .iter()
                 .for_each(|param| self.check_param(&param));
+            if let Some(ref template_spec) = output.template_spec {
+                if let Some(ref invoke) = template_spec.inv {
+                    self.check_expression(&invoke.target);
+                    if let Some(ref cond) = invoke.condition {
+                        self.check_expression(&cond);
+                    }
+                }
+                if let Some(ref extend) = template_spec.ext {
+                    if let Some(ref freq) = extend.freq {
+                        match freq {
+                            ExtendRate::Frequency(expr, _) | ExtendRate::Duration(expr, _) => {
+                                self.check_expression(&expr);
+                            }
+                        }
+                    }
+                    if let Some(ref cond) = extend.target {
+                        self.check_expression(&cond);
+                    }
+                }
+                if let Some(ref terminate) = template_spec.ter {
+                    self.check_expression(&terminate.target);
+                }
+            }
             self.check_expression(&output.expression);
             self.declarations.pop();
         }
@@ -596,6 +619,17 @@ mod tests {
     #[test]
     fn keyword_are_not_valid_names() {
         let spec = "output Int128 := 3";
+        let throw = |e| panic!("{}", e);
+        let mut ast = parse(spec).unwrap_or_else(throw);
+        id_assignment::assign_ids(&mut ast);
+        let mut naming_analyzer = NamingAnalysis::new();
+        naming_analyzer.check(&ast);
+        assert_eq!(1, naming_analyzer.errors.len());
+    }
+
+    #[test]
+    fn template_spec_is_also_tested() {
+        let spec = "output a {invoke b} := 3";
         let throw = |e| panic!("{}", e);
         let mut ast = parse(spec).unwrap_or_else(throw);
         id_assignment::assign_ids(&mut ast);
