@@ -120,12 +120,20 @@ fn parse_inputs(spec: &mut LolaSpec, pair: Pair<Rule>) -> Vec<Input> {
         let start = pair.as_span().start();
         let name = parse_ident(&pair);
 
-        let pair = pairs.next().expect("mismatch between grammar and AST");
+        let mut pair = pairs.next().expect("mismatch between grammar and AST");
+        let params = if let Rule::ParamList = pair.as_rule() {
+            let res = parse_parameter_list(spec, pair.into_inner());
+            pair = pairs.next().expect("mismatch between grammar and AST");
+            res
+        } else {
+            Vec::new()
+        };
         let end = pair.as_span().end();
         let ty = parse_type(spec, pair);
         inputs.push(Input {
             _id: NodeId::DUMMY,
             name,
+            params,
             ty,
             _span: Span { start, end },
         })
@@ -783,6 +791,14 @@ mod tests {
         assert_eq!(format!("{}", inputs[0]), "input a: Int");
         assert_eq!(format!("{}", inputs[1]), "input b: Int");
         assert_eq!(format!("{}", inputs[2]), "input c: Bool");
+    }
+
+    #[test]
+    fn build_ast_parameterized_input() {
+        let spec = "input in <ab: Int8>: Int8";
+        let throw = |e| panic!("{}", e);
+        let ast = parse(spec).unwrap_or_else(throw);
+        cmp_ast_spec(ast, spec);
     }
 
     #[test]

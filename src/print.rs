@@ -45,7 +45,11 @@ impl Display for Constant {
 
 impl Display for Input {
     fn fmt(&self, f: &mut Formatter) -> Result {
-        write!(f, "input {}: {}", self.name, self.ty)
+        write!(f, "input {}", self.name)?;
+        if !self.params.is_empty() {
+            PrintHelper::write(f, &self.params, " <", ">", ", ")?;
+        }
+        write!(f, ": {}", self.ty)
     }
 }
 

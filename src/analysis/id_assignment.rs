@@ -131,6 +131,7 @@ mod tests {
         Input {
             _id: NodeId::DUMMY,
             name: Ident::new(String::from("Something"), span()),
+            params: Vec::new(),
             ty: Type::new_simple(String::from("something"), span()),
             _span: span(),
         }

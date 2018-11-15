@@ -29,7 +29,7 @@ impl LolaSpec {
 }
 
 /// Versions and Extensions of the Lola language
-#[derive(Debug, EnumString, Display)]
+#[derive(Debug, EnumString, Display, PartialEq)]
 pub enum LanguageSpec {
     /// The original Lola specification language,
     /// see ``LOLA: Runtime Monitoring of Synchronous Systems'' (https://ieeexplore.ieee.org/document/1443364)
@@ -68,6 +68,7 @@ pub struct Constant {
 pub struct Input {
     pub name: Ident,
     pub ty: Type,
+    pub params: Vec<Parameter>,
     pub(crate) _id: NodeId,
     pub(crate) _span: Span,
 }
