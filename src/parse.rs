@@ -586,7 +586,7 @@ fn build_function_expression(spec: &mut LolaSpec, pair: Pair<Rule>, span: Span) 
         "tan" => FunctionKind::Tan,
         "arcsin" => FunctionKind::Arcsin,
         "arccos" => FunctionKind::Arccos,
-        "arctar" => FunctionKind::Arctan,
+        "arctan" => FunctionKind::Arctan,
         "exp" => FunctionKind::Exp,
         "floor" => FunctionKind::Floor,
         "ceil" => FunctionKind::Ceil,
@@ -736,7 +736,7 @@ mod tests {
     fn parse_simple() {
         let _ = LolaParser::parse(
             Rule::Spec,
-            "input in: Int\noutput out: Int := in\ntrigger in != out",
+            "input in: Int\noutput out: Int := in\ntrigger in ≠ out",
         ).unwrap_or_else(|e| panic!("{}", e));
     }
 
@@ -880,13 +880,13 @@ mod tests {
 
     #[test]
     fn parse_trigger_ast() {
-        let pair = LolaParser::parse(Rule::Trigger, "trigger in != out \"some message\"")
+        let pair = LolaParser::parse(Rule::Trigger, "trigger in ≠ out \"some message\"")
             .unwrap_or_else(|e| panic!("{}", e))
             .next()
             .unwrap();
         let mut spec = LolaSpec::new();
         let ast = super::parse_trigger(&mut spec, pair);
-        assert_eq!(format!("{}", ast), "trigger in != out \"some message\"")
+        assert_eq!(format!("{}", ast), "trigger in ≠ out \"some message\"")
     }
 
     #[test]
@@ -927,7 +927,7 @@ mod tests {
 
     #[test]
     fn build_simple_ast() {
-        let spec = "input in: Int\noutput out: Int := in\ntrigger in != out";
+        let spec = "input in: Int\noutput out: Int := in\ntrigger in ≠ out";
         let throw = |e| panic!("{}", e);
         let ast = parse(spec).unwrap_or_else(throw);
         cmp_ast_spec(&ast, spec);
