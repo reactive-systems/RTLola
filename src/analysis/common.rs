@@ -32,7 +32,7 @@ impl BuiltinType {
 pub enum Type {
     BuiltIn(BuiltinType),
     Tuple(Vec<BuiltinType>),
-//    Composite(Vec<(String, Box<Type>)>),
+    //    Composite(Vec<(String, Box<Type>)>),
 }
 
 // These MUST all be lowercase

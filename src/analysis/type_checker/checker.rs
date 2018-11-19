@@ -1,7 +1,5 @@
 use super::super::common::BuiltinType;
 use super::super::naming::{Declaration, DeclarationTable};
-use super::super::AnalysisError;
-use ast::*;
 use ast::*;
 use std::collections::HashMap;
 extern crate ast_node;

@@ -1,16 +1,16 @@
-use ::ast::LolaSpec;
 use super::naming::DeclarationTable;
+use ast::LolaSpec;
 
-mod checker;
 mod candidates;
+mod checker;
 mod type_error;
 
+use super::common::Type;
 use super::type_checker::checker::*;
 use super::type_checker::type_error::TypeError;
 use ast_node::NodeId;
-use super::common::Type;
 
-use std::collections::{HashMap};
+use std::collections::HashMap;
 
 type TypeTable = HashMap<NodeId, Type>;
 
@@ -27,14 +27,13 @@ pub(crate) fn type_check<'a>(dt: &'a DeclarationTable, spec: &'a LolaSpec) -> Ty
     tc_res
 }
 
-
 #[cfg(test)]
 mod tests {
-    use ::parse::*;
-    use ::analysis::id_assignment::*;
-    use ::analysis::naming::*;
-    use ::analysis::type_checker::type_check;
+    use analysis::id_assignment::*;
+    use analysis::naming::*;
+    use analysis::type_checker::type_check;
     use analysis::type_checker::type_error::TypeError;
+    use parse::*;
 
     #[test]
     fn simple_input() {
@@ -64,7 +63,6 @@ mod tests {
         assert!(res.errors.is_empty(), "There should not be a typing error.");
     }
 
-
     #[test]
     fn simple_const_faulty() {
         let spec = "constant c: Int8 := true";
@@ -76,9 +74,13 @@ mod tests {
         let mut na = NamingAnalysis::new();
         na.check(&spec);
         let res = type_check(&na.result, &spec);
-        assert_eq!(res.errors.len(), 1, "There should not be exactly one typing error.");
+        assert_eq!(
+            res.errors.len(),
+            1,
+            "There should not be exactly one typing error."
+        );
         match *res.errors[0] {
-            TypeError::IncompatibleTypes(_, _) => {},
+            TypeError::IncompatibleTypes(_, _) => {}
             _ => assert!(false, "Incompatible types were not recognized as such."),
         }
     }
@@ -94,9 +96,13 @@ mod tests {
         let mut na = NamingAnalysis::new();
         na.check(&spec);
         let res = type_check(&na.result, &spec);
-        assert_eq!(res.errors.len(), 1, "There should be exactly one typing error.");
+        assert_eq!(
+            res.errors.len(),
+            1,
+            "There should be exactly one typing error."
+        );
         match *res.errors[0] {
-            TypeError::IncompatibleTypes(_, _) => {},
+            TypeError::IncompatibleTypes(_, _) => {}
             _ => assert!(false, "Incompatible types were not recognized as such."),
         }
     }
@@ -112,9 +118,13 @@ mod tests {
         let mut na = NamingAnalysis::new();
         na.check(&spec);
         let res = type_check(&na.result, &spec);
-        assert_eq!(res.errors.len(), 1, "There should not be exactly one typing error.");
+        assert_eq!(
+            res.errors.len(),
+            1,
+            "There should not be exactly one typing error."
+        );
         match *res.errors[0] {
-            TypeError::IncompatibleTypes(_, _) => {},
+            TypeError::IncompatibleTypes(_, _) => {}
             _ => assert!(false, "Incompatible types were not recognized as such."),
         }
     }
@@ -174,9 +184,13 @@ mod tests {
         let mut na = NamingAnalysis::new();
         na.check(&spec);
         let res = type_check(&na.result, &spec);
-        assert_eq!(res.errors.len(), 1, "There should be exactly one typing error.");
+        assert_eq!(
+            res.errors.len(),
+            1,
+            "There should be exactly one typing error."
+        );
         match *res.errors[0] {
-            TypeError::IncompatibleTypes(_, _) => {},
+            TypeError::IncompatibleTypes(_, _) => {}
             _ => assert!(false, "Incompatible types were not recognized as such."),
         }
     }
@@ -192,9 +206,13 @@ mod tests {
         let mut na = NamingAnalysis::new();
         na.check(&spec);
         let res = type_check(&na.result, &spec);
-        assert_eq!(res.errors.len(), 1, "There should be exactly one typing error.");
+        assert_eq!(
+            res.errors.len(),
+            1,
+            "There should be exactly one typing error."
+        );
         match *res.errors[0] {
-            TypeError::IncompatibleTypes(_, _) => {},
+            TypeError::IncompatibleTypes(_, _) => {}
             _ => assert!(false, "Incompatible types were not recognized as such."),
         }
     }
@@ -238,9 +256,13 @@ mod tests {
         let mut na = NamingAnalysis::new();
         na.check(&spec);
         let res = type_check(&na.result, &spec);
-        assert_eq!(res.errors.len(), 1, "There should be exactly one typing error.");
+        assert_eq!(
+            res.errors.len(),
+            1,
+            "There should be exactly one typing error."
+        );
         match *res.errors[0] {
-            TypeError::IncompatibleTypes(_, _) => {},
+            TypeError::IncompatibleTypes(_, _) => {}
             _ => assert!(false, "Incompatible types were not recognized as such."),
         }
     }
@@ -256,9 +278,13 @@ mod tests {
         let mut na = NamingAnalysis::new();
         na.check(&spec);
         let res = type_check(&na.result, &spec);
-        assert_eq!(res.errors.len(), 1, "There should be exactly one typing error.");
+        assert_eq!(
+            res.errors.len(),
+            1,
+            "There should be exactly one typing error."
+        );
         match *res.errors[0] {
-            TypeError::IncompatibleTypes(_, _) => {},
+            TypeError::IncompatibleTypes(_, _) => {}
             _ => assert!(false, "Incompatible types were not recognized as such."),
         }
     }
@@ -302,9 +328,13 @@ mod tests {
         let mut na = NamingAnalysis::new();
         na.check(&spec);
         let res = type_check(&na.result, &spec);
-        assert_eq!(res.errors.len(), 1, "There should be exactly one typing error.");
+        assert_eq!(
+            res.errors.len(),
+            1,
+            "There should be exactly one typing error."
+        );
         match *res.errors[0] {
-            TypeError::IncompatibleTypes(_, _) => {},
+            TypeError::IncompatibleTypes(_, _) => {}
             _ => assert!(false, "Incompatible types were not recognized as such."),
         }
     }
@@ -320,9 +350,13 @@ mod tests {
         let mut na = NamingAnalysis::new();
         na.check(&spec);
         let res = type_check(&na.result, &spec);
-        assert_eq!(res.errors.len(), 1, "There should be exactly one typing error.");
+        assert_eq!(
+            res.errors.len(),
+            1,
+            "There should be exactly one typing error."
+        );
         match *res.errors[0] {
-            TypeError::InvalidArgument(_, _, _) => {},
+            TypeError::InvalidArgument(_, _, _) => {}
             _ => assert!(false, "Incompatible types were not recognized as such."),
         }
     }
@@ -352,9 +386,13 @@ mod tests {
         let mut na = NamingAnalysis::new();
         na.check(&spec);
         let res = type_check(&na.result, &spec);
-        assert_eq!(res.errors.len(), 1, "There should be exactly one typing error.");
+        assert_eq!(
+            res.errors.len(),
+            1,
+            "There should be exactly one typing error."
+        );
         match *res.errors[0] {
-            TypeError::IncompatibleTypes(_, _) => {},
+            TypeError::IncompatibleTypes(_, _) => {}
             _ => assert!(false, "Incompatible types were not recognized as such."),
         }
     }
@@ -384,9 +422,13 @@ mod tests {
         let mut na = NamingAnalysis::new();
         na.check(&spec);
         let res = type_check(&na.result, &spec);
-        assert_eq!(res.errors.len(), 1, "There should be exactly one typing error.");
+        assert_eq!(
+            res.errors.len(),
+            1,
+            "There should be exactly one typing error."
+        );
         match *res.errors[0] {
-            TypeError::IncompatibleTypes(_, _) => {},
+            TypeError::IncompatibleTypes(_, _) => {}
             _ => assert!(false, "Incompatible types were not recognized as such."),
         }
     }
@@ -416,9 +458,13 @@ mod tests {
         let mut na = NamingAnalysis::new();
         na.check(&spec);
         let res = type_check(&na.result, &spec);
-        assert_eq!(res.errors.len(), 1, "There should be exactly one typing error.");
+        assert_eq!(
+            res.errors.len(),
+            1,
+            "There should be exactly one typing error."
+        );
         match *res.errors[0] {
-            TypeError::IncompatibleTypes(_, _) => {},
+            TypeError::IncompatibleTypes(_, _) => {}
             _ => assert!(false, "Incompatible types were not recognized as such."),
         }
     }
@@ -448,9 +494,13 @@ mod tests {
         let mut na = NamingAnalysis::new();
         na.check(&spec);
         let res = type_check(&na.result, &spec);
-        assert_eq!(res.errors.len(), 1, "There should be exactly one typing error.");
+        assert_eq!(
+            res.errors.len(),
+            1,
+            "There should be exactly one typing error."
+        );
         match *res.errors[0] {
-            TypeError::IncompatibleTypes(_, _) => {},
+            TypeError::IncompatibleTypes(_, _) => {}
             _ => assert!(false, "Incompatible types were not recognized as such."),
         }
     }
@@ -480,9 +530,13 @@ mod tests {
         let mut na = NamingAnalysis::new();
         na.check(&spec);
         let res = type_check(&na.result, &spec);
-        assert_eq!(res.errors.len(), 1, "There should be exactly one typing error.");
+        assert_eq!(
+            res.errors.len(),
+            1,
+            "There should be exactly one typing error."
+        );
         match *res.errors[0] {
-            TypeError::IncompatibleTypes(_, _) => {},
+            TypeError::IncompatibleTypes(_, _) => {}
             _ => assert!(false, "Incompatible types were not recognized as such."),
         }
     }
@@ -512,9 +566,13 @@ mod tests {
         let mut na = NamingAnalysis::new();
         na.check(&spec);
         let res = type_check(&na.result, &spec);
-        assert_eq!(res.errors.len(), 1, "There should be exactly one typing error.");
+        assert_eq!(
+            res.errors.len(),
+            1,
+            "There should be exactly one typing error."
+        );
         match *res.errors[0] {
-            TypeError::IncompatibleTypes(_, _) => {},
+            TypeError::IncompatibleTypes(_, _) => {}
             _ => assert!(false, "Incompatible types were not recognized as such."),
         }
     }
@@ -544,9 +602,13 @@ mod tests {
         let mut na = NamingAnalysis::new();
         na.check(&spec);
         let res = type_check(&na.result, &spec);
-        assert_eq!(res.errors.len(), 1, "There should be exactly one typing error.");
+        assert_eq!(
+            res.errors.len(),
+            1,
+            "There should be exactly one typing error."
+        );
         match *res.errors[0] {
-            TypeError::IncompatibleTypes(_, _) => {},
+            TypeError::IncompatibleTypes(_, _) => {}
             _ => assert!(false, "Incompatible types were not recognized as such."),
         }
     }
@@ -562,9 +624,13 @@ mod tests {
         let mut na = NamingAnalysis::new();
         na.check(&spec);
         let res = type_check(&na.result, &spec);
-        assert_eq!(res.errors.len(), 1, "There should be exactly one typing error.");
+        assert_eq!(
+            res.errors.len(),
+            1,
+            "There should be exactly one typing error."
+        );
         match *res.errors[0] {
-            TypeError::IncompatibleTypes(_, _) => {},
+            TypeError::IncompatibleTypes(_, _) => {}
             _ => assert!(false, "Incompatible types were not recognized as such."),
         }
     }
@@ -594,9 +660,13 @@ mod tests {
         let mut na = NamingAnalysis::new();
         na.check(&spec);
         let res = type_check(&na.result, &spec);
-        assert_eq!(res.errors.len(), 1, "There should be exactly one typing error.");
+        assert_eq!(
+            res.errors.len(),
+            1,
+            "There should be exactly one typing error."
+        );
         match *res.errors[0] {
-            TypeError::IncompatibleTypes(_, _) => {},
+            TypeError::IncompatibleTypes(_, _) => {}
             _ => assert!(false, "Incompatible types were not recognized as such."),
         }
     }
@@ -654,9 +724,13 @@ mod tests {
         let mut na = NamingAnalysis::new();
         na.check(&spec);
         let res = type_check(&na.result, &spec);
-        assert_eq!(res.errors.len(), 1, "There should be exactly one typing error.");
+        assert_eq!(
+            res.errors.len(),
+            1,
+            "There should be exactly one typing error."
+        );
         match *res.errors[0] {
-            TypeError::IncompatibleTypes(_, _) => {},
+            TypeError::IncompatibleTypes(_, _) => {}
             _ => assert!(false, "Incompatible types were not recognized as such."),
         }
     }

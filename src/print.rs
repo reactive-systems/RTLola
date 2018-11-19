@@ -6,7 +6,13 @@ use std::fmt::{Display, Formatter, Result};
 
 pub(crate) struct PrintHelper {}
 impl PrintHelper {
-    pub(crate) fn write<T: Display>(f: &mut Formatter, v: &[T], pref: &str, suff: &str, join: &str) -> Result {
+    pub(crate) fn write<T: Display>(
+        f: &mut Formatter,
+        v: &[T],
+        pref: &str,
+        suff: &str,
+        join: &str,
+    ) -> Result {
         write!(f, "{}", pref)?;
         if let Some(e) = v.first() {
             write!(f, "{}", e)?;
