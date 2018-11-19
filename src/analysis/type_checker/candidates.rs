@@ -99,12 +99,12 @@ impl Candidates {
 
     fn meet_conc_abs(conc: BuiltinType, abs: NumConfig) -> Candidates {
         match conc {
-            BuiltinType::UInt(_) if (abs.def_signed || abs.def_float) => Candidates::None,
-            BuiltinType::Int(_) if abs.def_float => Candidates::None,
-            BuiltinType::UInt(w) | BuiltinType::Int(w) | BuiltinType::Float(w) if w < abs.width => {
-                Candidates::None
-            }
-            _ => Candidates::Concrete(conc),
+            BuiltinType::UInt(w) | BuiltinType::Int(w) | BuiltinType::Float(w) if w < abs.width =>
+                Candidates::None,
+            BuiltinType::UInt(_) if !(abs.def_signed || abs.def_float) => Candidates::Concrete(conc),
+            BuiltinType::Int(_) if !abs.def_float => Candidates::Concrete(conc),
+            BuiltinType::Float(_) => Candidates::Concrete(conc),
+            _ => Candidates::None,
         }
     }
 

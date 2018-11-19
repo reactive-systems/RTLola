@@ -271,8 +271,8 @@ impl<'a> TypeChecker<'a> {
                     self.reg_error(TypeError::IncompatibleTypes(
                         e,
                         format!(
-                            "Arms of if` expression have incompatible types {} and {}.",
-                            cond, alt
+                            "Arms of `if` expression have incompatible types {} and {}.",
+                            cons, alt
                         ),
                     ))
                 } else {
@@ -451,7 +451,7 @@ impl<'a> TypeChecker<'a> {
         inst: &'a StreamInstance,
         origin: &'a Expression,
     ) -> Candidates {
-        let inst_candidates = self.get_ty_from_decl(*inst.id(), origin);
+        let result_type = self.get_ty_from_decl(*inst.id(), origin);
         match self.declarations.get(inst.id()) {
             Some(Declaration::Out(ref o)) => {
                 if o.params.len() != inst.arguments.len() {
@@ -492,9 +492,9 @@ impl<'a> TypeChecker<'a> {
                     }
                 }
                 // Independent of all checks, pretend everything worked fine.
-                self.reg_cand(*origin.id(), inst_candidates)
+                self.reg_cand(*origin.id(), result_type)
             }
-            Some(Declaration::In(_)) => self.reg_cand(*origin.id(), inst_candidates),
+            Some(Declaration::In(_)) => self.reg_cand(*origin.id(), result_type),
             _ => self.reg_error(TypeError::UnknownIdentifier(inst)), // Unknown output, return Candidates::None.
         }
     }

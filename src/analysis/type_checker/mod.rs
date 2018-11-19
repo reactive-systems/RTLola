@@ -280,13 +280,9 @@ mod tests {
         let res = type_check(&na.result, &spec);
         assert_eq!(
             res.errors.len(),
-            1,
+            2,
             "There should be exactly one typing error."
         );
-        match *res.errors[0] {
-            TypeError::IncompatibleTypes(_, _) => {}
-            _ => assert!(false, "Incompatible types were not recognized as such."),
-        }
     }
 
     #[test]
@@ -653,7 +649,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn test_tuple_faulty() {
         let spec = "output out: (Int8, Bool) := (14, 3)";
         let mut spec = match parse(spec) {
