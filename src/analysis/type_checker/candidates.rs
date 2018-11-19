@@ -239,7 +239,6 @@ impl<'a> From<&'a Literal> for Candidates {
                 Candidates::Numeric(NumConfig::new_float(Some(find_required_bits_f(*f))))
             }
             LitKind::Bool(_) => Candidates::Concrete(BuiltinType::Bool),
-            LitKind::Tuple(lits) => Candidates::Tuple(lits.iter().map(Candidates::from).collect()),
         }
     }
 }

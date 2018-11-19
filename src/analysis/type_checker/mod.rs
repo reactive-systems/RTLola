@@ -484,6 +484,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_invoke_type_faulty() {
         let spec = "input in: Bool\n output a<p1: Int8>: Int8 { invoke in } := 3";
         let mut spec = match parse(spec) {
@@ -520,6 +521,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_extend_type_faulty() {
         let spec = "input in: Int8\n output a: Int8 { extend in } := 3";
         let mut spec = match parse(spec) {
@@ -556,6 +558,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_terminate_type_faulty() {
         let spec = "input in: Int8\n output a: Int8 { terminate in } := 3";
         let mut spec = match parse(spec) {
@@ -650,6 +653,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_tuple_faulty() {
         let spec = "output out: (Int8, Bool) := (14, 3)";
         let mut spec = match parse(spec) {
