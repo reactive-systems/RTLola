@@ -399,7 +399,7 @@ impl<'a> TypeChecker<'a> {
             ));
             return;
         }
-        for ((pred, desc), ty, arg) in izip!(expected, was, args) {
+        for (((pred, desc), ty), arg) in expected.iter().zip(was).zip(args) {
             if !pred(ty) {
                 self.reg_error(TypeError::inv_argument(
                     call,
