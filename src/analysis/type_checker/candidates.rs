@@ -178,16 +178,6 @@ impl Default for Candidates {
     }
 }
 
-impl<'a> From<&'a Type> for Candidates {
-    fn from(ty: &Type) -> Self {
-        match &ty.kind {
-            TypeKind::Tuple(elems) => unimplemented!(),
-            TypeKind::Simple(name) => unimplemented!(),
-            TypeKind::Malformed(string) => unreachable!(),
-        }
-    }
-}
-
 impl<'a> From<&'a Literal> for Candidates {
 
     fn from(lit: &'a Literal) -> Self {
@@ -202,7 +192,7 @@ impl<'a> From<&'a Literal> for Candidates {
                 _ => unreachable!(),
             }
         }
-        fn find_required_bits_f(f: f64) -> u8 {
+        fn find_required_bits_f(_f: f64) -> u8 {
             // It could be both, so we default to the less specific option.
             32
         }
@@ -221,25 +211,6 @@ impl<'a> From<&'a Literal> for Candidates {
             LitKind::Bool(_) => Candidates::Concrete(BuiltinType::Bool),
             LitKind::Tuple(lits) => Candidates::Tuple(lits.iter().map(Candidates::from).collect()),
         }
-    }
-}
-
-impl<'a> From<&'a Option<Type>> for Candidates {
-
-    fn from(lit: &'a Option<Type>) -> Self {
-        if let Some(t) = lit {
-            Candidates::from(t)
-        } else {
-            Candidates::Any
-        }
-    }
-}
-
-impl<'a> From<&'a TypeDeclaration> for Candidates {
-    fn from(td: &'a TypeDeclaration) -> Self {
-        let subs: Vec<Candidates> = td.fields.iter().map(|field| Candidates::from(&field.ty)).collect();
-//        Candidates::Defined(subs)
-        unimplemented!()
     }
 }
 
@@ -273,13 +244,20 @@ impl<'a> From<&'a Candidates> for OType {
                     OType::BuiltIn(BuiltinType::Int(width))
                 },
             Candidates::Tuple(v) => {
-                let mut vec = Vec::new();
-                for (i, elem) in v.iter().enumerate() {
-                    let ot: OType = elem.into();
-                    vec.push((i.to_string(), Box::new(ot)));
-                }
-                OType::Composite(vec)
-            }
+                // Just make sure there are no nested tuples.
+                assert!(v.iter().all(|t| match t {
+                    Candidates::Tuple(_) => false,
+                    _ => true,
+                }));
+                let transformed: Vec<BuiltinType> = v.iter()
+                    .map(|t| t.into())
+                    .map(|ot| match ot {
+                        OType::BuiltIn(t) => t,
+                        OType::Tuple(_v) => unreachable!(),
+                    })
+                    .collect();
+                OType::Tuple(transformed)
+            },
             Candidates::None => unreachable!(),
         }
     }

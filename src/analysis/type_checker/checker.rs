@@ -2,37 +2,13 @@ use super::super::common::BuiltinType;
 use super::super::naming::{Declaration, DeclarationTable};
 use super::super::AnalysisError;
 use ast::*;
+use ast::*;
 use std::collections::HashMap;
 extern crate ast_node;
 use super::candidates::*;
 use super::type_error::*;
 use super::TypeCheckResult;
-use ast_node::{AstNode, NodeId, Span};
-
-//// TODO: Remove?
-//#[derive(Debug)]
-//pub struct TypeTable {
-//    map: HashMap<NodeId, Candidates>,
-//}
-//
-//impl TypeTable {
-//    fn new() -> Self {
-//        TypeTable { map: HashMap::new() }
-//    }
-//
-//    fn meet(&mut self, target: NodeId, candidates: &Candidates) -> Candidates {
-//        let res = {
-//            let current = self.map.get(&target).unwrap_or(&Candidates::Any);
-//            current.meet(candidates)
-//        }; // Drops `current`, such that there no burrow to `self.map` anymore.
-//        self.map.insert(target, res.clone());
-//        res
-//    }
-//
-//    fn get(&self, target: NodeId) -> Option<&Candidates> {
-//        self.map.get(&target)
-//    }
-//}
+use ast_node::{AstNode, NodeId};
 
 pub(crate) struct TypeChecker<'a> {
     declarations: &'a DeclarationTable<'a>,
@@ -40,6 +16,8 @@ pub(crate) struct TypeChecker<'a> {
     tt: HashMap<NodeId, Candidates>,
     errors: Vec<Box<TypeError<'a>>>,
 }
+
+// TODO: Check type of auxiliary streams!
 
 impl<'a> TypeChecker<'a> {
     pub(crate) fn new(dt: &'a DeclarationTable, spec: &'a LolaSpec) -> TypeChecker<'a> {
@@ -51,38 +29,28 @@ impl<'a> TypeChecker<'a> {
         }
     }
 
-    pub(crate) fn check(mut self) -> TypeCheckResult<'a> {
-        for input in &self.spec.inputs {
-            self.reg_cand(*input.id(), Candidates::from(&input.ty));
+    pub(crate) fn check(&mut self) -> TypeCheckResult<'a> {
+        self.check_typedeclarations();
+        //        println!("Errors after checking type declarations: {:?}.", self.errors);
+        self.check_constants();
+        //        println!("Errors after checking constants: {:?}.", self.errors);
+        self.check_inputs();
+        //        println!("Errors after checking inputs: {:?}.", self.errors);
+        self.check_outputs();
+        //        println!("Errors after checking outputs: {:?}.", self.errors);
+        self.check_triggers();
+        //        println!("Errors after checking triggers: {:?}.", self.errors);
+
+        let type_table: HashMap<NodeId, super::super::common::Type> =
+            self.tt.iter().map(|(nid, c)| (*nid, c.into())).collect();
+
+        TypeCheckResult {
+            errors: self.errors.clone(),
+            type_table,
         }
-        for constant in &self.spec.constants {
-            let was = Candidates::from(&constant.literal);
-            let declared = Candidates::from(&constant.ty);
-            if declared.meet(&was).is_none() {
-                self.reg_error(TypeError::IncompatibleTypes(
-                    constant,
-                    format!("Expected {} but got {}.", declared, was),
-                ));
-            }
-            self.reg_cand(*constant.id(), declared);
-        }
-        for td in &self.spec.type_declarations {
-            unimplemented!();
-        }
-        for output in &self.spec.outputs {
-            for param in &output.params {
-                self.reg_cand(*param.id(), Candidates::from(&param.ty));
-            }
-            let was = self.get_candidates(&output.expression);
-            let declared = Candidates::from(&output.ty);
-            if declared.meet(&was).is_none() {
-                self.reg_error(TypeError::IncompatibleTypes(
-                    output,
-                    format!("Expected {} but got {}.", declared, was),
-                ));
-            }
-            self.reg_cand(*output.id(), declared);
-        }
+    }
+
+    fn check_triggers(&mut self) {
         for trigger in &self.spec.trigger {
             let was = self.get_candidates(&trigger.expression);
             if !was.is_logic() {
@@ -93,26 +61,89 @@ impl<'a> TypeChecker<'a> {
                 ));
             }
         }
+    }
 
-        let type_table = unimplemented!();
+    fn check_typedeclarations(&mut self) {
+        for _td in &self.spec.type_declarations {
+            unimplemented!();
+        }
+    }
 
-        TypeCheckResult {
-            errors: self.errors,
-            type_table,
+    fn check_outputs(&mut self) {
+        // First register all expected types, then check each in separation.
+        for output in &self.spec.outputs {
+            // TODO: Move into function: `Self × Option<ast::Type> -> Candidates`
+            let cand = output
+                .ty
+                .as_ref()
+                .map(|t| self.type_to_cands(t))
+                .unwrap_or(Candidates::Any);
+            self.reg_cand(*output.id(), cand);
+        }
+        for output in &self.spec.outputs {
+            for param in &output.params {
+                let ty = param
+                    .ty
+                    .as_ref()
+                    .map(|t| self.type_to_cands(&t))
+                    .unwrap_or(Candidates::Any);
+                self.reg_cand(*param.id(), ty);
+            }
+            let was = self.get_candidates(&output.expression);
+            let declared = output
+                .ty
+                .as_ref()
+                .map(|t| self.type_to_cands(&t))
+                .unwrap_or(Candidates::Any);
+            if declared.meet(&was).is_none() {
+                self.reg_error(TypeError::IncompatibleTypes(
+                    output,
+                    format!("Expected {} but got {}.", declared, was),
+                ));
+            }
+            self.reg_cand(*output.id(), declared);
+        }
+    }
+
+    fn check_constants(&mut self) {
+        for constant in &self.spec.constants {
+            let was = Candidates::from(&constant.literal);
+            let declared = constant
+                .ty
+                .as_ref()
+                .map(|t| self.type_to_cands(&t))
+                .unwrap_or(Candidates::Any);
+            if declared.meet(&was).is_none() {
+                self.reg_error(TypeError::IncompatibleTypes(
+                    constant,
+                    format!("Expected {} but got {}.", declared, was),
+                ));
+            }
+            self.reg_cand(*constant.id(), declared);
+        }
+    }
+
+    fn check_inputs(&mut self) {
+        for input in &self.spec.inputs {
+            let cands = self.type_to_cands(&input.ty);
+            self.reg_cand(*input.id(), cands);
         }
     }
 
     fn get_candidates(&mut self, e: &'a Expression) -> Candidates {
         match e.kind {
             ExpressionKind::Lit(ref lit) => self.reg_cand(*e.id(), Candidates::from(lit)),
-            ExpressionKind::Ident(ref i) => {
+            ExpressionKind::Ident(_) => {
                 let cand = self.get_ty_from_decl(*e.id(), e);
                 self.reg_cand(*e.id(), cand)
             }
             ExpressionKind::Default(ref expr, ref dft) => {
-                let res = self.get_candidates(expr).meet(&self.get_candidates(dft));
+                let expr_ty = self.get_candidates(expr);
+                let dft_ty = self.get_candidates(dft);
+                let res = expr_ty.meet(&dft_ty);
                 if res.is_none() {
-                    self.reg_error(TypeError::IncompatibleTypes(e, String::from("A potentially undefined expression and its default need matching types.")))
+                    self.reg_error(TypeError::IncompatibleTypes(e, String::from("A potentially undefined expression and its default need matching types.")));
+                    dft_ty
                 } else {
                     self.reg_cand(*e.id(), res)
                 }
@@ -126,7 +157,7 @@ impl<'a> TypeChecker<'a> {
                 }
                 let op = op.unwrap();
                 // For all window operations, the source stream needs to be numeric.
-                if target_stream_type.is_numeric() {
+                if !target_stream_type.is_numeric() {
                     return self.reg_error(TypeError::IncompatibleTypes(
                         e,
                         format!(
@@ -153,29 +184,54 @@ impl<'a> TypeChecker<'a> {
                 let lhs_type = self.get_candidates(lhs);
                 let rhs_type = self.get_candidates(rhs);
                 let meet_type = lhs_type.meet(&rhs_type);
-                let res = match op {
+                match op {
                     BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div | BinOp::Rem | BinOp::Pow
                         if meet_type.is_numeric() =>
                     {
-                        Some(meet_type)
+                        meet_type
                     }
-                    BinOp::And | BinOp::Or if meet_type.is_logic() => Some(meet_type),
+                    BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div | BinOp::Rem | BinOp::Pow
+                        if !meet_type.is_numeric() =>
+                    {
+                        self.reg_error(TypeError::IncompatibleTypes(
+                            e,
+                            format!(
+                                "Binary operator {} applied to types {} and {}.",
+                                op, lhs, rhs
+                            ),
+                        ));
+                        Candidates::Numeric(NumConfig::new_unsigned(None))
+                    }
+                    BinOp::And | BinOp::Or if meet_type.is_logic() => meet_type,
+                    BinOp::And | BinOp::Or if meet_type.is_logic() => {
+                        self.reg_error(TypeError::IncompatibleTypes(
+                            e,
+                            format!(
+                                "Binary operator {} applied to types {} and {}.",
+                                op, lhs, rhs
+                            ),
+                        ));
+                        Candidates::Concrete(BuiltinType::Bool)
+                    }
+                    // As long as two types are compatible in some way, we return a bool after the comparison.
+                    BinOp::Eq | BinOp::Lt | BinOp::Le | BinOp::Ne | BinOp::Ge | BinOp::Gt
+                        if !meet_type.is_none() =>
+                    {
+                        Candidates::Concrete(BuiltinType::Bool)
+                    }
                     BinOp::Eq | BinOp::Lt | BinOp::Le | BinOp::Ne | BinOp::Ge | BinOp::Gt
                         if meet_type.is_none() =>
                     {
-                        Some(Candidates::Concrete(BuiltinType::Bool))
+                        self.reg_error(TypeError::IncompatibleTypes(
+                            e,
+                            format!(
+                                "Binary operator {} applied to types {} and {}.",
+                                op, lhs, rhs
+                            ),
+                        ));
+                        Candidates::Concrete(BuiltinType::Bool)
                     }
-                    _ => None,
-                };
-                match res {
-                    Some(cand) => self.reg_cand(*e.id(), cand),
-                    None => self.reg_error(TypeError::IncompatibleTypes(
-                        e,
-                        format!(
-                            "Binary operator {} applied to types {} and {}.",
-                            op, lhs, rhs
-                        ),
-                    )),
+                    _ => unreachable!(),
                 }
             }
             ExpressionKind::Unary(ref operator, ref operand) => {
@@ -187,13 +243,16 @@ impl<'a> TypeChecker<'a> {
                 };
                 match res_type {
                     Some(cand) => self.reg_cand(*e.id(), cand),
-                    None => self.reg_error(TypeError::IncompatibleTypes(
-                        e,
-                        format!(
-                            "Unary operator {} cannot be applied to type {}.",
-                            operator, op_type
-                        ),
-                    )),
+                    None => {
+                        self.reg_error(TypeError::IncompatibleTypes(
+                            e,
+                            format!(
+                                "Unary operator {} cannot be applied to type {}.",
+                                operator, op_type
+                            ),
+                        ));
+                        Candidates::Concrete(BuiltinType::Bool)
+                    }
                 }
             }
             ExpressionKind::Ite(ref cond, ref cons, ref alt) => {
@@ -201,7 +260,7 @@ impl<'a> TypeChecker<'a> {
                 let cons = self.get_candidates(cons);
                 let alt = self.get_candidates(alt);
                 if !cond.is_logic() {
-                    return self.reg_error(TypeError::IncompatibleTypes(
+                    self.reg_error(TypeError::IncompatibleTypes(
                         e,
                         format!(
                             "Expected boolean value in condition of `if` expression but got {}.",
@@ -229,14 +288,7 @@ impl<'a> TypeChecker<'a> {
             ExpressionKind::MissingExpression() => self.reg_error(TypeError::MissingExpression(e)),
             ExpressionKind::Tuple(ref exprs) => {
                 let cands: Vec<Candidates> = exprs.iter().map(|e| self.get_candidates(e)).collect();
-                self.reg_cand(
-                    *e.id(),
-                    if cands.len() < exprs.len() {
-                        Candidates::None
-                    } else {
-                        Candidates::Tuple(cands)
-                    },
-                )
+                self.reg_cand(*e.id(), Candidates::Tuple(cands))
             }
             ExpressionKind::Function(ref kind, ref args) => self.check_function(e, *kind, args),
         }
@@ -402,43 +454,74 @@ impl<'a> TypeChecker<'a> {
         origin: &'a Expression,
     ) -> Candidates {
         let inst_candidates = self.get_ty_from_decl(*inst.id(), origin);
-        if let Some(Declaration::Out(ref o)) = self.declarations.get(inst.id()) {
-            if o.params.len() != inst.arguments.len() {
-                let msg = format!(
-                    "Expected {}, but got {}.",
-                    o.params.len(),
-                    inst.arguments.len()
-                );
-                self.reg_error(TypeError::UnexpectedNumberOfArguments(origin, msg));
-            } else {
-                // Check the parameter/argument pairs.
-                // We can only perform these checks of there is the correct number of arguments. Otherwise skip until correct number of arguments is provided.
-                let params = o.params.iter().map(|p| Candidates::from(&p.ty));
-                let arguments: Vec<Candidates> = inst
-                    .arguments
-                    .iter()
-                    .map(|e: &Box<Expression>| self.get_candidates(e))
-                    .collect();
+        match self.declarations.get(inst.id()) {
+            Some(Declaration::Out(ref o)) => {
+                if o.params.len() != inst.arguments.len() {
+                    let msg = format!(
+                        "Expected {}, but got {}.",
+                        o.params.len(),
+                        inst.arguments.len()
+                    );
+                    self.reg_error(TypeError::UnexpectedNumberOfArguments(origin, msg));
+                } else {
+                    // Check the parameter/argument pairs.
+                    // We can only perform these checks of there is the correct number of arguments. Otherwise skip until correct number of arguments is provided.
+                    let params: Vec<Candidates> = o
+                        .params
+                        .iter()
+                        .flat_map(|p| &p.ty)
+                        .map(|t| self.type_to_cands(&t))
+                        .collect(); // Collect to resolve closure dependencies.
+                    let arguments: Vec<Candidates> = inst
+                        .arguments
+                        .iter()
+                        .map(|e: &Box<Expression>| self.get_candidates(e))
+                        .collect();
 
-                if arguments.len() < inst.arguments.len() {
-                    for (exp, was) in params.zip(arguments) {
-                        let res = exp.meet(&was);
-                        // If `exp` or `was` is `none`, `res` will be `none`, too.
-                        // We already reported the error in the recursion, so no need to repeat ourselves; skip.
-                        if res.is_none() && !exp.is_none() && !was.is_none() {
-                            self.reg_error(TypeError::IncompatibleTypes(origin, String::from("")));
+                    if arguments.len() == inst.arguments.len() {
+                        // Otherwise we had a problem earlier, which is already reported.
+                        for (exp, was) in params.iter().zip(arguments) {
+                            let res = exp.meet(&was);
+                            // If `exp` or `was` is `none`, `res` will be `none`, too.
+                            // We already reported the error in the recursion, so no need to repeat ourselves; skip.
+                            if res.is_none() && !exp.is_none() && !was.is_none() {
+                                self.reg_error(TypeError::IncompatibleTypes(
+                                    origin,
+                                    String::from(""),
+                                ));
+                            }
                         }
                     }
                 }
+                // Independent of all checks, pretend everything worked fine.
+                self.reg_cand(*origin.id(), inst_candidates)
             }
-            // Independent of all checks, pretend everything worked fine.
-            self.reg_cand(*origin.id(), inst_candidates)
-        } else {
-            self.reg_error(TypeError::UnknownIdentifier(inst)) // Unknown output, return Candidates::None.
+            Some(Declaration::In(i)) => self.reg_cand(*origin.id(), inst_candidates),
+            _ => self.reg_error(TypeError::UnknownIdentifier(inst)), // Unknown output, return Candidates::None.
         }
     }
 
-    fn get_ty_from_decl(&mut self, nid: NodeId, ident: &'a Expression) -> Candidates {
+    fn type_to_cands(&mut self, ty: &'a Type) -> Candidates {
+        match ty.kind {
+            TypeKind::Tuple(ref v) => {
+                let vals = v.iter().map(|t| self.type_to_cands(t)).collect();
+                return Candidates::Tuple(vals);
+            }
+            TypeKind::Malformed(_) => unreachable!(),
+            TypeKind::Simple(_) => self.get_ty_from_decl(*ty.id(), ty),
+        }
+    }
+
+    fn typedecl_to_cands(&mut self, td: &'a TypeDeclaration) -> Candidates {
+        let _subs: Vec<Candidates> = td
+            .fields
+            .iter()
+            .map(|field| self.type_to_cands(&field.ty))
+            .collect();
+        unimplemented!()
+    }
+
+    fn get_ty_from_decl(&mut self, nid: NodeId, ident: &'a AstNode<'a>) -> Candidates {
         match self.declarations.get(&nid) {
             Some(Declaration::Const(ref c)) => {
                 let cand = self.get_from_tt(*c.id());
@@ -455,9 +538,15 @@ impl<'a> TypeChecker<'a> {
                 assert!(cand.is_some()); // Since we added all declarations in the beginning, this value needs to be present.
                 self.reg_cand(nid, cand.unwrap())
             }
-            Some(Declaration::UserDefinedType(td)) => unimplemented!(),
+            Some(Declaration::UserDefinedType(_td)) => unimplemented!(),
             Some(Declaration::BuiltinType(ref b)) => self.reg_cand(nid, Candidates::from(b)),
-            Some(Declaration::Param(ref p)) => self.reg_cand(nid, Candidates::from(&p.ty)),
+            Some(Declaration::Param(ref p)) => {
+                let cands =
+                    p.ty.as_ref()
+                        .map(|t| self.type_to_cands(&t))
+                        .unwrap_or(Candidates::Any);
+                self.reg_cand(nid, cands)
+            }
             None => self.reg_error(TypeError::UnknownIdentifier(ident)),
         }
     }
@@ -472,11 +561,11 @@ impl<'a> TypeChecker<'a> {
     }
 
     fn reg_cand(&mut self, nid: NodeId, cand: Candidates) -> Candidates {
-        assert_eq!(
-            self.tt.insert(nid, cand.clone()),
-            None,
-            "Right now, there should not be the need to overwrite an entry."
-        );
-        cand
+        let res = match self.tt.get(&nid) {
+            Some(c) => c.meet(&cand),
+            None => cand,
+        };
+        self.tt.insert(nid, res.clone());
+        res
     }
 }

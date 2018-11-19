@@ -1,7 +1,6 @@
 extern crate ast_node;
-use ast_node::{NodeId, Span, AstNode};
+use ast_node::{AstNode};
 use std::fmt::{Display, Result, Formatter};
-use ::ast::Parameter;
 use super::super::AnalysisError;
 
 #[derive(Debug, Clone)]
@@ -28,7 +27,7 @@ impl<'a> TypeError<'a> {
 impl<'a> AnalysisError<'a> for TypeError<'a> {}
 
 impl<'a> Display for TypeError<'a> {
-    fn fmt(&self, f: &mut Formatter) -> Result {
+    fn fmt(&self, _f: &mut Formatter) -> Result {
         unimplemented!();
     }
 }
