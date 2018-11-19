@@ -31,7 +31,8 @@ impl BuiltinType {
 #[derive(Debug)]
 pub enum Type {
     BuiltIn(BuiltinType),
-    Composite(Vec<(String, Box<Type>)>),
+    Tuple(Vec<BuiltinType>),
+//    Composite(Vec<(String, Box<Type>)>),
 }
 
 // These MUST all be lowercase
