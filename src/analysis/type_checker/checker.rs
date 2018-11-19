@@ -296,7 +296,7 @@ impl<'a> TypeChecker<'a> {
         &mut self,
         e: &'a Expression,
         kind: FunctionKind,
-        args: &'a Vec<Box<Expression>>,
+        args: &'a [Box<Expression>],
     ) -> Candidates {
         let cands: Vec<Candidates> = args.iter().map(|a| self.get_candidates(a)).collect();
         let numeric_check = Box::new(|c: &Candidates| c.is_numeric());
@@ -389,7 +389,7 @@ impl<'a> TypeChecker<'a> {
         call: &'a Expression,
         args: Vec<&'a Expression>,
         expected: Vec<(Box<Fn(&Candidates) -> bool>, &str)>,
-        was: &Vec<Candidates>,
+        was: &[Candidates],
     ) {
         if was.len() != expected.len() {
             self.reg_error(TypeError::inv_num_of_args(
@@ -494,7 +494,7 @@ impl<'a> TypeChecker<'a> {
                 // Independent of all checks, pretend everything worked fine.
                 self.reg_cand(*origin.id(), inst_candidates)
             }
-            Some(Declaration::In(i)) => self.reg_cand(*origin.id(), inst_candidates),
+            Some(Declaration::In(_)) => self.reg_cand(*origin.id(), inst_candidates),
             _ => self.reg_error(TypeError::UnknownIdentifier(inst)), // Unknown output, return Candidates::None.
         }
     }
@@ -503,7 +503,7 @@ impl<'a> TypeChecker<'a> {
         match ty.kind {
             TypeKind::Tuple(ref v) => {
                 let vals = v.iter().map(|t| self.type_to_cands(t)).collect();
-                return Candidates::Tuple(vals);
+                Candidates::Tuple(vals)
             }
             TypeKind::Malformed(_) => unreachable!(),
             TypeKind::Simple(_) => self.get_ty_from_decl(*ty.id(), ty),
@@ -550,7 +550,7 @@ impl<'a> TypeChecker<'a> {
     }
 
     fn get_from_tt(&self, nid: NodeId) -> Option<Candidates> {
-        self.tt.get(&nid).map(|t| t.clone())
+        self.tt.get(&nid).cloned()
     }
 
     fn reg_error(&mut self, e: TypeError<'a>) -> Candidates {

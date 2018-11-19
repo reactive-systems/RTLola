@@ -256,7 +256,7 @@ impl<'a> From<&'a Candidates> for OType {
         match cand {
             Candidates::Any => unreachable!(), // Explicit type annotations should make this case impossible.
             Candidates::Concrete(t) => OType::BuiltIn(*t),
-            Candidates::Numeric(cfg) => if cfg.def_signed {
+            Candidates::Numeric(cfg) => if cfg.def_float {
                 let width = if cfg.width >= 32 { cfg.width } else { 32 };
                 OType::BuiltIn(BuiltinType::Float(width))
             } else if cfg.def_signed {
@@ -264,7 +264,7 @@ impl<'a> From<&'a Candidates> for OType {
                 OType::BuiltIn(BuiltinType::Int(width))
             } else {
                 let width = if cfg.width >= 32 { cfg.width } else { 32 };
-                OType::BuiltIn(BuiltinType::Int(width))
+                OType::BuiltIn(BuiltinType::UInt(width))
             },
             Candidates::Tuple(v) => {
                 // Just make sure there are no nested tuples.
