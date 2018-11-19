@@ -11,9 +11,9 @@ extern crate pest;
 extern crate pest_derive;
 #[macro_use]
 extern crate lazy_static;
+extern crate ast_node;
 extern crate clap;
 extern crate termcolor;
-extern crate ast_node;
 #[macro_use]
 extern crate ast_node_derive;
 
