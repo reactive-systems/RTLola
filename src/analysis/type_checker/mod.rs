@@ -352,7 +352,11 @@ mod tests {
             "There should be exactly one typing error."
         );
         match *res.errors[0] {
-            TypeError::InvalidArgument(_, _, _) => {}
+            TypeError::InvalidArgument {
+                call: _,
+                arg: _,
+                msg: _,
+            } => {}
             _ => assert!(false, "Incompatible types were not recognized as such."),
         }
     }

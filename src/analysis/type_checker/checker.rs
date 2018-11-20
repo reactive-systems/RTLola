@@ -29,15 +29,10 @@ impl<'a> TypeChecker<'a> {
 
     pub(crate) fn check(&mut self) -> TypeCheckResult<'a> {
         self.check_typedeclarations();
-        //        println!("Errors after checking type declarations: {:?}.", self.errors);
         self.check_constants();
-        //        println!("Errors after checking constants: {:?}.", self.errors);
         self.check_inputs();
-        //        println!("Errors after checking inputs: {:?}.", self.errors);
         self.check_outputs();
-        //        println!("Errors after checking outputs: {:?}.", self.errors);
         self.check_triggers();
-        //        println!("Errors after checking triggers: {:?}.", self.errors);
 
         let type_table: HashMap<NodeId, super::super::common::Type> =
             self.tt.iter().map(|(nid, c)| (*nid, c.into())).collect();
@@ -320,10 +315,14 @@ impl<'a> TypeChecker<'a> {
             }
             FunctionKind::Projection => {
                 if cands.len() < 2 {
-                    self.reg_error(TypeError::inv_num_of_args(e, 2, cands.len() as u8));
+                    self.reg_error(TypeError::InvalidNumberOfArguments {
+                        node: e,
+                        expected: 2,
+                        was: cands.len() as u8,
+                    });
                 }
                 if !cands[0].is_unsigned() {
-                    self.reg_error(TypeError::inv_argument(e, args[0], format!("Projection requires an unsigned integer as first argument but found {}.", cands[0])));
+                    self.reg_error(TypeError::InvalidArgument{ call: e, arg: args[0], msg: format!("Projection requires an unsigned integer as first argument but found {}.", cands[0])});
                 }
                 match cands[1] {
                     Candidates::Tuple(ref v) => {
@@ -331,28 +330,31 @@ impl<'a> TypeChecker<'a> {
                             Some(n) if n < v.len() =>
                             // No way to recover from here.
                             {
-                                self.reg_error(TypeError::inv_argument(
-                                    e,
-                                    args[1],
-                                    format!(
+                                self.reg_error(TypeError::InvalidArgument {
+                                    call: e,
+                                    arg: args[1],
+                                    msg: format!(
                                         "Projection index {} exceeds tuple dimension {}.",
                                         n,
                                         v.len()
                                     ),
-                                ))
+                                })
                             }
                             Some(n) => self.reg_cand(*e.id(), cands[n].clone()),
-                            None => self.reg_error(TypeError::ConstantValueRequired(e, args[1])),
+                            None => self.reg_error(TypeError::ConstantValueRequired {
+                                call: e,
+                                args: args[1],
+                            }),
                         }
                     }
-                    _ => self.reg_error(TypeError::inv_argument(
-                        e,
-                        args[1],
-                        format!(
+                    _ => self.reg_error(TypeError::InvalidArgument {
+                        call: e,
+                        arg: args[1],
+                        msg: format!(
                             "Projection requires a tuple as second argument but found {}.",
                             cands[1]
                         ),
-                    )),
+                    }),
                 }
             }
             FunctionKind::Sin
@@ -392,20 +394,20 @@ impl<'a> TypeChecker<'a> {
         was: &[Candidates],
     ) {
         if was.len() != expected.len() {
-            self.reg_error(TypeError::inv_num_of_args(
-                call,
-                expected.len() as u8,
-                was.len() as u8,
-            ));
+            self.reg_error(TypeError::InvalidNumberOfArguments {
+                node: call,
+                expected: expected.len() as u8,
+                was: was.len() as u8,
+            });
             return;
         }
         for (((pred, desc), ty), arg) in expected.iter().zip(was).zip(args) {
             if !pred(ty) {
-                self.reg_error(TypeError::inv_argument(
+                self.reg_error(TypeError::InvalidArgument {
                     call,
                     arg,
-                    format!("Required {} but found {}.", desc, ty),
-                ));
+                    msg: format!("Required {} but found {}.", desc, ty),
+                });
             }
         }
     }
