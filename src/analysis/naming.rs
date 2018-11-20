@@ -2,6 +2,7 @@
 
 use super::super::ast::Offset::*;
 use super::super::ast::*;
+use super::reporting::Handler;
 use super::AnalysisError;
 use crate::analysis::*;
 use ast_node::{AstNode, NodeId};
@@ -13,6 +14,7 @@ pub(crate) struct NamingAnalysis<'a> {
     declarations: ScopedDecl<'a>,
     pub result: DeclarationTable<'a>,
     pub errors: Vec<Box<AnalysisError<'a> + 'a>>,
+    handler: &'a Handler,
 }
 
 fn declaration_is_type(decl: &Declaration) -> bool {
@@ -41,7 +43,7 @@ fn is_malformed_name(_name: &str) -> bool {
 }
 
 impl<'a> NamingAnalysis<'a> {
-    pub(crate) fn new() -> Self {
+    pub(crate) fn new(handler: &'a Handler) -> Self {
         let mut scoped_decls = ScopedDecl::new();
 
         for (name, ty) in super::common::BuiltinType::all() {
@@ -52,6 +54,7 @@ impl<'a> NamingAnalysis<'a> {
             declarations: scoped_decls,
             result: HashMap::new(),
             errors: Vec::new(),
+            handler,
         }
     }
 
@@ -80,6 +83,10 @@ impl<'a> NamingAnalysis<'a> {
                     }
                 } else {
                     // it does not exist
+                    self.handler.error_with_span(
+                        &format!("cannot find type `{}` in this scope", name),
+                        ty._span,
+                    );
                     self.errors.push(Box::new(NamingError::TypeNotFound(ty)));
                 }
             }
@@ -468,7 +475,8 @@ mod tests {
         let throw = |e| panic!("{}", e);
         let mut ast = parse(spec).unwrap_or_else(throw);
         id_assignment::assign_ids(&mut ast);
-        let mut naming_analyzer = NamingAnalysis::new();
+        let handler = Handler::new();
+        let mut naming_analyzer = NamingAnalysis::new(&handler);
         naming_analyzer.check(&ast);
         assert_eq!(3, naming_analyzer.errors.len());
     }
@@ -479,7 +487,8 @@ mod tests {
         let throw = |e| panic!("{}", e);
         let mut ast = parse(spec).unwrap_or_else(throw);
         id_assignment::assign_ids(&mut ast);
-        let mut naming_analyzer = NamingAnalysis::new();
+        let handler = Handler::new();
+        let mut naming_analyzer = NamingAnalysis::new(&handler);
         naming_analyzer.check(&ast);
         assert_eq!(1, naming_analyzer.errors.len());
     }
@@ -490,7 +499,8 @@ mod tests {
         let throw = |e| panic!("{}", e);
         let mut ast = parse(spec).unwrap_or_else(throw);
         id_assignment::assign_ids(&mut ast);
-        let mut naming_analyzer = NamingAnalysis::new();
+        let handler = Handler::new();
+        let mut naming_analyzer = NamingAnalysis::new(&handler);
         naming_analyzer.check(&ast);
         assert_eq!(0, naming_analyzer.errors.len());
     }
@@ -501,7 +511,8 @@ mod tests {
         let throw = |e| panic!("{}", e);
         let mut ast = parse(spec).unwrap_or_else(throw);
         id_assignment::assign_ids(&mut ast);
-        let mut naming_analyzer = NamingAnalysis::new();
+        let handler = Handler::new();
+        let mut naming_analyzer = NamingAnalysis::new(&handler);
         naming_analyzer.check(&ast);
         assert_eq!(0, naming_analyzer.errors.len());
     }
@@ -512,7 +523,8 @@ mod tests {
         let throw = |e| panic!("{}", e);
         let mut ast = parse(spec).unwrap_or_else(throw);
         id_assignment::assign_ids(&mut ast);
-        let mut naming_analyzer = NamingAnalysis::new();
+        let handler = Handler::new();
+        let mut naming_analyzer = NamingAnalysis::new(&handler);
         naming_analyzer.check(&ast);
         assert_eq!(0, naming_analyzer.errors.len());
     }
@@ -523,7 +535,8 @@ mod tests {
         let throw = |e| panic!("{}", e);
         let mut ast = parse(spec).unwrap_or_else(throw);
         id_assignment::assign_ids(&mut ast);
-        let mut naming_analyzer = NamingAnalysis::new();
+        let handler = Handler::new();
+        let mut naming_analyzer = NamingAnalysis::new(&handler);
         naming_analyzer.check(&ast);
         assert_eq!(0, naming_analyzer.errors.len());
     }
@@ -534,7 +547,8 @@ mod tests {
         let throw = |e| panic!("{}", e);
         let mut ast = parse(spec).unwrap_or_else(throw);
         id_assignment::assign_ids(&mut ast);
-        let mut naming_analyzer = NamingAnalysis::new();
+        let handler = Handler::new();
+        let mut naming_analyzer = NamingAnalysis::new(&handler);
         naming_analyzer.check(&ast);
         assert_eq!(0, naming_analyzer.errors.len());
     }
@@ -545,7 +559,8 @@ mod tests {
         let throw = |e| panic!("{}", e);
         let mut ast = parse(spec).unwrap_or_else(throw);
         id_assignment::assign_ids(&mut ast);
-        let mut naming_analyzer = NamingAnalysis::new();
+        let handler = Handler::new();
+        let mut naming_analyzer = NamingAnalysis::new(&handler);
         naming_analyzer.check(&ast);
         assert_eq!(0, naming_analyzer.errors.len());
     }
@@ -556,7 +571,8 @@ mod tests {
         let throw = |e| panic!("{}", e);
         let mut ast = parse(spec).unwrap_or_else(throw);
         id_assignment::assign_ids(&mut ast);
-        let mut naming_analyzer = NamingAnalysis::new();
+        let handler = Handler::new();
+        let mut naming_analyzer = NamingAnalysis::new(&handler);
         naming_analyzer.check(&ast);
         assert_eq!(0, naming_analyzer.errors.len());
     }
@@ -567,7 +583,8 @@ mod tests {
         let throw = |e| panic!("{}", e);
         let mut ast = parse(spec).unwrap_or_else(throw);
         id_assignment::assign_ids(&mut ast);
-        let mut naming_analyzer = NamingAnalysis::new();
+        let handler = Handler::new();
+        let mut naming_analyzer = NamingAnalysis::new(&handler);
         naming_analyzer.check(&ast);
         assert_eq!(0, naming_analyzer.errors.len());
     }
@@ -578,7 +595,8 @@ mod tests {
         let throw = |e| panic!("{}", e);
         let mut ast = parse(spec).unwrap_or_else(throw);
         id_assignment::assign_ids(&mut ast);
-        let mut naming_analyzer = NamingAnalysis::new();
+        let handler = Handler::new();
+        let mut naming_analyzer = NamingAnalysis::new(&handler);
         naming_analyzer.check(&ast);
         assert_eq!(1, naming_analyzer.errors.len());
     }
@@ -589,7 +607,8 @@ mod tests {
         let throw = |e| panic!("{}", e);
         let mut ast = parse(spec).unwrap_or_else(throw);
         id_assignment::assign_ids(&mut ast);
-        let mut naming_analyzer = NamingAnalysis::new();
+        let handler = Handler::new();
+        let mut naming_analyzer = NamingAnalysis::new(&handler);
         naming_analyzer.check(&ast);
         assert_eq!(1, naming_analyzer.result.len());
     }
@@ -600,7 +619,8 @@ mod tests {
         let throw = |e| panic!("{}", e);
         let mut ast = parse(spec).unwrap_or_else(throw);
         id_assignment::assign_ids(&mut ast);
-        let mut naming_analyzer = NamingAnalysis::new();
+        let handler = Handler::new();
+        let mut naming_analyzer = NamingAnalysis::new(&handler);
         naming_analyzer.check(&ast);
         assert_eq!(1, naming_analyzer.errors.len());
     }
@@ -611,7 +631,8 @@ mod tests {
         let throw = |e| panic!("{}", e);
         let mut ast = parse(spec).unwrap_or_else(throw);
         id_assignment::assign_ids(&mut ast);
-        let mut naming_analyzer = NamingAnalysis::new();
+        let handler = Handler::new();
+        let mut naming_analyzer = NamingAnalysis::new(&handler);
         naming_analyzer.check(&ast);
         assert_eq!(1, naming_analyzer.errors.len());
     }
@@ -622,7 +643,8 @@ mod tests {
         let throw = |e| panic!("{}", e);
         let mut ast = parse(spec).unwrap_or_else(throw);
         id_assignment::assign_ids(&mut ast);
-        let mut naming_analyzer = NamingAnalysis::new();
+        let handler = Handler::new();
+        let mut naming_analyzer = NamingAnalysis::new(&handler);
         naming_analyzer.check(&ast);
         assert_eq!(1, naming_analyzer.errors.len());
     }
@@ -633,7 +655,8 @@ mod tests {
         let throw = |e| panic!("{}", e);
         let mut ast = parse(spec).unwrap_or_else(throw);
         id_assignment::assign_ids(&mut ast);
-        let mut naming_analyzer = NamingAnalysis::new();
+        let handler = Handler::new();
+        let mut naming_analyzer = NamingAnalysis::new(&handler);
         naming_analyzer.check(&ast);
         assert_eq!(1, naming_analyzer.errors.len());
     }

@@ -7,10 +7,12 @@ mod common;
 mod id_assignment;
 mod lola_version;
 mod naming;
+mod reporting;
 
+use self::lola_version::LolaVersionAnalysis;
+use self::naming::{Declaration, NamingAnalysis};
+use self::reporting::Handler;
 use super::ast::LolaSpec;
-use crate::analysis::lola_version::LolaVersionAnalysis;
-use crate::analysis::naming::Declaration;
 use ast_node::AstNode;
 
 pub trait AnalysisError<'a>: std::fmt::Debug {}
@@ -20,10 +22,17 @@ pub struct Report<'a> {
     errors: Vec<Box<AnalysisError<'a>>>,
 }
 
-pub fn analyze(spec: &mut LolaSpec) -> Report {
+pub fn analyze(spec: &mut LolaSpec) -> bool {
+    let mut handler = Handler::new();
     id_assignment::assign_ids(spec);
-    let mut naming_analyzer = naming::NamingAnalysis::new();
+    let mut naming_analyzer = NamingAnalysis::new(&handler);
     naming_analyzer.check(spec);
+
+    if handler.contains_error() {
+        handler.error("aborting due to previous error");
+        return false;
+    }
+
     let mut version_analyzer = LolaVersionAnalysis::new();
     let version_result = version_analyzer.analyse(spec);
     unimplemented!();

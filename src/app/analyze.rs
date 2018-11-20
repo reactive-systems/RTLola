@@ -56,6 +56,15 @@ impl Config {
                             .required(true)
                             .index(1),
                     ),
+            ).subcommand(
+                SubCommand::with_name("analyze")
+                    .about("Parses the input file and runs semantic analysis")
+                    .arg(
+                        Arg::with_name("INPUT")
+                            .help("Sets the input file to use")
+                            .required(true)
+                            .index(1),
+                    ),
             ).get_matches_from(args);
 
         match matches.subcommand() {
