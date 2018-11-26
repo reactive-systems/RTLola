@@ -268,6 +268,8 @@ impl<'a> NamingAnalysis<'a> {
                     self.check_expression(&terminate.target);
                 }
             }
+            self.declarations
+                .add_decl_for("self", Declaration::Out(output));
             self.check_expression(&output.expression);
             self.declarations.pop();
         }
@@ -624,5 +626,15 @@ mod tests {
     #[test]
     fn template_spec_is_also_tested() {
         assert_eq!(1, number_of_naming_errors("output a {invoke b} := 3"))
+    }
+
+    #[test]
+    fn self_is_allowed_in_output_expression() {
+        assert_eq!(0, number_of_naming_errors("output a  := self[-1]"))
+    }
+
+    #[test]
+    fn self_not_allowed_in_trigger_expression() {
+        assert_eq!(1, number_of_naming_errors("trigger a  := self[-1]"))
     }
 }

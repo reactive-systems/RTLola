@@ -30,11 +30,12 @@ impl BuiltinType {
 
 // These MUST all be lowercase
 // TODO add an static assertion for this
-pub(crate) const KEYWORDS: [&str; 27] = [
+pub(crate) const KEYWORDS: [&str; 28] = [
     "input",
     "output",
     "trigger",
     "type",
+    "self",
     "include",
     "invoke",
     "inv",
