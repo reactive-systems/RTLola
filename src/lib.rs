@@ -9,6 +9,7 @@ extern crate pest_derive;
 #[macro_use]
 extern crate lazy_static;
 extern crate clap;
+extern crate termcolor;
 
 extern crate ast_node;
 #[macro_use]

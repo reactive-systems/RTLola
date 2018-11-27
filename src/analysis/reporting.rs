@@ -4,6 +4,8 @@ use self::Level::*;
 use ast_node::Span;
 use crate::parse::SourceMapper;
 use std::cell::RefCell;
+use std::io::Write;
+use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 
 /// A handler is responsible for emitting warnings and errors
 pub(crate) struct Handler {
@@ -74,31 +76,85 @@ impl StderrEmitter {
 
 impl Emitter for StderrEmitter {
     fn emit(&mut self, mapper: &SourceMapper, diagnostic: &Diagnostic) {
-        eprintln!("{}: {}", diagnostic.level.to_str(), diagnostic.message);
+        let mut stderr = StandardStream::stderr(ColorChoice::Always);
+        for line in self.render(mapper, diagnostic) {
+            for part in &line.strings {
+                stderr
+                    .set_color(&part.color)
+                    .expect("cannot set output color");
+                write!(&mut stderr, "{}", part.string);
+            }
+            writeln!(&mut stderr, "");
+        }
+        stderr.reset().expect("cannot reset output color");
+    }
+}
+
+impl StderrEmitter {
+    fn render(&mut self, mapper: &SourceMapper, diagnostic: &Diagnostic) -> Vec<ColoredLine> {
+        let mut lines = Vec::new();
+
+        // write header, e.g., `error: some error message`
+        let mut line = ColoredLine::new();
+        line.push(&diagnostic.level.to_str(), diagnostic.level.to_color());
+        line.push(": ", ColorSpec::new());
+        line.push(&diagnostic.message, ColorSpec::new().set_bold(true).clone());
+        lines.push(line);
+
+        // output source code
         if let Some(span) = diagnostic.span {
             // map span back to source code
             if let Some(line) = mapper.get_line(span) {
                 let line_number_length = format!("{}", line.line_number).len();
-                eprintln!(
-                    "{}--> {}:{}:{}",
-                    " ".repeat(line_number_length),
-                    line.path.display(),
-                    line.line_number,
-                    line.column_number,
+
+                // path information
+                let mut rendered_line = ColoredLine::new();
+                rendered_line.push(&" ".repeat(line_number_length), ColorSpec::new());
+                rendered_line.push("--> ", ColorSpec::new().set_fg(Some(Color::Blue)).clone());
+                rendered_line.push(
+                    &format!(
+                        "{}:{}:{}",
+                        line.path.display(),
+                        line.line_number,
+                        line.column_number,
+                    ),
+                    ColorSpec::new(),
                 );
-                eprintln!("{} | ", " ".repeat(line_number_length));
-                eprintln!("{} | {}", line.line_number, line.line);
-                eprintln!("{} | ", " ".repeat(line_number_length));
+                lines.push(rendered_line);
+
+                // source code snippet
+                let mut rendered_line = ColoredLine::new();
+                rendered_line.push(
+                    &format!("{} | ", " ".repeat(line_number_length)),
+                    ColorSpec::new().set_fg(Some(Color::Blue)).clone(),
+                );
+                lines.push(rendered_line);
+
+                let mut rendered_line = ColoredLine::new();
+                rendered_line.push(
+                    &format!("{} | ", line.line_number),
+                    ColorSpec::new().set_fg(Some(Color::Blue)).clone(),
+                );
+                rendered_line.push(&line.line, ColorSpec::new());
+                lines.push(rendered_line);
+
+                let mut rendered_line = ColoredLine::new();
+                rendered_line.push(
+                    &format!("{} | ", " ".repeat(line_number_length)),
+                    ColorSpec::new().set_fg(Some(Color::Blue)).clone(),
+                );
+                lines.push(rendered_line);
             }
         }
-        for child in &diagnostic.children {
+        /*for child in &diagnostic.children {
             eprintln!("| {}: {}", child.level.to_str(), child.message);
             if let Some(span) = child.span {
                 // TODO: actually map back to source code
                 eprintln!("| {:?}", span);
             }
-        }
-        eprintln!("");
+        }*/
+        lines.push(ColoredLine::new());
+        lines
     }
 }
 
@@ -149,5 +205,43 @@ impl Level {
             Note => "note",
             Help => "help",
         }
+    }
+
+    pub(crate) fn to_color(self) -> ColorSpec {
+        let mut colorspec = ColorSpec::new();
+        colorspec.set_intense(true).set_bold(true);
+        match self {
+            Bug | Fatal | Error => colorspec.set_fg(Some(Color::Red)),
+            Warning => colorspec.set_fg(Some(Color::Yellow)),
+            Note => colorspec.set_fg(Some(Color::Green)),
+            Help => colorspec.set_fg(Some(Color::Cyan)),
+        };
+        colorspec
+    }
+}
+
+#[derive(Debug)]
+struct ColoredString {
+    string: String,
+    color: ColorSpec,
+}
+
+#[derive(Debug)]
+struct ColoredLine {
+    strings: Vec<ColoredString>,
+}
+
+impl ColoredLine {
+    fn new() -> ColoredLine {
+        ColoredLine {
+            strings: Vec::new(),
+        }
+    }
+
+    fn push(&mut self, string: &str, color: ColorSpec) {
+        self.strings.push(ColoredString {
+            string: string.to_owned(),
+            color,
+        })
     }
 }

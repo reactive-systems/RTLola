@@ -12,5 +12,6 @@ pest = "^2.0"         # parser generator
 pest_derive = "^2.0"
 lazy_static = "1.1.0" # lazy_static! macro
 clap = "2.32.0"  # command line parsing
+termcolor = "1"  # color output to terminal
 ast_node = {path = "ast_node"}
 ast_node_derive = {path = "ast_node_derive"}
