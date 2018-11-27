@@ -754,7 +754,7 @@ impl SourceMapper {
 
     pub(crate) fn get_line(&self, span: Span) -> Option<CodeLine> {
         let mut byte_offset = 0;
-        for (num, line) in self.content.lines().enumerate() {
+        for (num, line) in self.content.split('\n').enumerate() {
             assert!(byte_offset <= span.start);
             let line_end = byte_offset + line.len() + 1; // +1 as it is excluding newline character
 

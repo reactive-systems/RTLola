@@ -192,5 +192,5 @@ StreamInstance = { Ident ~("(" ~Expr ~(","~ Expr)* ~")")?}
 Letter = { 'a'..'z' | 'A'..'Z'}
 Digit = _{'0'..'9'}
 Number = { '0'..'9'+ }
-WHITESPACE = _{ " " | "\t" | "\n"}
+WHITESPACE = _{ " " | "\t" | "\r" | "\n"}
 COMMENT = _{ ("/*" ~ (!"*/" ~ ANY)* ~ "*/") | ("//" ~(!("\n")~ANY)*~ "\n"? ) }
