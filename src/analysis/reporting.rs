@@ -143,6 +143,14 @@ impl StderrEmitter {
                     &format!("{} | ", " ".repeat(line_number_length)),
                     ColorSpec::new().set_fg(Some(Color::Blue)).clone(),
                 );
+                rendered_line.push(
+                    &format!(
+                        "{}{}",
+                        " ".repeat(line.highlight.start),
+                        "^".repeat(line.highlight.end - line.highlight.start)
+                    ),
+                    diagnostic.level.to_color(),
+                );
                 lines.push(rendered_line);
             }
         }

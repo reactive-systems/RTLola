@@ -735,6 +735,13 @@ pub(crate) struct CodeLine {
     pub(crate) line_number: usize,
     pub(crate) column_number: usize,
     pub(crate) line: String,
+    pub(crate) highlight: CharSpan,
+}
+
+#[derive(Debug)]
+pub(crate) struct CharSpan {
+    pub(crate) start: usize,
+    pub(crate) end: usize,
 }
 
 impl SourceMapper {
@@ -758,18 +765,31 @@ impl SourceMapper {
                 } else {
                     // get column
                     let mut column = 0;
+                    let mut start: Option<usize> = None;
+                    let mut end: Option<usize> = None;
+                    let mut i = 0;
                     for (index, _) in line.char_indices() {
-                        if index >= span.start - byte_offset {
+                        i = index;
+                        if index < span.start - byte_offset {
+                            column += 1;
+                        } else if index == span.start - byte_offset {
+                            start = Some(index);
+                        } else if index == span.end - byte_offset {
+                            end = Some(index);
                             break;
                         }
-                        column += 1;
                     }
+                    let (start, end) = (
+                        start.expect("start value cannot be empty"),
+                        end.unwrap_or(i + 1),
+                    );
 
                     return Some(CodeLine {
                         path: self.path.clone(),
                         line_number: num + 1,
                         column_number: column + 1,
                         line: line.to_string(),
+                        highlight: CharSpan { start, end },
                     });
                 }
             }
