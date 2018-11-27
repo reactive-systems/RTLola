@@ -2,24 +2,27 @@
 
 use self::Level::*;
 use ast_node::Span;
+use crate::parse::SourceMapper;
 use std::cell::RefCell;
 
 /// A handler is responsible for emitting warnings and errors
 pub(crate) struct Handler {
     error_count: RefCell<usize>,
     emitter: RefCell<Box<dyn Emitter>>,
+    mapper: SourceMapper,
 }
 
 impl Handler {
-    pub(crate) fn new() -> Self {
+    pub(crate) fn new(mapper: SourceMapper) -> Self {
         Handler {
             error_count: RefCell::new(0),
             emitter: RefCell::new(Box::new(StderrEmitter::new())),
+            mapper,
         }
     }
 
     pub(crate) fn contains_error(&self) -> bool {
-        *self.error_count.borrow() > 0
+        self.emitted_errors() > 0
     }
 
     pub(crate) fn emitted_errors(&self) -> usize {
@@ -27,16 +30,16 @@ impl Handler {
     }
 
     /// Displays diagnostic to user
-    fn emit(&self, diagnostic: Diagnostic) {
+    fn emit(&self, diagnostic: &Diagnostic) {
         if diagnostic.is_error() {
             let mut count = self.error_count.borrow_mut();
             *count += 1;
         }
-        self.emitter.borrow_mut().emit(&diagnostic)
+        self.emitter.borrow_mut().emit(&self.mapper, &diagnostic)
     }
 
     pub(crate) fn error(&self, message: &str) {
-        self.emit(Diagnostic {
+        self.emit(&Diagnostic {
             level: Error,
             message: message.to_owned(),
             span: None,
@@ -45,7 +48,7 @@ impl Handler {
     }
 
     pub(crate) fn error_with_span(&self, message: &str, span: Span) {
-        self.emit(Diagnostic {
+        self.emit(&Diagnostic {
             level: Error,
             message: message.to_owned(),
             span: Some(span),
@@ -57,7 +60,7 @@ impl Handler {
 /// Emitter trait for emitting errors.
 pub(crate) trait Emitter {
     /// Emit a structured diagnostic.
-    fn emit(&mut self, diagnostic: &Diagnostic);
+    fn emit(&mut self, mapper: &SourceMapper, diagnostic: &Diagnostic);
 }
 
 /// Emits errors to stderr
@@ -70,11 +73,23 @@ impl StderrEmitter {
 }
 
 impl Emitter for StderrEmitter {
-    fn emit(&mut self, diagnostic: &Diagnostic) {
+    fn emit(&mut self, mapper: &SourceMapper, diagnostic: &Diagnostic) {
         eprintln!("{}: {}", diagnostic.level.to_str(), diagnostic.message);
         if let Some(span) = diagnostic.span {
-            // TODO: actually map back to source code
-            eprintln!("{:?}", span);
+            // map span back to source code
+            if let Some(line) = mapper.get_line(span) {
+                let line_number_length = format!("{}", line.line_number).len();
+                eprintln!(
+                    "{}--> {}:{}:{}",
+                    " ".repeat(line_number_length),
+                    line.path.display(),
+                    line.line_number,
+                    line.column_number,
+                );
+                eprintln!("{} | ", " ".repeat(line_number_length));
+                eprintln!("{} | {}", line.line_number, line.line);
+                eprintln!("{} | ", " ".repeat(line_number_length));
+            }
         }
         for child in &diagnostic.children {
             eprintln!("| {}: {}", child.level.to_str(), child.message);

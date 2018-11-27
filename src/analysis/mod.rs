@@ -14,16 +14,12 @@ use self::naming::{Declaration, NamingAnalysis};
 use self::reporting::Handler;
 use super::ast::LolaSpec;
 use ast_node::AstNode;
+use crate::parse::SourceMapper;
 
 pub trait AnalysisError<'a>: std::fmt::Debug {}
 
-#[derive(Debug)]
-pub struct Report<'a> {
-    errors: Vec<Box<AnalysisError<'a>>>,
-}
-
-pub fn analyze(spec: &mut LolaSpec) -> bool {
-    let mut handler = Handler::new();
+pub(crate) fn analyze(spec: &mut LolaSpec, mapper: SourceMapper) -> bool {
+    let handler = Handler::new(mapper);
     id_assignment::assign_ids(spec);
     let mut naming_analyzer = NamingAnalysis::new(&handler);
     naming_analyzer.check(spec);

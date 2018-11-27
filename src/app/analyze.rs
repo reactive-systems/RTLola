@@ -3,6 +3,7 @@
 use std::error::Error;
 use std::fs::File;
 use std::io::prelude::*;
+use std::path::PathBuf;
 use std::process;
 
 use clap::{App, Arg, SubCommand};
@@ -10,6 +11,7 @@ use pest::Parser;
 
 use super::super::analysis;
 use super::super::parse::{LolaParser, Rule};
+use crate::parse::SourceMapper;
 
 enum Analysis {
     Parse,
@@ -134,6 +136,7 @@ impl Config {
         let mut file = File::open(&self.filename)?;
         let mut contents = String::new();
         file.read_to_string(&mut contents)?;
+        let mapper = SourceMapper::new(PathBuf::from(&self.filename), &contents);
         match &self.which {
             Analysis::Parse => {
                 let result =
@@ -153,7 +156,7 @@ impl Config {
             }
             Analysis::Analyze => {
                 let mut spec = crate::parse::parse(&contents).unwrap_or_else(|e| panic!("{}", e));
-                let report = analysis::analyze(&mut spec);
+                let report = analysis::analyze(&mut spec, mapper);
                 println!("{:?}", report);
                 Ok(())
             }

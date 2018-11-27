@@ -7,6 +7,7 @@ use pest;
 use pest::iterators::{Pair, Pairs};
 use pest::prec_climber::{Assoc, Operator, PrecClimber};
 use pest::Parser;
+use std::path::PathBuf;
 
 #[derive(Parser)]
 #[grammar = "lola.pest"]
@@ -718,6 +719,63 @@ pub struct Ident {
 impl Ident {
     pub fn new(name: String, span: Span) -> Ident {
         Ident { name, span }
+    }
+}
+
+/// A mapper from `Span` to actual source code
+#[derive(Debug)]
+pub(crate) struct SourceMapper {
+    path: PathBuf,
+    content: String,
+}
+
+#[derive(Debug)]
+pub(crate) struct CodeLine {
+    pub(crate) path: PathBuf,
+    pub(crate) line_number: usize,
+    pub(crate) column_number: usize,
+    pub(crate) line: String,
+}
+
+impl SourceMapper {
+    pub(crate) fn new(path: PathBuf, content: &str) -> SourceMapper {
+        SourceMapper {
+            path,
+            content: content.to_string(),
+        }
+    }
+
+    pub(crate) fn get_line(&self, span: Span) -> Option<CodeLine> {
+        let mut byte_offset = 0;
+        for (num, line) in self.content.lines().enumerate() {
+            assert!(byte_offset <= span.start);
+            let line_end = byte_offset + line.len() + 1; // +1 as it is excluding newline character
+
+            if span.start < line_end {
+                if span.end > line_end {
+                    // not a single line
+                    return None;
+                } else {
+                    // get column
+                    let mut column = 0;
+                    for (index, _) in line.char_indices() {
+                        if index >= span.start - byte_offset {
+                            break;
+                        }
+                        column += 1;
+                    }
+
+                    return Some(CodeLine {
+                        path: self.path.clone(),
+                        line_number: num + 1,
+                        column_number: column + 1,
+                        line: line.to_string(),
+                    });
+                }
+            }
+            byte_offset = line_end;
+        }
+        unreachable!();
     }
 }
 

@@ -467,197 +467,75 @@ mod tests {
     use super::*;
     use crate::analysis::id_assignment;
     use crate::parse::parse;
+    use std::path::PathBuf;
+
+    /// Parses the content, runs naming analysis, and returns number of errors
+    fn number_of_naming_errors(content: &str) -> usize {
+        let mut ast = parse(content).unwrap_or_else(|e| panic!("{}", e));
+        id_assignment::assign_ids(&mut ast);
+        let handler = Handler::new(SourceMapper::new(PathBuf::new(), content));
+        let mut naming_analyzer = NamingAnalysis::new(&handler);
+        naming_analyzer.check(&ast);
+        naming_analyzer.errors.len()
+    }
 
     // TODO: implement test cases
     #[test]
     fn unknown_types_are_reported() {
-        let spec = "output test<ab: B, c: D>: E := 3";
-        let throw = |e| panic!("{}", e);
-        let mut ast = parse(spec).unwrap_or_else(throw);
-        id_assignment::assign_ids(&mut ast);
-        let handler = Handler::new();
-        let mut naming_analyzer = NamingAnalysis::new(&handler);
-        naming_analyzer.check(&ast);
-        assert_eq!(3, naming_analyzer.errors.len());
+        assert_eq!(
+            3,
+            number_of_naming_errors("output test<ab: B, c: D>: E := 3")
+        )
     }
 
     #[test]
     fn unknown_identifiers_are_reported() {
-        let spec = "output test: Int8 := A";
-        let throw = |e| panic!("{}", e);
-        let mut ast = parse(spec).unwrap_or_else(throw);
-        id_assignment::assign_ids(&mut ast);
-        let handler = Handler::new();
-        let mut naming_analyzer = NamingAnalysis::new(&handler);
-        naming_analyzer.check(&ast);
-        assert_eq!(1, naming_analyzer.errors.len());
+        assert_eq!(1, number_of_naming_errors("output test: Int8 := A"))
     }
 
     #[test]
-    fn int8_is_a_known_type() {
-        let spec = "output test: Int8 := 3";
-        let throw = |e| panic!("{}", e);
-        let mut ast = parse(spec).unwrap_or_else(throw);
-        id_assignment::assign_ids(&mut ast);
-        let handler = Handler::new();
-        let mut naming_analyzer = NamingAnalysis::new(&handler);
-        naming_analyzer.check(&ast);
-        assert_eq!(0, naming_analyzer.errors.len());
-    }
-
-    #[test]
-    fn int16_is_a_known_type() {
-        let spec = "output test: Int16 := 3";
-        let throw = |e| panic!("{}", e);
-        let mut ast = parse(spec).unwrap_or_else(throw);
-        id_assignment::assign_ids(&mut ast);
-        let handler = Handler::new();
-        let mut naming_analyzer = NamingAnalysis::new(&handler);
-        naming_analyzer.check(&ast);
-        assert_eq!(0, naming_analyzer.errors.len());
-    }
-
-    #[test]
-    fn int32_is_a_known_type() {
-        let spec = "output test: Int32 := 3";
-        let throw = |e| panic!("{}", e);
-        let mut ast = parse(spec).unwrap_or_else(throw);
-        id_assignment::assign_ids(&mut ast);
-        let handler = Handler::new();
-        let mut naming_analyzer = NamingAnalysis::new(&handler);
-        naming_analyzer.check(&ast);
-        assert_eq!(0, naming_analyzer.errors.len());
-    }
-
-    #[test]
-    fn int64_is_a_known_type() {
-        let spec = "output test: Int64 := 3";
-        let throw = |e| panic!("{}", e);
-        let mut ast = parse(spec).unwrap_or_else(throw);
-        id_assignment::assign_ids(&mut ast);
-        let handler = Handler::new();
-        let mut naming_analyzer = NamingAnalysis::new(&handler);
-        naming_analyzer.check(&ast);
-        assert_eq!(0, naming_analyzer.errors.len());
-    }
-
-    #[test]
-    fn float32_is_a_known_type() {
-        let spec = "output test: Float32 := 3";
-        let throw = |e| panic!("{}", e);
-        let mut ast = parse(spec).unwrap_or_else(throw);
-        id_assignment::assign_ids(&mut ast);
-        let handler = Handler::new();
-        let mut naming_analyzer = NamingAnalysis::new(&handler);
-        naming_analyzer.check(&ast);
-        assert_eq!(0, naming_analyzer.errors.len());
-    }
-
-    #[test]
-    fn float64_is_a_known_type() {
-        let spec = "output test: Float64 := 3";
-        let throw = |e| panic!("{}", e);
-        let mut ast = parse(spec).unwrap_or_else(throw);
-        id_assignment::assign_ids(&mut ast);
-        let handler = Handler::new();
-        let mut naming_analyzer = NamingAnalysis::new(&handler);
-        naming_analyzer.check(&ast);
-        assert_eq!(0, naming_analyzer.errors.len());
-    }
-
-    #[test]
-    fn bool_is_a_known_type() {
-        let spec = "output test: Bool := 3";
-        let throw = |e| panic!("{}", e);
-        let mut ast = parse(spec).unwrap_or_else(throw);
-        id_assignment::assign_ids(&mut ast);
-        let handler = Handler::new();
-        let mut naming_analyzer = NamingAnalysis::new(&handler);
-        naming_analyzer.check(&ast);
-        assert_eq!(0, naming_analyzer.errors.len());
-    }
-
-    #[test]
-    fn string_is_a_known_type() {
-        let spec = "output test: String := 3";
-        let throw = |e| panic!("{}", e);
-        let mut ast = parse(spec).unwrap_or_else(throw);
-        id_assignment::assign_ids(&mut ast);
-        let handler = Handler::new();
-        let mut naming_analyzer = NamingAnalysis::new(&handler);
-        naming_analyzer.check(&ast);
-        assert_eq!(0, naming_analyzer.errors.len());
+    fn primitive_types_are_a_known() {
+        for ty in &[
+            "Int8", "Int16", "Int32", "Int64", "Float32", "Float64", "Bool", "String",
+        ] {
+            assert_eq!(
+                0,
+                number_of_naming_errors(&format!("output test: {} := 3", ty))
+            )
+        }
     }
 
     #[test]
     fn duplicate_names_at_the_same_level_are_reported() {
-        let spec = "output test: String := 3\noutput test: String := 3";
-        let throw = |e| panic!("{}", e);
-        let mut ast = parse(spec).unwrap_or_else(throw);
-        id_assignment::assign_ids(&mut ast);
-        let handler = Handler::new();
-        let mut naming_analyzer = NamingAnalysis::new(&handler);
-        naming_analyzer.check(&ast);
-        assert_eq!(1, naming_analyzer.errors.len());
-    }
-
-    #[test]
-    fn streams_declared_type_is_in_the_result() {
-        let spec = "output test: Int8 := 3";
-        let throw = |e| panic!("{}", e);
-        let mut ast = parse(spec).unwrap_or_else(throw);
-        id_assignment::assign_ids(&mut ast);
-        let handler = Handler::new();
-        let mut naming_analyzer = NamingAnalysis::new(&handler);
-        naming_analyzer.check(&ast);
-        assert_eq!(1, naming_analyzer.result.len());
+        assert_eq!(
+            1,
+            number_of_naming_errors("output test: String := 3\noutput test: String := 3")
+        )
     }
 
     #[test]
     fn duplicate_parameters_are_not_allowed_for_outputs() {
-        let spec = "output test<ab: Int8, ab: Int8> := 3";
-        let throw = |e| panic!("{}", e);
-        let mut ast = parse(spec).unwrap_or_else(throw);
-        id_assignment::assign_ids(&mut ast);
-        let handler = Handler::new();
-        let mut naming_analyzer = NamingAnalysis::new(&handler);
-        naming_analyzer.check(&ast);
-        assert_eq!(1, naming_analyzer.errors.len());
+        assert_eq!(
+            1,
+            number_of_naming_errors("output test<ab: Int8, ab: Int8> := 3")
+        )
     }
 
     #[test]
     fn duplicate_parameters_are_not_allowed_for_inputs() {
-        let spec = "input test<ab: Int8, ab: Int8> : Int8";
-        let throw = |e| panic!("{}", e);
-        let mut ast = parse(spec).unwrap_or_else(throw);
-        id_assignment::assign_ids(&mut ast);
-        let handler = Handler::new();
-        let mut naming_analyzer = NamingAnalysis::new(&handler);
-        naming_analyzer.check(&ast);
-        assert_eq!(1, naming_analyzer.errors.len());
+        assert_eq!(
+            1,
+            number_of_naming_errors("input test<ab: Int8, ab: Int8> : Int8")
+        )
     }
 
     #[test]
     fn keyword_are_not_valid_names() {
-        let spec = "output if := 3";
-        let throw = |e| panic!("{}", e);
-        let mut ast = parse(spec).unwrap_or_else(throw);
-        id_assignment::assign_ids(&mut ast);
-        let handler = Handler::new();
-        let mut naming_analyzer = NamingAnalysis::new(&handler);
-        naming_analyzer.check(&ast);
-        assert_eq!(1, naming_analyzer.errors.len());
+        assert_eq!(1, number_of_naming_errors("output if := 3"))
     }
 
     #[test]
     fn template_spec_is_also_tested() {
-        let spec = "output a {invoke b} := 3";
-        let throw = |e| panic!("{}", e);
-        let mut ast = parse(spec).unwrap_or_else(throw);
-        id_assignment::assign_ids(&mut ast);
-        let handler = Handler::new();
-        let mut naming_analyzer = NamingAnalysis::new(&handler);
-        naming_analyzer.check(&ast);
-        assert_eq!(1, naming_analyzer.errors.len());
+        assert_eq!(1, number_of_naming_errors("output a {invoke b} := 3"))
     }
 }
