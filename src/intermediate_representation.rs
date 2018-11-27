@@ -1,4 +1,3 @@
-
 #[derive(Debug)]
 pub struct IntermediateRepresentation {
     /// All input streams.
@@ -11,7 +10,6 @@ pub struct IntermediateRepresentation {
     pub sliding_windows: Vec<SlidingWindow>,
     /// A collection of flags representing features the specification requires.
     pub feature_flags: Vec<FeatureFlag>,
-
 }
 
 /// Represents an atomic type, i.e. a type that is not composed of other types.
@@ -183,7 +181,7 @@ pub enum ExpressionKind {
     Function(FunctionKind, Vec<Box<Expression>>),
     // /// An aggregation such as `count`, `exists` or `forall`. Note: This is not a window aggregation
     // TODO: Does not exist, yet.
-//    Aggregation(AggregationKind, Parameter, Box<Expression>),
+    //    Aggregation(AggregationKind, Parameter, Box<Expression>),
 }
 
 /// Represents an arbitrary expression. Specific information is available in the `kind`.
@@ -224,17 +222,16 @@ pub enum FeatureFlag {
     DiscreteWindows,
 }
 
-
 /////// Referencing Structures ///////
 
 /// Allows for referencing a window instance.
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct WindowReference {
     pub ix: usize,
 }
 
 /// Allows for referencing a stream within the specification.
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum StreamReference {
     InRef(usize),
     OutRef { timed: bool, ix: usize },
@@ -267,9 +264,9 @@ impl<'a> IntermediateRepresentation {
 }
 
 impl AtomicType {
-    fn size(&self) -> ValSize {
+    fn size(self) -> ValSize {
         match self {
-            AtomicType::Int(w) | AtomicType::UInt(w) | AtomicType::Float(w) => *w as ValSize,
+            AtomicType::Int(w) | AtomicType::UInt(w) | AtomicType::Float(w) => u32::from(*w),
             AtomicType::String => unimplemented!(), // String handling is not clear, yet.
             AtomicType::Bool => 1,
         }
@@ -283,7 +280,7 @@ impl Type {
     fn size(&self) -> ValSize {
         match self {
             Type::Atomic(a) => a.size(),
-            Type::Tuple(v) => v.iter().map(|x| x.size()).sum()
+            Type::Tuple(v) => v.iter().map(|x| x.size()).sum(),
         }
     }
 }
