@@ -16,6 +16,7 @@ extern crate ast_node_derive;
 mod analysis;
 pub mod app;
 mod ast;
+pub mod intermediate_representation;
 mod parse;
 mod print;
 mod reporting;
