@@ -2,10 +2,10 @@
 
 use super::super::ast::Offset::*;
 use super::super::ast::*;
-use super::reporting::Handler;
+use super::reporting::{Handler, LabeledSpan, Level};
 use super::AnalysisError;
 use crate::analysis::*;
-use ast_node::{AstNode, NodeId};
+use ast_node::{AstNode, NodeId, Span};
 use std::collections::HashMap;
 
 pub(crate) type DeclarationTable<'a> = HashMap<NodeId, Declaration<'a>>;
@@ -85,7 +85,7 @@ impl<'a> NamingAnalysis<'a> {
                     // it does not exist
                     self.handler.error_with_span(
                         &format!("cannot find type `{}` in this scope", name),
-                        ty._span,
+                        LabeledSpan::new(ty._span, "not found in this scope", Level::Error),
                     );
                     self.errors.push(Box::new(NamingError::TypeNotFound(ty)));
                 }
@@ -206,6 +206,25 @@ impl<'a> NamingAnalysis<'a> {
     fn add_outputs(&mut self, spec: &'a LolaSpec) {
         for output in &spec.outputs {
             if let Some(decl) = self.declarations.get_decl_for(&output.name.name) {
+                let mut builder = self.handler.build_error_with_span(
+                    &format!("the name `{}` is defined multiple times", output.name.name),
+                    LabeledSpan::new(
+                        output.name.span,
+                        &format!("`{}` redefined here", output.name.name),
+                        Level::Error,
+                    ),
+                );
+                if let Some(span) = decl.get_span() {
+                    builder.add_span_with_label(
+                        span,
+                        &format!(
+                            "previous definition of the valze `{}` here",
+                            output.name.name
+                        ),
+                        Level::Note,
+                    );
+                }
+                builder.emit();
                 self.errors.push(Box::new(NamingError::NameAlreadyUsed {
                     current: output,
                     previous: decl,
@@ -441,6 +460,17 @@ pub enum Declaration<'a> {
     UserDefinedType(&'a TypeDeclaration),
     BuiltinType(super::common::BuiltinType),
     StreamParameter(&'a Parameter),
+}
+
+impl<'a> Declaration<'a> {
+    fn get_span(&self) -> Option<Span> {
+        match self {
+            Declaration::Const(constant) => Some(constant.name.span),
+            Declaration::In(input) => Some(input.name.span),
+            Declaration::Out(output) => Some(output.name.span),
+            _ => unimplemented!(),
+        }
+    }
 }
 
 impl<'a> Into<Declaration<'a>> for &'a Constant {

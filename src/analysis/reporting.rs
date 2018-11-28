@@ -2,12 +2,13 @@
 
 use self::Level::*;
 use ast_node::Span;
-use crate::parse::SourceMapper;
+use crate::parse::{CodeLine, SourceMapper};
 use std::cell::RefCell;
 use std::io::Write;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 
 /// A handler is responsible for emitting warnings and errors
+#[derive(Debug)]
 pub(crate) struct Handler {
     error_count: RefCell<usize>,
     emitter: RefCell<Box<dyn Emitter>>,
@@ -44,28 +45,39 @@ impl Handler {
         self.emit(&Diagnostic {
             level: Error,
             message: message.to_owned(),
-            span: None,
+            span: Vec::new(),
             children: vec![],
         });
     }
 
-    pub(crate) fn error_with_span(&self, message: &str, span: Span) {
+    pub(crate) fn error_with_span(&self, message: &str, span: LabeledSpan) {
         self.emit(&Diagnostic {
             level: Error,
             message: message.to_owned(),
-            span: Some(span),
+            span: vec![span],
             children: vec![],
         });
+    }
+
+    pub(crate) fn build_error_with_span(
+        &self,
+        message: &str,
+        span: LabeledSpan,
+    ) -> DiagosticBuilder {
+        let mut builder = DiagosticBuilder::new(&self, Error, message);
+        builder.add_labeled_span(span);
+        builder
     }
 }
 
 /// Emitter trait for emitting errors.
-pub(crate) trait Emitter {
+pub(crate) trait Emitter: std::fmt::Debug {
     /// Emit a structured diagnostic.
     fn emit(&mut self, mapper: &SourceMapper, diagnostic: &Diagnostic);
 }
 
 /// Emits errors to stderr
+#[derive(Debug)]
 struct StderrEmitter {}
 
 impl StderrEmitter {
@@ -101,59 +113,110 @@ impl StderrEmitter {
         line.push(&diagnostic.message, ColorSpec::new().set_bold(true).clone());
         lines.push(line);
 
-        // output source code
-        if let Some(span) = diagnostic.span {
-            // map span back to source code
-            if let Some(line) = mapper.get_line(span) {
-                let line_number_length = format!("{}", line.line_number).len();
+        // output source code snippet with annotations
+        // first, try to get code lines from spans
+        let mut snippets: Vec<(CodeLine, Option<(String, Level)>)> = diagnostic
+            .span
+            .iter()
+            .flat_map(|s| mapper.get_line(s.span).map(|l| (l, s.label.clone())))
+            .collect();
 
-                // path information
+        if snippets.len() > 0 && snippets.len() == diagnostic.span.len() {
+            let line_number_length = snippets
+                .iter()
+                .map(|(s, _)| format!("{}", s.line_number).len())
+                .fold(0, |val, el| std::cmp::max(val, el));
+
+            // we assume the first span is the main one, i.e., we output path information
+            let path = {
+                let (main, _) = snippets.first().unwrap();
+
+                // emit path information
                 let mut rendered_line = ColoredLine::new();
                 rendered_line.push(&" ".repeat(line_number_length), ColorSpec::new());
                 rendered_line.push("--> ", ColorSpec::new().set_fg(Some(Color::Blue)).clone());
                 rendered_line.push(
                     &format!(
                         "{}:{}:{}",
-                        line.path.display(),
-                        line.line_number,
-                        line.column_number,
+                        main.path.display(),
+                        main.line_number,
+                        main.column_number,
                     ),
                     ColorSpec::new(),
                 );
                 lines.push(rendered_line);
+                main.path.clone()
+            };
 
+            // we sort the code lines, i.e., earlier lines come first
+            snippets.sort_unstable();
+
+            let mut prev_line_number = None;
+
+            for (snippet, label) in snippets {
+                assert!(
+                    path == snippet.path,
+                    "assume snippets to be in same source file, use `SubDiagnostic` if not"
+                );
                 // source code snippet
+                if prev_line_number.is_none() {
+                    // print leading space
+                    let mut rendered_line = ColoredLine::new();
+                    rendered_line.push(
+                        &format!("{} | ", " ".repeat(line_number_length)),
+                        ColorSpec::new().set_fg(Some(Color::Blue)).clone(),
+                    );
+                    lines.push(rendered_line);
+                } else {
+                    assert!(prev_line_number.unwrap() < snippet.line_number);
+                    if prev_line_number.unwrap() + 1 != snippet.line_number {
+                        // print ...
+                        let mut rendered_line = ColoredLine::new();
+                        rendered_line.push(
+                            &format!("..."),
+                            ColorSpec::new().set_fg(Some(Color::Blue)).clone(),
+                        );
+                        lines.push(rendered_line);
+                    }
+                }
+                prev_line_number = Some(snippet.line_number);
+
+                let mut rendered_line = ColoredLine::new();
+                rendered_line.push(
+                    &format!("{} | ", snippet.line_number),
+                    ColorSpec::new().set_fg(Some(Color::Blue)).clone(),
+                );
+                rendered_line.push(&snippet.line, ColorSpec::new());
+                lines.push(rendered_line);
+
                 let mut rendered_line = ColoredLine::new();
                 rendered_line.push(
                     &format!("{} | ", " ".repeat(line_number_length)),
                     ColorSpec::new().set_fg(Some(Color::Blue)).clone(),
                 );
-                lines.push(rendered_line);
-
-                let mut rendered_line = ColoredLine::new();
-                rendered_line.push(
-                    &format!("{} | ", line.line_number),
-                    ColorSpec::new().set_fg(Some(Color::Blue)).clone(),
-                );
-                rendered_line.push(&line.line, ColorSpec::new());
-                lines.push(rendered_line);
-
-                let mut rendered_line = ColoredLine::new();
-                rendered_line.push(
-                    &format!("{} | ", " ".repeat(line_number_length)),
-                    ColorSpec::new().set_fg(Some(Color::Blue)).clone(),
-                );
+                let highlight_char = label
+                    .as_ref()
+                    .map(|(_, level)| level.annotation_char())
+                    .unwrap_or(diagnostic.level.annotation_char());
+                let color = label
+                    .as_ref()
+                    .map(|(_, level)| level.to_color())
+                    .unwrap_or(diagnostic.level.to_color());
                 rendered_line.push(
                     &format!(
                         "{}{}",
-                        " ".repeat(line.highlight.start),
-                        "^".repeat(line.highlight.end - line.highlight.start)
+                        " ".repeat(snippet.highlight.start),
+                        highlight_char.repeat(snippet.highlight.end - snippet.highlight.start)
                     ),
-                    diagnostic.level.to_color(),
+                    color,
                 );
+                if let Some((label, level)) = label {
+                    rendered_line.push(&format!(" {}", label), level.to_color());
+                }
                 lines.push(rendered_line);
             }
         }
+
         /*for child in &diagnostic.children {
             eprintln!("| {}: {}", child.level.to_str(), child.message);
             if let Some(span) = child.span {
@@ -166,7 +229,7 @@ impl StderrEmitter {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Level {
     /// A compiler bug
     Bug,
@@ -183,7 +246,7 @@ pub enum Level {
 pub struct Diagnostic {
     pub level: Level,
     pub message: String,
-    pub span: Option<Span>,
+    pub(crate) span: Vec<LabeledSpan>,
     pub children: Vec<SubDiagnostic>,
 }
 
@@ -205,7 +268,7 @@ pub struct SubDiagnostic {
 }
 
 impl Level {
-    pub fn to_str(self) -> &'static str {
+    pub fn to_str(&self) -> &'static str {
         match self {
             Bug => "error: internal compiler error",
             Fatal | Error => "error",
@@ -215,17 +278,101 @@ impl Level {
         }
     }
 
-    pub(crate) fn to_color(self) -> ColorSpec {
+    pub(crate) fn to_color(&self) -> ColorSpec {
         let mut colorspec = ColorSpec::new();
         colorspec.set_intense(true).set_bold(true);
         match self {
             Bug | Fatal | Error => colorspec.set_fg(Some(Color::Red)),
             Warning => colorspec.set_fg(Some(Color::Yellow)),
-            Note => colorspec.set_fg(Some(Color::Green)),
+            Note => colorspec.set_fg(Some(Color::Blue)),
             Help => colorspec.set_fg(Some(Color::Cyan)),
         };
         colorspec
     }
+
+    pub(crate) fn annotation_char(&self) -> &'static str {
+        match self {
+            Bug | Fatal | Error | Warning => "^",
+            Note | Help => "-",
+        }
+    }
+}
+
+/// Show a label (message) next to the position in source code
+#[derive(Debug, Clone)]
+pub(crate) struct LabeledSpan {
+    span: Span,
+    label: Option<(String, Level)>,
+}
+
+impl LabeledSpan {
+    pub(crate) fn new(span: Span, label: &str, level: Level) -> Self {
+        LabeledSpan {
+            span,
+            label: Some((label.to_string(), level)),
+        }
+    }
+}
+
+/// Sometimes diagnostics cannot be emitted directly as important informations are still missing.
+/// `DiagnosticBuilder` helps in this situations by allowing to incrementally build diagnostics.
+#[derive(Debug)]
+pub(crate) struct DiagosticBuilder<'a> {
+    handler: &'a Handler,
+    diagnostic: Diagnostic,
+    status: DiagnosticBuilderStatus,
+}
+
+impl<'a> DiagosticBuilder<'a> {
+    fn new(handler: &'a Handler, level: Level, messgage: &str) -> Self {
+        DiagosticBuilder {
+            handler: handler,
+            diagnostic: Diagnostic {
+                level,
+                message: messgage.to_string(),
+                span: Vec::new(),
+                children: Vec::new(),
+            },
+            status: DiagnosticBuilderStatus::Building,
+        }
+    }
+
+    pub(crate) fn emit(&mut self) {
+        assert!(self.status == DiagnosticBuilderStatus::Building);
+        self.handler.emit(&self.diagnostic);
+        self.status = DiagnosticBuilderStatus::Emitted;
+    }
+
+    pub(crate) fn cancel(&mut self) {
+        assert!(self.status == DiagnosticBuilderStatus::Building);
+        self.status = DiagnosticBuilderStatus::Cancelled;
+    }
+
+    pub(crate) fn add_span_with_label(&mut self, span: Span, label: &str, level: Level) {
+        self.diagnostic
+            .span
+            .push(LabeledSpan::new(span, label, level))
+    }
+
+    pub(crate) fn add_labeled_span(&mut self, span: LabeledSpan) {
+        self.diagnostic.span.push(span)
+    }
+}
+
+impl<'a> Drop for DiagosticBuilder<'a> {
+    fn drop(&mut self) {
+        // make sure that diagnostic is either emitted or canceled
+        if self.status == DiagnosticBuilderStatus::Building {
+            panic!("Diagnostic was build but was neither emitted, nor cancelled.");
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum DiagnosticBuilderStatus {
+    Building,
+    Emitted,
+    Cancelled,
 }
 
 #[derive(Debug)]

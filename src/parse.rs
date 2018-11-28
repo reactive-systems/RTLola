@@ -729,7 +729,7 @@ pub(crate) struct SourceMapper {
     content: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, Ord)]
 pub(crate) struct CodeLine {
     pub(crate) path: PathBuf,
     pub(crate) line_number: usize,
@@ -738,7 +738,29 @@ pub(crate) struct CodeLine {
     pub(crate) highlight: CharSpan,
 }
 
-#[derive(Debug)]
+impl PartialEq for CodeLine {
+    /// the equality on code lines is given by the equality of the tuples `(path, line_number, column_number)`
+    fn eq(&self, rhs: &CodeLine) -> bool {
+        (&self.path, self.line_number, self.column_number).eq(&(
+            &rhs.path,
+            rhs.line_number,
+            rhs.column_number,
+        ))
+    }
+}
+
+impl PartialOrd for CodeLine {
+    /// the partial order on code lines is given by the lexicographic order of `(path, line_number, column_number)`
+    fn partial_cmp(&self, rhs: &CodeLine) -> Option<std::cmp::Ordering> {
+        (&self.path, self.line_number, self.column_number).partial_cmp(&(
+            &rhs.path,
+            rhs.line_number,
+            rhs.column_number,
+        ))
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct CharSpan {
     pub(crate) start: usize,
     pub(crate) end: usize,
