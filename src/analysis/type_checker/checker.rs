@@ -15,7 +15,7 @@ pub(crate) struct TypeChecker<'a> {
     errors: Vec<Box<TypeError<'a>>>,
 }
 
-// TODO: Check type of auxiliary streams!
+type TypeExpectation<'a> = Vec<(Box<Fn(&Candidates) -> bool>, &'a str)>;
 
 impl<'a> TypeChecker<'a> {
     pub(crate) fn new(dt: &'a DeclarationTable, spec: &'a LolaSpec) -> TypeChecker<'a> {
@@ -141,138 +141,15 @@ impl<'a> TypeChecker<'a> {
                     self.reg_cand(*e.id(), res)
                 }
             }
-            ExpressionKind::Lookup(ref inst, ref offset, ref op) => {
-                self.check_offset(offset, e); // Return value does not matter.
-                let target_stream_type = self.check_stream_instance(inst, e);
-
-                if op.is_none() {
-                    return self.reg_cand(*e.id(), target_stream_type);
-                }
-                let op = op.unwrap();
-                // For all window operations, the source stream needs to be numeric.
-                if !target_stream_type.is_numeric() {
-                    return self.reg_error(TypeError::IncompatibleTypes(
-                        e,
-                        format!(
-                            "Window source needs to be numeric for the {:?} aggregation.",
-                            op
-                        ),
-                    ));
-                }
-
-                self.reg_cand(
-                    *e.id(),
-                    match op {
-                        WindowOperation::Sum | WindowOperation::Product => target_stream_type,
-                        WindowOperation::Average | WindowOperation::Integral => {
-                            Candidates::Numeric(NumConfig::new_float(None))
-                        }
-                        WindowOperation::Count => {
-                            Candidates::Numeric(NumConfig::new_unsigned(None))
-                        }
-                    },
-                )
+            ExpressionKind::Lookup(ref inst, ref offset, op) => {
+                self.cands_from_lookup(e, inst, offset, op)
             }
-            ExpressionKind::Binary(op, ref lhs, ref rhs) => {
-                let lhs_type = self.get_candidates(lhs);
-                let rhs_type = self.get_candidates(rhs);
-                let meet_type = lhs_type.meet(&rhs_type);
-                match op {
-                    BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div | BinOp::Rem | BinOp::Pow
-                        if meet_type.is_numeric() =>
-                    {
-                        meet_type
-                    }
-                    BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div | BinOp::Rem | BinOp::Pow
-                        if !meet_type.is_numeric() =>
-                    {
-                        self.reg_error(TypeError::IncompatibleTypes(
-                            e,
-                            format!(
-                                "Binary operator {} applied to types {} and {}.",
-                                op, lhs, rhs
-                            ),
-                        ));
-                        Candidates::Numeric(NumConfig::new_unsigned(None))
-                    }
-                    BinOp::And | BinOp::Or if meet_type.is_logic() => meet_type,
-                    BinOp::And | BinOp::Or if meet_type.is_logic() => {
-                        self.reg_error(TypeError::IncompatibleTypes(
-                            e,
-                            format!(
-                                "Binary operator {} applied to types {} and {}.",
-                                op, lhs, rhs
-                            ),
-                        ));
-                        Candidates::Concrete(BuiltinType::Bool)
-                    }
-                    // As long as two types are compatible in some way, we return a bool after the comparison.
-                    BinOp::Eq | BinOp::Lt | BinOp::Le | BinOp::Ne | BinOp::Ge | BinOp::Gt
-                        if !meet_type.is_none() =>
-                    {
-                        Candidates::Concrete(BuiltinType::Bool)
-                    }
-                    BinOp::Eq | BinOp::Lt | BinOp::Le | BinOp::Ne | BinOp::Ge | BinOp::Gt
-                        if meet_type.is_none() =>
-                    {
-                        self.reg_error(TypeError::IncompatibleTypes(
-                            e,
-                            format!(
-                                "Binary operator {} applied to types {} and {}.",
-                                op, lhs, rhs
-                            ),
-                        ));
-                        Candidates::Concrete(BuiltinType::Bool)
-                    }
-                    _ => unreachable!(),
-                }
-            }
-            ExpressionKind::Unary(ref operator, ref operand) => {
-                let op_type = self.get_candidates(operand);
-                let res_type = match operator {
-                    UnOp::Neg if op_type.is_numeric() => Some(op_type.clone().into_signed()),
-                    UnOp::Not if op_type.is_logic() => Some(op_type.clone()),
-                    _ => None,
-                };
-                match res_type {
-                    Some(cand) => self.reg_cand(*e.id(), cand),
-                    None => {
-                        self.reg_error(TypeError::IncompatibleTypes(
-                            e,
-                            format!(
-                                "Unary operator {} cannot be applied to type {}.",
-                                operator, op_type
-                            ),
-                        ));
-                        Candidates::Concrete(BuiltinType::Bool)
-                    }
-                }
+            ExpressionKind::Binary(op, ref lhs, ref rhs) => self.cands_from_binary(e, op, lhs, rhs),
+            ExpressionKind::Unary(operator, ref operand) => {
+                self.cands_from_unary(e, operator, operand)
             }
             ExpressionKind::Ite(ref cond, ref cons, ref alt) => {
-                let cond = self.get_candidates(cond);
-                let cons = self.get_candidates(cons);
-                let alt = self.get_candidates(alt);
-                if !cond.is_logic() {
-                    self.reg_error(TypeError::IncompatibleTypes(
-                        e,
-                        format!(
-                            "Expected boolean value in condition of `if` expression but got {}.",
-                            cond
-                        ),
-                    ));
-                }
-                let res_type = cons.meet(&alt);
-                if res_type.is_none() {
-                    self.reg_error(TypeError::IncompatibleTypes(
-                        e,
-                        format!(
-                            "Arms of `if` expression have incompatible types {} and {}.",
-                            cons, alt
-                        ),
-                    ))
-                } else {
-                    self.reg_cand(*e.id(), res_type)
-                }
+                self.cands_from_ite(e, cond, cons, alt)
             }
             ExpressionKind::ParenthesizedExpression(_, ref expr, _) => {
                 let res = self.get_candidates(expr);
@@ -285,6 +162,151 @@ impl<'a> TypeChecker<'a> {
             }
             ExpressionKind::Function(ref kind, ref args) => self.check_function(e, *kind, args),
         }
+    }
+
+    fn cands_from_unary(
+        &mut self,
+        e: &'a Expression,
+        operator: UnOp,
+        operand: &'a Expression,
+    ) -> Candidates {
+        let op_type = self.get_candidates(operand);
+        let res_type = match operator {
+            UnOp::Neg if op_type.is_numeric() => Some(op_type.clone().into_signed()),
+            UnOp::Not if op_type.is_logic() => Some(op_type.clone()),
+            _ => None,
+        };
+        match res_type {
+            Some(cand) => self.reg_cand(*e.id(), cand),
+            None => {
+                self.reg_error(TypeError::IncompatibleTypes(
+                    e,
+                    format!(
+                        "Unary operator {} cannot be applied to type {}.",
+                        operator, op_type
+                    ),
+                ));
+                Candidates::Concrete(BuiltinType::Bool)
+            }
+        }
+    }
+
+    fn cands_from_binary(
+        &mut self,
+        e: &'a Expression,
+        op: BinOp,
+        lhs: &'a Expression,
+        rhs: &'a Expression,
+    ) -> Candidates {
+        let lhs_type = self.get_candidates(lhs);
+        let rhs_type = self.get_candidates(rhs);
+        let meet_type = lhs_type.meet(&rhs_type);
+        let mut incompatible_err = || {
+            self.reg_error(TypeError::IncompatibleTypes(
+                e,
+                format!(
+                    "Binary operator {} applied to types {} and {}.",
+                    op, lhs, rhs
+                ),
+            ));
+        };
+        match op {
+            BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div | BinOp::Rem | BinOp::Pow => {
+                if meet_type.is_numeric() {
+                    meet_type
+                } else {
+                    incompatible_err();
+                    Candidates::Numeric(NumConfig::new_unsigned(None))
+                }
+            }
+            BinOp::And | BinOp::Or => {
+                if meet_type.is_logic() {
+                    meet_type
+                } else {
+                    incompatible_err();
+                    Candidates::Concrete(BuiltinType::Bool)
+                }
+            }
+            BinOp::Eq | BinOp::Lt | BinOp::Le | BinOp::Ne | BinOp::Ge | BinOp::Gt => {
+                // As long as two types are compatible in some way, we return a bool after the comparison.
+                if !meet_type.is_none() {
+                    Candidates::Concrete(BuiltinType::Bool)
+                } else {
+                    incompatible_err();
+                    Candidates::Concrete(BuiltinType::Bool)
+                }
+
+            }
+        }
+    }
+
+    fn cands_from_ite(
+        &mut self,
+        e: &'a Expression,
+        cond: &'a Expression,
+        cons: &'a Expression,
+        alt: &'a Expression,
+    ) -> Candidates {
+        let cond = self.get_candidates(cond);
+        let cons = self.get_candidates(cons);
+        let alt = self.get_candidates(alt);
+        if !cond.is_logic() {
+            self.reg_error(TypeError::IncompatibleTypes(
+                e,
+                format!(
+                    "Expected boolean value in condition of `if` expression but got {}.",
+                    cond
+                ),
+            ));
+        }
+        let res_type = cons.meet(&alt);
+        if res_type.is_none() {
+            self.reg_error(TypeError::IncompatibleTypes(
+                e,
+                format!(
+                    "Arms of `if` expression have incompatible types {} and {}.",
+                    cons, alt
+                ),
+            ))
+        } else {
+            self.reg_cand(*e.id(), res_type)
+        }
+    }
+
+    fn cands_from_lookup(
+        &mut self,
+        e: &'a Expression,
+        inst: &'a StreamInstance,
+        offset: &'a Offset,
+        op: Option<WindowOperation>,
+    ) -> Candidates {
+        self.check_offset(offset, e);
+        // Return value does not matter.
+        let target_stream_type = self.check_stream_instance(inst, e);
+        if op.is_none() {
+            return self.reg_cand(*e.id(), target_stream_type);
+        }
+        let op = op.unwrap();
+        // For all window operations, the source stream needs to be numeric.
+        if !target_stream_type.is_numeric() {
+            return self.reg_error(TypeError::IncompatibleTypes(
+                e,
+                format!(
+                    "Window source needs to be numeric for the {:?} aggregation.",
+                    op
+                ),
+            ));
+        }
+        self.reg_cand(
+            *e.id(),
+            match op {
+                WindowOperation::Sum | WindowOperation::Product => target_stream_type,
+                WindowOperation::Average | WindowOperation::Integral => {
+                    Candidates::Numeric(NumConfig::new_float(None))
+                }
+                WindowOperation::Count => Candidates::Numeric(NumConfig::new_unsigned(None)),
+            },
+        )
     }
 
     fn check_function(
@@ -300,17 +322,17 @@ impl<'a> TypeChecker<'a> {
         let args = args.iter().map(|a| a.as_ref()).collect();
         match kind {
             FunctionKind::NthRoot => {
-                let expected: Vec<(Box<Fn(&Candidates) -> bool>, &str)> = vec![
+                let expected: TypeExpectation = vec![
                     (integer_check, "integer value"),
                     (numeric_check, "numeric value"),
                 ];
-                self.check_n_ary_fn(e, args, expected, &cands);
+                self.check_n_ary_fn(e, args, &expected, &cands);
                 self.reg_cand(*e.id(), Candidates::Numeric(NumConfig::new_float(None)))
             }
             FunctionKind::Sqrt => {
-                let expected: Vec<(Box<Fn(&Candidates) -> bool>, &str)> =
+                let expected: TypeExpectation =
                     vec![(numeric_check, "numeric value")];
-                self.check_n_ary_fn(e, args, expected, &cands);
+                self.check_n_ary_fn(e, args, &expected, &cands);
                 self.reg_cand(*e.id(), Candidates::Numeric(NumConfig::new_float(None)))
             }
             FunctionKind::Projection => {
@@ -363,21 +385,21 @@ impl<'a> TypeChecker<'a> {
             | FunctionKind::Arcsin
             | FunctionKind::Arccos
             | FunctionKind::Arctan => {
-                let expected: Vec<(Box<Fn(&Candidates) -> bool>, &str)> =
+                let expected: TypeExpectation =
                     vec![(numeric_check, "numeric value")];
-                self.check_n_ary_fn(e, args, expected, &cands);
+                self.check_n_ary_fn(e, args, &expected, &cands);
                 self.reg_cand(*e.id(), Candidates::Numeric(NumConfig::new_float(None)))
             }
             FunctionKind::Exp => {
-                let expected: Vec<(Box<Fn(&Candidates) -> bool>, &str)> =
+                let expected: TypeExpectation =
                     vec![(numeric_check, "numeric value")];
-                self.check_n_ary_fn(e, args, expected, &cands);
+                self.check_n_ary_fn(e, args, &expected, &cands);
                 self.reg_cand(*e.id(), Candidates::Numeric(NumConfig::new_float(None)))
             }
             FunctionKind::Floor | FunctionKind::Ceil => {
-                let expected: Vec<(Box<Fn(&Candidates) -> bool>, &str)> =
+                let expected: TypeExpectation =
                     vec![(float_check, "float value")];
-                self.check_n_ary_fn(e, args, expected, &cands);
+                self.check_n_ary_fn(e, args, &expected, &cands);
                 self.reg_cand(
                     *e.id(),
                     Candidates::Numeric(NumConfig::new_signed(cands[0].width())),
@@ -390,7 +412,7 @@ impl<'a> TypeChecker<'a> {
         &mut self,
         call: &'a Expression,
         args: Vec<&'a Expression>,
-        expected: Vec<(Box<Fn(&Candidates) -> bool>, &str)>,
+        expected: &TypeExpectation,
         was: &[Candidates],
     ) {
         if was.len() != expected.len() {
@@ -475,7 +497,7 @@ impl<'a> TypeChecker<'a> {
                     let arguments: Vec<Candidates> = inst
                         .arguments
                         .iter()
-                        .map(|e: &Box<Expression>| self.get_candidates(e))
+                        .map(|e| self.get_candidates(e))
                         .collect();
 
                     if arguments.len() == inst.arguments.len() {

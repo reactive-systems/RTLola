@@ -17,7 +17,6 @@ pub enum TypeError<'a> {
         expected: u8,
         was: u8,
     },
-    InvalidType(&'a AstNode<'a>, String),
     UnexpectedNumberOfArguments(&'a AstNode<'a>, String),
     MissingExpression(&'a AstNode<'a>),
     ConstantValueRequired {
