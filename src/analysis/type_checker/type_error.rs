@@ -19,25 +19,11 @@ pub enum TypeError<'a> {
     },
     UnexpectedNumberOfArguments(&'a AstNode<'a>, String),
     MissingExpression(&'a AstNode<'a>),
+    // Tuple projections require a constant projection value.
     ConstantValueRequired {
         call: &'a AstNode<'a>,
         args: &'a AstNode<'a>,
-    }, // Tuple projections require a constant projection value.
-}
-
-impl<'a> TypeError<'a> {
-    //    pub fn inv_num_of_args(node: &'a AstNode<'a>, expected: u8, was: u8) -> TypeError<'a> {
-    //        // TODO Remove for Rust'18.
-    //        TypeError::InvalidNumberOfArguments(node, format!("Expected {} but was {}.", expected, was))
-    ////    }
-    //    pub fn inv_argument(
-    //        call: &'a AstNode<'a>,
-    //        argument: &'a AstNode<'a>,
-    //        msg: String,
-    //    ) -> TypeError<'a> {
-    //        // TODO Remove for Rust'18.
-    //        TypeError::InvalidArgument(call, argument, msg)
-    //    }
+    },
 }
 
 impl<'a> AnalysisError<'a> for TypeError<'a> {}

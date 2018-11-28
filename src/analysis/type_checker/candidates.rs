@@ -130,6 +130,7 @@ impl Candidates {
     pub fn is_none(&self) -> bool {
         *self == Candidates::None
     }
+    #[allow(dead_code)]
     pub fn is_tuple(&self) -> bool {
         match self {
             Candidates::Tuple(_) => true,

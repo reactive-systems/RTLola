@@ -235,7 +235,6 @@ impl<'a> TypeChecker<'a> {
                     incompatible_err();
                     Candidates::Concrete(BuiltinType::Bool)
                 }
-
             }
         }
     }
@@ -330,8 +329,7 @@ impl<'a> TypeChecker<'a> {
                 self.reg_cand(*e.id(), Candidates::Numeric(NumConfig::new_float(None)))
             }
             FunctionKind::Sqrt => {
-                let expected: TypeExpectation =
-                    vec![(numeric_check, "numeric value")];
+                let expected: TypeExpectation = vec![(numeric_check, "numeric value")];
                 self.check_n_ary_fn(e, args, &expected, &cands);
                 self.reg_cand(*e.id(), Candidates::Numeric(NumConfig::new_float(None)))
             }
@@ -385,20 +383,17 @@ impl<'a> TypeChecker<'a> {
             | FunctionKind::Arcsin
             | FunctionKind::Arccos
             | FunctionKind::Arctan => {
-                let expected: TypeExpectation =
-                    vec![(numeric_check, "numeric value")];
+                let expected: TypeExpectation = vec![(numeric_check, "numeric value")];
                 self.check_n_ary_fn(e, args, &expected, &cands);
                 self.reg_cand(*e.id(), Candidates::Numeric(NumConfig::new_float(None)))
             }
             FunctionKind::Exp => {
-                let expected: TypeExpectation =
-                    vec![(numeric_check, "numeric value")];
+                let expected: TypeExpectation = vec![(numeric_check, "numeric value")];
                 self.check_n_ary_fn(e, args, &expected, &cands);
                 self.reg_cand(*e.id(), Candidates::Numeric(NumConfig::new_float(None)))
             }
             FunctionKind::Floor | FunctionKind::Ceil => {
-                let expected: TypeExpectation =
-                    vec![(float_check, "float value")];
+                let expected: TypeExpectation = vec![(float_check, "float value")];
                 self.check_n_ary_fn(e, args, &expected, &cands);
                 self.reg_cand(
                     *e.id(),
@@ -534,6 +529,7 @@ impl<'a> TypeChecker<'a> {
         }
     }
 
+    #[allow(dead_code)]
     fn typedecl_to_cands(&mut self, td: &'a TypeDeclaration) -> Candidates {
         let _subs: Vec<Candidates> = td
             .fields
