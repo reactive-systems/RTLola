@@ -2,7 +2,7 @@
 
 use super::super::ast::Offset::*;
 use super::super::ast::*;
-use super::reporting::{Handler, LabeledSpan, Level};
+use super::reporting::{Handler, LabeledSpan};
 use super::AnalysisError;
 use crate::analysis::*;
 use ast_node::{AstNode, NodeId, Span};
@@ -85,7 +85,7 @@ impl<'a> NamingAnalysis<'a> {
                     // it does not exist
                     self.handler.error_with_span(
                         &format!("cannot find type `{}` in this scope", name),
-                        LabeledSpan::new(ty._span, "not found in this scope", Level::Error),
+                        LabeledSpan::new(ty._span, "not found in this scope", true),
                     );
                     self.errors.push(Box::new(NamingError::TypeNotFound(ty)));
                 }
@@ -211,7 +211,7 @@ impl<'a> NamingAnalysis<'a> {
                     LabeledSpan::new(
                         output.name.span,
                         &format!("`{}` redefined here", output.name.name),
-                        Level::Error,
+                        true,
                     ),
                 );
                 if let Some(span) = decl.get_span() {
@@ -221,7 +221,7 @@ impl<'a> NamingAnalysis<'a> {
                             "previous definition of the value `{}` here",
                             output.name.name
                         ),
-                        Level::Note,
+                        false,
                     );
                 }
                 builder.emit();
