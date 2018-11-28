@@ -266,7 +266,7 @@ impl<'a> IntermediateRepresentation {
 impl AtomicType {
     fn size(self) -> ValSize {
         match self {
-            AtomicType::Int(w) | AtomicType::UInt(w) | AtomicType::Float(w) => u32::from(*w),
+            AtomicType::Int(w) | AtomicType::UInt(w) | AtomicType::Float(w) => u32::from(w),
             AtomicType::String => unimplemented!(), // String handling is not clear, yet.
             AtomicType::Bool => 1,
         }
