@@ -284,3 +284,54 @@ impl Type {
         }
     }
 }
+
+////////// AST -> IntermediateRepresentation //////////
+
+use crate::analysis::naming::DeclarationTable;
+use crate::ast;
+
+// Placeholder for the actual type table
+pub(crate) struct TypeTable {}
+
+impl IntermediateRepresentation {
+    pub(crate) fn new(
+        spec: ast::LolaSpec,
+        decl: &DeclarationTable,
+        tt: &TypeTable,
+    ) -> IntermediateRepresentation {
+        let inputs: Vec<InputStream> = spec
+            .inputs
+            .iter()
+            .map(|i| InputStream::from(i, decl, tt))
+            .collect();
+        let outputs: Vec<OutputStream> = spec
+            .outputs
+            .iter()
+            .map(|o| OutputStream::from(o, decl, tt))
+            .collect();
+        let trigger: Vec<OutputStream> = spec
+            .trigger
+            .iter()
+            .map(|t| OutputStream::from_trigger(t, decl, tt))
+            .collect();
+        unimplemented!()
+    }
+}
+
+impl InputStream {
+    fn from(input: &ast::Input, decl: &DeclarationTable, tt: &TypeTable) -> InputStream {
+        let name = input.name.name.clone();
+        let ty = unimplemented!();
+        InputStream { name, ty }
+    }
+}
+
+impl OutputStream {
+    fn from(output: &ast::Output, dt: &DeclarationTable, tt: &TypeTable) -> OutputStream {
+        unimplemented!()
+    }
+
+    fn from_trigger(trigger: &ast::Trigger, dt: &DeclarationTable, tt: &TypeTable) -> OutputStream {
+        unimplemented!()
+    }
+}
