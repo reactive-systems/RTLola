@@ -218,7 +218,7 @@ impl<'a> NamingAnalysis<'a> {
                     builder.add_span_with_label(
                         span,
                         &format!(
-                            "previous definition of the valze `{}` here",
+                            "previous definition of the value `{}` here",
                             output.name.name
                         ),
                         Level::Note,
