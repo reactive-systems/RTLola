@@ -686,7 +686,7 @@ mod tests {
 
     #[test]
     fn test_window_widening() {
-        let spec = "input in: Int8\n output out: Int64 := in[3s, Σ] ? 0";
+        let spec = "input in: Int8\n output out: Int64 {extend @5Hz}:= in[3s, Σ] ? 0";
         let mut spec = match parse(spec) {
             Err(e) => panic!("Spec {} cannot be parsed: {}.", spec, e),
             Ok(s) => s,
@@ -700,7 +700,7 @@ mod tests {
 
     #[test]
     fn test_window() {
-        let spec = "input in: Int8\n output out: Int8 := in[3s, Σ] ? 0";
+        let spec = "input in: Int8\n output out: Int8 {extend @5Hz} := in[3s, Σ] ? 0";
         let mut spec = match parse(spec) {
             Err(e) => panic!("Spec {} cannot be parsed: {}.", spec, e),
             Ok(s) => s,
@@ -713,8 +713,30 @@ mod tests {
     }
 
     #[test]
+    fn test_window_untimed() {
+        let spec = "input in: Int8\n output out: Int16 := in[3s, Σ] ? 5";
+        let mut spec = match parse(spec) {
+            Err(e) => panic!("Spec {} cannot be parsed: {}.", spec, e),
+            Ok(s) => s,
+        };
+        assign_ids(&mut spec);
+        let mut na = NamingAnalysis::new();
+        na.check(&spec);
+        let res = type_check(&na.result, &spec);
+        assert_eq!(
+            res.errors.len(),
+            1,
+            "There should be exactly one typing error."
+        );
+        match *res.errors[0] {
+            TypeError::IncompatibleTypes(_, _) => {}
+            _ => assert!(false, "Incompatible timings were not recognized as such."),
+        }
+    }
+
+    #[test]
     fn test_window_faulty() {
-        let spec = "input in: Int8\n output out: Bool := in[3s, Σ] ? true";
+        let spec = "input in: Int8\n output out: Bool {extend @5Hz} := in[3s, Σ] ? true";
         let mut spec = match parse(spec) {
             Err(e) => panic!("Spec {} cannot be parsed: {}.", spec, e),
             Ok(s) => s,
@@ -736,7 +758,8 @@ mod tests {
 
     #[test]
     fn test_involved() {
-        let spec = "input velo: Float32\n output avg: Float32 := velo[1h, avg] ? 10000\n trigger avg < 500";
+        let spec =
+            "input velo: Float32\n output avg: Float64 {extend @5Hz} := velo[1h, avg] ? 10000";
         let mut spec = match parse(spec) {
             Err(e) => panic!("Spec {} cannot be parsed: {}.", spec, e),
             Ok(s) => s,
