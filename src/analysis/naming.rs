@@ -23,7 +23,7 @@ fn declaration_is_type(decl: &Declaration) -> bool {
         Declaration::Const(_)
         | Declaration::In(_)
         | Declaration::Out(_)
-        | Declaration::StreamParameter(_) => false,
+        | Declaration::Param(_) => false,
     }
 }
 
@@ -33,7 +33,7 @@ fn declaration_is_lookup_target(decl: &Declaration) -> bool {
         Declaration::Const(_)
         | Declaration::UserDefinedType(_)
         | Declaration::BuiltinType(_)
-        | Declaration::StreamParameter(_) => false,
+        | Declaration::Param(_) => false,
     }
 }
 
@@ -113,7 +113,7 @@ impl<'a> NamingAnalysis<'a> {
             }
         } else {
             // it does not exist
-            self.add_decl_for(&param.name.name, Declaration::StreamParameter(param), param);
+            self.add_decl_for(&param.name.name, param.into(), param);
         }
 
         // check the type
@@ -459,7 +459,7 @@ pub enum Declaration<'a> {
     Out(&'a Output),
     UserDefinedType(&'a TypeDeclaration),
     BuiltinType(super::common::BuiltinType),
-    StreamParameter(&'a Parameter),
+    Param(&'a Parameter),
 }
 
 impl<'a> Declaration<'a> {
@@ -488,6 +488,12 @@ impl<'a> Into<Declaration<'a>> for &'a Input {
 impl<'a> Into<Declaration<'a>> for &'a Output {
     fn into(self) -> Declaration<'a> {
         Declaration::Out(self)
+    }
+}
+
+impl<'a> Into<Declaration<'a>> for &'a Parameter {
+    fn into(self) -> Declaration<'a> {
+        Declaration::Param(self)
     }
 }
 
