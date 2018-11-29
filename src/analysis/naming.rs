@@ -45,8 +45,11 @@ impl<'a> NamingAnalysis<'a> {
     /// Checks if
     /// * name of declaration is a keyword
     /// * declaration already exists in current scope
-    fn add_decl_for(&mut self, name: &'a str, decl: Declaration<'a>) {
+    fn add_decl_for(&mut self, decl: Declaration<'a>) {
         assert!(!decl.is_type());
+        let name = decl
+            .get_name()
+            .expect("added declarations are guaranteed to have a name");
 
         let span = decl
             .get_span()
@@ -117,7 +120,7 @@ impl<'a> NamingAnalysis<'a> {
                         param.name.name
                     ),
                     LabeledSpan::new(
-                        param._span,
+                        param.name.span,
                         &format!("`{}` used as a parameter more than once", param.name.name),
                         true,
                     ),
@@ -132,7 +135,7 @@ impl<'a> NamingAnalysis<'a> {
             }
         } else {
             // it does not exist
-            self.add_decl_for(&param.name.name, param.into());
+            self.add_decl_for(param.into());
         }
 
         // check the type
@@ -143,18 +146,18 @@ impl<'a> NamingAnalysis<'a> {
 
     /// Entry method, checks that every identifier in the given spec is bound.
     pub(crate) fn check(&mut self, spec: &'a LolaSpec) {
-        //self.check_type_declarations(&spec);
+        self.check_type_declarations(&spec);
 
         // Store global declarations, i.e., constants, inputs, and outputs of the given specification
         for constant in &spec.constants {
-            self.add_decl_for(&constant.name.name, constant.into());
+            self.add_decl_for(constant.into());
             if let Some(ty) = constant.ty.as_ref() {
                 self.check_type(ty)
             }
         }
 
         for input in &spec.inputs {
-            self.add_decl_for(&input.name.name, input.into());
+            self.add_decl_for(input.into());
             self.check_type(&input.ty);
 
             // check types for parametric inputs
@@ -167,7 +170,7 @@ impl<'a> NamingAnalysis<'a> {
         }
 
         for output in &spec.outputs {
-            self.add_decl_for(&output.name.name, output.into());
+            self.add_decl_for(output.into());
             if let Some(ty) = output.ty.as_ref() {
                 self.check_type(ty)
             }
@@ -276,8 +279,7 @@ impl<'a> NamingAnalysis<'a> {
     }
 
     fn check_type_declarations(&mut self, spec: &'a LolaSpec) {
-        unimplemented!();
-        /*for type_decl in &spec.type_declarations {
+        for type_decl in &spec.type_declarations {
             self.declarations.push();
             // check children
             let mut field_names: Vec<(&'a String, &'a TypeDeclField)> = Vec::new();
@@ -292,10 +294,21 @@ impl<'a> NamingAnalysis<'a> {
                         (ref name, ref previous_field) => {
                             if field.name == **name {
                                 found = true;
-                                self.errors.push(Box::new(NamingError::FieldWithSameName {
-                                    current: &**field,
-                                    previous: *previous_field,
-                                }));
+
+                                let mut builder = self.handler.build_error_with_span(
+                                    &format!("the field `{}` is defined multiple times", name),
+                                    LabeledSpan::new(
+                                        field._span,
+                                        &format!("`{}` redefined here", name),
+                                        true,
+                                    ),
+                                );
+                                builder.add_span_with_label(
+                                    previous_field._span,
+                                    &format!("previous definition of the value `{}` here", name),
+                                    false,
+                                );
+                                builder.emit();
                                 break;
                             }
                         }
@@ -303,10 +316,6 @@ impl<'a> NamingAnalysis<'a> {
                 }
                 if !found {
                     field_names.push((&field.name, &**field));
-                    if is_malformed_name(&field.name) {
-                        self.errors
-                            .push(Box::new(NamingError::MalformedName(&**field)));
-                    }
                 }
             });
 
@@ -314,12 +323,15 @@ impl<'a> NamingAnalysis<'a> {
 
             // only add the new type name after checking all fields
             if let Some(name) = type_decl.name.as_ref() {
-                self.add_decl_for(&name.name, type_decl.into());
+                self.type_declarations
+                    .add_decl_for(&name.name, type_decl.into());
             } else {
-                self.errors
-                    .push(Box::new(NamingError::UnnamedTypeDeclaration(type_decl)));
+                self.handler.error_with_span(
+                    &format!("type declarations need to have a name"),
+                    LabeledSpan::new(type_decl._span, "define here", true),
+                );
             }
-        }*/
+        }
     }
 
     fn check_stream_instance(&mut self, instance: &'a StreamInstance) {
