@@ -8,6 +8,7 @@ use std::process;
 
 use clap::{App, Arg, SubCommand};
 use pest::Parser;
+use simplelog::*;
 
 use super::super::analysis;
 use super::super::parse::{LolaParser, Rule};
@@ -31,6 +32,13 @@ impl Config {
             .version(env!("CARGO_PKG_VERSION"))
             .author(env!("CARGO_PKG_AUTHORS"))
             .about("lola-anlyze is a tool to parse, type check, and analyze Lola specifications")
+            .arg(
+                Arg::with_name("v")
+                    .short("v")
+                    .multiple(true)
+                    .required(false)
+                    .help("Sets the level of verbosity"),
+            )
             .subcommand(
                 SubCommand::with_name("parse")
                     .about("Parses the input file and outputs parse tree")
@@ -67,7 +75,24 @@ impl Config {
                             .required(true)
                             .index(1),
                     ),
-            ).get_matches_from(args);
+            )
+            .get_matches_from(args);
+
+        let verbosity = match matches.occurrences_of("v") {
+            0 => LevelFilter::Warn,
+            1 => LevelFilter::Info,
+            2 => LevelFilter::Debug,
+            3 | _ => LevelFilter::Trace,
+        };
+
+        let mut logger: Vec<Box<SharedLogger>> = Vec::new();
+        if let Some(term_logger) = TermLogger::new(verbosity, simplelog::Config::default()) {
+            logger.push(term_logger);
+        } else {
+            logger.push(SimpleLogger::new(verbosity, simplelog::Config::default()))
+        }
+
+        CombinedLogger::init(logger).expect("failed to initialize logging framework");
 
         match matches.subcommand() {
             ("parse", Some(parse_matches)) => {

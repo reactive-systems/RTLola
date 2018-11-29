@@ -1,7 +1,10 @@
 //! Parser for the Lola language.
 
 #![deny(unsafe_code)] // disallow unsafe code by default
-#[allow(unused_imports)]
+
+#[macro_use]
+extern crate log;
+extern crate simplelog;
 #[macro_use]
 extern crate pest;
 #[macro_use]

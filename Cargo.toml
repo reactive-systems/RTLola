@@ -8,6 +8,8 @@ authors = [
 ]
 
 [dependencies]
+log = "0.4.6"  # logging macros
+simplelog = "0.5.3"  # logging implementation
 pest = "^2.0"         # parser generator
 pest_derive = "^2.0"
 lazy_static = "1.1.0" # lazy_static! macro
