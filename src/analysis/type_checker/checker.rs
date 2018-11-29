@@ -65,47 +65,55 @@ impl<'a> TypeChecker<'a> {
     fn check_outputs(&mut self) {
         // First register all expected types, then check each in separation.
         for output in &self.spec.outputs {
-            // TODO: Move into function: `Self × Option<ast::Type> -> Candidates`
-            let cand = output
-                .ty
-                .as_ref()
-                .map(|t| self.type_to_cands(t))
-                .unwrap_or(Candidates::Any);
-            self.reg_cand(*output.id(), cand);
+            let ti: TimingInfo = TypeChecker::extract_timing_info(output);
+            let declared = self
+                .cands_from_opt_type(&output.ty)
+                .meet(&Candidates::Any(ti));
+            self.reg_cand(*output.id(), declared);
         }
         for output in &self.spec.outputs {
+            // Check whether this output is time- or event-driven.
             for param in &output.params {
-                let ty = param
-                    .ty
-                    .as_ref()
-                    .map(|t| self.type_to_cands(&t))
-                    .unwrap_or(Candidates::Any);
+                let ty = self.cands_from_opt_type(&param.ty);
                 self.reg_cand(*param.id(), ty);
             }
             let was = self.get_candidates(&output.expression);
-            let declared = output
-                .ty
-                .as_ref()
-                .map(|t| self.type_to_cands(&t))
-                .unwrap_or(Candidates::Any);
+            let declared = self.get_from_tt(*output.id()).unwrap(); // Registered earlier.
             if declared.meet(&was).is_none() {
                 self.reg_error(TypeError::IncompatibleTypes(
                     output,
                     format!("Expected {} but got {}.", declared, was),
                 ));
             }
-            self.reg_cand(*output.id(), declared);
+            // Type is already declared, return.
         }
+    }
+
+    fn extract_timing_info(stream: &Output) -> TimingInfo {
+        if stream
+            .template_spec
+            .as_ref()
+            .and_then(|spec| spec.ext.as_ref())
+            .map(|ext| ext.freq.is_some())
+            .unwrap_or(false)
+        {
+            TimingInfo::TimeBased
+        } else {
+            TimingInfo::EventBased
+        }
+    }
+
+    fn cands_from_opt_type(&mut self, opt_ty: &'a Option<Type>) -> Candidates {
+        opt_ty
+            .as_ref()
+            .map(|t| self.check_explicit_type(t))
+            .unwrap_or(Candidates::Any(TimingInfo::Unknown))
     }
 
     fn check_constants(&mut self) {
         for constant in &self.spec.constants {
             let was = Candidates::from(&constant.literal);
-            let declared = constant
-                .ty
-                .as_ref()
-                .map(|t| self.type_to_cands(&t))
-                .unwrap_or(Candidates::Any);
+            let declared = self.cands_from_opt_type(&constant.ty);
             if declared.meet(&was).is_none() {
                 self.reg_error(TypeError::IncompatibleTypes(
                     constant,
@@ -118,7 +126,7 @@ impl<'a> TypeChecker<'a> {
 
     fn check_inputs(&mut self) {
         for input in &self.spec.inputs {
-            let cands = self.type_to_cands(&input.ty);
+            let cands = self.check_explicit_type(&input.ty).as_event_driven();
             self.reg_cand(*input.id(), cands);
         }
     }
@@ -176,6 +184,7 @@ impl<'a> TypeChecker<'a> {
             UnOp::Not if op_type.is_logic() => Some(op_type.clone()),
             _ => None,
         };
+        let ti = self.combine_and_check_ti(e, &[op_type.timing_info()]);
         match res_type {
             Some(cand) => self.reg_cand(*e.id(), cand),
             None => {
@@ -186,7 +195,7 @@ impl<'a> TypeChecker<'a> {
                         operator, op_type
                     ),
                 ));
-                Candidates::Concrete(BuiltinType::Bool)
+                Candidates::Concrete(BuiltinType::Bool, ti)
             }
         }
     }
@@ -201,6 +210,7 @@ impl<'a> TypeChecker<'a> {
         let lhs_type = self.get_candidates(lhs);
         let rhs_type = self.get_candidates(rhs);
         let meet_type = lhs_type.meet(&rhs_type);
+        let ti = self.combine_and_check_ti(e, &[lhs_type.timing_info(), rhs_type.timing_info()]);
         let mut incompatible_err = || {
             self.reg_error(TypeError::IncompatibleTypes(
                 e,
@@ -216,7 +226,7 @@ impl<'a> TypeChecker<'a> {
                     meet_type
                 } else {
                     incompatible_err();
-                    Candidates::Numeric(NumConfig::new_unsigned(None))
+                    Candidates::Numeric(NumConfig::new_unsigned(None), ti)
                 }
             }
             BinOp::And | BinOp::Or => {
@@ -224,16 +234,16 @@ impl<'a> TypeChecker<'a> {
                     meet_type
                 } else {
                     incompatible_err();
-                    Candidates::Concrete(BuiltinType::Bool)
+                    Candidates::Concrete(BuiltinType::Bool, ti)
                 }
             }
             BinOp::Eq | BinOp::Lt | BinOp::Le | BinOp::Ne | BinOp::Ge | BinOp::Gt => {
                 // As long as two types are compatible in some way, we return a bool after the comparison.
                 if !meet_type.is_none() {
-                    Candidates::Concrete(BuiltinType::Bool)
+                    Candidates::Concrete(BuiltinType::Bool, ti)
                 } else {
                     incompatible_err();
-                    Candidates::Concrete(BuiltinType::Bool)
+                    Candidates::Concrete(BuiltinType::Bool, ti)
                 }
             }
         }
@@ -249,6 +259,7 @@ impl<'a> TypeChecker<'a> {
         let cond = self.get_candidates(cond);
         let cons = self.get_candidates(cons);
         let alt = self.get_candidates(alt);
+        self.combine_and_check_ti(e, &[cons.timing_info(), alt.timing_info()]);
         if !cond.is_logic() {
             self.reg_error(TypeError::IncompatibleTypes(
                 e,
@@ -279,8 +290,7 @@ impl<'a> TypeChecker<'a> {
         offset: &'a Offset,
         op: Option<WindowOperation>,
     ) -> Candidates {
-        self.check_offset(offset, e);
-        // Return value does not matter.
+        self.check_offset(offset, e); // Return value does not matter.
         let target_stream_type = self.check_stream_instance(inst, e);
         if op.is_none() {
             return self.reg_cand(*e.id(), target_stream_type);
@@ -299,11 +309,15 @@ impl<'a> TypeChecker<'a> {
         self.reg_cand(
             *e.id(),
             match op {
-                WindowOperation::Sum | WindowOperation::Product => target_stream_type,
-                WindowOperation::Average | WindowOperation::Integral => {
-                    Candidates::Numeric(NumConfig::new_float(None))
+                WindowOperation::Sum | WindowOperation::Product => {
+                    target_stream_type.as_time_driven()
                 }
-                WindowOperation::Count => Candidates::Numeric(NumConfig::new_unsigned(None)),
+                WindowOperation::Average | WindowOperation::Integral => {
+                    Candidates::Numeric(NumConfig::new_float(None), TimingInfo::TimeBased)
+                }
+                WindowOperation::Count => {
+                    Candidates::Numeric(NumConfig::new_unsigned(None), TimingInfo::TimeBased)
+                }
             },
         )
     }
@@ -319,19 +333,29 @@ impl<'a> TypeChecker<'a> {
         let integer_check = Box::new(|c: &Candidates| c.is_integer());
         let float_check = Box::new(|c: &Candidates| c.is_float());
         let args = args.iter().map(|a| a.as_ref()).collect();
+        fn get_ti<'a>(
+            tc: &mut TypeChecker<'a>,
+            cands: &[Candidates],
+            e: &'a Expression,
+        ) -> TimingInfo {
+            let tis: Vec<Option<TimingInfo>> = cands.iter().map(|c| c.timing_info()).collect();
+            tc.combine_and_check_ti(e, &tis)
+        };
         match kind {
             FunctionKind::NthRoot => {
+                let ti = get_ti(self, &cands, e);
                 let expected: TypeExpectation = vec![
                     (integer_check, "integer value"),
                     (numeric_check, "numeric value"),
                 ];
                 self.check_n_ary_fn(e, args, &expected, &cands);
-                self.reg_cand(*e.id(), Candidates::Numeric(NumConfig::new_float(None)))
+                self.reg_cand(*e.id(), Candidates::Numeric(NumConfig::new_float(None), ti))
             }
             FunctionKind::Sqrt => {
+                let ti = get_ti(self, &cands, e);
                 let expected: TypeExpectation = vec![(numeric_check, "numeric value")];
                 self.check_n_ary_fn(e, args, &expected, &cands);
-                self.reg_cand(*e.id(), Candidates::Numeric(NumConfig::new_float(None)))
+                self.reg_cand(*e.id(), Candidates::Numeric(NumConfig::new_float(None), ti))
             }
             FunctionKind::Projection => {
                 if cands.len() < 2 {
@@ -346,7 +370,7 @@ impl<'a> TypeChecker<'a> {
                 }
                 match cands[1] {
                     Candidates::Tuple(ref v) => {
-                        match TypeChecker::convert_to_constant(args[1]) {
+                        match TypeChecker::convert_to_constant(args[0]) {
                             Some(n) if n < v.len() =>
                             // No way to recover from here.
                             {
@@ -383,21 +407,24 @@ impl<'a> TypeChecker<'a> {
             | FunctionKind::Arcsin
             | FunctionKind::Arccos
             | FunctionKind::Arctan => {
+                let ti = get_ti(self, &cands, e);
                 let expected: TypeExpectation = vec![(numeric_check, "numeric value")];
                 self.check_n_ary_fn(e, args, &expected, &cands);
-                self.reg_cand(*e.id(), Candidates::Numeric(NumConfig::new_float(None)))
+                self.reg_cand(*e.id(), Candidates::Numeric(NumConfig::new_float(None), ti))
             }
             FunctionKind::Exp => {
+                let ti = get_ti(self, &cands, e);
                 let expected: TypeExpectation = vec![(numeric_check, "numeric value")];
                 self.check_n_ary_fn(e, args, &expected, &cands);
-                self.reg_cand(*e.id(), Candidates::Numeric(NumConfig::new_float(None)))
+                self.reg_cand(*e.id(), Candidates::Numeric(NumConfig::new_float(None), ti))
             }
             FunctionKind::Floor | FunctionKind::Ceil => {
+                let ti = get_ti(self, &cands, e);
                 let expected: TypeExpectation = vec![(float_check, "float value")];
                 self.check_n_ary_fn(e, args, &expected, &cands);
                 self.reg_cand(
                     *e.id(),
-                    Candidates::Numeric(NumConfig::new_signed(cands[0].width())),
+                    Candidates::Numeric(NumConfig::new_signed(cands[0].width()), ti),
                 )
             }
         }
@@ -487,7 +514,10 @@ impl<'a> TypeChecker<'a> {
                         .params
                         .iter()
                         .flat_map(|p| &p.ty)
-                        .map(|t| self.type_to_cands(&t))
+                        .map(|t| {
+                            self.get_from_tt(*t.id())
+                                .expect("Need to be declared before-hand.")
+                        })
                         .collect(); // Collect to resolve closure dependencies.
                     let arguments: Vec<Candidates> = inst
                         .arguments
@@ -511,21 +541,25 @@ impl<'a> TypeChecker<'a> {
                     }
                 }
                 // Independent of all checks, pretend everything worked fine.
-                self.reg_cand(*origin.id(), result_type)
+                result_type
             }
-            Some(Declaration::In(_)) => self.reg_cand(*origin.id(), result_type),
+            Some(Declaration::In(_)) => result_type, // Nothing to check for inputs.
             _ => self.reg_error(TypeError::UnknownIdentifier(inst)), // Unknown output, return Candidates::None.
         }
     }
 
-    fn type_to_cands(&mut self, ty: &'a Type) -> Candidates {
+    fn check_explicit_type(&mut self, ty: &'a Type) -> Candidates {
         match ty.kind {
             TypeKind::Tuple(ref v) => {
-                let vals = v.iter().map(|t| self.type_to_cands(t)).collect();
-                Candidates::Tuple(vals)
+                let vals = v.iter().map(|t| self.check_explicit_type(t)).collect();
+                let res = Candidates::Tuple(vals);
+                self.reg_cand(*ty.id(), res)
             }
             TypeKind::Malformed(_) => unreachable!(),
-            TypeKind::Simple(_) => self.get_ty_from_decl(*ty.id(), ty),
+            TypeKind::Simple(_) => {
+                let res = self.get_ty_from_decl(*ty.id(), ty);
+                self.reg_cand(*ty.id(), res)
+            }
         }
     }
 
@@ -534,7 +568,7 @@ impl<'a> TypeChecker<'a> {
         let _subs: Vec<Candidates> = td
             .fields
             .iter()
-            .map(|field| self.type_to_cands(&field.ty))
+            .map(|field| self.check_explicit_type(&field.ty))
             .collect();
         unimplemented!()
     }
@@ -544,28 +578,44 @@ impl<'a> TypeChecker<'a> {
             Some(Declaration::Const(ref c)) => {
                 let cand = self.get_from_tt(*c.id());
                 assert!(cand.is_some()); // Since we added all declarations in the beginning, this value needs to be present.
-                self.reg_cand(nid, cand.unwrap())
+                cand.unwrap()
             }
             Some(Declaration::In(ref i)) => {
                 let cand = self.get_from_tt(*i.id());
                 assert!(cand.is_some()); // Since we added all declarations in the beginning, this value needs to be present.
-                self.reg_cand(nid, cand.unwrap())
+                cand.unwrap()
             }
             Some(Declaration::Out(ref o)) => {
                 let cand = self.get_from_tt(*o.id());
                 assert!(cand.is_some()); // Since we added all declarations in the beginning, this value needs to be present.
-                self.reg_cand(nid, cand.unwrap())
+                cand.unwrap()
             }
             Some(Declaration::UserDefinedType(_td)) => unimplemented!(),
-            Some(Declaration::BuiltinType(ref b)) => self.reg_cand(nid, Candidates::from(b)),
-            Some(Declaration::Param(ref p)) => {
-                let cands =
-                    p.ty.as_ref()
-                        .map(|t| self.type_to_cands(&t))
-                        .unwrap_or(Candidates::Any);
-                self.reg_cand(nid, cands)
-            }
+            Some(Declaration::BuiltinType(ref b)) => Candidates::from(b),
+            Some(Declaration::Param(ref p)) => self.cands_from_opt_type(&p.ty),
             None => self.reg_error(TypeError::UnknownIdentifier(ident)),
+        }
+    }
+
+    fn combine_and_check_ti(
+        &mut self,
+        expr: &'a AstNode<'a>,
+        v: &[Option<TimingInfo>],
+    ) -> TimingInfo {
+        // TODO: Refine for better error reporting, esp. for high-arity functions.
+        // TODO: if one of the arguments was None already, do not file an error!
+        let ti = v
+            .iter()
+            .fold(Some(TimingInfo::Unknown), |a, b| TimingInfo::meet(a, *b));
+        match ti {
+            Some(ti) => ti,
+            None => {
+                self.reg_error(TypeError::IncompatibleTiming(
+                    expr,
+                    format!("Arguments {:?} have incompatible timing.", v),
+                ));
+                TimingInfo::Unknown
+            }
         }
     }
 
@@ -580,7 +630,7 @@ impl<'a> TypeChecker<'a> {
 
     fn reg_cand(&mut self, nid: NodeId, cand: Candidates) -> Candidates {
         let res = match self.tt.get(&nid) {
-            Some(c) => c.meet(&cand),
+            Some(_c) => panic!("Without type inference, we cannot concretize the type of a node."),
             None => cand,
         };
         self.tt.insert(nid, res.clone());

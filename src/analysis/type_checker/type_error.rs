@@ -24,6 +24,7 @@ pub enum TypeError<'a> {
         call: &'a AstNode<'a>,
         args: &'a AstNode<'a>,
     },
+    IncompatibleTiming(&'a AstNode<'a>, String),
 }
 
 impl<'a> AnalysisError<'a> for TypeError<'a> {}
