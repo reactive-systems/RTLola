@@ -15,26 +15,6 @@ pub(crate) struct NamingAnalysis<'a> {
     handler: &'a Handler,
 }
 
-fn declaration_is_type(decl: &Declaration) -> bool {
-    match decl {
-        Declaration::UserDefinedType(_) | Declaration::BuiltinType(_) => true,
-        Declaration::Const(_)
-        | Declaration::In(_)
-        | Declaration::Out(_)
-        | Declaration::Param(_) => false,
-    }
-}
-
-fn declaration_is_lookup_target(decl: &Declaration) -> bool {
-    match decl {
-        Declaration::In(_) | Declaration::Out(_) => true,
-        Declaration::Const(_)
-        | Declaration::UserDefinedType(_)
-        | Declaration::BuiltinType(_)
-        | Declaration::Param(_) => false,
-    }
-}
-
 fn is_malformed_name(_name: &str) -> bool {
     // TODO check for malformed
     false
@@ -99,7 +79,7 @@ impl<'a> NamingAnalysis<'a> {
         match ty.kind {
             TypeKind::Simple(ref name) | TypeKind::Malformed(ref name) => {
                 if let Some(decl) = self.declarations.get_decl_for(&name) {
-                    if !declaration_is_type(&decl) {
+                    if !decl.is_type() {
                         self.handler.error_with_span(
                             &format!("expected type, found `{}`", name),
                             LabeledSpan::new(ty._span, "is not a type", true),
@@ -124,7 +104,7 @@ impl<'a> NamingAnalysis<'a> {
     fn check_param(&mut self, param: &'a Parameter) {
         // check the name
         if let Some(decl) = self.declarations.get_decl_for(&param.name.name) {
-            if declaration_is_type(&decl) {
+            if decl.is_type() {
                 self.handler.error_with_span(
                     &format!("expected stream, found type `{}`", param.name.name),
                     LabeledSpan::new(param._span, "is not a stream", true),
@@ -344,7 +324,7 @@ impl<'a> NamingAnalysis<'a> {
             .declarations
             .get_decl_for(&instance.stream_identifier.name)
         {
-            if !declaration_is_lookup_target(&decl) {
+            if !decl.is_lookup_target() {
                 // not a stream
                 let mut builder = self.handler.build_error_with_span(
                     &format!(
@@ -390,7 +370,7 @@ impl<'a> NamingAnalysis<'a> {
             Ident(ident) => {
                 if let Some(decl) = self.declarations.get_decl_for(&ident.name) {
                     assert!(*expression.id() != NodeId::DUMMY);
-                    if declaration_is_type(&decl) {
+                    if decl.is_type() {
                         self.handler.error_with_span(
                             &format!("expected stream, found type `{}`", ident.name),
                             LabeledSpan::new(ident.span, "is not a stream", true),
@@ -509,6 +489,27 @@ impl<'a> Declaration<'a> {
             Declaration::UserDefinedType(ty) => ty.name.as_ref().map(|ident| ident.name.as_str()),
             Declaration::Param(p) => Some(&p.name.name),
             Declaration::BuiltinType(_) => None,
+        }
+    }
+
+    fn is_type(&self) -> bool {
+        match self {
+            Declaration::UserDefinedType(_) | Declaration::BuiltinType(_) => true,
+            Declaration::Const(_)
+            | Declaration::In(_)
+            | Declaration::Out(_)
+            | Declaration::Param(_) => false,
+        }
+    }
+
+    /// is a stream, i.e., can be used with offsets
+    fn is_lookup_target(&self) -> bool {
+        match self {
+            Declaration::In(_) | Declaration::Out(_) => true,
+            Declaration::Const(_)
+            | Declaration::UserDefinedType(_)
+            | Declaration::BuiltinType(_)
+            | Declaration::Param(_) => false,
         }
     }
 }
