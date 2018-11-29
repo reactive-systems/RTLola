@@ -16,11 +16,6 @@ pub(crate) struct NamingAnalysis<'a> {
     handler: &'a Handler,
 }
 
-fn is_malformed_name(_name: &str) -> bool {
-    // TODO check for malformed
-    false
-}
-
 impl<'a> NamingAnalysis<'a> {
     pub(crate) fn new(handler: &'a Handler) -> Self {
         let mut scoped_decls = ScopedDecl::new();
@@ -327,7 +322,7 @@ impl<'a> NamingAnalysis<'a> {
                     .add_decl_for(&name.name, type_decl.into());
             } else {
                 self.handler.error_with_span(
-                    &format!("type declarations need to have a name"),
+                    "type declarations need to have a name",
                     LabeledSpan::new(type_decl._span, "define here", true),
                 );
             }

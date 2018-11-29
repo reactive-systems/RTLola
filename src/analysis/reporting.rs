@@ -96,7 +96,7 @@ impl Emitter for StderrEmitter {
                     .expect("cannot set output color");
                 write!(&mut stderr, "{}", part.string);
             }
-            writeln!(&mut stderr, "");
+            writeln!(&mut stderr);
         }
         stderr.reset().expect("cannot reset output color");
     }
@@ -124,11 +124,11 @@ impl StderrEmitter {
                     .map(|l| (l, s.label.clone(), s.primary))
             }).collect();
 
-        if snippets.len() > 0 && snippets.len() == diagnostic.span.len() {
+        if !snippets.is_empty() && snippets.len() == diagnostic.span.len() {
             let line_number_length = snippets
                 .iter()
                 .map(|(s, _, _)| format!("{}", s.line_number).len())
-                .fold(0, |val, el| std::cmp::max(val, el));
+                .fold(0, std::cmp::max);
 
             // we assume the first span is the main one, i.e., we output path information
             let path = {
@@ -282,7 +282,7 @@ pub struct SubDiagnostic {
 }
 
 impl Level {
-    pub fn to_str(&self) -> &'static str {
+    pub fn to_str(self) -> &'static str {
         match self {
             Bug => "error: internal compiler error",
             Fatal | Error => "error",
@@ -292,7 +292,7 @@ impl Level {
         }
     }
 
-    pub(crate) fn to_color(&self) -> ColorSpec {
+    pub(crate) fn to_color(self) -> ColorSpec {
         let mut colorspec = ColorSpec::new();
         colorspec.set_intense(true).set_bold(true);
         match self {
@@ -335,7 +335,7 @@ pub(crate) struct DiagosticBuilder<'a> {
 impl<'a> DiagosticBuilder<'a> {
     fn new(handler: &'a Handler, level: Level, messgage: &str) -> Self {
         DiagosticBuilder {
-            handler: handler,
+            handler,
             diagnostic: Diagnostic {
                 level,
                 message: messgage.to_string(),
