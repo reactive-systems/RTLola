@@ -11,6 +11,7 @@ pub(crate) type DeclarationTable<'a> = HashMap<NodeId, Declaration<'a>>;
 
 pub(crate) struct NamingAnalysis<'a> {
     declarations: ScopedDecl<'a>,
+    type_declarations: ScopedDecl<'a>,
     pub result: DeclarationTable<'a>,
     handler: &'a Handler,
 }
@@ -32,7 +33,8 @@ impl<'a> NamingAnalysis<'a> {
         scoped_decls.push();
 
         NamingAnalysis {
-            declarations: scoped_decls,
+            declarations: ScopedDecl::new(),
+            type_declarations: scoped_decls,
             result: HashMap::new(),
             handler,
         }
@@ -44,6 +46,8 @@ impl<'a> NamingAnalysis<'a> {
     /// * name of declaration is a keyword
     /// * declaration already exists in current scope
     fn add_decl_for(&mut self, name: &'a str, decl: Declaration<'a>) {
+        assert!(!decl.is_type());
+
         let span = decl
             .get_span()
             .expect("all user defined declarations have a `Span`");
@@ -75,18 +79,13 @@ impl<'a> NamingAnalysis<'a> {
         }
     }
 
+    /// Checks if given type is bound
     fn check_type(&mut self, ty: &'a Type) {
         match ty.kind {
             TypeKind::Simple(ref name) | TypeKind::Malformed(ref name) => {
-                if let Some(decl) = self.declarations.get_decl_for(&name) {
-                    if !decl.is_type() {
-                        self.handler.error_with_span(
-                            &format!("expected type, found `{}`", name),
-                            LabeledSpan::new(ty._span, "is not a type", true),
-                        );
-                    } else {
-                        self.result.insert(*ty.id(), decl);
-                    }
+                if let Some(decl) = self.type_declarations.get_decl_for(&name) {
+                    assert!(decl.is_type());
+                    self.result.insert(*ty.id(), decl);
                 } else {
                     // it does not exist
                     self.handler.error_with_span(
@@ -101,15 +100,14 @@ impl<'a> NamingAnalysis<'a> {
         }
     }
 
+    /// Checks that the parameter name and type are both valid
     fn check_param(&mut self, param: &'a Parameter) {
         // check the name
         if let Some(decl) = self.declarations.get_decl_for(&param.name.name) {
-            if decl.is_type() {
-                self.handler.error_with_span(
-                    &format!("expected stream, found type `{}`", param.name.name),
-                    LabeledSpan::new(param._span, "is not a stream", true),
-                );
-            } else if let Some(decl) = self
+            assert!(!decl.is_type());
+
+            // check if there is a parameter with the same name
+            if let Some(decl) = self
                 .declarations
                 .get_decl_in_current_scope_for(&param.name.name)
             {
@@ -124,13 +122,12 @@ impl<'a> NamingAnalysis<'a> {
                         true,
                     ),
                 );
-                if let Some(span) = decl.get_span() {
-                    builder.add_span_with_label(
-                        span,
-                        &format!("previous use of the parameter `{}` here", param.name.name),
-                        false,
-                    );
-                }
+                builder.add_span_with_label(
+                    decl.get_span()
+                        .expect("as it is in parameter list, it has a span"),
+                    &format!("previous use of the parameter `{}` here", param.name.name),
+                    false,
+                );
                 builder.emit();
             }
         } else {
@@ -144,13 +141,16 @@ impl<'a> NamingAnalysis<'a> {
         }
     }
 
+    /// Entry method, checks that every identifier in the given spec is bound.
     pub(crate) fn check(&mut self, spec: &'a LolaSpec) {
         //self.check_type_declarations(&spec);
 
         // Store global declarations, i.e., constants, inputs, and outputs of the given specification
         for constant in &spec.constants {
             self.add_decl_for(&constant.name.name, constant.into());
-            constant.ty.as_ref().map(|ty| self.check_type(ty));
+            if let Some(ty) = constant.ty.as_ref() {
+                self.check_type(ty)
+            }
         }
 
         for input in &spec.inputs {
@@ -168,13 +168,16 @@ impl<'a> NamingAnalysis<'a> {
 
         for output in &spec.outputs {
             self.add_decl_for(&output.name.name, output.into());
-            output.ty.as_ref().map(|ty| self.check_type(ty));
+            if let Some(ty) = output.ty.as_ref() {
+                self.check_type(ty)
+            }
         }
 
         self.check_outputs(&spec);
         self.check_triggers(&spec)
     }
 
+    /// Checks that if the trigger has a name, it is unique
     fn check_triggers(&mut self, spec: &'a LolaSpec) {
         let mut trigger_names: Vec<(&'a String, &'a Trigger)> = Vec::new();
         for trigger in &spec.trigger {
@@ -331,7 +334,7 @@ impl<'a> NamingAnalysis<'a> {
                         "the name `{}` is not a stream",
                         instance.stream_identifier.name
                     ),
-                    LabeledSpan::new(instance._span, &format!("expected a stream here"), true),
+                    LabeledSpan::new(instance._span, "expected a stream here", true),
                 );
                 if let Some(span) = decl.get_span() {
                     builder.add_span_with_label(
@@ -370,14 +373,9 @@ impl<'a> NamingAnalysis<'a> {
             Ident(ident) => {
                 if let Some(decl) = self.declarations.get_decl_for(&ident.name) {
                     assert!(*expression.id() != NodeId::DUMMY);
-                    if decl.is_type() {
-                        self.handler.error_with_span(
-                            &format!("expected stream, found type `{}`", ident.name),
-                            LabeledSpan::new(ident.span, "is not a stream", true),
-                        );
-                    } else {
-                        self.result.insert(*expression.id(), decl);
-                    }
+                    assert!(!decl.is_type());
+
+                    self.result.insert(*expression.id(), decl);
                 } else {
                     self.handler.error_with_span(
                         "name `{}` does not exist in current scope",
@@ -481,7 +479,7 @@ impl<'a> Declaration<'a> {
         }
     }
 
-    fn get_name(&self) -> Option<&str> {
+    fn get_name(&self) -> Option<&'a str> {
         match self {
             Declaration::Const(constant) => Some(&constant.name.name),
             Declaration::In(input) => Some(&input.name.name),
