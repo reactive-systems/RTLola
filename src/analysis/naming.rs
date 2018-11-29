@@ -3,7 +3,6 @@
 use super::super::ast::Offset::*;
 use super::super::ast::*;
 use super::reporting::{Handler, LabeledSpan};
-use super::AnalysisError;
 use crate::analysis::*;
 use ast_node::{AstNode, NodeId, Span};
 use std::collections::HashMap;
@@ -13,7 +12,6 @@ pub(crate) type DeclarationTable<'a> = HashMap<NodeId, Declaration<'a>>;
 pub(crate) struct NamingAnalysis<'a> {
     declarations: ScopedDecl<'a>,
     pub result: DeclarationTable<'a>,
-    pub errors: Vec<Box<AnalysisError<'a> + 'a>>,
     handler: &'a Handler,
 }
 
@@ -50,26 +48,51 @@ impl<'a> NamingAnalysis<'a> {
             scoped_decls.add_decl_for(name, Declaration::BuiltinType(ty));
         }
 
+        // add a new scope to distinguish between extern/builtin declarations
+        scoped_decls.push();
+
         NamingAnalysis {
             declarations: scoped_decls,
             result: HashMap::new(),
-            errors: Vec::new(),
             handler,
         }
     }
 
-    fn add_decl_for(&mut self, name: &'a str, decl: Declaration<'a>, node: &'a AstNode<'a>) {
+    /// Adds a declaration to the declaration store.
+    ///
+    /// Checks if
+    /// * name of declaration is a keyword
+    /// * declaration already exists in current scope
+    fn add_decl_for(&mut self, name: &'a str, decl: Declaration<'a>) {
+        let span = decl
+            .get_span()
+            .expect("all user defined declarations have a `Span`");
+
         // check for keyword
         let lower = name.to_lowercase();
         if common::KEYWORDS.contains(&lower.as_str()) {
-            self.errors
-                .push(Box::new(NamingError::ReservedKeyword(node)));
+            self.handler.error_with_span(
+                &format!("`{}` is a reserved keyword", name),
+                LabeledSpan::new(span, "use a different name here", true),
+            )
         }
 
-        if is_malformed_name(name) {
-            self.errors.push(Box::new(NamingError::MalformedName(node)));
+        if let Some(decl) = self.declarations.get_decl_in_current_scope_for(name) {
+            let mut builder = self.handler.build_error_with_span(
+                &format!("the name `{}` is defined multiple times", name),
+                LabeledSpan::new(span, &format!("`{}` redefined here", name), true),
+            );
+            if let Some(span) = decl.get_span() {
+                builder.add_span_with_label(
+                    span,
+                    &format!("previous definition of the value `{}` here", name),
+                    false,
+                );
+            }
+            builder.emit();
+        } else {
+            self.declarations.add_decl_for(name, decl);
         }
-        self.declarations.add_decl_for(name, decl);
     }
 
     fn check_type(&mut self, ty: &'a Type) {
@@ -77,7 +100,10 @@ impl<'a> NamingAnalysis<'a> {
             TypeKind::Simple(ref name) | TypeKind::Malformed(ref name) => {
                 if let Some(decl) = self.declarations.get_decl_for(&name) {
                     if !declaration_is_type(&decl) {
-                        self.errors.push(Box::new(NamingError::NotAType(ty)));
+                        self.handler.error_with_span(
+                            &format!("expected type, found `{}`", name),
+                            LabeledSpan::new(ty._span, "is not a type", true),
+                        );
                     } else {
                         self.result.insert(*ty.id(), decl);
                     }
@@ -87,7 +113,6 @@ impl<'a> NamingAnalysis<'a> {
                         &format!("cannot find type `{}` in this scope", name),
                         LabeledSpan::new(ty._span, "not found in this scope", true),
                     );
-                    self.errors.push(Box::new(NamingError::TypeNotFound(ty)));
                 }
             }
             TypeKind::Tuple(ref elements) => elements.iter().for_each(|ty| {
@@ -100,20 +125,37 @@ impl<'a> NamingAnalysis<'a> {
         // check the name
         if let Some(decl) = self.declarations.get_decl_for(&param.name.name) {
             if declaration_is_type(&decl) {
-                self.errors
-                    .push(Box::new(NamingError::TypeNotAllowedHere(param)));
+                self.handler.error_with_span(
+                    &format!("expected stream, found type `{}`", param.name.name),
+                    LabeledSpan::new(param._span, "is not a stream", true),
+                );
             } else if let Some(decl) = self
                 .declarations
                 .get_decl_in_current_scope_for(&param.name.name)
             {
-                self.errors.push(Box::new(NamingError::NameAlreadyUsed {
-                    current: param,
-                    previous: decl,
-                }));
+                let mut builder = self.handler.build_error_with_span(
+                    &format!(
+                        "identifier `{}` is use more than once in this paramater list",
+                        param.name.name
+                    ),
+                    LabeledSpan::new(
+                        param._span,
+                        &format!("`{}` used as a parameter more than once", param.name.name),
+                        true,
+                    ),
+                );
+                if let Some(span) = decl.get_span() {
+                    builder.add_span_with_label(
+                        span,
+                        &format!("previous use of the parameter `{}` here", param.name.name),
+                        false,
+                    );
+                }
+                builder.emit();
             }
         } else {
             // it does not exist
-            self.add_decl_for(&param.name.name, param.into(), param);
+            self.add_decl_for(&param.name.name, param.into());
         }
 
         // check the type
@@ -123,11 +165,32 @@ impl<'a> NamingAnalysis<'a> {
     }
 
     pub(crate) fn check(&mut self, spec: &'a LolaSpec) {
+        //self.check_type_declarations(&spec);
+
         // Store global declarations, i.e., constants, inputs, and outputs of the given specification
-        self.check_type_declarations(&spec);
-        self.add_constants(&spec);
-        self.add_inputs(&spec);
-        self.add_outputs(&spec);
+        for constant in &spec.constants {
+            self.add_decl_for(&constant.name.name, constant.into());
+            constant.ty.as_ref().map(|ty| self.check_type(ty));
+        }
+
+        for input in &spec.inputs {
+            self.add_decl_for(&input.name.name, input.into());
+            self.check_type(&input.ty);
+
+            // check types for parametric inputs
+            self.declarations.push();
+            input
+                .params
+                .iter()
+                .for_each(|param| self.check_param(&param));
+            self.declarations.pop();
+        }
+
+        for output in &spec.outputs {
+            self.add_decl_for(&output.name.name, output.into());
+            output.ty.as_ref().map(|ty| self.check_type(ty));
+        }
+
         self.check_outputs(&spec);
         self.check_triggers(&spec)
     }
@@ -135,13 +198,24 @@ impl<'a> NamingAnalysis<'a> {
     fn check_triggers(&mut self, spec: &'a LolaSpec) {
         let mut trigger_names: Vec<(&'a String, &'a Trigger)> = Vec::new();
         for trigger in &spec.trigger {
-            self.declarations.push();
             if let Some(ident) = &trigger.name {
-                if let Some(decl) = self.declarations.get_decl_for(&ident.name) {
-                    self.errors.push(Box::new(NamingError::NameAlreadyUsed {
-                        current: trigger,
-                        previous: decl,
-                    }));
+                if let Some(decl) = self.declarations.get_decl_in_current_scope_for(&ident.name) {
+                    let mut builder = self.handler.build_error_with_span(
+                        &format!("the name `{}` is defined multiple times", ident.name),
+                        LabeledSpan::new(
+                            ident.span,
+                            &format!("`{}` redefined here", ident.name),
+                            true,
+                        ),
+                    );
+                    if let Some(span) = decl.get_span() {
+                        builder.add_span_with_label(
+                            span,
+                            &format!("previous definition of the value `{}` here", ident.name),
+                            false,
+                        );
+                    }
+                    builder.emit();
                 }
                 let mut found = false;
                 for previous_entry in trigger_names.iter() {
@@ -149,10 +223,24 @@ impl<'a> NamingAnalysis<'a> {
                         (ref name, ref previous_trigger) => {
                             if ident.name == **name {
                                 found = true;
-                                self.errors.push(Box::new(NamingError::TriggerWithSameName {
-                                    current: trigger,
-                                    previous: *previous_trigger,
-                                }));
+                                let mut builder = self.handler.build_error_with_span(
+                                    &format!(
+                                        "the trigger `{}` is defined multiple times",
+                                        ident.name
+                                    ),
+                                    LabeledSpan::new(
+                                        ident.span,
+                                        &format!("`{}` redefined here", ident.name),
+                                        true,
+                                    ),
+                                );
+                                builder.add_span_with_label(
+                                    previous_trigger._span,
+                                    &format!("previous trigger definition `{}` here", ident.name),
+                                    false,
+                                );
+                                builder.emit();
+
                                 break;
                             }
                         }
@@ -162,6 +250,7 @@ impl<'a> NamingAnalysis<'a> {
                     trigger_names.push((&ident.name, trigger))
                 }
             }
+            self.declarations.push();
             self.check_expression(&trigger.expression);
             self.declarations.pop();
         }
@@ -203,80 +292,9 @@ impl<'a> NamingAnalysis<'a> {
         }
     }
 
-    fn add_outputs(&mut self, spec: &'a LolaSpec) {
-        for output in &spec.outputs {
-            if let Some(decl) = self.declarations.get_decl_for(&output.name.name) {
-                let mut builder = self.handler.build_error_with_span(
-                    &format!("the name `{}` is defined multiple times", output.name.name),
-                    LabeledSpan::new(
-                        output.name.span,
-                        &format!("`{}` redefined here", output.name.name),
-                        true,
-                    ),
-                );
-                if let Some(span) = decl.get_span() {
-                    builder.add_span_with_label(
-                        span,
-                        &format!(
-                            "previous definition of the value `{}` here",
-                            output.name.name
-                        ),
-                        false,
-                    );
-                }
-                builder.emit();
-                self.errors.push(Box::new(NamingError::NameAlreadyUsed {
-                    current: output,
-                    previous: decl,
-                }));
-            } else {
-                self.add_decl_for(&output.name.name, output.into(), output);
-            }
-            if let Some(ref ty) = &output.ty {
-                self.check_type(ty);
-            }
-        }
-    }
-
-    fn add_inputs(&mut self, spec: &'a LolaSpec) {
-        for input in &spec.inputs {
-            if let Some(decl) = self.declarations.get_decl_for(&input.name.name) {
-                self.errors.push(Box::new(NamingError::NameAlreadyUsed {
-                    current: input,
-                    previous: decl,
-                }));
-            } else {
-                self.add_decl_for(&input.name.name, input.into(), input);
-            }
-            self.check_type(&input.ty);
-
-            self.declarations.push();
-            input
-                .params
-                .iter()
-                .for_each(|param| self.check_param(&param));
-            self.declarations.pop();
-        }
-    }
-
-    fn add_constants(&mut self, spec: &'a LolaSpec) {
-        for constant in &spec.constants {
-            if let Some(decl) = self.declarations.get_decl_for(&constant.name.name) {
-                self.errors.push(Box::new(NamingError::NameAlreadyUsed {
-                    current: constant,
-                    previous: decl,
-                }));
-            } else {
-                self.add_decl_for(&constant.name.name, constant.into(), constant);
-            }
-            if let Some(ref ty) = constant.ty {
-                self.check_type(&ty);
-            }
-        }
-    }
-
     fn check_type_declarations(&mut self, spec: &'a LolaSpec) {
-        for type_decl in &spec.type_declarations {
+        unimplemented!();
+        /*for type_decl in &spec.type_declarations {
             self.declarations.push();
             // check children
             let mut field_names: Vec<(&'a String, &'a TypeDeclField)> = Vec::new();
@@ -312,24 +330,13 @@ impl<'a> NamingAnalysis<'a> {
             self.declarations.pop();
 
             // only add the new type name after checking all fields
-            if let Some(ref name) = &type_decl.name {
-                if let Some(decl) = self.declarations.get_decl_for(&name.name) {
-                    self.errors.push(Box::new(NamingError::NameAlreadyUsed {
-                        current: type_decl,
-                        previous: decl,
-                    }));
-                } else {
-                    self.add_decl_for(
-                        &name.name,
-                        Declaration::UserDefinedType(type_decl),
-                        type_decl,
-                    );
-                }
+            if let Some(name) = type_decl.name.as_ref() {
+                self.add_decl_for(&name.name, type_decl.into());
             } else {
                 self.errors
                     .push(Box::new(NamingError::UnnamedTypeDeclaration(type_decl)));
             }
-        }
+        }*/
     }
 
     fn check_stream_instance(&mut self, instance: &'a StreamInstance) {
@@ -338,15 +345,31 @@ impl<'a> NamingAnalysis<'a> {
             .get_decl_for(&instance.stream_identifier.name)
         {
             if !declaration_is_lookup_target(&decl) {
-                self.errors
-                    .push(Box::new(NamingError::NotAStream(instance)));
+                // not a stream
+                let mut builder = self.handler.build_error_with_span(
+                    &format!(
+                        "the name `{}` is not a stream",
+                        instance.stream_identifier.name
+                    ),
+                    LabeledSpan::new(instance._span, &format!("expected a stream here"), true),
+                );
+                if let Some(span) = decl.get_span() {
+                    builder.add_span_with_label(
+                        span,
+                        &format!("definition of `{}` here", instance.stream_identifier.name),
+                        false,
+                    );
+                }
+                builder.emit();
             } else {
                 self.result.insert(*instance.id(), decl);
             }
         } else {
             // it does not exist
-            self.errors
-                .push(Box::new(NamingError::NameNotFound(instance)));
+            self.handler.error_with_span(
+                "name `{}` does not exist in current scope",
+                LabeledSpan::new(instance._span, "does not exist", true),
+            );
         }
         // check paramterization
         instance.arguments.iter().for_each(|param| {
@@ -368,14 +391,18 @@ impl<'a> NamingAnalysis<'a> {
                 if let Some(decl) = self.declarations.get_decl_for(&ident.name) {
                     assert!(*expression.id() != NodeId::DUMMY);
                     if declaration_is_type(&decl) {
-                        self.errors
-                            .push(Box::new(NamingError::TypeNotAllowedHere(expression)));
+                        self.handler.error_with_span(
+                            &format!("expected stream, found type `{}`", ident.name),
+                            LabeledSpan::new(ident.span, "is not a stream", true),
+                        );
                     } else {
                         self.result.insert(*expression.id(), decl);
                     }
                 } else {
-                    self.errors
-                        .push(Box::new(NamingError::NameNotFound(expression)))
+                    self.handler.error_with_span(
+                        "name `{}` does not exist in current scope",
+                        LabeledSpan::new(ident.span, "does not exist", true),
+                    );
                 }
             }
             Binary(_, left, right) => {
@@ -430,7 +457,7 @@ impl<'a> ScopedDecl<'a> {
         self.scopes.pop();
     }
 
-    fn get_decl_for(&self, name: &'a str) -> Option<Declaration<'a>> {
+    fn get_decl_for(&self, name: &str) -> Option<Declaration<'a>> {
         for scope in self.scopes.iter().rev() {
             if let Some(&decl) = scope.get(name) {
                 return Some(decl);
@@ -439,7 +466,7 @@ impl<'a> ScopedDecl<'a> {
         None
     }
 
-    fn get_decl_in_current_scope_for(&self, name: &'a str) -> Option<Declaration<'a>> {
+    fn get_decl_in_current_scope_for(&self, name: &str) -> Option<Declaration<'a>> {
         match self.scopes.last().unwrap().get(name) {
             Some(&decl) => Some(decl),
             None => None,
@@ -464,11 +491,24 @@ pub enum Declaration<'a> {
 
 impl<'a> Declaration<'a> {
     fn get_span(&self) -> Option<Span> {
-        match self {
+        match &self {
             Declaration::Const(constant) => Some(constant.name.span),
             Declaration::In(input) => Some(input.name.span),
             Declaration::Out(output) => Some(output.name.span),
-            _ => unimplemented!(),
+            Declaration::UserDefinedType(ty) => ty.name.as_ref().map(|ident| ident.span),
+            Declaration::Param(p) => Some(p.name.span),
+            Declaration::BuiltinType(_) => None,
+        }
+    }
+
+    fn get_name(&self) -> Option<&str> {
+        match self {
+            Declaration::Const(constant) => Some(&constant.name.name),
+            Declaration::In(input) => Some(&input.name.name),
+            Declaration::Out(output) => Some(&output.name.name),
+            Declaration::UserDefinedType(ty) => ty.name.as_ref().map(|ident| ident.name.as_str()),
+            Declaration::Param(p) => Some(&p.name.name),
+            Declaration::BuiltinType(_) => None,
         }
     }
 }
@@ -497,6 +537,12 @@ impl<'a> Into<Declaration<'a>> for &'a Parameter {
     }
 }
 
+impl<'a> Into<Declaration<'a>> for &'a TypeDeclaration {
+    fn into(self) -> Declaration<'a> {
+        Declaration::UserDefinedType(self)
+    }
+}
+
 #[cfg(test)]
 mod tests {
 
@@ -512,10 +558,9 @@ mod tests {
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), content));
         let mut naming_analyzer = NamingAnalysis::new(&handler);
         naming_analyzer.check(&ast);
-        naming_analyzer.errors.len()
+        handler.emitted_errors()
     }
 
-    // TODO: implement test cases
     #[test]
     fn unknown_types_are_reported() {
         assert_eq!(

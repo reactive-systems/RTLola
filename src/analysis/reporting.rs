@@ -161,6 +161,17 @@ impl StderrEmitter {
                     path == snippet.path,
                     "assume snippets to be in same source file, use `SubDiagnostic` if not"
                 );
+
+                fn render_source_line(snippet: &CodeLine) -> ColoredLine {
+                    let mut rendered_line = ColoredLine::new();
+                    rendered_line.push(
+                        &format!("{} | ", snippet.line_number),
+                        ColorSpec::new().set_fg(Some(Color::Blue)).clone(),
+                    );
+                    rendered_line.push(&snippet.line, ColorSpec::new());
+                    rendered_line
+                }
+
                 // source code snippet
                 if prev_line_number.is_none() {
                     // print leading space
@@ -170,25 +181,24 @@ impl StderrEmitter {
                         ColorSpec::new().set_fg(Some(Color::Blue)).clone(),
                     );
                     lines.push(rendered_line);
+
+                    lines.push(render_source_line(&snippet));
                 } else {
-                    assert!(prev_line_number.unwrap() < snippet.line_number);
-                    if prev_line_number.unwrap() + 1 != snippet.line_number {
+                    assert!(prev_line_number.unwrap() <= snippet.line_number);
+                    if prev_line_number.unwrap() + 1 < snippet.line_number {
                         // print ...
                         let mut rendered_line = ColoredLine::new();
                         rendered_line
                             .push("...", ColorSpec::new().set_fg(Some(Color::Blue)).clone());
                         lines.push(rendered_line);
                     }
+
+                    if prev_line_number.unwrap() != snippet.line_number {
+                        // do not print line twice
+                        lines.push(render_source_line(&snippet));
+                    }
                 }
                 prev_line_number = Some(snippet.line_number);
-
-                let mut rendered_line = ColoredLine::new();
-                rendered_line.push(
-                    &format!("{} | ", snippet.line_number),
-                    ColorSpec::new().set_fg(Some(Color::Blue)).clone(),
-                );
-                rendered_line.push(&snippet.line, ColorSpec::new());
-                lines.push(rendered_line);
 
                 let mut rendered_line = ColoredLine::new();
                 rendered_line.push(
