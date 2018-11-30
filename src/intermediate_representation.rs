@@ -8,13 +8,15 @@ pub struct IntermediateRepresentation {
     pub time_outputs: Vec<OutputStream>,
     /// A collection of all sliding windows.
     pub sliding_windows: Vec<SlidingWindow>,
+    /// A collection of triggers
+    pub triggers: Vec<Trigger>,
     /// A collection of flags representing features the specification requires.
     pub feature_flags: Vec<FeatureFlag>,
 }
 
 /// Represents an atomic type, i.e. a type that is not composed of other types.
 #[derive(Debug, Clone, Copy)]
-pub enum AtomicType {
+pub enum PrimitiveType {
     Int(u8),
     UInt(u8),
     Float(u8),
@@ -26,8 +28,8 @@ pub enum AtomicType {
 /// Allows for computing the required memory to store one value of this type.
 #[derive(Debug, Clone)]
 pub enum Type {
-    Atomic(AtomicType),
-    Tuple(Vec<AtomicType>),
+    Atomic(PrimitiveType),
+    Tuple(Vec<PrimitiveType>),
 }
 
 /// Represents an input stream of a Lola specification.
@@ -37,11 +39,76 @@ pub struct InputStream {
     pub ty: Type,
 }
 
+/// Represents an output stream in a Lola specification. The optional `message` is supposed to be
+/// printed when any instance of this stream produces a `true` output.
+#[derive(Debug)]
+pub struct OutputStream {
+    pub name: String,
+    pub ty: Type,
+    pub params: Vec<Parameter>,
+    pub expr: Expression,
+}
+
+#[derive(Debug)]
+pub struct Trigger {
+    pub name: String,
+    pub message: Option<String>,
+    /// Reference to `event_outputs`
+    pub idx: usize,
+}
+
 /// Represents a parameter, i.e. a name and a type.
 #[derive(Debug)]
 pub struct Parameter {
     pub name: String,
     pub ty: Type,
+}
+
+/// An expression in the IR is a list of executable statements
+#[derive(Debug)]
+pub struct Expression {
+    /// A list of statements where the last statement represents the result of the expression
+    pub stmts: Vec<Statement>,
+    /// A list of temporary values, use in the statements
+    pub temporaries: Vec<Type>,
+}
+
+pub type Temporary = u32;
+
+/// A statement is of the form `target = op <arguments>`
+#[derive(Debug)]
+pub struct Statement {
+    /// the name of the temporary
+    pub target: Temporary,
+    pub op: Op,
+    pub args: Vec<Temporary>,
+}
+
+/// the operations (instruction set) of the IR
+#[derive(Debug)]
+pub enum Op {
+    /// Loading a constant
+    LoadConstant(Constant),
+    /// Applying arithmetic or logic operation
+    ArithLog(ArithLogOp, Type),
+    /// Accessing another stream
+    StreamLookup {
+        instance: StreamInstance,
+        offset: Offset,
+        default: Temporary,
+    },
+    /// A window expression over a duration
+    WindowLookup(WindowReference),
+    /// An if-then-else expression
+    Ite {
+        condition: Temporary,
+        lhs: Vec<Statement>,
+        rhs: Vec<Statement>,
+    },
+    /// A tuple expression
+    Tuple(Vec<Temporary>),
+    /// A function call
+    Function(FunctionKind, Vec<Temporary>),
 }
 
 /// Represents a constant value of a certain kind.
@@ -58,14 +125,14 @@ pub enum Constant {
 #[derive(Debug)]
 pub struct StreamInstance {
     pub reference: StreamReference,
-    pub arguments: Vec<Box<Expression>>,
+    pub arguments: Vec<Box<Temporary>>,
 }
 
 /// Offset used in the lookup expression
 #[derive(Debug)]
 pub enum Offset {
     /// A discrete offset, e.g., `0`, `-4`, or `42`
-    DiscreteOffset(Box<Expression>),
+    DiscreteOffset(Constant),
     /// A real-time offset, e.g., `3ms`, `4min`, `2.3h`
     RealTimeOffset(Duration),
 }
@@ -80,7 +147,11 @@ pub enum WindowOperation {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum BinOp {
+pub enum ArithLogOp {
+    /// The `!` operator for logical inversion
+    Not,
+    /// The `-` operator for negation
+    Neg,
     /// The `+` operator (addition)
     Add,
     /// The `-` operator (subtraction)
@@ -123,14 +194,6 @@ pub enum BinOp {
     Gt,
 }
 
-#[derive(Debug, Clone, Copy)]
-pub enum UnOp {
-    /// The `!` operator for logical inversion
-    Not,
-    /// The `-` operator for negation
-    Neg,
-}
-
 #[derive(Debug, PartialEq, Eq)]
 pub enum FunctionKind {
     NthRoot,
@@ -149,58 +212,8 @@ pub enum FunctionKind {
 /// Specifies a duration as well as a rate, normalized to ms.
 #[derive(Debug)]
 pub struct Duration {
-    pub expr: Box<Expression>,
+    pub constant: Constant,
     pub factor: f64,
-}
-
-/// Specifies the kind of an expression and contains all information specific to this kind.
-#[derive(Debug)]
-pub enum ExpressionKind {
-    // I chose to call it `Constant` rather than `Literal`, because it might be the result of
-    // constant folding or similar, and not originally a literal.
-    Const(Constant),
-    /// An identifier, e.g., `foo`
-    // TODO: This can only refer to a parameter. Use indices for accessing params, store index here.
-    // TODO: Irrelevant until parametrization is introduced.
-    Ident(String),
-    /// A default expression, e.g., ` a ? 0 `
-    Default(Box<Expression>, Box<Expression>),
-    /// A stream lookup with offset
-    StreamLookup(StreamInstance, Offset),
-    /// A window expression over a duration
-    WindowLookup(WindowReference),
-    /// A binary operation (For example: `a + b`, `a * b`)
-    Binary(BinOp, Box<Expression>, Box<Expression>),
-    /// A unary operation (For example: `!x`, `*x`)
-    Unary(UnOp, Box<Expression>),
-    /// An if-then-else expression
-    Ite(Box<Expression>, Box<Expression>, Box<Expression>),
-    /// A tuple expression
-    Tuple(Vec<Box<Expression>>),
-    /// A function call
-    Function(FunctionKind, Vec<Box<Expression>>),
-    // /// An aggregation such as `count`, `exists` or `forall`. Note: This is not a window aggregation
-    // TODO: Does not exist, yet.
-    //    Aggregation(AggregationKind, Parameter, Box<Expression>),
-}
-
-/// Represents an arbitrary expression. Specific information is available in the `kind`.
-#[derive(Debug)]
-pub struct Expression {
-    pub kind: ExpressionKind,
-    pub ty: Type,
-}
-
-/// Represents an output stream in a Lola specification. The optional `message` is supposed to be
-/// printed when any instance of this stream produces a `true` output.
-#[derive(Debug)]
-pub struct OutputStream {
-    pub name: String,
-    pub ty: Type,
-    pub params: Vec<Parameter>,
-    pub expr: Expression,
-    pub message: Option<String>,
-    // TODO: Check in constructor that message is only available when type is bool.
 }
 
 /// Represents an instance of a sliding window.
@@ -234,7 +247,8 @@ pub struct WindowReference {
 #[derive(Debug, Clone, Copy)]
 pub enum StreamReference {
     InRef(usize),
-    OutRef { timed: bool, ix: usize },
+    EventOutRef(usize),
+    TimeOutRef(usize),
 }
 
 /// A super-type for any kind of stream.
@@ -257,30 +271,52 @@ impl<'a> IntermediateRepresentation {
     pub fn get(&'a self, reference: StreamReference) -> Stream<'a> {
         match reference {
             StreamReference::InRef(ix) => Stream::In(&self.inputs[ix]),
-            StreamReference::OutRef { timed: true, ix } => Stream::Out(&self.time_outputs[ix]),
-            StreamReference::OutRef { timed: false, ix } => Stream::Out(&self.event_outputs[ix]),
+            StreamReference::EventOutRef(ix) => Stream::Out(&self.event_outputs[ix]),
+            StreamReference::TimeOutRef(ix) => Stream::Out(&self.time_outputs[ix]),
         }
     }
 }
 
-impl AtomicType {
-    fn size(self) -> ValSize {
+impl PrimitiveType {
+    fn size(self) -> Option<ValSize> {
         match self {
-            AtomicType::Int(w) | AtomicType::UInt(w) | AtomicType::Float(w) => u32::from(w),
-            AtomicType::String => unimplemented!(), // String handling is not clear, yet.
-            AtomicType::Bool => 1,
+            PrimitiveType::Int(w) | PrimitiveType::UInt(w) | PrimitiveType::Float(w) => {
+                Some(ValSize::from(w))
+            }
+            PrimitiveType::String => None, // Strings do not have a a priori fixed value
+            PrimitiveType::Bool => Some(ValSize::from(1)),
         }
     }
 }
 
 /// The size of a specific value in bytes.
-pub type ValSize = u32; // Needs to be reasonable large for compound types.
+#[derive(Debug, Clone, Copy)]
+pub struct ValSize(u32); // Needs to be reasonable large for compound types.
+
+impl From<u8> for ValSize {
+    fn from(val: u8) -> ValSize {
+        ValSize(val as u32)
+    }
+}
+
+impl std::ops::Add for ValSize {
+    type Output = ValSize;
+    fn add(self, rhs: ValSize) -> ValSize {
+        ValSize(self.0 + rhs.0)
+    }
+}
 
 impl Type {
-    fn size(&self) -> ValSize {
+    fn size(&self) -> Option<ValSize> {
         match self {
             Type::Atomic(a) => a.size(),
-            Type::Tuple(v) => v.iter().map(|x| x.size()).sum(),
+            Type::Tuple(v) => v.iter().map(|x| x.size()).fold(Some(ValSize(0)), |val, i| {
+                if let Some(val) = val {
+                    i.map(|i| val + i)
+                } else {
+                    None
+                }
+            }),
         }
     }
 }
