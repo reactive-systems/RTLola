@@ -1,3 +1,5 @@
+use std::fmt::{Display, Formatter, Result};
+
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub enum BuiltinType {
     Int(u8),
@@ -67,3 +69,16 @@ pub(crate) const KEYWORDS: [&str; 28] = [
     "overflow_error",
     "conversion_error",
 ];
+
+impl Display for BuiltinType {
+    fn fmt(&self, f: &mut Formatter) -> Result {
+        match self {
+            BuiltinType::Int(w) => write!(f, "Int{}", w),
+            BuiltinType::UInt(w) => write!(f, "UInt{}", w),
+            BuiltinType::Float(w) => write!(f, "Float{}", w),
+            BuiltinType::String => write!(f, "String"),
+            BuiltinType::Bool => write!(f, "Bool"),
+            BuiltinType::InvocationTime => write!(f, "InvocationTime"),
+        }
+    }
+}

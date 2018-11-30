@@ -47,10 +47,9 @@ impl<'a> TypeChecker<'a> {
         for trigger in &self.spec.trigger {
             let was = self.get_candidates(&trigger.expression);
             if !was.is_logic() {
-                // TODO: bool display
                 self.reg_error(TypeError::IncompatibleTypes(
                     trigger,
-                    format!("Expected {:?} but got {}.", BuiltinType::Bool, was),
+                    format!("Expected {} but got {}.", BuiltinType::Bool, was),
                 ));
             }
         }
