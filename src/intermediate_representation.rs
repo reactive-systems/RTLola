@@ -14,7 +14,7 @@ pub struct IntermediateRepresentation {
     pub feature_flags: Vec<FeatureFlag>,
 }
 
-/// Represents an atomic type, i.e. a type that is not composed of other types.
+/// Represents a primitive type, i.e. a type that is not composed of other types.
 #[derive(Debug, Clone, Copy)]
 pub enum PrimitiveType {
     Int(u8),
@@ -24,11 +24,11 @@ pub enum PrimitiveType {
     Bool,
 }
 
-/// Represents a type that is either atomic or a composed of other types, such as a tuple.
+/// Represents a type that is either primitive or a tuple.
 /// Allows for computing the required memory to store one value of this type.
 #[derive(Debug, Clone)]
 pub enum Type {
-    Atomic(PrimitiveType),
+    Primitive(PrimitiveType),
     Tuple(Vec<PrimitiveType>),
 }
 
@@ -51,10 +51,8 @@ pub struct OutputStream {
 
 #[derive(Debug)]
 pub struct Trigger {
-    pub name: String,
     pub message: Option<String>,
-    /// Reference to `event_outputs`
-    pub idx: usize,
+    pub reference: StreamReference,
 }
 
 /// Represents a parameter, i.e. a name and a type.
@@ -309,7 +307,7 @@ impl std::ops::Add for ValSize {
 impl Type {
     fn size(&self) -> Option<ValSize> {
         match self {
-            Type::Atomic(a) => a.size(),
+            Type::Primitive(a) => a.size(),
             Type::Tuple(v) => v.iter().map(|x| x.size()).fold(Some(ValSize(0)), |val, i| {
                 if let Some(val) = val {
                     i.map(|i| val + i)
