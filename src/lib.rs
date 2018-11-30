@@ -16,7 +16,7 @@ extern crate ast_node_derive;
 mod analysis;
 pub mod app;
 mod ast;
-pub mod intermediate_representation;
+mod ir;
 mod parse;
 mod print;
 mod reporting;
@@ -25,4 +25,4 @@ mod stdlib;
 mod ty;
 
 // Re-export on the root level
-pub use crate::ast::{LanguageSpec, LolaSpec};
+pub use crate::ir::LolaIR;

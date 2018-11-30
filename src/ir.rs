@@ -1,5 +1,5 @@
 #[derive(Debug)]
-pub struct IntermediateRepresentation {
+pub struct LolaIR {
     /// All input streams.
     pub inputs: Vec<InputStream>,
     /// All event-triggered output streams and triggers. See `OutputStream` for more information.
@@ -258,7 +258,7 @@ pub enum Stream<'a> {
 
 ////////// Implementations //////////
 
-impl<'a> IntermediateRepresentation {
+impl<'a> LolaIR {
     pub fn outputs(&'a self) -> Vec<Stream<'a>> {
         self.event_outputs
             .iter()
@@ -327,12 +327,8 @@ use crate::ast;
 // Placeholder for the actual type table
 pub(crate) struct TypeTable {}
 
-impl IntermediateRepresentation {
-    pub(crate) fn new(
-        spec: ast::LolaSpec,
-        decl: &DeclarationTable,
-        tt: &TypeTable,
-    ) -> IntermediateRepresentation {
+impl LolaIR {
+    pub(crate) fn new(spec: ast::LolaSpec, decl: &DeclarationTable, tt: &TypeTable) -> LolaIR {
         let inputs: Vec<InputStream> = spec
             .inputs
             .iter()
