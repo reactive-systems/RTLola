@@ -828,7 +828,7 @@ mod tests {
 
     fn cmp_ast_spec(ast: &LolaSpec, spec: &str) -> bool {
         // Todo: Make more robust, e.g. against changes in whitespace.
-        assert_eq!(format!("{}", ast), spec.replace("\n", " "));
+        assert_eq!(format!("{}", ast), spec);
         true
     }
 
@@ -916,7 +916,7 @@ mod tests {
 
     #[test]
     fn build_ast_parameterized_input() {
-        let spec = "input in <ab: Int8>: Int8";
+        let spec = "input in <ab: Int8>: Int8\n";
         let throw = |e| panic!("{}", e);
         let ast = parse(spec).unwrap_or_else(throw);
         cmp_ast_spec(&ast, spec);
@@ -1027,7 +1027,7 @@ mod tests {
 
     #[test]
     fn build_simple_ast() {
-        let spec = "input in: Int\noutput out: Int := in\ntrigger in ≠ out";
+        let spec = "input in: Int\noutput out: Int := in\ntrigger in ≠ out\n";
         let throw = |e| panic!("{}", e);
         let ast = parse(spec).unwrap_or_else(throw);
         cmp_ast_spec(&ast, spec);
@@ -1035,7 +1035,7 @@ mod tests {
 
     #[test]
     fn build_ast_input() {
-        let spec = "input in: Int\ninput in2: Int\ninput in3: (Int, Bool)\ninput in4: Bool";
+        let spec = "input in: Int\ninput in2: Int\ninput in3: (Int, Bool)\ninput in4: Bool\n";
         let throw = |e| panic!("{}", e);
         let ast = parse(spec).unwrap_or_else(throw);
         cmp_ast_spec(&ast, spec);
@@ -1043,7 +1043,7 @@ mod tests {
 
     #[test]
     fn build_parenthesized_expression() {
-        let spec = "output s: Bool := (true ∨ true)";
+        let spec = "output s: Bool := (true ∨ true)\n";
         let throw = |e| panic!("{}", e);
         let ast = parse(spec).unwrap_or_else(throw);
         cmp_ast_spec(&ast, spec);
@@ -1051,7 +1051,7 @@ mod tests {
 
     #[test]
     fn build_lookup_expression() {
-        let spec = "output s: Int := s[-1] ? (3 * 4)";
+        let spec = "output s: Int := s[-1] ? (3 * 4)\n";
         let throw = |e| panic!("{}", e);
         let ast = parse(spec).unwrap_or_else(throw);
         cmp_ast_spec(&ast, spec);
@@ -1059,7 +1059,7 @@ mod tests {
 
     #[test]
     fn build_ternary_expression() {
-        let spec = "input in: Int\noutput s: Int := if in = 3 then 4 else in + 2";
+        let spec = "input in: Int\noutput s: Int := if in = 3 then 4 else in + 2\n";
         let throw = |e| panic!("{}", e);
         let ast = parse(spec).unwrap_or_else(throw);
         cmp_ast_spec(&ast, spec);
@@ -1067,7 +1067,7 @@ mod tests {
 
     #[test]
     fn build_function_expression() {
-        let spec = "input in: (Int, Bool)\noutput s: Int := nroot(1, π(1, in))";
+        let spec = "input in: (Int, Bool)\noutput s: Int := nroot(1, π(1, in))\n";
         let throw = |e| panic!("{}", e);
         let ast = parse(spec).unwrap_or_else(throw);
         cmp_ast_spec(&ast, spec);
@@ -1075,7 +1075,7 @@ mod tests {
 
     #[test]
     fn build_trigger() {
-        let spec = "input in: Int\ntrigger in > 5";
+        let spec = "input in: Int\ntrigger in > 5\n";
         let throw = |e| panic!("{}", e);
         let ast = parse(spec).unwrap_or_else(throw);
         cmp_ast_spec(&ast, spec);
@@ -1083,7 +1083,7 @@ mod tests {
 
     #[test]
     fn build_complex_expression() {
-        let spec = "output s: Double := if !((s[-1] ? (3 * 4) + -4) = 12) ∨ true = false then 2.0 else 4.1";
+        let spec = "output s: Double := if !((s[-1] ? (3 * 4) + -4) = 12) ∨ true = false then 2.0 else 4.1\n";
         let throw = |e| panic!("{}", e);
         let ast = parse(spec).unwrap_or_else(throw);
         cmp_ast_spec(&ast, spec);
@@ -1091,7 +1091,7 @@ mod tests {
 
     #[test]
     fn build_type_declaration() {
-        let spec = "type VerifiedUser { name: String }";
+        let spec = "type VerifiedUser { name: String }\n";
         let throw = |e| panic!("{}", e);
         let ast = parse(spec).unwrap_or_else(throw);
         cmp_ast_spec(&ast, spec);
@@ -1099,7 +1099,7 @@ mod tests {
 
     #[test]
     fn build_parameter_list() {
-        let spec = "output s <a: B, c: D>: E := 3";
+        let spec = "output s <a: B, c: D>: E := 3\n";
         let throw = |e| panic!("{}", e);
         let ast = parse(spec).unwrap_or_else(throw);
         cmp_ast_spec(&ast, spec);
@@ -1107,7 +1107,8 @@ mod tests {
 
     #[test]
     fn build_template_spec() {
-        let spec = "output s: Int { invoke inp unless 3 > 5 extend b @ 5GHz terminate false } := 3";
+        let spec =
+            "output s: Int { invoke inp unless 3 > 5 extend b @ 5GHz terminate false } := 3\n";
         let throw = |e| panic!("{}", e);
         let ast = parse(spec).unwrap_or_else(throw);
         cmp_ast_spec(&ast, spec);

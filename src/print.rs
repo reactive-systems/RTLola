@@ -4,37 +4,28 @@ use super::ast::*;
 use super::parse::Ident;
 use std::fmt::{Display, Formatter, Result};
 
-pub(crate) struct PrintHelper {}
-impl PrintHelper {
-    pub(crate) fn write<T: Display>(
-        f: &mut Formatter,
-        v: &[T],
-        pref: &str,
-        suff: &str,
-        join: &str,
-    ) -> Result {
-        write!(f, "{}", pref)?;
-        if let Some(e) = v.first() {
-            write!(f, "{}", e)?;
-            for b in &v[1..] {
-                write!(f, "{}{}", join, b)?;
-            }
-        }
-        write!(f, "{}", suff)?;
-        Ok(())
-    }
-
-    pub(crate) fn format_opt<T: Display>(opt: &Option<T>, pref: &str, suff: &str) -> String {
-        if let Some(ref e) = opt {
-            format!("{}{}{}", pref, e, suff)
-        } else {
-            String::new()
+fn write<T: Display>(f: &mut Formatter, v: &[T], pref: &str, suff: &str, join: &str) -> Result {
+    write!(f, "{}", pref)?;
+    if let Some(e) = v.first() {
+        write!(f, "{}", e)?;
+        for b in &v[1..] {
+            write!(f, "{}{}", join, b)?;
         }
     }
+    write!(f, "{}", suff)?;
+    Ok(())
+}
 
-    pub(crate) fn format_type(ty: &Option<Type>) -> String {
-        PrintHelper::format_opt(ty, ": ", "")
+fn format_opt<T: Display>(opt: &Option<T>, pref: &str, suff: &str) -> String {
+    if let Some(ref e) = opt {
+        format!("{}{}{}", pref, e, suff)
+    } else {
+        String::new()
     }
+}
+
+fn format_type(ty: &Option<Type>) -> String {
+    format_opt(ty, ": ", "")
 }
 
 impl Display for Constant {
@@ -43,7 +34,7 @@ impl Display for Constant {
             f,
             "constant {}{} := {}",
             self.name,
-            PrintHelper::format_type(&self.ty),
+            format_type(&self.ty),
             self.literal
         )
     }
@@ -53,7 +44,7 @@ impl Display for Input {
     fn fmt(&self, f: &mut Formatter) -> Result {
         write!(f, "input {}", self.name)?;
         if !self.params.is_empty() {
-            PrintHelper::write(f, &self.params, " <", ">", ", ")?;
+            write(f, &self.params, " <", ">", ", ")?;
         }
         write!(f, ": {}", self.ty)
     }
@@ -63,13 +54,13 @@ impl Display for Output {
     fn fmt(&self, f: &mut Formatter) -> Result {
         write!(f, "output {}", self.name)?;
         if !self.params.is_empty() {
-            PrintHelper::write(f, &self.params, " <", ">", ", ")?;
+            write(f, &self.params, " <", ">", ", ")?;
         }
         write!(
             f,
             "{}{} := {}",
-            PrintHelper::format_type(&self.ty),
-            PrintHelper::format_opt(&self.template_spec, " ", ""),
+            format_type(&self.ty),
+            format_opt(&self.template_spec, " ", ""),
             self.expression
         )
     }
@@ -87,13 +78,13 @@ impl Display for TemplateSpec {
         if let Some(ref t) = self.ter {
             vec.push(format!("{}", t));
         }
-        PrintHelper::write(f, &vec, "{ ", " }", " ")
+        write(f, &vec, "{ ", " }", " ")
     }
 }
 
 impl Display for Parameter {
     fn fmt(&self, f: &mut Formatter) -> Result {
-        write!(f, "{}{}", self.name, PrintHelper::format_type(&self.ty))
+        write!(f, "{}{}", self.name, format_type(&self.ty))
     }
 }
 
@@ -117,8 +108,8 @@ impl Display for ExtendSpec {
         write!(
             f,
             "extend {}{}",
-            PrintHelper::format_opt(&self.target, "", ""),
-            PrintHelper::format_opt(&self.freq, " @ ", ""),
+            format_opt(&self.target, "", ""),
+            format_opt(&self.freq, " @ ", ""),
         )
     }
 }
@@ -143,9 +134,9 @@ impl Display for Trigger {
         write!(
             f,
             "trigger{} {}{}",
-            PrintHelper::format_opt(&self.name, " ", " :="),
+            format_opt(&self.name, " ", " :="),
             self.expression,
-            PrintHelper::format_opt(&self.message, " \"", "\""),
+            format_opt(&self.message, " \"", "\""),
         )
     }
 }
@@ -161,7 +152,7 @@ impl Display for TypeKind {
         match &self {
             TypeKind::Simple(name) => write!(f, "{}", name),
             TypeKind::Malformed(s) => write!(f, "{}", s),
-            TypeKind::Tuple(types) => PrintHelper::write(f, types, "(", ")", ", "),
+            TypeKind::Tuple(types) => write(f, types, "(", ")", ", "),
         }
     }
 }
@@ -174,8 +165,8 @@ impl Display for TypeDeclField {
 
 impl Display for TypeDeclaration {
     fn fmt(&self, f: &mut Formatter) -> Result {
-        write!(f, "type {}", PrintHelper::format_opt(&self.name, "", ""))?;
-        PrintHelper::write(f, &self.fields, " { ", " }", ", ")
+        write!(f, "type {}", format_opt(&self.name, "", ""))?;
+        write(f, &self.fields, " { ", " }", ", ")
     }
 }
 
@@ -202,11 +193,11 @@ impl Display for Expression {
                 if right.is_some() { ")" } else { "" }
             ),
             ExpressionKind::MissingExpression() => Ok(()),
-            ExpressionKind::Tuple(exprs) => PrintHelper::write(f, exprs, "(", ")", ", "),
+            ExpressionKind::Tuple(exprs) => write(f, exprs, "(", ")", ", "),
             ExpressionKind::Function(kind, args) => {
                 write!(f, "{}", kind)?;
-                PrintHelper::write(f, args, "(", ")", ", ")
-            },
+                write(f, args, "(", ")", ", ")
+            }
         }
     }
 }
@@ -215,7 +206,7 @@ impl Display for StreamInstance {
     fn fmt(&self, f: &mut Formatter) -> Result {
         write!(f, "{}", self.stream_identifier)?;
         if !self.arguments.is_empty() {
-            PrintHelper::write(f, &self.arguments, "(", ")", ", ")
+            write(f, &self.arguments, "(", ")", ", ")
         } else {
             Ok(())
         }
@@ -377,33 +368,23 @@ impl Display for LanguageSpec {
 impl Display for LolaSpec {
     fn fmt(&self, f: &mut Formatter) -> Result {
         if let Some(v) = &self.language {
-            write!(f, "version {}", v)?
+            writeln!(f, "version {}", v)?
         }
-        let mut first = true;
-        if !self.type_declarations.is_empty() {
-            PrintHelper::write(
-                f,
-                &self.type_declarations,
-                if first { "" } else { " " },
-                "",
-                " ",
-            )?;
-            first = false;
+
+        for decl in &self.type_declarations {
+            writeln!(f, "{}", decl);
         }
-        if !self.constants.is_empty() {
-            PrintHelper::write(f, &self.constants, if first { "" } else { " " }, "", " ")?;
-            first = false;
+        for constant in &self.constants {
+            writeln!(f, "{}", constant);
         }
-        if !self.inputs.is_empty() {
-            PrintHelper::write(f, &self.inputs, if first { "" } else { " " }, "", " ")?;
-            first = false;
+        for input in &self.inputs {
+            writeln!(f, "{}", input);
         }
-        if !self.outputs.is_empty() {
-            PrintHelper::write(f, &self.outputs, if first { "" } else { " " }, "", " ")?;
-            first = false;
+        for output in &self.outputs {
+            writeln!(f, "{}", output);
         }
-        if !self.trigger.is_empty() {
-            PrintHelper::write(f, &self.trigger, if first { "" } else { " " }, "", " ")?
+        for trigger in &self.trigger {
+            writeln!(f, "{}", trigger);
         }
         Ok(())
     }
