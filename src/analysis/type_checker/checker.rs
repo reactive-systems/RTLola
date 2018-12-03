@@ -51,25 +51,33 @@ impl<'a> TypeChecker<'a> {
         TypeCheckResult { type_table }
     }
 
-    fn check_triggers(&mut self) {
-        for trigger in &self.spec.trigger {
-            let was = self.check_expression(&trigger.expression);
-            if !was.is_logic() {
-                let expected = Candidates::Concrete(BuiltinType::Bool, TimingInfo::Unknown);
-                self.report_unexpected_type(
-                    &expected,
-                    &was,
-                    &trigger.expression,
-                    Some("Boolean required."),
-                    None,
-                );
-            }
-        }
-    }
-
     fn check_typedeclarations(&mut self) {
         for _td in &self.spec.type_declarations {
             unimplemented!();
+        }
+    }
+
+    fn check_constants(&mut self) {
+        for constant in &self.spec.constants {
+            let was = Candidates::from(&constant.literal);
+            let declared = self.check_optional_type(&constant.ty);
+            if declared.meet(&was).is_none() {
+                self.report_unexpected_type(
+                    &declared,
+                    &was,
+                    &constant.literal,
+                    Some("Does not match declared type."),
+                    None,
+                );
+            }
+            self.register_cand(*constant.id(), declared);
+        }
+    }
+
+    fn check_inputs(&mut self) {
+        for input in &self.spec.inputs {
+            let cands = self.check_ast_type(&input.ty).as_event_driven();
+            self.register_cand(*input.id(), cands);
         }
     }
 
@@ -103,48 +111,19 @@ impl<'a> TypeChecker<'a> {
         }
     }
 
-    fn extract_timing_info(stream: &Output) -> TimingInfo {
-        if stream
-            .template_spec
-            .as_ref()
-            .and_then(|spec| spec.ext.as_ref())
-            .map(|ext| ext.freq.is_some())
-            .unwrap_or(false)
-        {
-            TimingInfo::TimeBased
-        } else {
-            TimingInfo::EventBased
-        }
-    }
-
-    fn check_optional_type(&mut self, opt_ty: &'a Option<Type>) -> Candidates {
-        opt_ty
-            .as_ref()
-            .map(|t| self.check_ast_type(t))
-            .unwrap_or(Candidates::Any(TimingInfo::Unknown))
-    }
-
-    fn check_constants(&mut self) {
-        for constant in &self.spec.constants {
-            let was = Candidates::from(&constant.literal);
-            let declared = self.check_optional_type(&constant.ty);
-            if declared.meet(&was).is_none() {
+    fn check_triggers(&mut self) {
+        for trigger in &self.spec.trigger {
+            let was = self.check_expression(&trigger.expression);
+            if !was.is_logic() {
+                let expected = Candidates::Concrete(BuiltinType::Bool, TimingInfo::Unknown);
                 self.report_unexpected_type(
-                    &declared,
+                    &expected,
                     &was,
-                    &constant.literal,
-                    Some("Does not match declared type."),
+                    &trigger.expression,
+                    Some("Boolean required."),
                     None,
                 );
             }
-            self.register_cand(*constant.id(), declared);
-        }
-    }
-
-    fn check_inputs(&mut self) {
-        for input in &self.spec.inputs {
-            let cands = self.check_ast_type(&input.ty).as_event_driven();
-            self.register_cand(*input.id(), cands);
         }
     }
 
@@ -464,38 +443,6 @@ impl<'a> TypeChecker<'a> {
         }
     }
 
-    fn check_n_ary_fn(
-        &mut self,
-        call: &'a AstNode<'a>,
-        args: &[&'a Expression],
-        expected: &[&Candidates],
-    ) {
-        let was: Vec<Candidates> = args.iter().map(|a| self.check_expression(a)).collect();
-        if was.len() != expected.len() {
-            self.report_wrong_num_of_args(expected.len() as u8, was.len() as u8, call);
-        } else {
-            for ((expected, was), arg) in expected.iter().zip(was).zip(args) {
-                if expected.meet(&was).is_none() {
-                    // Register error and mask erroneous value in TypeTable.
-                    self.report_unexpected_type(expected, &was, *arg, None, None);
-                    let res: Candidates = (*expected).clone();
-                    self.override_cand(*arg.id(), res);
-                }
-            }
-        }
-    }
-
-    fn extract_constant_value(e: &'a Expression) -> Option<usize> {
-        match e.kind {
-            ExpressionKind::Lit(ref lit) => match lit.kind {
-                LitKind::Int(i) => Some(i as usize),
-                _ => unimplemented!(),
-            },
-            ExpressionKind::Ident(_) => unimplemented!(), // Here, we should check the declaration. If it is a constant -> fine.
-            _ => unimplemented!(),
-        }
-    }
-
     fn check_offset(&mut self, offset: &'a Offset, origin: &'a Expression) {
         let (expr, is_discrete) = match offset {
             Offset::DiscreteOffset(e) => (e, true),
@@ -585,6 +532,27 @@ impl<'a> TypeChecker<'a> {
         }
     }
 
+    fn check_n_ary_fn(
+        &mut self,
+        call: &'a AstNode<'a>,
+        args: &[&'a Expression],
+        expected: &[&Candidates],
+    ) {
+        let was: Vec<Candidates> = args.iter().map(|a| self.check_expression(a)).collect();
+        if was.len() != expected.len() {
+            self.report_wrong_num_of_args(expected.len() as u8, was.len() as u8, call);
+        } else {
+            for ((expected, was), arg) in expected.iter().zip(was).zip(args) {
+                if expected.meet(&was).is_none() {
+                    // Register error and mask erroneous value in TypeTable.
+                    self.report_unexpected_type(expected, &was, *arg, None, None);
+                    let res: Candidates = (*expected).clone();
+                    self.override_cand(*arg.id(), res);
+                }
+            }
+        }
+    }
+
     fn check_ast_type(&mut self, ty: &'a Type) -> Candidates {
         match ty.kind {
             TypeKind::Tuple(ref v) => {
@@ -598,6 +566,13 @@ impl<'a> TypeChecker<'a> {
                 self.register_cand(*ty.id(), res)
             }
         }
+    }
+
+    fn check_optional_type(&mut self, opt_ty: &'a Option<Type>) -> Candidates {
+        opt_ty
+            .as_ref()
+            .map(|t| self.check_ast_type(t))
+            .unwrap_or(Candidates::Any(TimingInfo::Unknown))
     }
 
     fn retrieve_from_declaration(&mut self, node: &'a AstNode<'a>) -> Candidates {
@@ -636,6 +611,37 @@ impl<'a> TypeChecker<'a> {
             } // Otherwise ignore, error already reported.
         }
         accu
+    }
+
+    fn retrieve_ti(&mut self, node: &'a AstNode<'a>) -> Option<TimingInfo> {
+        self.retrieve_type(node).timing_info()
+    }
+
+    fn retrieve_type(&mut self, node: &'a AstNode<'a>) -> Candidates {
+        if let Some(c) = self.retrieve_from_tt(*node.id()) {
+            c
+        } else {
+            self.report_value_not_present(node);
+            Candidates::top()
+        }
+    }
+
+    fn retrieve_from_tt(&self, nid: NodeId) -> Option<Candidates> {
+        self.tt.get(&nid).cloned()
+    }
+
+    fn override_cand(&mut self, nid: NodeId, cand: Candidates) -> Candidates {
+        assert!(self.tt.insert(nid, cand.clone()).is_some());
+        cand
+    }
+
+    fn register_cand(&mut self, nid: NodeId, cand: Candidates) -> Candidates {
+        let res = match self.tt.get(&nid) {
+            Some(_c) => panic!("Without type inference, we cannot concretize the type of a node."),
+            None => cand,
+        };
+        self.tt.insert(nid, res.clone());
+        res
     }
 
     fn report_unknown_identifier(&mut self, node: &'a AstNode<'a>) {
@@ -703,34 +709,28 @@ impl<'a> TypeChecker<'a> {
         self.handler.error_with_span(msg.as_str(), span);
     }
 
-    fn retrieve_ti(&mut self, node: &'a AstNode<'a>) -> Option<TimingInfo> {
-        self.retrieve_type(node).timing_info()
-    }
-
-    fn retrieve_type(&mut self, node: &'a AstNode<'a>) -> Candidates {
-        if let Some(c) = self.retrieve_from_tt(*node.id()) {
-            c
+    fn extract_timing_info(stream: &Output) -> TimingInfo {
+        if stream
+            .template_spec
+            .as_ref()
+            .and_then(|spec| spec.ext.as_ref())
+            .map(|ext| ext.freq.is_some())
+            .unwrap_or(false)
+        {
+            TimingInfo::TimeBased
         } else {
-            self.report_value_not_present(node);
-            Candidates::top()
+            TimingInfo::EventBased
         }
     }
 
-    fn retrieve_from_tt(&self, nid: NodeId) -> Option<Candidates> {
-        self.tt.get(&nid).cloned()
-    }
-
-    fn override_cand(&mut self, nid: NodeId, cand: Candidates) -> Candidates {
-        assert!(self.tt.insert(nid, cand.clone()).is_some());
-        cand
-    }
-
-    fn register_cand(&mut self, nid: NodeId, cand: Candidates) -> Candidates {
-        let res = match self.tt.get(&nid) {
-            Some(_c) => panic!("Without type inference, we cannot concretize the type of a node."),
-            None => cand,
-        };
-        self.tt.insert(nid, res.clone());
-        res
+    fn extract_constant_value(e: &'a Expression) -> Option<usize> {
+        match e.kind {
+            ExpressionKind::Lit(ref lit) => match lit.kind {
+                LitKind::Int(i) => Some(i as usize),
+                _ => unimplemented!(),
+            },
+            ExpressionKind::Ident(_) => unimplemented!(), // Here, we should check the declaration. If it is a constant -> fine.
+            _ => unimplemented!(),
+        }
     }
 }
