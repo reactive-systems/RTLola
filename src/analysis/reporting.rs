@@ -74,7 +74,7 @@ impl Handler {
             level: Bug,
             message: message.to_owned(),
             span: vec![span],
-            children: vec![]
+            children: vec![],
         });
     }
 }

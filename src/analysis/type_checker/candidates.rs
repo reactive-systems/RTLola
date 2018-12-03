@@ -89,9 +89,10 @@ impl Candidates {
         match self {
             Candidates::Numeric(_, ti) => Some(*ti),
             Candidates::Concrete(_, ti) => Some(*ti),
-            Candidates::Tuple(v) => v.iter()
-                    .map(|c| c.timing_info())
-                    .fold(Some(TimingInfo::Unknown), TimingInfo::meet_opt),
+            Candidates::Tuple(v) => v
+                .iter()
+                .map(|c| c.timing_info())
+                .fold(Some(TimingInfo::Unknown), TimingInfo::meet_opt),
             Candidates::Any(ti) => Some(*ti),
             Candidates::None => None,
         }
