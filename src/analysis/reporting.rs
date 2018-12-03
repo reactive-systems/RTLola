@@ -69,16 +69,7 @@ impl Handler {
         builder
     }
 
-    pub(crate) fn bug(&self, message: &str) {
-        self.emit(&Diagnostic {
-            level: Bug,
-            message: message.to_owned(),
-            span: Vec::new(),
-            children: vec![]
-        });
-    }
-
-    pub(crate) fn bug_with_error(&self, message: &str, span: LabeledSpan) {
+    pub(crate) fn bug_with_span(&self, message: &str, span: LabeledSpan) {
         self.emit(&Diagnostic {
             level: Bug,
             message: message.to_owned(),
