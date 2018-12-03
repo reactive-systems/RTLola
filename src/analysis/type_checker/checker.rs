@@ -228,13 +228,13 @@ impl<'a> TypeChecker<'a> {
         let numeric_type =
             Candidates::Numeric(NumConfig::new_unsigned(Some(8)), TimingInfo::Unknown);
         let any_type = Candidates::top();
-        let (expected_lhs, expected_rhs, expected_meet) = match op {
+        let (expected_lhs, expected_rhs) = match op {
             BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div | BinOp::Rem | BinOp::Pow => {
-                (&numeric_type, &numeric_type, &numeric_type)
+                (&numeric_type, &numeric_type)
             }
-            BinOp::And | BinOp::Or => (&logic_type, &logic_type, &logic_type),
+            BinOp::And | BinOp::Or => (&logic_type, &logic_type),
             BinOp::Eq | BinOp::Lt | BinOp::Le | BinOp::Ne | BinOp::Ge | BinOp::Gt => {
-                (&any_type, &any_type, &any_type)
+                (&any_type, &any_type)
             }
         };
         self.check_n_ary_fn(e, &vec![lhs, rhs], &vec![expected_lhs, expected_rhs]);
