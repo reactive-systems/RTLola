@@ -63,8 +63,8 @@ impl Handler {
         &self,
         message: &str,
         span: LabeledSpan,
-    ) -> DiagosticBuilder {
-        let mut builder = DiagosticBuilder::new(&self, Error, message);
+    ) -> DiagnosticBuilder {
+        let mut builder = DiagnosticBuilder::new(&self, Error, message);
         builder.add_labeled_span(span);
         builder
     }
@@ -332,18 +332,18 @@ impl LabeledSpan {
     }
 }
 
-/// Sometimes diagnostics cannot be emitted directly as important informations are still missing.
+/// Sometimes diagnostics cannot be emitted directly as important information is still missing.
 /// `DiagnosticBuilder` helps in this situations by allowing to incrementally build diagnostics.
 #[derive(Debug)]
-pub(crate) struct DiagosticBuilder<'a> {
+pub(crate) struct DiagnosticBuilder<'a> {
     handler: &'a Handler,
     diagnostic: Diagnostic,
     status: DiagnosticBuilderStatus,
 }
 
-impl<'a> DiagosticBuilder<'a> {
+impl<'a> DiagnosticBuilder<'a> {
     fn new(handler: &'a Handler, level: Level, messgage: &str) -> Self {
-        DiagosticBuilder {
+        DiagnosticBuilder {
             handler,
             diagnostic: Diagnostic {
                 level,
@@ -377,7 +377,7 @@ impl<'a> DiagosticBuilder<'a> {
     }
 }
 
-impl<'a> Drop for DiagosticBuilder<'a> {
+impl<'a> Drop for DiagnosticBuilder<'a> {
     fn drop(&mut self) {
         // make sure that diagnostic is either emitted or canceled
         if self.status == DiagnosticBuilderStatus::Building {
