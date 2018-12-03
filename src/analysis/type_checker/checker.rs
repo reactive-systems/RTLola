@@ -4,30 +4,33 @@ use ast::*;
 use std::collections::HashMap;
 extern crate ast_node;
 use super::candidates::*;
-use super::type_error::*;
 use super::TypeCheckResult;
+use analysis::reporting::{Handler, LabeledSpan};
+use ast_node::Span;
 use ast_node::{AstNode, NodeId};
 
 pub(crate) struct TypeChecker<'a> {
     declarations: &'a DeclarationTable<'a>,
     spec: &'a LolaSpec,
     tt: HashMap<NodeId, Candidates>,
-    errors: Vec<Box<TypeError<'a>>>,
+    handler: &'a Handler,
 }
 
-type TypeExpectation<'a> = Vec<(Box<Fn(&Candidates) -> bool>, &'a str)>;
-
 impl<'a> TypeChecker<'a> {
-    pub(crate) fn new(dt: &'a DeclarationTable, spec: &'a LolaSpec) -> TypeChecker<'a> {
+    pub(crate) fn new(
+        dt: &'a DeclarationTable,
+        spec: &'a LolaSpec,
+        handler: &'a Handler,
+    ) -> TypeChecker<'a> {
         TypeChecker {
             declarations: dt,
             spec,
             tt: HashMap::new(),
-            errors: Vec::new(),
+            handler,
         }
     }
 
-    pub(crate) fn check(&mut self) -> TypeCheckResult<'a> {
+    pub(crate) fn check(&mut self) -> TypeCheckResult {
         self.check_typedeclarations();
         self.check_constants();
         self.check_inputs();
@@ -37,20 +40,21 @@ impl<'a> TypeChecker<'a> {
         let type_table: HashMap<NodeId, super::super::common::Type> =
             self.tt.iter().map(|(nid, c)| (*nid, c.into())).collect();
 
-        TypeCheckResult {
-            errors: self.errors.clone(),
-            type_table,
-        }
+        TypeCheckResult { type_table }
     }
 
     fn check_triggers(&mut self) {
         for trigger in &self.spec.trigger {
             let was = self.get_candidates(&trigger.expression);
             if !was.is_logic() {
-                self.reg_error(TypeError::IncompatibleTypes(
-                    trigger,
-                    format!("Expected {} but got {}.", BuiltinType::Bool, was),
-                ));
+                let expected = Candidates::Concrete(BuiltinType::Bool, TimingInfo::Unknown);
+                self.unexpected_type(
+                    &expected,
+                    &was,
+                    &trigger.expression,
+                    Some("Boolean required."),
+                    None,
+                );
             }
         }
     }
@@ -79,10 +83,13 @@ impl<'a> TypeChecker<'a> {
             let was = self.get_candidates(&output.expression);
             let declared = self.get_from_tt(*output.id()).unwrap(); // Registered earlier.
             if declared.meet(&was).is_none() {
-                self.reg_error(TypeError::IncompatibleTypes(
-                    output,
-                    format!("Expected {} but got {}.", declared, was),
-                ));
+                self.unexpected_type(
+                    &declared,
+                    &was,
+                    &output.expression,
+                    Some("Does not match declared type."),
+                    None,
+                );
             }
             // Type is already declared, return.
         }
@@ -114,10 +121,13 @@ impl<'a> TypeChecker<'a> {
             let was = Candidates::from(&constant.literal);
             let declared = self.cands_from_opt_type(&constant.ty);
             if declared.meet(&was).is_none() {
-                self.reg_error(TypeError::IncompatibleTypes(
-                    constant,
-                    format!("Expected {} but got {}.", declared, was),
-                ));
+                self.unexpected_type(
+                    &declared,
+                    &was,
+                    &constant.literal,
+                    Some("Does not match declared type."),
+                    None,
+                );
             }
             self.reg_cand(*constant.id(), declared);
         }
@@ -134,20 +144,10 @@ impl<'a> TypeChecker<'a> {
         match e.kind {
             ExpressionKind::Lit(ref lit) => self.reg_cand(*e.id(), Candidates::from(lit)),
             ExpressionKind::Ident(_) => {
-                let cand = self.get_ty_from_decl(*e.id(), e);
+                let cand = self.get_ty_from_decl(e);
                 self.reg_cand(*e.id(), cand)
             }
-            ExpressionKind::Default(ref expr, ref dft) => {
-                let expr_ty = self.get_candidates(expr);
-                let dft_ty = self.get_candidates(dft);
-                let res = expr_ty.meet(&dft_ty);
-                if res.is_none() {
-                    self.reg_error(TypeError::IncompatibleTypes(e, String::from("A potentially undefined expression and its default need matching types.")));
-                    dft_ty
-                } else {
-                    self.reg_cand(*e.id(), res)
-                }
-            }
+            ExpressionKind::Default(ref expr, ref dft) => self.cands_from_default(e, expr, dft),
             ExpressionKind::Lookup(ref inst, ref offset, op) => {
                 self.cands_from_lookup(e, inst, offset, op)
             }
@@ -162,13 +162,32 @@ impl<'a> TypeChecker<'a> {
                 let res = self.get_candidates(expr);
                 self.reg_cand(*e.id(), res)
             }
-            ExpressionKind::MissingExpression() => self.reg_error(TypeError::MissingExpression(e)),
+            ExpressionKind::MissingExpression() => unimplemented!(),
             ExpressionKind::Tuple(ref exprs) => {
                 let cands: Vec<Candidates> = exprs.iter().map(|e| self.get_candidates(e)).collect();
                 self.reg_cand(*e.id(), Candidates::Tuple(cands))
             }
             ExpressionKind::Function(ref kind, ref args) => self.check_function(e, *kind, args),
         }
+    }
+
+    fn cands_from_default(
+        &mut self,
+        e: &'a AstNode<'a>,
+        expr: &'a Expression,
+        dft: &'a Expression,
+    ) -> Candidates {
+        let expr_ty = self.get_candidates(expr);
+        let dft_ty = self.get_candidates(dft);
+        let mut res = expr_ty.meet(&dft_ty);
+        if res.is_none() {
+            self.incompatible_types(
+                e,
+                "Default value and expression need to have compatible types.",
+            );
+            res = dft_ty
+        }
+        self.reg_cand(*e.id(), res)
     }
 
     fn cands_from_unary(
@@ -178,23 +197,38 @@ impl<'a> TypeChecker<'a> {
         operand: &'a Expression,
     ) -> Candidates {
         let op_type = self.get_candidates(operand);
-        let res_type = match operator {
-            UnOp::Neg if op_type.is_numeric() => Some(op_type.clone().into_signed()),
-            UnOp::Not if op_type.is_logic() => Some(op_type.clone()),
-            _ => None,
-        };
-        let ti = self.combine_and_check_ti(e, &[op_type.timing_info()]);
-        match res_type {
-            Some(cand) => self.reg_cand(*e.id(), cand),
-            None => {
-                self.reg_error(TypeError::IncompatibleTypes(
-                    e,
-                    format!(
-                        "Unary operator {} cannot be applied to type {}.",
-                        operator, op_type
-                    ),
-                ));
-                Candidates::Concrete(BuiltinType::Bool, ti)
+        match operator {
+            UnOp::Neg => {
+                if op_type.is_numeric() {
+                    op_type.clone().into_signed()
+                } else {
+                    let ti = op_type.timing_info().unwrap_or(TimingInfo::Unknown);
+                    let expected = Candidates::Numeric(NumConfig::new_unsigned(Some(8)), ti);
+                    self.unexpected_type(
+                        &expected,
+                        &op_type,
+                        e,
+                        Some("Expected numeric value."),
+                        None,
+                    );
+                    expected.into_signed()
+                }
+            }
+            UnOp::Not => {
+                if op_type.is_logic() {
+                    op_type.clone()
+                } else {
+                    let ti = op_type.timing_info().unwrap_or(TimingInfo::Unknown);
+                    let expected = Candidates::Concrete(BuiltinType::Bool, ti);
+                    self.unexpected_type(
+                        &expected,
+                        &op_type,
+                        e,
+                        Some("Expected boolean value."),
+                        None,
+                    );
+                    expected
+                }
             }
         }
     }
@@ -206,77 +240,77 @@ impl<'a> TypeChecker<'a> {
         lhs: &'a Expression,
         rhs: &'a Expression,
     ) -> Candidates {
-        let lhs_type = self.get_candidates(lhs);
-        let rhs_type = self.get_candidates(rhs);
-        let meet_type = lhs_type.meet(&rhs_type);
-        let ti = self.combine_and_check_ti(e, &[lhs_type.timing_info(), rhs_type.timing_info()]);
-        let mut incompatible_err = || {
-            self.reg_error(TypeError::IncompatibleTypes(
-                e,
-                format!(
-                    "Binary operator {} applied to types {} and {}.",
-                    op, lhs, rhs
-                ),
-            ));
-        };
-        match op {
+        let logic_type = Candidates::Concrete(BuiltinType::Bool, TimingInfo::Unknown);
+        let numeric_type =
+            Candidates::Numeric(NumConfig::new_unsigned(Some(8)), TimingInfo::Unknown);
+        let any_type = Candidates::top();
+        let (expected_lhs, expected_rhs, expected_meet) = match op {
             BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div | BinOp::Rem | BinOp::Pow => {
-                if meet_type.is_numeric() {
-                    meet_type
-                } else {
-                    incompatible_err();
-                    Candidates::Numeric(NumConfig::new_unsigned(None), ti)
-                }
+                (&numeric_type, &numeric_type, &numeric_type)
             }
-            BinOp::And | BinOp::Or => {
-                if meet_type.is_logic() {
-                    meet_type
-                } else {
-                    incompatible_err();
-                    Candidates::Concrete(BuiltinType::Bool, ti)
-                }
-            }
+            BinOp::And | BinOp::Or => (&logic_type, &logic_type, &logic_type),
             BinOp::Eq | BinOp::Lt | BinOp::Le | BinOp::Ne | BinOp::Ge | BinOp::Gt => {
-                // As long as two types are compatible in some way, we return a bool after the comparison.
-                if !meet_type.is_none() {
-                    Candidates::Concrete(BuiltinType::Bool, ti)
-                } else {
-                    incompatible_err();
-                    Candidates::Concrete(BuiltinType::Bool, ti)
-                }
+                (&any_type, &any_type, &any_type)
             }
-        }
+        };
+        self.check_n_ary_fn(e, &vec![lhs, rhs], &vec![expected_lhs, expected_rhs]);
+        let lhs_ty = self.retrieve_type(lhs);
+        let rhs_ty = self.retrieve_type(rhs);
+        let ti = self.retrieve_and_check_ti(&vec![lhs, rhs]);
+        let meet_type = lhs_ty.meet(&rhs_ty);
+        let error_return = match op {
+            BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div | BinOp::Rem | BinOp::Pow => {
+                Candidates::Numeric(NumConfig::new_unsigned(None), ti)
+            }
+            BinOp::And | BinOp::Or => Candidates::Concrete(BuiltinType::Bool, ti),
+            BinOp::Eq | BinOp::Lt | BinOp::Le | BinOp::Ne | BinOp::Ge | BinOp::Gt => {
+                Candidates::Concrete(BuiltinType::Bool, ti)
+            }
+        };
+        let res = if meet_type.is_none() {
+            let msg = format!(
+                "Binary operator {} is not applicable to incompatible types {} and {}.",
+                op, lhs_ty, rhs_ty
+            );
+            self.incompatible_types(e, msg.as_str());
+            error_return
+        } else {
+            meet_type
+        };
+        self.reg_cand(*e.id(), res)
     }
 
     fn cands_from_ite(
         &mut self,
         e: &'a Expression,
-        cond: &'a Expression,
-        cons: &'a Expression,
-        alt: &'a Expression,
+        cond_ex: &'a Expression,
+        cons_ex: &'a Expression,
+        alt_ex: &'a Expression,
     ) -> Candidates {
-        let cond = self.get_candidates(cond);
-        let cons = self.get_candidates(cons);
-        let alt = self.get_candidates(alt);
-        self.combine_and_check_ti(e, &[cons.timing_info(), alt.timing_info()]);
+        let cond = self.get_candidates(cond_ex);
+        let cons = self.get_candidates(cons_ex);
+        let alt = self.get_candidates(alt_ex);
+        self.retrieve_and_check_ti(&vec![cons_ex, alt_ex]);
         if !cond.is_logic() {
-            self.reg_error(TypeError::IncompatibleTypes(
-                e,
-                format!(
-                    "Expected boolean value in condition of `if` expression but got {}.",
-                    cond
-                ),
-            ));
+            let expected = Candidates::Concrete(BuiltinType::Bool, TimingInfo::Unknown);
+            self.unexpected_type(
+                &expected,
+                &cond,
+                cond_ex,
+                Some("Boolean expected"),
+                Some("Condition of an if expression needs to be boolean."),
+            );
         }
         let res_type = cons.meet(&alt);
         if res_type.is_none() {
-            self.reg_error(TypeError::IncompatibleTypes(
+            self.unexpected_type(
+                &cons,
+                &alt,
                 e,
-                format!(
-                    "Arms of `if` expression have incompatible types {} and {}.",
-                    cons, alt
-                ),
-            ))
+                Some("All arms of an if expression need to be compatible."),
+                Some("Arms have incompatible types."),
+            );
+            Candidates::top()
         } else {
             self.reg_cand(*e.id(), res_type)
         }
@@ -290,20 +324,22 @@ impl<'a> TypeChecker<'a> {
         op: Option<WindowOperation>,
     ) -> Candidates {
         self.check_offset(offset, e); // Return value does not matter.
-        let target_stream_type = self.check_stream_instance(inst, e);
+        let target_stream_type = self.check_stream_instance(inst);
         if op.is_none() {
             return self.reg_cand(*e.id(), target_stream_type);
         }
         let op = op.unwrap();
         // For all window operations, the source stream needs to be numeric.
         if !target_stream_type.is_numeric() {
-            return self.reg_error(TypeError::IncompatibleTypes(
-                e,
-                format!(
-                    "Window source needs to be numeric for the {:?} aggregation.",
-                    op
-                ),
-            ));
+            let expected =
+                Candidates::Numeric(NumConfig::new_unsigned(Some(8)), TimingInfo::Unknown);
+            self.unexpected_type(
+                &expected,
+                &target_stream_type,
+                inst,
+                Some("Numeric type required."),
+                Some("Window operations require a numeric source type."),
+            );
         }
         self.reg_cand(
             *e.id(),
@@ -327,45 +363,37 @@ impl<'a> TypeChecker<'a> {
         kind: FunctionKind,
         args: &'a [Box<Expression>],
     ) -> Candidates {
-        let cands: Vec<Candidates> = args.iter().map(|a| self.get_candidates(a)).collect();
-        let numeric_check = Box::new(|c: &Candidates| c.is_numeric());
-        let integer_check = Box::new(|c: &Candidates| c.is_integer());
-        let float_check = Box::new(|c: &Candidates| c.is_float());
-        let args = args.iter().map(|a| a.as_ref()).collect();
-        fn get_ti<'a>(
-            tc: &mut TypeChecker<'a>,
-            cands: &[Candidates],
-            e: &'a Expression,
-        ) -> TimingInfo {
-            let tis: Vec<Option<TimingInfo>> = cands.iter().map(|c| c.timing_info()).collect();
-            tc.combine_and_check_ti(e, &tis)
-        };
+        // TODO: Remove magic number, more info on timing requirement.
+        let numeric_type =
+            Candidates::Numeric(NumConfig::new_unsigned(Some(8)), TimingInfo::Unknown);
+        let integer_type = Candidates::Numeric(NumConfig::new_signed(Some(8)), TimingInfo::Unknown);
+        let float_type = Candidates::Numeric(NumConfig::new_float(Some(8)), TimingInfo::Unknown);
+        let args: Vec<&Expression> = args.iter().map(|a| a.as_ref()).collect();
         match kind {
             FunctionKind::NthRoot => {
-                let ti = get_ti(self, &cands, e);
-                let expected: TypeExpectation = vec![
-                    (integer_check, "integer value"),
-                    (numeric_check, "numeric value"),
-                ];
-                self.check_n_ary_fn(e, args, &expected, &cands);
+                self.check_n_ary_fn(e, &args, &vec![&integer_type, &numeric_type]);
+                let ti = self.retrieve_and_check_ti(&args);
                 self.reg_cand(*e.id(), Candidates::Numeric(NumConfig::new_float(None), ti))
             }
             FunctionKind::Sqrt => {
-                let ti = get_ti(self, &cands, e);
-                let expected: TypeExpectation = vec![(numeric_check, "numeric value")];
-                self.check_n_ary_fn(e, args, &expected, &cands);
+                self.check_n_ary_fn(e, &args, &vec![&numeric_type]);
+                let ti = self.retrieve_and_check_ti(&args);
                 self.reg_cand(*e.id(), Candidates::Numeric(NumConfig::new_float(None), ti))
             }
             FunctionKind::Projection => {
+                let cands: Vec<Candidates> = args.iter().map(|a| self.get_candidates(a)).collect();
                 if cands.len() < 2 {
-                    self.reg_error(TypeError::InvalidNumberOfArguments {
-                        node: e,
-                        expected: 2,
-                        was: cands.len() as u8,
-                    });
+                    self.unexpected_number_of_arguments(2, cands.len() as u8, e);
                 }
                 if !cands[0].is_unsigned() {
-                    self.reg_error(TypeError::InvalidArgument{ call: e, arg: args[0], msg: format!("Projection requires an unsigned integer as first argument but found {}.", cands[0])});
+                    let expected = Candidates::Concrete(BuiltinType::UInt(8), TimingInfo::Unknown);
+                    self.unexpected_type(
+                        &expected,
+                        &cands[0],
+                        e,
+                        Some("Unsigned integer required."),
+                        Some("Tuple projections require an unsigned integer as first argument."),
+                    );
                 }
                 match cands[1] {
                     Candidates::Tuple(ref v) => {
@@ -373,31 +401,33 @@ impl<'a> TypeChecker<'a> {
                             Some(n) if n < v.len() =>
                             // No way to recover from here.
                             {
-                                self.reg_error(TypeError::InvalidArgument {
-                                    call: e,
-                                    arg: args[1],
-                                    msg: format!(
-                                        "Projection index {} exceeds tuple dimension {}.",
-                                        n,
-                                        v.len()
-                                    ),
-                                })
+                                let msg = format!(
+                                    "Cannot access element {} in a tuple of length {}.",
+                                    n,
+                                    v.len()
+                                );
+                                let label = format!("Needs to be between 1 and {}.", v.len());
+                                self.invalid_argument(args[0], msg.as_str(), label.as_str());
+                                Candidates::top()
                             }
                             Some(n) => self.reg_cand(*e.id(), cands[n].clone()),
-                            None => self.reg_error(TypeError::ConstantValueRequired {
-                                call: e,
-                                args: args[1],
-                            }),
+                            None => {
+                                self.constant_value_required(args[0]);
+                                Candidates::top()
+                            }
                         }
                     }
-                    _ => self.reg_error(TypeError::InvalidArgument {
-                        call: e,
-                        arg: args[1],
-                        msg: format!(
-                            "Projection requires a tuple as second argument but found {}.",
-                            cands[1]
-                        ),
-                    }),
+                    _ => {
+                        let expected = &Candidates::Tuple(Vec::new());
+                        self.unexpected_type(
+                            &expected,
+                            &cands[1],
+                            args[1],
+                            Some("Tuple required."),
+                            Some("Tuple projections require a tuple as second argument."),
+                        );
+                        Candidates::top()
+                    }
                 }
             }
             FunctionKind::Sin
@@ -406,24 +436,23 @@ impl<'a> TypeChecker<'a> {
             | FunctionKind::Arcsin
             | FunctionKind::Arccos
             | FunctionKind::Arctan => {
-                let ti = get_ti(self, &cands, e);
-                let expected: TypeExpectation = vec![(numeric_check, "numeric value")];
-                self.check_n_ary_fn(e, args, &expected, &cands);
+                self.check_n_ary_fn(e, &args, &vec![&numeric_type]);
+                let ti = self.retrieve_and_check_ti(&args);
                 self.reg_cand(*e.id(), Candidates::Numeric(NumConfig::new_float(None), ti))
             }
             FunctionKind::Exp => {
-                let ti = get_ti(self, &cands, e);
-                let expected: TypeExpectation = vec![(numeric_check, "numeric value")];
-                self.check_n_ary_fn(e, args, &expected, &cands);
+                self.check_n_ary_fn(e, &args, &vec![&numeric_type]);
+                let ti = self.retrieve_and_check_ti(&args);
                 self.reg_cand(*e.id(), Candidates::Numeric(NumConfig::new_float(None), ti))
             }
             FunctionKind::Floor | FunctionKind::Ceil => {
-                let ti = get_ti(self, &cands, e);
-                let expected: TypeExpectation = vec![(float_check, "float value")];
-                self.check_n_ary_fn(e, args, &expected, &cands);
+                self.check_n_ary_fn(e, &args, &vec![&float_type]);
+                let ti = self.retrieve_and_check_ti(&args);
+                // TODO: This makes little sense.
+                let width = self.retrieve_type(args[0]).width();
                 self.reg_cand(
                     *e.id(),
-                    Candidates::Numeric(NumConfig::new_signed(cands[0].width()), ti),
+                    Candidates::Numeric(NumConfig::new_signed(width), ti),
                 )
             }
         }
@@ -431,26 +460,21 @@ impl<'a> TypeChecker<'a> {
 
     fn check_n_ary_fn(
         &mut self,
-        call: &'a Expression,
-        args: Vec<&'a Expression>,
-        expected: &TypeExpectation,
-        was: &[Candidates],
+        call: &'a AstNode<'a>,
+        args: &[&'a Expression],
+        expected: &[&Candidates],
     ) {
+        let was: Vec<Candidates> = args.iter().map(|a| self.get_candidates(a)).collect();
         if was.len() != expected.len() {
-            self.reg_error(TypeError::InvalidNumberOfArguments {
-                node: call,
-                expected: expected.len() as u8,
-                was: was.len() as u8,
-            });
-            return;
-        }
-        for (((pred, desc), ty), arg) in expected.iter().zip(was).zip(args) {
-            if !pred(ty) {
-                self.reg_error(TypeError::InvalidArgument {
-                    call,
-                    arg,
-                    msg: format!("Required {} but found {}.", desc, ty),
-                });
+            self.unexpected_number_of_arguments(expected.len() as u8, was.len() as u8, call);
+        } else {
+            for ((expected, was), arg) in expected.iter().zip(was).zip(args) {
+                if expected.meet(&was).is_none() {
+                    // Register error and mask erroneous value in TypeTable.
+                    self.unexpected_type(expected, &was, *arg, None, None);
+                    let res: Candidates = (*expected).clone();
+                    self.override_cand(*arg.id(), res);
+                }
             }
         }
     }
@@ -477,65 +501,64 @@ impl<'a> TypeChecker<'a> {
         match (is_discrete, cand.is_numeric(), cand.is_integer()) {
             (true, _, true) | (false, true, _) => {} // fine
             (true, _, false) => {
-                self.reg_error(TypeError::IncompatibleTypes(
+                // TODO: weaken width requirement, strengthen timing requirement.
+                let expected = Candidates::Concrete(BuiltinType::Int(8), TimingInfo::Unknown);
+                self.unexpected_type(
+                    &expected,
+                    &cand,
                     origin,
-                    String::from("A discrete offset must be an integer value."),
-                ));
+                    Some("Integer required."),
+                    Some("Discrete offsets require an integer offset."),
+                );
             }
             (false, false, _) => {
-                self.reg_error(TypeError::IncompatibleTypes(
+                // TODO: strengthen timing requirement.
+                let expected =
+                    Candidates::Numeric(NumConfig::new_unsigned(Some(8)), TimingInfo::Unknown);
+                self.unexpected_type(
+                    &expected,
+                    &cand,
                     origin,
-                    String::from("A real-time offset must be a numeric value."),
-                ));
+                    Some("Numeric value required."),
+                    Some("Real-time offset require a numeric offset."),
+                );
             }
         }
     }
 
-    fn check_stream_instance(
-        &mut self,
-        inst: &'a StreamInstance,
-        origin: &'a Expression,
-    ) -> Candidates {
-        let result_type = self.get_ty_from_decl(*inst.id(), origin);
+    fn check_stream_instance(&mut self, inst: &'a StreamInstance) -> Candidates {
+        let result_type = self.get_ty_from_decl(inst);
         match self.declarations.get(inst.id()) {
             Some(Declaration::Out(ref o)) => {
                 if o.params.len() != inst.arguments.len() {
-                    let msg = format!(
-                        "Expected {}, but got {}.",
-                        o.params.len(),
-                        inst.arguments.len()
+                    self.unexpected_number_of_arguments(
+                        o.params.len() as u8,
+                        inst.arguments.len() as u8,
+                        inst,
                     );
-                    self.reg_error(TypeError::UnexpectedNumberOfArguments(origin, msg));
                 } else {
                     // Check the parameter/argument pairs.
                     // We can only perform these checks of there is the correct number of arguments. Otherwise skip until correct number of arguments is provided.
-                    let params: Vec<Candidates> = o
-                        .params
-                        .iter()
-                        .flat_map(|p| &p.ty)
-                        .map(|t| {
-                            self.get_from_tt(*t.id())
-                                .expect("Need to be declared before-hand.")
-                        })
-                        .collect(); // Collect to resolve closure dependencies.
+                    let params: Vec<Candidates> =
+                        o.params.iter().map(|p| self.retrieve_type(p)).collect();
+
                     let arguments: Vec<Candidates> = inst
                         .arguments
                         .iter()
                         .map(|e| self.get_candidates(e))
                         .collect();
 
-                    if arguments.len() == inst.arguments.len() {
-                        // Otherwise we had a problem earlier, which is already reported.
-                        for (exp, was) in params.iter().zip(arguments) {
-                            let res = exp.meet(&was);
-                            // If `exp` or `was` is `none`, `res` will be `none`, too.
-                            // We already reported the error in the recursion, so no need to repeat ourselves; skip.
-                            if res.is_none() && !exp.is_none() && !was.is_none() {
-                                self.reg_error(TypeError::IncompatibleTypes(
-                                    origin,
-                                    String::from(""),
-                                ));
-                            }
+                    if arguments.len() != inst.arguments.len() {
+                        self.report_bug("Parameters and arguments should already be checked.")
+                    }
+
+                    for (i, (exp, was)) in params.iter().zip(arguments).enumerate() {
+                        if exp.is_none() || was.is_none() {
+                            continue; // Already reported in `get_cands`.
+                        }
+                        let res = exp.meet(&was);
+                        if res.is_none() {
+                            self.unexpected_type(exp, &was, inst.arguments[i].as_ref(), None, None);
                         }
                     }
                 }
@@ -543,7 +566,10 @@ impl<'a> TypeChecker<'a> {
                 result_type
             }
             Some(Declaration::In(_)) => result_type, // Nothing to check for inputs.
-            _ => self.reg_error(TypeError::UnknownIdentifier(inst)), // Unknown output, return Candidates::None.
+            _ => {
+                self.unknown_identifier(inst);
+                Candidates::top() // Pretend everything's fine, but we have no information whatsoever.
+            }
         }
     }
 
@@ -556,24 +582,14 @@ impl<'a> TypeChecker<'a> {
             }
             TypeKind::Malformed(_) => unreachable!(),
             TypeKind::Simple(_) => {
-                let res = self.get_ty_from_decl(*ty.id(), ty);
+                let res = self.get_ty_from_decl(ty);
                 self.reg_cand(*ty.id(), res)
             }
         }
     }
 
-    #[allow(dead_code)]
-    fn typedecl_to_cands(&mut self, td: &'a TypeDeclaration) -> Candidates {
-        let _subs: Vec<Candidates> = td
-            .fields
-            .iter()
-            .map(|field| self.check_explicit_type(&field.ty))
-            .collect();
-        unimplemented!()
-    }
-
-    fn get_ty_from_decl(&mut self, nid: NodeId, ident: &'a AstNode<'a>) -> Candidates {
-        match self.declarations.get(&nid) {
+    fn get_ty_from_decl(&mut self, node: &'a AstNode<'a>) -> Candidates {
+        match self.declarations.get(node.id()) {
             Some(Declaration::Const(ref c)) => {
                 let cand = self.get_from_tt(*c.id());
                 assert!(cand.is_some()); // Since we added all declarations in the beginning, this value needs to be present.
@@ -592,29 +608,107 @@ impl<'a> TypeChecker<'a> {
             Some(Declaration::UserDefinedType(_td)) => unimplemented!(),
             Some(Declaration::BuiltinType(ref b)) => Candidates::from(b),
             Some(Declaration::Param(ref p)) => self.cands_from_opt_type(&p.ty),
-            None => self.reg_error(TypeError::UnknownIdentifier(ident)),
+            None => {
+                self.unknown_identifier(node);
+                Candidates::bot()
+            }
         }
     }
 
-    fn combine_and_check_ti(
+    fn retrieve_and_check_ti(&mut self, v: &[&'a Expression]) -> TimingInfo {
+        let mut accu = TimingInfo::Unknown;
+        let tis: Vec<Option<TimingInfo>> = v.iter().map(|e| self.retrieve_ti(*e)).collect();
+        for (i, ti) in tis.iter().enumerate() {
+            if let Some(ti) = ti {
+                if let Some(new_ti) = TimingInfo::meet(accu, *ti) {
+                    accu = new_ti;
+                } else {
+                    let span = Span {
+                        start: v[0].span().start,
+                        end: v[i].span().end,
+                    };
+                    self.incompatible_timing(accu, *ti, span);
+                    return TimingInfo::Unknown;
+                }
+            } // Otherwise ignore, error already reported.
+        }
+        accu
+    }
+
+    fn unknown_identifier(&mut self, node: &'a AstNode<'a>) {
+        let span = LabeledSpan::new(*node.span(), "Identifier unknown.", true);
+        self.handler.bug_with_span(
+            "Found unknown identifier. This must not happen after the naming analysis.",
+            span,
+        )
+    }
+
+    fn report_bug(&mut self, msg: &str) {
+        self.handler.error(msg)
+    }
+
+    fn invalid_argument(&mut self, arg: &'a AstNode<'a>, msg: &str, label: &str) {
+        let span = LabeledSpan::new(*arg.span(), label, true);
+        self.handler.error_with_span(msg, span);
+    }
+
+    fn constant_value_required(&mut self, expr: &'a AstNode<'a>) {
+        let span = LabeledSpan::new(*expr.span(), "Unknown at compile time.", true);
+        self.handler
+            .error_with_span("Value cannot be determined statically.", span);
+    }
+
+    fn unexpected_type(
         &mut self,
+        expected: &Candidates,
+        was: &Candidates,
         expr: &'a AstNode<'a>,
-        v: &[Option<TimingInfo>],
-    ) -> TimingInfo {
-        // TODO: Refine for better error reporting, esp. for high-arity functions.
-        // TODO: if one of the arguments was None already, do not file an error!
-        let ti = v
-            .iter()
-            .fold(Some(TimingInfo::Unknown), |a, b| TimingInfo::meet(a, *b));
-        match ti {
-            Some(ti) => ti,
-            None => {
-                self.reg_error(TypeError::IncompatibleTiming(
-                    expr,
-                    format!("Arguments {:?} have incompatible timing.", v),
-                ));
-                TimingInfo::Unknown
-            }
+        label: Option<&str>,
+        msg: Option<&str>,
+    ) {
+        let label_dft = format!("Expected {}.", expected);
+        let span = LabeledSpan::new(*expr.span(), label.unwrap_or(label_dft.as_str()), true);
+        let msg_dft = format!("Expected type {} but got {}.", expected, was);
+        self.handler
+            .error_with_span(msg.unwrap_or(msg_dft.as_str()), span);
+    }
+
+    fn unexpected_number_of_arguments(&mut self, expected: u8, was: u8, expr: &'a AstNode<'a>) {
+        let span = LabeledSpan::new(*expr.span(), "Identifier not declared.", true);
+        self.handler.error_with_span(
+            format!("Expected {} argument but got {}.", expected, was).as_str(),
+            span,
+        )
+    }
+
+    fn incompatible_types(&mut self, expr: &'a AstNode<'a>, msg: &str) {
+        let span = LabeledSpan::new(*expr.span(), "Incompatible types.", true);
+        self.handler.error_with_span(msg, span);
+    }
+
+    fn value_not_present(&mut self, node: &'a AstNode<'a>) {
+        let span = LabeledSpan::new(*node.span(), "Should have been reported before.", true);
+        self.handler.bug_with_span(
+            "Expected type to be computed already, but it was not.",
+            span,
+        );
+    }
+
+    fn incompatible_timing(&mut self, left: TimingInfo, right: TimingInfo, span: Span) {
+        //        format!("Arguments {:?} have incompatible timing.", v),
+        unimplemented!()
+    }
+
+    fn retrieve_ti(&mut self, node: &'a AstNode<'a>) -> Option<TimingInfo> {
+        self.retrieve_type(node).timing_info()
+    }
+
+    fn retrieve_type(&mut self, node: &'a AstNode<'a>) -> Candidates {
+        if let Some(c) = self.get_from_tt(*node.id()) {
+            c
+        } else {
+            self.value_not_present(node);
+            Candidates::top()
         }
     }
 
@@ -622,9 +716,9 @@ impl<'a> TypeChecker<'a> {
         self.tt.get(&nid).cloned()
     }
 
-    fn reg_error(&mut self, e: TypeError<'a>) -> Candidates {
-        self.errors.push(Box::new(e));
-        Candidates::None // In the error case, we return the contradiction.
+    fn override_cand(&mut self, nid: NodeId, cand: Candidates) -> Candidates {
+        assert!(self.tt.insert(nid, cand.clone()).is_some());
+        cand
     }
 
     fn reg_cand(&mut self, nid: NodeId, cand: Candidates) -> Candidates {

@@ -44,16 +44,17 @@ pub(crate) enum TimingInfo {
 }
 
 impl TimingInfo {
-    pub(crate) fn meet(lhs: Option<TimingInfo>, rhs: Option<TimingInfo>) -> Option<TimingInfo> {
-        fn _meet(left: TimingInfo, right: TimingInfo) -> Option<TimingInfo> {
-            match (left, right) {
-                (TimingInfo::Unknown, s) | (s, TimingInfo::Unknown) => Some(s),
-                (s0, s1) if s0 == s1 => Some(s0),
-                _ => None,
-            }
-        }
+    pub(crate) fn meet_opt(lhs: Option<TimingInfo>, rhs: Option<TimingInfo>) -> Option<TimingInfo> {
         match (lhs, rhs) {
-            (Some(left), Some(right)) => _meet(left, right),
+            (Some(left), Some(right)) => TimingInfo::meet(left, right),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn meet(left: TimingInfo, right: TimingInfo) -> Option<TimingInfo> {
+        match (left, right) {
+            (TimingInfo::Unknown, s) | (s, TimingInfo::Unknown) => Some(s),
+            (s0, s1) if s0 == s1 => Some(s0),
             _ => None,
         }
     }
@@ -88,10 +89,9 @@ impl Candidates {
         match self {
             Candidates::Numeric(_, ti) => Some(*ti),
             Candidates::Concrete(_, ti) => Some(*ti),
-            Candidates::Tuple(v) => v
-                .iter()
-                .map(|c| c.timing_info())
-                .fold(Some(TimingInfo::Unknown), TimingInfo::meet),
+            Candidates::Tuple(v) => v.iter()
+                    .map(|c| c.timing_info())
+                    .fold(Some(TimingInfo::Unknown), TimingInfo::meet_opt),
             Candidates::Any(ti) => Some(*ti),
             Candidates::None => None,
         }
@@ -117,6 +117,14 @@ impl Candidates {
     pub(crate) fn as_time_driven(&self) -> Candidates {
         self.replace_ti(TimingInfo::TimeBased)
     }
+
+    pub(crate) fn top() -> Candidates {
+        Candidates::Any(TimingInfo::Unknown)
+    }
+
+    pub(crate) fn bot() -> Candidates {
+        Candidates::None
+    }
 }
 
 impl Display for Candidates {
@@ -141,7 +149,7 @@ impl Display for Candidates {
 
 impl Candidates {
     pub fn meet(&self, others: &Candidates) -> Candidates {
-        let time_meet = TimingInfo::meet(self.timing_info(), others.timing_info());
+        let time_meet = TimingInfo::meet_opt(self.timing_info(), others.timing_info());
         if time_meet.is_none() {
             return Candidates::None;
         }
