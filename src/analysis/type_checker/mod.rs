@@ -23,7 +23,7 @@ pub(crate) fn type_check<'a>(
     spec: &'a LolaSpec,
     handler: &'a Handler,
 ) -> TypeCheckResult {
-    TypeChecker::new(dt, spec, handler).check()
+    TypeChecker::new(dt, spec, handler).check_spec()
 }
 
 #[cfg(test)]
