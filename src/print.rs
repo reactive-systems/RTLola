@@ -4,6 +4,7 @@ use super::ast::*;
 use super::parse::Ident;
 use std::fmt::{Display, Formatter, Result};
 
+/// Writes out the joined vector `v`, enclosed by the given strings `pref` and `suff`.
 pub(crate) fn write_delim_list<T: Display>(
     f: &mut Formatter,
     v: &[T],
@@ -22,6 +23,7 @@ pub(crate) fn write_delim_list<T: Display>(
     Ok(())
 }
 
+/// Helper to format an Optional
 fn format_opt<T: Display>(opt: &Option<T>, pref: &str, suff: &str) -> String {
     if let Some(ref e) = opt {
         format!("{}{}{}", pref, e, suff)
@@ -30,6 +32,7 @@ fn format_opt<T: Display>(opt: &Option<T>, pref: &str, suff: &str) -> String {
     }
 }
 
+/// Formats an optional type
 fn format_type(ty: &Option<Type>) -> String {
     format_opt(ty, ": ", "")
 }
