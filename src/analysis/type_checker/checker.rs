@@ -237,10 +237,10 @@ impl<'a> TypeChecker<'a> {
                 (&any_type, &any_type)
             }
         };
-        self.check_n_ary_fn(e, &vec![lhs, rhs], &vec![expected_lhs, expected_rhs]);
+        self.check_n_ary_fn(e, &[lhs, rhs], &[expected_lhs, expected_rhs]);
         let lhs_ty = self.retrieve_type(lhs);
         let rhs_ty = self.retrieve_type(rhs);
-        let ti = self.retrieve_and_check_ti(&vec![lhs, rhs]);
+        let ti = self.retrieve_and_check_ti(&[lhs, rhs]);
         let meet_type = lhs_ty.meet(&rhs_ty);
         let error_return = match op {
             BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div | BinOp::Rem | BinOp::Pow => {
@@ -274,7 +274,7 @@ impl<'a> TypeChecker<'a> {
         let cond = self.check_expression(cond_ex);
         let cons = self.check_expression(cons_ex);
         let alt = self.check_expression(alt_ex);
-        self.retrieve_and_check_ti(&vec![cons_ex, alt_ex]);
+        self.retrieve_and_check_ti(&[cons_ex, alt_ex]);
         if !cond.is_logic() {
             let expected = Candidates::Concrete(BuiltinType::Bool, TimingInfo::Unknown);
             self.report_unexpected_type(
@@ -355,12 +355,12 @@ impl<'a> TypeChecker<'a> {
         let args: Vec<&Expression> = args.iter().map(|a| a.as_ref()).collect();
         match kind {
             FunctionKind::NthRoot => {
-                self.check_n_ary_fn(e, &args, &vec![&integer_type, &numeric_type]);
+                self.check_n_ary_fn(e, &args, &[&integer_type, &numeric_type]);
                 let ti = self.retrieve_and_check_ti(&args);
                 self.register_cand(*e.id(), Candidates::Numeric(NumConfig::new_float(None), ti))
             }
             FunctionKind::Sqrt => {
-                self.check_n_ary_fn(e, &args, &vec![&numeric_type]);
+                self.check_n_ary_fn(e, &args, &[&numeric_type]);
                 let ti = self.retrieve_and_check_ti(&args);
                 self.register_cand(*e.id(), Candidates::Numeric(NumConfig::new_float(None), ti))
             }
@@ -421,17 +421,17 @@ impl<'a> TypeChecker<'a> {
             | FunctionKind::Arcsin
             | FunctionKind::Arccos
             | FunctionKind::Arctan => {
-                self.check_n_ary_fn(e, &args, &vec![&numeric_type]);
+                self.check_n_ary_fn(e, &args, &[&numeric_type]);
                 let ti = self.retrieve_and_check_ti(&args);
                 self.register_cand(*e.id(), Candidates::Numeric(NumConfig::new_float(None), ti))
             }
             FunctionKind::Exp => {
-                self.check_n_ary_fn(e, &args, &vec![&numeric_type]);
+                self.check_n_ary_fn(e, &args, &[&numeric_type]);
                 let ti = self.retrieve_and_check_ti(&args);
                 self.register_cand(*e.id(), Candidates::Numeric(NumConfig::new_float(None), ti))
             }
             FunctionKind::Floor | FunctionKind::Ceil => {
-                self.check_n_ary_fn(e, &args, &vec![&float_type]);
+                self.check_n_ary_fn(e, &args, &[&float_type]);
                 let ti = self.retrieve_and_check_ti(&args);
                 // TODO: This makes little sense.
                 let width = self.retrieve_type(args[0]).width();
@@ -676,10 +676,14 @@ impl<'a> TypeChecker<'a> {
         msg: Option<&str>,
     ) {
         let label_dft = format!("Expected {}.", expected);
-        let span = LabeledSpan::new(*expr.span(), label.unwrap_or(label_dft.as_str()), true);
+        let span = LabeledSpan::new(
+            *expr.span(),
+            label.unwrap_or_else(|| label_dft.as_str()),
+            true,
+        );
         let msg_dft = format!("Expected type {} but got {}.", expected, was);
         self.handler
-            .error_with_span(msg.unwrap_or(msg_dft.as_str()), span);
+            .error_with_span(msg.unwrap_or_else(|| msg_dft.as_str()), span);
     }
 
     fn report_wrong_num_of_args(&mut self, expected: u8, was: u8, expr: &'a AstNode<'a>) {
