@@ -130,7 +130,7 @@ impl Candidates {
 
 impl Display for Candidates {
     fn fmt(&self, f: &mut Formatter) -> Result {
-        use print::PrintHelper;
+        use print::write_delim_list;
         match self {
             Candidates::Numeric(cfg, ti) if cfg.def_float => {
                 write!(f, "Float≥{}/{}", cfg.width, ti)
@@ -139,7 +139,7 @@ impl Display for Candidates {
                 write!(f, "(Float|Int)≥{}/{}", cfg.width, ti)
             }
             Candidates::Numeric(cfg, ti) => write!(f, "(Float|Int|UInt)>{}/{}", cfg.width, ti),
-            Candidates::Tuple(cands) => PrintHelper::write(f, cands, "{ ", " }", " ,"),
+            Candidates::Tuple(cands) => write_delim_list(f, cands, "{ ", " }", " ,"),
             // Candidates::Defined(fields) => PrintHelper::write(f, fields, "{ ", " }", " ,"),
             Candidates::Concrete(ty, ti) => write!(f, "{:?}/{}", ty, ti), // TODO: implement Display for builtin types.
             Candidates::Any(ti) => write!(f, "⊤/{}", ti),

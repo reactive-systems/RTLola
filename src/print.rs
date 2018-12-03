@@ -4,7 +4,13 @@ use super::ast::*;
 use super::parse::Ident;
 use std::fmt::{Display, Formatter, Result};
 
-fn write<T: Display>(f: &mut Formatter, v: &[T], pref: &str, suff: &str, join: &str) -> Result {
+pub(crate) fn write_delim_list<T: Display>(
+    f: &mut Formatter,
+    v: &[T],
+    pref: &str,
+    suff: &str,
+    join: &str,
+) -> Result {
     write!(f, "{}", pref)?;
     if let Some(e) = v.first() {
         write!(f, "{}", e)?;
@@ -44,7 +50,7 @@ impl Display for Input {
     fn fmt(&self, f: &mut Formatter) -> Result {
         write!(f, "input {}", self.name)?;
         if !self.params.is_empty() {
-            write(f, &self.params, " <", ">", ", ")?;
+            write_delim_list(f, &self.params, " <", ">", ", ")?;
         }
         write!(f, ": {}", self.ty)
     }
@@ -54,7 +60,7 @@ impl Display for Output {
     fn fmt(&self, f: &mut Formatter) -> Result {
         write!(f, "output {}", self.name)?;
         if !self.params.is_empty() {
-            write(f, &self.params, " <", ">", ", ")?;
+            write_delim_list(f, &self.params, " <", ">", ", ")?;
         }
         write!(
             f,
@@ -78,7 +84,7 @@ impl Display for TemplateSpec {
         if let Some(ref t) = self.ter {
             vec.push(format!("{}", t));
         }
-        write(f, &vec, "{ ", " }", " ")
+        write_delim_list(f, &vec, "{ ", " }", " ")
     }
 }
 
@@ -152,7 +158,7 @@ impl Display for TypeKind {
         match &self {
             TypeKind::Simple(name) => write!(f, "{}", name),
             TypeKind::Malformed(s) => write!(f, "{}", s),
-            TypeKind::Tuple(types) => write(f, types, "(", ")", ", "),
+            TypeKind::Tuple(types) => write_delim_list(f, types, "(", ")", ", "),
         }
     }
 }
@@ -166,7 +172,7 @@ impl Display for TypeDeclField {
 impl Display for TypeDeclaration {
     fn fmt(&self, f: &mut Formatter) -> Result {
         write!(f, "type {}", format_opt(&self.name, "", ""))?;
-        write(f, &self.fields, " { ", " }", ", ")
+        write_delim_list(f, &self.fields, " { ", " }", ", ")
     }
 }
 
@@ -193,10 +199,10 @@ impl Display for Expression {
                 if right.is_some() { ")" } else { "" }
             ),
             ExpressionKind::MissingExpression() => Ok(()),
-            ExpressionKind::Tuple(exprs) => write(f, exprs, "(", ")", ", "),
+            ExpressionKind::Tuple(exprs) => write_delim_list(f, exprs, "(", ")", ", "),
             ExpressionKind::Function(kind, args) => {
                 write!(f, "{}", kind)?;
-                write(f, args, "(", ")", ", ")
+                write_delim_list(f, args, "(", ")", ", ")
             }
         }
     }
@@ -206,7 +212,7 @@ impl Display for StreamInstance {
     fn fmt(&self, f: &mut Formatter) -> Result {
         write!(f, "{}", self.stream_identifier)?;
         if !self.arguments.is_empty() {
-            write(f, &self.arguments, "(", ")", ", ")
+            write_delim_list(f, &self.arguments, "(", ")", ", ")
         } else {
             Ok(())
         }
