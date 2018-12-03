@@ -456,7 +456,14 @@ fn parse_literal(pair: Pair<Rule>) -> Literal {
         .next()
         .expect("Rule::Literal has exactly one child");
     match inner.as_rule() {
-        Rule::String => unimplemented!(),
+        Rule::String => {
+            let str_rep = inner.as_str();
+            Literal::new_str(str_rep, inner.as_span().into())
+        }
+        Rule::RawString => {
+            let str_rep = inner.as_str();
+            Literal::new_raw_str(str_rep, inner.as_span().into())
+        }
         Rule::NumberLiteral => {
             let str_rep = inner.as_str();
             if let Result::Ok(i) = str_rep.parse::<i128>() {
@@ -1111,6 +1118,20 @@ mod tests {
             "output s: Int { invoke inp unless 3 > 5 extend b @ 5GHz terminate false } := 3\n";
         let throw = |e| panic!("{}", e);
         let ast = parse(spec).unwrap_or_else(throw);
+        cmp_ast_spec(&ast, spec);
+    }
+
+    #[test]
+    fn parse_string() {
+        let spec = r#"constant s: String := "a string with \n newline""#;
+        let ast = parse(spec).unwrap_or_else(|e| panic!("{}", e));
+        cmp_ast_spec(&ast, spec);
+    }
+
+    #[test]
+    fn parse_raw_string() {
+        let spec = r##"constant s: String := r#"a raw \ string that " needs padding"#"##;
+        let ast = parse(spec).unwrap_or_else(|e| panic!("{}", e));
         cmp_ast_spec(&ast, spec);
     }
 }

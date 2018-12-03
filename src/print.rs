@@ -332,7 +332,15 @@ impl Display for Literal {
                     write!(f, "{}", fl)
                 }
             }
-            LitKind::Str(s) => write!(f, "{}", s),
+            LitKind::Str(s) => write!(f, "\"{}\"", s),
+            LitKind::RawStr(s) => {
+                // need to determine padding with `#`
+                let mut padding = 0;
+                while s.contains(&format!("{}\"", "#".repeat(padding))) {
+                    padding += 1;
+                }
+                write!(f, "r{pad}\"{}\"{pad}", s, pad = "#".repeat(padding))
+            }
         }
     }
 }

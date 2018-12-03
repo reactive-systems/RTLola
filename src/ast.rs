@@ -319,12 +319,30 @@ impl Literal {
             _span: span,
         }
     }
+
+    pub(crate) fn new_str(val: &str, span: Span) -> Literal {
+        Literal {
+            _id: NodeId::DUMMY,
+            kind: LitKind::Str(val.to_string()),
+            _span: span,
+        }
+    }
+
+    pub(crate) fn new_raw_str(val: &str, span: Span) -> Literal {
+        Literal {
+            _id: NodeId::DUMMY,
+            kind: LitKind::RawStr(val.to_string()),
+            _span: span,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
 pub enum LitKind {
     /// A string literal (`"foo"`)
     Str(String),
+    /// A raw string literal (`r#" x " a \ff "#`)
+    RawStr(String),
     /// An integer literal (`1`)
     Int(i128),
     /// A float literal (`1f64` or `1E10f64`)

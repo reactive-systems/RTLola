@@ -152,11 +152,14 @@ NumberLiteral = @{ ("+" | "-")?~ Digit+~ ("."~ Digit*)?~ ("e"~ ("+" | "-")?~ Dig
 
 StringLiteral = _{ "\""~ String~ "\""}
 String = @{("\\\""|!("\"") ~ ANY)*}
+// A raw string literal, e.g., r#"a\"b"#
+RawStringLiteral = _{ "r" ~ PUSH("#"*) ~ "\"" ~ RawString ~ "\"" ~ POP }
+RawString = @{ (!("\"" ~ PEEK) ~ ANY)* }
 
 BooleanLiteral = _{ True | False}
 True = @{"true"| "⊤"}
 False = @{"false"  | "⊥"}
-Literal = { StringLiteral | NumberLiteral | BooleanLiteral}
+Literal = { StringLiteral | RawStringLiteral | NumberLiteral | BooleanLiteral}
 
 IntegerLiteral = @{ Digit*}
 
