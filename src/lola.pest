@@ -114,25 +114,6 @@ NotEqual = {"!=" | "≠"}
 Equal = { "="{1,2} }
 CompOp = _{LessThanOrEqual | MoreThanOrEqual | LessThan | MoreThan | NotEqual | Equal}
 
-BinaryFunctionSymbol = {
-      "nroot"
-    | "π" // Tuple Projection
-    | "proj"
-    }
-
-UnaryFunctionSymbol = {
-      "sin"
-    | "cos"
-    | "tan"
-    | "arcsin"
-    | "arccos"
-    | "arctan"
-    | "exp"
-    | "floor"
-    | "ceil"
-    | "sqrt"
-}
-
 Sum = {"Σ" | "sum"}
 Count = {"#"|"count"}
 Product = {"Π" | "prod"}
@@ -141,7 +122,7 @@ Average = { "avg" }
 
 WindowOp = _{ Sum | Product | Average | Count | Integral}
 
-FunctionSymbol = _{ UnaryFunctionSymbol | BinaryFunctionSymbol}
+FunctionSymbol = _{ Ident }
 
 
 //////////////////////////////////////////////////

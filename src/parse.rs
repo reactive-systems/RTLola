@@ -1074,7 +1074,7 @@ mod tests {
 
     #[test]
     fn build_function_expression() {
-        let spec = "input in: (Int, Bool)\noutput s: Int := nroot(1, π(1, in))\n";
+        let spec = "input in: (Int, Bool)\noutput s: Int := nroot(1, proj(1, in))\n";
         let throw = |e| panic!("{}", e);
         let ast = parse(spec).unwrap_or_else(throw);
         cmp_ast_spec(&ast, spec);

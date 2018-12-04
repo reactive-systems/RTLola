@@ -230,7 +230,7 @@ impl Display for FunctionKind {
             match self {
                 FunctionKind::NthRoot => "nroot",
                 FunctionKind::Sqrt => "sqrt",
-                FunctionKind::Projection => "π",
+                FunctionKind::Projection => "proj",
                 FunctionKind::Sin => "sin",
                 FunctionKind::Cos => "cos",
                 FunctionKind::Tan => "tan",
