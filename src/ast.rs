@@ -262,7 +262,7 @@ pub enum ExpressionKind {
     /// Access of a named (`obj.foo`) or unnamed (`obj.0`) struct field
     Field(Box<Expression>, Ident),
     /// A function call
-    Function(FunctionKind, Vec<Box<Expression>>),
+    Function(Ident, Vec<Box<Expression>>),
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]

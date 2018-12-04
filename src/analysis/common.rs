@@ -1,3 +1,4 @@
+use crate::analysis::type_checker::candidates::{Candidates, NumConfig, TimingInfo};
 use std::fmt::{Display, Formatter, Result};
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
@@ -35,6 +36,52 @@ pub enum Type {
     BuiltIn(BuiltinType),
     Tuple(Vec<BuiltinType>),
     //    Composite(Vec<(String, Box<Type>)>),
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum BuiltinFunction {
+    // math
+    NthRoot,
+    Sqrt,
+    Sin,
+    Cos,
+    Tan,
+    Arcsin,
+    Arccos,
+    Arctan,
+    Exp,
+    Floor,
+    Ceil,
+    // tuple projection
+    Projection,
+}
+
+struct Generic {
+    constraint: Candidates,
+}
+
+enum Parameter {
+    Ty(Type),
+    Generic(u8),
+}
+
+/// A (possibly generic) function declaration
+pub struct FunctionDecl {
+    name: String,
+    generics: Vec<Generic>,
+    parameters: Vec<Parameter>,
+    return_type: Parameter,
+}
+
+fn builtin_functions() -> Vec<FunctionDecl> {
+    vec![FunctionDecl {
+        name: "sqrt".to_string(),
+        generics: vec![Generic {
+            constraint: Candidates::Numeric(NumConfig::new_float(None), TimingInfo::Unknown),
+        }],
+        parameters: vec![Parameter::Generic(0)],
+        return_type: Parameter::Generic(0),
+    }]
 }
 
 // These MUST all be lowercase

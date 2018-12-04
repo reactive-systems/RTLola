@@ -1,7 +1,7 @@
 use super::naming::DeclarationTable;
 use crate::ast::LolaSpec;
 
-mod candidates;
+pub(crate) mod candidates;
 mod checker;
 
 use super::common::Type;

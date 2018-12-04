@@ -585,23 +585,9 @@ fn parse_lookup_expression(spec: &mut LolaSpec, pair: Pair<'_, Rule>, span: Span
 
 fn build_function_expression(spec: &mut LolaSpec, pair: Pair<'_, Rule>, span: Span) -> Expression {
     let mut children = pair.into_inner();
-    let name = children.next().unwrap().as_str();
-    let function_kind = match name {
-        "nroot" => FunctionKind::NthRoot,
-        "sqrt" => FunctionKind::Sqrt,
-        "sin" => FunctionKind::Sin,
-        "cos" => FunctionKind::Cos,
-        "tan" => FunctionKind::Tan,
-        "arcsin" => FunctionKind::Arcsin,
-        "arccos" => FunctionKind::Arccos,
-        "arctan" => FunctionKind::Arctan,
-        "exp" => FunctionKind::Exp,
-        "floor" => FunctionKind::Floor,
-        "ceil" => FunctionKind::Ceil,
-        _ => panic!("Unknown function symbol: {}.", name),
-    };
+    let ident = parse_ident(&children.next().unwrap());
     let args = parse_vec_of_expressions(spec, children);
-    Expression::new(ExpressionKind::Function(function_kind, args), span)
+    Expression::new(ExpressionKind::Function(ident, args), span)
 }
 
 /**

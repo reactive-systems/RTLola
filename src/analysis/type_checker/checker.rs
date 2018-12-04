@@ -152,7 +152,10 @@ impl<'a> TypeChecker<'a> {
                     exprs.iter().map(|e| self.check_expression(e)).collect();
                 self.register_cand(*e.id(), Candidates::Tuple(cands))
             }
-            ExpressionKind::Function(ref kind, ref args) => self.check_function(e, *kind, args),
+            ExpressionKind::Function(ref kind, ref args) => {
+                unimplemented!();
+                //self.check_function(e, *kind, args)
+            }
             ExpressionKind::Field(ref expr, ref ident) => self.check_field_access(e, expr, ident),
         }
     }
