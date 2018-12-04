@@ -1123,14 +1123,16 @@ mod tests {
 
     #[test]
     fn parse_string() {
-        let spec = r#"constant s: String := "a string with \n newline""#;
+        let spec = r#"constant s: String := "a string with \n newline"
+"#;
         let ast = parse(spec).unwrap_or_else(|e| panic!("{}", e));
         cmp_ast_spec(&ast, spec);
     }
 
     #[test]
     fn parse_raw_string() {
-        let spec = r##"constant s: String := r#"a raw \ string that " needs padding"#"##;
+        let spec = r##"constant s: String := r#"a raw \ string that " needs padding"#
+"##;
         let ast = parse(spec).unwrap_or_else(|e| panic!("{}", e));
         cmp_ast_spec(&ast, spec);
     }

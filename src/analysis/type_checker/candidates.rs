@@ -330,6 +330,7 @@ impl<'a> From<&'a Literal> for Candidates {
         }
         match &lit.kind {
             LitKind::Str(_) => Candidates::Concrete(BuiltinType::String, TimingInfo::Unknown),
+            LitKind::RawStr(_) => Candidates::Concrete(BuiltinType::String, TimingInfo::Unknown),
             LitKind::Int(i) => {
                 let width = find_required_bits(*i);
                 assert!(width.count_ones() == 1 && width <= 128 && width >= 8);
