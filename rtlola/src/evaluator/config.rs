@@ -6,10 +6,17 @@ pub struct EvalConfig {
 }
 
 pub enum Verbosity {
-    Triggers,
-    Outputs,
+    /// Prints fine-grained debug information. Not suitable for production.
     Debug,
+    /// Prints information about all or a subset of output streams whenever they produce a new
+    /// value.
+    Outputs,
+    /// Prints only triggers and runtime warnings.
+    Triggers,
+    /// Prints nothing but runtime warnings about potentially critical states, e.g. dropped
+    /// evaluation cycles.
     WarningsOnly,
+    /// Suppresses any kind of logging.
     Silent,
 }
 

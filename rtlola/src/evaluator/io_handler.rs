@@ -11,7 +11,7 @@ impl OutputHandler {
 
     /// Accepts a message and forwards it to the appropriate output channel.
     /// If the configuration prohibits printing the message, `msg` is never called.
-    pub(crate) fn accept<T>(&self, kind: OutputKind, msg: T) where T: FnOnce() -> String {
+    pub(crate) fn emit<T>(&self, kind: OutputKind, msg: T) where T: FnOnce() -> String {
         match self.verbosity {
             Verbosity::Debug => self.print(msg()),
             Verbosity::Outputs => match kind {
@@ -37,9 +37,14 @@ impl OutputHandler {
 
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
 pub(crate) enum OutputKind {
+    /// Information about trigger events.
     Trigger,
+    /// Information about the values of output streams.
     Output,
+    /// Fine-grained debug information.
     Debug,
+    /// Warning for problems occurring during runtime such as too high pressure,
+    /// invalid inputs, skipped evaluation steps, or high memory consumption.
     RuntimeWarning,
 }
 
