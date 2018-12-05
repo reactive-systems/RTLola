@@ -588,8 +588,6 @@ fn build_function_expression(spec: &mut LolaSpec, pair: Pair<Rule>, span: Span) 
     let function_kind = match name {
         "nroot" => FunctionKind::NthRoot,
         "sqrt" => FunctionKind::Sqrt,
-        "π" => FunctionKind::Projection,
-        "proj" => FunctionKind::Projection,
         "sin" => FunctionKind::Sin,
         "cos" => FunctionKind::Cos,
         "tan" => FunctionKind::Tan,
@@ -1093,7 +1091,7 @@ mod tests {
 
     #[test]
     fn build_function_expression() {
-        let spec = "input in: (Int, Bool)\noutput s: Int := nroot(1, proj(1, in))\n";
+        let spec = "input in: (Int, Bool)\noutput s: Int := nroot(1, sin(1, in))\n";
         let throw = |e| panic!("{}", e);
         let ast = parse(spec).unwrap_or_else(throw);
         cmp_ast_spec(&ast, spec);

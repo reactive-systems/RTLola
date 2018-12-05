@@ -366,57 +366,6 @@ impl<'a> TypeChecker<'a> {
                 let ti = self.retrieve_and_check_ti(&args);
                 self.register_cand(*e.id(), Candidates::Numeric(NumConfig::new_float(None), ti))
             }
-            FunctionKind::Projection => {
-                let cands: Vec<Candidates> =
-                    args.iter().map(|a| self.check_expression(a)).collect();
-                if cands.len() < 2 {
-                    self.report_wrong_num_of_args(2, cands.len() as u8, e);
-                }
-                if !cands[0].is_unsigned() {
-                    let expected = Candidates::Concrete(BuiltinType::UInt(8), TimingInfo::Unknown);
-                    self.report_unexpected_type(
-                        &expected,
-                        &cands[0],
-                        e,
-                        Some("Unsigned integer required."),
-                        Some("Tuple projections require an unsigned integer as first argument."),
-                    );
-                }
-                match cands[1] {
-                    Candidates::Tuple(ref v) => {
-                        match TypeChecker::extract_constant_value(args[0]) {
-                            Some(n) if n < v.len() =>
-                            // No way to recover from here.
-                            {
-                                let msg = format!(
-                                    "Cannot access element {} in a tuple of length {}.",
-                                    n,
-                                    v.len()
-                                );
-                                let label = format!("Needs to be between 1 and {}.", v.len());
-                                self.report_invalid_argument(args[0], msg.as_str(), label.as_str());
-                                Candidates::top()
-                            }
-                            Some(n) => self.register_cand(*e.id(), cands[n].clone()),
-                            None => {
-                                self.report_not_constant(args[0]);
-                                Candidates::top()
-                            }
-                        }
-                    }
-                    _ => {
-                        let expected = &Candidates::Tuple(Vec::new());
-                        self.report_unexpected_type(
-                            &expected,
-                            &cands[1],
-                            args[1],
-                            Some("Tuple required."),
-                            Some("Tuple projections require a tuple as second argument."),
-                        );
-                        Candidates::top()
-                    }
-                }
-            }
             FunctionKind::Sin
             | FunctionKind::Cos
             | FunctionKind::Tan

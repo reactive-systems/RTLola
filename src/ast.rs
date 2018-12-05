@@ -269,7 +269,6 @@ pub enum ExpressionKind {
 pub enum FunctionKind {
     NthRoot,
     Sqrt,
-    Projection,
     Sin,
     Cos,
     Tan,
