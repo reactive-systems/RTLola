@@ -2,11 +2,10 @@
 pub mod config;
 mod io_handler;
 
-use lola_parser::{LolaIR, StreamReference};
+use lola_parser::{LolaIR, StreamReference, Duration};
 use evaluator::config::*;
 use evaluator::io_handler::*;
 
-struct WaitingTime(u32);
 
 struct TimeDrivenManager {
 
@@ -28,7 +27,7 @@ impl TimeDrivenManager {
     ///
     /// *Returns:* `WaitingTime` _t_ and `TimeDrivenCycleCount` _i_ where _i_ nanoseconds can pass
     /// until the _i_th time-driven evaluation cycle needs to be started.
-    fn wait_for(&self) -> (WaitingTime, TimeDrivenCycleCount) {
+    fn wait_for(&self) -> (Duration, TimeDrivenCycleCount) {
         unimplemented!()
     }
 
@@ -68,7 +67,7 @@ pub struct Evaluator {
     event_manager: EventDrivenManager,
 
     /// States greatest common denominator of extend periods.
-    extend_period: WaitingTime,
+    extend_period: Duration,
 
     /// Intermediate representation of input Lola specification.
     spec: LolaIR
@@ -109,13 +108,17 @@ impl Evaluator {
 
     //////////// Private Functions ////////////
 
-    fn find_extend_period(ir: &LolaIR) -> u32 {
+    fn find_extend_period(ir: &LolaIR) -> Duration {
         assert!(!ir.time_outputs.is_empty());
-        let mut rates: Vec<u32> = ir.time_outputs.iter().flat_map(|s| s.extend_rate).collect();
-        rates.iter().fold(rates[0], |a,b| Evaluator::gcd(a,*b))
+        let mut rates: Vec<u128> = ir.time_outputs
+            .iter()
+            .flat_map(|s| s.extend_rate.map(|r| r.0))
+            .collect();
+        let res = rates.iter().fold(rates[0], |a,b| Evaluator::gcd(a, *b));
+        Duration(res)
     }
 
-    fn gcd(mut a: u32, mut b: u32) -> u32 {
+    fn gcd(mut a: u128, mut b: u128) -> u128 {
         // Courtesy of wikipedia.
         while b != 0 {
             let temp = b;
@@ -130,8 +133,7 @@ impl Evaluator {
 
 mod tests {
     use evaluator::Evaluator;
-    use lola_parser;
-    use lola_parser::LolaIR;
+    use lola_parser::{LolaIR, Duration};
 
     fn to_ir(spec: &str) -> LolaIR {
         unimplemented!("We need some interface from the parser.")
@@ -165,7 +167,7 @@ mod tests {
         let cases = [case1, case2, case3, case4, case5];
         for (spec, expected) in cases.iter() {
             let was = Evaluator::find_extend_period(&to_ir(spec));
-            assert_eq!(expected, was);
+            assert_eq!(*expected, was.0);
         }
     }
 }

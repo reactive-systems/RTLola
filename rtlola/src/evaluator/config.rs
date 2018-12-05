@@ -35,7 +35,7 @@ impl Default for EvalConfig {
     fn default() -> EvalConfig {
         EvalConfig {
             source: InputSource::StdIn,
-            verbosity: Verbosity::TriggersOnly,
+            verbosity: Verbosity::Triggers,
             output_channel: OutputChannel::StdOut,
         }
     }
@@ -52,8 +52,18 @@ impl EvalConfig {
         self
     }
 
-    fn print_triggers_only(mut self) -> Self {
-        self.verbosity = Verbosity::TriggersOnly;
+    fn print_triggers(mut self) -> Self {
+        self.verbosity = Verbosity::Triggers;
+        self
+    }
+
+    fn silent_mode(mut self) -> Self {
+        self.verbosity = Verbosity::Silent;
+        self
+    }
+
+    fn print_warnings(mut self) -> Self {
+        self.verbosity = Verbosity::WarningsOnly;
         self
     }
 
