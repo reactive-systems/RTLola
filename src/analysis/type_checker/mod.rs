@@ -431,6 +431,38 @@ mod tests {
     }
 
     #[test]
+    fn test_tuple_access() {
+        let spec = "input in: (Int8, Bool)\noutput out: Bool := in.1";
+        let (_, handler) = setup(spec);
+        assert!(
+            !handler.contains_error(),
+            "There should not be a typing error."
+        );
+    }
+
+    #[test]
+    fn test_tuple_access_faulty_type() {
+        let spec = "input in: (Int8, Bool)\noutput out: Bool := in.0";
+        let (_, handler) = setup(spec);
+        assert_eq!(
+            handler.emitted_errors(),
+            1,
+            "Incompatible types were not recognized as such."
+        );
+    }
+
+    #[test]
+    fn test_tuple_access_faulty_len() {
+        let spec = "input in: (Int8, Bool)\noutput out: Bool := in.2";
+        let (_, handler) = setup(spec);
+        assert_eq!(
+            handler.emitted_errors(),
+            1,
+            "Tuple access larger than tuple was not recognized."
+        );
+    }
+
+    #[test]
     fn test_input_offset() {
         let spec = "input a: UInt8\n output b: UInt8 := a[3]";
         let (_, handler) = setup(spec);

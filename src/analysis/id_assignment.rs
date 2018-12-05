@@ -182,6 +182,9 @@ where
         ExpressionKind::Function(_, args) => {
             args.iter_mut().for_each(|e| assign_ids_expr(e, next_id))
         }
+        ExpressionKind::Field(expr, _) => {
+            assign_ids_expr(expr, next_id);
+        }
     }
 }
 

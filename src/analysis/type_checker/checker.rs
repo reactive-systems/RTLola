@@ -8,6 +8,7 @@ use super::TypeCheckResult;
 use analysis::reporting::{Handler, LabeledSpan};
 use ast_node::Span;
 use ast_node::{AstNode, NodeId};
+use parse::Ident;
 
 pub(crate) struct TypeChecker<'a> {
     declarations: &'a DeclarationTable<'a>,
@@ -152,6 +153,7 @@ impl<'a> TypeChecker<'a> {
                 self.register_cand(*e.id(), Candidates::Tuple(cands))
             }
             ExpressionKind::Function(ref kind, ref args) => self.check_function(e, *kind, args),
+            ExpressionKind::Field(ref expr, ref ident) => self.check_field_access(e, expr, ident),
         }
     }
 
@@ -439,6 +441,48 @@ impl<'a> TypeChecker<'a> {
                     *e.id(),
                     Candidates::Numeric(NumConfig::new_signed(width), ti),
                 )
+            }
+        }
+    }
+
+    fn check_field_access(
+        &mut self,
+        e: &'a Expression,
+        expr: &'a Expression,
+        ident: &'a Ident,
+    ) -> Candidates {
+        let u = ident
+            .name
+            .parse::<usize>()
+            .expect("field is an unsigned integer");
+        // check type of expression
+        match self.check_expression(expr) {
+            Candidates::Tuple(ref v) => {
+                if u >= v.len() {
+                    // No way to recover from here.
+                    let msg = format!(
+                        "Cannot access element {} in a tuple of length {}.",
+                        u,
+                        v.len()
+                    );
+                    let label = format!("Needs to be between 0 and {}.", v.len() - 1);
+                    self.handler
+                        .error_with_span(&msg, LabeledSpan::new(ident.span, &label, true));
+                    Candidates::top()
+                } else {
+                    self.register_cand(*e.id(), v[u].clone())
+                }
+            }
+            was => {
+                let expected = &Candidates::Tuple(Vec::new());
+                self.report_unexpected_type(
+                    &expected,
+                    &was,
+                    expr,
+                    Some("Tuple required."),
+                    Some("Tuple projections require a tuple as second argument."),
+                );
+                Candidates::top()
             }
         }
     }

@@ -419,6 +419,9 @@ impl<'a> NamingAnalysis<'a> {
                 self.check_stream_instance(instance);
                 self.check_offset(offset);
             }
+            Field(expr, _) => {
+                self.check_expression(expr);
+            }
         }
     }
 }

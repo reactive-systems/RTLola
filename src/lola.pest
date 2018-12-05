@@ -54,9 +54,9 @@ Trigger = { "trigger"~ (Ident ~ ":=")? ~ Expr~ StringLiteral?}
 // Precedences:
 // Atomic < TernaryExpr < BooleanDisExpr < BooleanConExpr 
 //      < CompExpr < AddExpr < MultiExpr < ExpoExpr < UnaryExpr < DefaultExpr 
-//      < FunctionExpr < LookupExpr < CompoundExpr
+//      < FunctionExpr < LookupExpr
 
-Operation = _{ Add | Subtract | Power | Multiply | Divide | Mod | And | Or | CompOp }
+Operation = _{ Add | Subtract | Power | Multiply | Divide | Mod | And | Or | CompOp | Dot }
     Add      = { "+"  }
     Subtract = { "-"  }
     Multiply = { "*"  }
@@ -65,13 +65,14 @@ Operation = _{ Add | Subtract | Power | Multiply | Divide | Mod | And | Or | Com
     Power    = { "**" }
     And      = { "∧" | "&"{1,2} | "and" }
     Or       = { "∨" | "|"{1,2} | "or"  }
+    Dot      = { "." }
 
 UnaryOperation = _{ Add | Subtract | Neg }
     Neg      = { "!" | "¬" }
 
 Expr = { Term ~ (Operation ~ Term)* }
 // TODO Do we need Term to exist for the precedence climber?
-Term = _{ Literal | ParenthesizedExpression | CompoundExpr | DefaultExpr| LookupExpr | FunctionExpr | UnaryExpr | TernaryExpr | MissingExpression | Ident | Tuple}
+Term = _{ Literal | ParenthesizedExpression | DefaultExpr| LookupExpr | FunctionExpr | UnaryExpr | TernaryExpr | MissingExpression | Ident | Tuple}
 
 ParenthesizedExpression = {OpeningParenthesis ~ Expr ~ ClosingParenthesis | OpeningParenthesis ~ Expr ~ MissingClosingParenthesis}
 OpeningParenthesis = {"("}
@@ -79,8 +80,6 @@ ClosingParenthesis = {")"}
 
 MissingClosingParenthesis = {WHITESPACE* ~ &("then" | "else" |"output" | "input" | "trigger" | "constant" | "Type" | "include" | EOI)}
 MissingExpression = {WHITESPACE* ~ &("then" | "else" |")"|"output" | "input" | "trigger" | "constant" | "Type" | "include" | EOI)}
-
-CompoundExpr = {Ident~ "."~ Ident}
 
 LookupExpr = {
       StreamInstance ~"["~ Expr~ "]" 

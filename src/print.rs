@@ -207,6 +207,7 @@ impl Display for Expression {
                 write!(f, "{}", kind)?;
                 write_delim_list(f, args, "(", ")", ", ")
             }
+            ExpressionKind::Field(expr, ident) => write!(f, "{}.{}", expr, ident),
         }
     }
 }

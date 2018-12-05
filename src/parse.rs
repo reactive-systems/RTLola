@@ -28,6 +28,7 @@ lazy_static! {
             Operator::new(Add, Left) | Operator::new(Subtract, Left),
             Operator::new(Multiply, Left) | Operator::new(Divide, Left) | Operator::new(Mod, Left),
             Operator::new(Power, Right),
+            Operator::new(Dot, Left),
         ])
     };
 }
@@ -707,6 +708,24 @@ fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<Rule>, span: Span) -> 
                 Rule::MoreThanOrEqual => BinOp::Ge,
                 Rule::Equal => BinOp::Eq,
                 Rule::NotEqual => BinOp::Ne,
+                Rule::Dot => {
+                    // access to a tuple
+                    let ident = match rhs.kind {
+                        ExpressionKind::Lit(l) => {
+                            match l.kind {
+                                LitKind::Int(i) => {
+                                    assert!(i >= 0);
+                                    Ident::new(format!("{}", i), l._span)
+                                }
+                                _ => {
+                                    panic!("expected unsigned integer");
+                                }
+                            }
+                        }
+                        _ => panic!("tuple accesses require a number"),
+                    };
+                    return Expression::new(ExpressionKind::Field(Box::new(lhs), ident), span);
+                }
                 _ => unreachable!(),
             };
             Expression::new(
@@ -1116,6 +1135,14 @@ mod tests {
     fn build_template_spec() {
         let spec =
             "output s: Int { invoke inp unless 3 > 5 extend b @ 5GHz terminate false } := 3\n";
+        let throw = |e| panic!("{}", e);
+        let ast = parse(spec).unwrap_or_else(throw);
+        cmp_ast_spec(&ast, spec);
+    }
+
+    #[test]
+    fn build_tuple_expression() {
+        let spec = "input in: (Int, Bool)\noutput s: Int := (1, in.0).1\n";
         let throw = |e| panic!("{}", e);
         let ast = parse(spec).unwrap_or_else(throw);
         cmp_ast_spec(&ast, spec);

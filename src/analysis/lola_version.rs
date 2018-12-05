@@ -74,6 +74,7 @@ fn analyse_expression(
                 analyse_expression(version_tracker, &*arg, false);
             });
         }
+        ExpressionKind::Field(expr, _) => analyse_expression(version_tracker, expr, false),
     }
 }
 

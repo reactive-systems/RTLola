@@ -259,6 +259,8 @@ pub enum ExpressionKind {
     MissingExpression(),
     /// A tuple expression
     Tuple(Vec<Box<Expression>>),
+    /// Access of a named (`obj.foo`) or unnamed (`obj.0`) struct field
+    Field(Box<Expression>, Ident),
     /// A function call
     Function(FunctionKind, Vec<Box<Expression>>),
 }
