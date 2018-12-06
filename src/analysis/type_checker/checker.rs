@@ -579,6 +579,7 @@ impl<'a> TypeChecker<'a> {
             Some(Declaration::UserDefinedType(_td)) => unimplemented!(),
             Some(Declaration::BuiltinType(ref b)) => Some(Candidates::from(b)),
             Some(Declaration::Param(ref p)) => self.retrieve_from_tt(*p.id()),
+            Some(_) => unimplemented!(),
             None => None,
         };
         if cand.is_none() {

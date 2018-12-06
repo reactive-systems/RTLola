@@ -5,6 +5,10 @@ use super::super::ast::*;
 use crate::analysis::*;
 use crate::reporting::{Handler, LabeledSpan};
 use ast_node::{AstNode, NodeId, Span};
+use crate::analysis::*;
+use crate::stdlib;
+use crate::stdlib::FuncDecl;
+use parse::Ident;
 use std::collections::HashMap;
 
 pub(crate) type DeclarationTable<'a> = HashMap<NodeId, Declaration<'a>>;
@@ -141,6 +145,16 @@ impl<'a> NamingAnalysis<'a> {
 
     /// Entry method, checks that every identifier in the given spec is bound.
     pub(crate) fn check(&mut self, spec: &'a LolaSpec) {
+        for import in &spec.imports {
+            match import.name.name.as_str() {
+                "math" => stdlib::import_math_module(&mut self.declarations),
+                n => self.handler.error_with_span(
+                    &format!("unresolved import `{}`", n),
+                    LabeledSpan::new(import.name.span, &format!("no `{}` in the root", n), true),
+                ),
+            }
+        }
+
         self.check_type_declarations(&spec);
 
         // Store global declarations, i.e., constants, inputs, and outputs of the given specification
@@ -375,22 +389,26 @@ impl<'a> NamingAnalysis<'a> {
         }
     }
 
-    fn check_expression(&mut self, expression: &'a Expression) {
-        use self::ExpressionKind::*;
+    fn check_ident(&mut self, expression: &'a Expression, ident: &'a Ident) {
+        if let Some(decl) = self.declarations.get_decl_for(&ident.name) {
+            assert!(!decl.is_type());
 
+            self.result.insert(*expression.id(), decl);
+        } else {
+            self.handler.error_with_span(
+                "name `{}` does not exist in current scope",
+                LabeledSpan::new(ident.span, "does not exist", true),
+            );
+        }
+    }
+
+    fn check_expression(&mut self, expression: &'a Expression) {
+        assert!(*expression.id() != NodeId::DUMMY);
+
+        use self::ExpressionKind::*;
         match &expression.kind {
             Ident(ident) => {
-                if let Some(decl) = self.declarations.get_decl_for(&ident.name) {
-                    assert!(*expression.id() != NodeId::DUMMY);
-                    assert!(!decl.is_type());
-
-                    self.result.insert(*expression.id(), decl);
-                } else {
-                    self.handler.error_with_span(
-                        "name `{}` does not exist in current scope",
-                        LabeledSpan::new(ident.span, "does not exist", true),
-                    );
-                }
+                self.check_ident(expression, ident);
             }
             Binary(_, left, right) => {
                 self.check_expression(left);
@@ -408,7 +426,8 @@ impl<'a> NamingAnalysis<'a> {
             Tuple(exprs) => {
                 exprs.iter().for_each(|expr| self.check_expression(expr));
             }
-            Function(_, exprs) => {
+            Function(name, exprs) => {
+                self.check_ident(expression, name);
                 exprs.iter().for_each(|expr| self.check_expression(expr));
             }
             Default(accessed, default) => {
@@ -427,7 +446,7 @@ impl<'a> NamingAnalysis<'a> {
 }
 
 /// Provides a mapping from `String` to `Declaration` and is able to handle different scopes.
-struct ScopedDecl<'a> {
+pub(crate) struct ScopedDecl<'a> {
     scopes: Vec<HashMap<&'a str, Declaration<'a>>>,
 }
 
@@ -463,7 +482,7 @@ impl<'a> ScopedDecl<'a> {
         }
     }
 
-    fn add_decl_for(&mut self, name: &'a str, decl: Declaration<'a>) {
+    pub(crate) fn add_decl_for(&mut self, name: &'a str, decl: Declaration<'a>) {
         assert!(self.scopes.last().is_some());
         self.scopes.last_mut().unwrap().insert(name, decl);
     }
@@ -477,6 +496,7 @@ pub enum Declaration<'a> {
     UserDefinedType(&'a TypeDeclaration),
     BuiltinType(super::common::BuiltinType),
     Param(&'a Parameter),
+    Func(&'a FuncDecl),
 }
 
 impl<'a> Declaration<'a> {
@@ -487,7 +507,7 @@ impl<'a> Declaration<'a> {
             Declaration::Out(output) => Some(output.name.span),
             Declaration::UserDefinedType(ty) => ty.name.as_ref().map(|ident| ident.span),
             Declaration::Param(p) => Some(p.name.span),
-            Declaration::BuiltinType(_) => None,
+            Declaration::BuiltinType(_) | Declaration::Func(_) => None,
         }
     }
 
@@ -498,7 +518,7 @@ impl<'a> Declaration<'a> {
             Declaration::Out(output) => Some(&output.name.name),
             Declaration::UserDefinedType(ty) => ty.name.as_ref().map(|ident| ident.name.as_str()),
             Declaration::Param(p) => Some(&p.name.name),
-            Declaration::BuiltinType(_) => None,
+            Declaration::BuiltinType(_) | Declaration::Func(_) => None,
         }
     }
 
@@ -508,7 +528,8 @@ impl<'a> Declaration<'a> {
             Declaration::Const(_)
             | Declaration::In(_)
             | Declaration::Out(_)
-            | Declaration::Param(_) => false,
+            | Declaration::Param(_)
+            | Declaration::Func(_) => false,
         }
     }
 
@@ -519,7 +540,8 @@ impl<'a> Declaration<'a> {
             Declaration::Const(_)
             | Declaration::UserDefinedType(_)
             | Declaration::BuiltinType(_)
-            | Declaration::Param(_) => false,
+            | Declaration::Param(_)
+            | Declaration::Func(_) => false,
         }
     }
 }
@@ -639,5 +661,28 @@ mod tests {
     #[test]
     fn self_not_allowed_in_trigger_expression() {
         assert_eq!(1, number_of_naming_errors("trigger a  := self[-1]"))
+    }
+
+    #[test]
+    fn unknown_import() {
+        assert_eq!(1, number_of_naming_errors("import xzy"))
+    }
+
+    #[test]
+    fn known_import() {
+        assert_eq!(0, number_of_naming_errors("import math"))
+    }
+
+    #[test]
+    fn unknown_function() {
+        assert_eq!(1, number_of_naming_errors("output x: Float32 := sqrt(2)"))
+    }
+
+    #[test]
+    fn known_function_though_import() {
+        assert_eq!(
+            0,
+            number_of_naming_errors("import math\noutput x: Float32 := sqrt(2)")
+        )
     }
 }

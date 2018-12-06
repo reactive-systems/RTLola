@@ -1,17 +1,29 @@
 //! This module contains the Lola standard library.
 
-trait TypeDecl {}
+use crate::ty::{GenricTypeConstraint, Ty};
 
+#[derive(Debug)]
 struct Generic {
-    //constraint: Candidates,
+    constraint: GenricTypeConstraint,
 }
 
+#[derive(Debug)]
 enum Parameter {
-    Ty(Box<dyn TypeDecl>),
+    Type(Ty),
+    /// Index into associated generics array
     Generic(u8),
 }
 
+/// different kinds of type declarations, can be e.g., alias, newtype, struct, enum
+#[derive(Debug)]
+pub enum TypeDecl {
+    //Alias(String, Ty),
+//NewType(String, Ty),
+//Struct(String, Vec<(String, Ty)>),
+}
+
 /// A (possibly generic) function declaration
+#[derive(Debug)]
 pub struct FuncDecl {
     name: String,
     generics: Vec<Generic>,
@@ -19,55 +31,20 @@ pub struct FuncDecl {
     return_type: Parameter,
 }
 
-/// A definition of a Lola Module, that consists of types and functions
-struct LolaModule {
-    types: Vec<Box<dyn TypeDecl>>,
-    functions: Vec<FuncDecl>,
+use crate::analysis::naming::{Declaration, ScopedDecl};
+
+lazy_static! {
+    // fn sqrt<T: FloatingPoint>(T) -> T
+    static ref SQRT: FuncDecl = FuncDecl {
+        name: "sqrt".to_string(),
+        generics: vec![Generic {
+            constraint: GenricTypeConstraint::FloatingPoint,
+        }],
+        parameters: vec![Parameter::Generic(0)],
+        return_type: Parameter::Generic(0),
+    };
 }
 
-// the core module
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
-pub enum PrimitiveType {
-    Int(u8),
-    UInt(u8),
-    Float(u8),
-    String,
-    Bool,
+pub(crate) fn import_math_module<'a>(scope: &mut ScopedDecl<'a>) {
+    scope.add_decl_for(&SQRT.name, Declaration::Func(&SQRT))
 }
-
-impl TypeDecl for PrimitiveType {}
-
-enum HyperType {
-    InvocationTime,
-}
-
-impl TypeDecl for HyperType {}
-
-trait SubType {
-    fn is_subtype<T: TypeDecl>(&self, rhs: &T) -> bool;
-}
-
-impl SubType for PrimitiveType {
-    fn is_subtype<T: TypeDecl>(&self, rhs: &T) -> bool {
-        false
-    }
-
-    fn is_subtype<T: TypeDecl>(&self, rhs: &T) -> bool {
-        false
-    }
-}
-
-fn x() {
-    let a = PrimitiveType::UInt(8);
-    let b = HyperType::InvocationTime;
-    a.is_subtype(&b);
-}
-
-/*#[cfg(test)]
-mod tests {
-
-    use super::*;
-
-    #[test]
-    fn unknown_types_are_reported() {}
-}*/

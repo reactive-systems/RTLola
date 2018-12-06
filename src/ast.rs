@@ -8,6 +8,7 @@ use ast_node::Span;
 #[derive(Debug, Default)]
 pub struct LolaSpec {
     pub language: Option<LanguageSpec>,
+    pub imports: Vec<Import>,
     pub constants: Vec<Constant>,
     pub inputs: Vec<Input>,
     pub outputs: Vec<Output>,
@@ -19,6 +20,7 @@ impl LolaSpec {
     pub fn new() -> LolaSpec {
         LolaSpec {
             language: None,
+            imports: Vec::new(),
             constants: Vec::new(),
             inputs: Vec::new(),
             outputs: Vec::new(),
@@ -48,6 +50,13 @@ impl<'a> From<&'a str> for LanguageSpec {
     fn from(_string: &str) -> Self {
         unimplemented!();
     }
+}
+
+#[derive(Debug)]
+pub struct Import {
+    pub name: Ident,
+    pub(crate) id: NodeId,
+    pub(crate) span: Span,
 }
 
 /// A declaration of a constant (stream)

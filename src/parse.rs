@@ -48,6 +48,10 @@ pub(crate) fn parse(content: &str) -> Result<LolaSpec, pest::error::Error<Rule>>
             Rule::LanguageSpec => {
                 spec.language = Some(LanguageSpec::from(pair.as_str()));
             }
+            Rule::ImportStmt => {
+                let import = parse_import(&mut spec, pair);
+                spec.imports.push(import);
+            }
             Rule::ConstantStream => {
                 let constant = parse_constant(&mut spec, pair);
                 spec.constants.push(constant);
@@ -73,6 +77,18 @@ pub(crate) fn parse(content: &str) -> Result<LolaSpec, pest::error::Error<Rule>>
         }
     }
     Ok(spec)
+}
+
+fn parse_import(spec: &mut LolaSpec, pair: Pair<Rule>) -> Import {
+    assert_eq!(pair.as_rule(), Rule::ImportStmt);
+    let span = pair.as_span().into();
+    let mut pairs = pair.into_inner();
+    let name = parse_ident(&pairs.next().expect("mismatch between grammar and AST"));
+    Import {
+        name,
+        id: NodeId::DUMMY,
+        span: span,
+    }
 }
 
 /**
@@ -1147,6 +1163,13 @@ mod tests {
     fn parse_raw_string() {
         let spec = r##"constant s: String := r#"a raw \ string that " needs padding"#
 "##;
+        let ast = parse(spec).unwrap_or_else(|e| panic!("{}", e));
+        cmp_ast_spec(&ast, spec);
+    }
+
+    #[test]
+    fn parse_import() {
+        let spec = "import math\ninput in: UInt8\n";
         let ast = parse(spec).unwrap_or_else(|e| panic!("{}", e));
         cmp_ast_spec(&ast, spec);
     }

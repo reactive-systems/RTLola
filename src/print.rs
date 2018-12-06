@@ -382,12 +382,21 @@ impl Display for LanguageSpec {
     }
 }
 
+impl Display for Import {
+    fn fmt(&self, f: &mut Formatter) -> Result {
+        write!(f, "import {}", self.name)
+    }
+}
+
 impl Display for LolaSpec {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         if let Some(v) = &self.language {
             writeln!(f, "version {}", v)?
         }
 
+        for import in &self.imports {
+            writeln!(f, "{}", import);
+        }
         for decl in &self.type_declarations {
             writeln!(f, "{}", decl)?;
         }

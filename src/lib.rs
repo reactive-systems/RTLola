@@ -20,6 +20,7 @@ mod parse;
 mod print;
 mod reporting;
 mod stdlib;
+mod ty;
 
 // Re-export on the root level
 pub use crate::ast::{LanguageSpec, LolaSpec};
