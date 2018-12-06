@@ -15,7 +15,6 @@ pub enum Ty {
     Tuple(Vec<Ty>),
     EventStream(Box<Ty>), // todo: probably need info if parametric
     TimedStream(Box<Ty>), // todo: probably need frequency as well
-    InvocationTime,
     Error,
 }
 
@@ -26,6 +25,7 @@ pub enum IntTy {
     I32,
     I64,
 }
+use self::IntTy::*;
 
 #[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub enum UIntTy {
@@ -34,16 +34,83 @@ pub enum UIntTy {
     U32,
     U64,
 }
+use self::UIntTy::*;
 
 #[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub enum FloatTy {
     F32,
     F64,
 }
+use self::FloatTy::*;
 
-#[derive(Debug)]
+lazy_static! {
+    static ref PRIMITIVE_TYPES: Vec<(&'static str, &'static Ty)> = vec![
+        ("Bool", &Ty::Bool),
+        ("Int8", &Ty::Int(I8)),
+        ("Int16", &Ty::Int(I16)),
+        ("Int32", &Ty::Int(I32)),
+        ("Int64", &Ty::Int(I64)),
+        ("UInt8", &Ty::UInt(U8)),
+        ("UInt16", &Ty::UInt(U16)),
+        ("UInt32", &Ty::UInt(U32)),
+        ("UInt64", &Ty::UInt(U64)),
+        ("Float32", &Ty::Float(F32)),
+        ("Float64", &Ty::Float(F64)),
+        ("String", &Ty::String),
+    ];
+}
+
+impl Ty {
+    pub(crate) fn primitive_types() -> std::slice::Iter<'static, (&'static str, &'static Ty)> {
+        PRIMITIVE_TYPES.iter()
+    }
+
+    pub(crate) fn satisfies(&self, constraint: GenricTypeConstraint) -> bool {
+        use self::GenricTypeConstraint::*;
+        use self::Ty::*;
+        match (self, constraint) {
+            (Float(_), FloatingPoint) => true,
+            (_, _) => unimplemented!(),
+        }
+    }
+}
+
+impl std::fmt::Display for Ty {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Ty::Bool => write!(f, "Bool"),
+            Ty::Int(I8) => write!(f, "Int8"),
+            Ty::Int(I16) => write!(f, "Int16"),
+            Ty::Int(I32) => write!(f, "Int32"),
+            Ty::Int(I64) => write!(f, "Int64"),
+            Ty::UInt(U8) => write!(f, "UInt8"),
+            Ty::UInt(U16) => write!(f, "UInt16"),
+            Ty::UInt(U32) => write!(f, "UInt32"),
+            Ty::UInt(U64) => write!(f, "UInt64"),
+            Ty::Float(F32) => write!(f, "Float32"),
+            Ty::Float(F64) => write!(f, "Float64"),
+            Ty::String => write!(f, "String"),
+            Ty::EventStream(ty) => write!(f, "EventStream<{}>", ty),
+            _ => unimplemented!(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum GenricTypeConstraint {
+    Integer,
     SignedInteger,
     UnsignedInteger,
     FloatingPoint,
+}
+
+impl std::fmt::Display for GenricTypeConstraint {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        use self::GenricTypeConstraint::*;
+        match self {
+            Integer => write!(f, "integer"),
+            FloatingPoint => write!(f, "floating point"),
+            _ => unimplemented!(),
+        }
+    }
 }

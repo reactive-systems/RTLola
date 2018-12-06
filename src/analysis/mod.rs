@@ -10,10 +10,12 @@ mod id_assignment;
 mod lola_version;
 mod naming;
 mod type_checker;
+mod typing;
 
 use self::lola_version::LolaVersionAnalysis;
 use self::naming::NamingAnalysis;
 use super::ast::LolaSpec;
+use analysis::typing::TypeAnalysis;
 use crate::parse::SourceMapper;
 use crate::reporting::Handler;
 
@@ -25,6 +27,13 @@ pub(crate) fn analyze(spec: &mut LolaSpec, mapper: SourceMapper) -> bool {
     let mut naming_analyzer = NamingAnalysis::new(&handler);
     naming_analyzer.check(spec);
 
+    if handler.contains_error() {
+        handler.error("aborting due to previous error");
+        return false;
+    }
+
+    let mut type_analysis = TypeAnalysis::new(&handler, &naming_analyzer.result);
+    type_analysis.check(&spec);
     if handler.contains_error() {
         handler.error("aborting due to previous error");
         return false;

@@ -30,6 +30,12 @@ impl NodeId {
     pub const DUMMY: NodeId = NodeId(!0);
 }
 
+impl std::fmt::Display for NodeId {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 /// A span marks a range in a file.
 /// Start and end positions are *byte* offsets.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

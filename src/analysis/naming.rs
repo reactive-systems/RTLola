@@ -8,6 +8,7 @@ use ast_node::{AstNode, NodeId, Span};
 use crate::analysis::*;
 use crate::stdlib;
 use crate::stdlib::FuncDecl;
+use crate::ty::Ty;
 use parse::Ident;
 use std::collections::HashMap;
 
@@ -24,8 +25,8 @@ impl<'a> NamingAnalysis<'a> {
     pub(crate) fn new(handler: &'a Handler) -> Self {
         let mut scoped_decls = ScopedDecl::new();
 
-        for (name, ty) in super::common::BuiltinType::all() {
-            scoped_decls.add_decl_for(name, Declaration::BuiltinType(ty));
+        for (name, ty) in Ty::primitive_types() {
+            scoped_decls.add_decl_for(name, Declaration::Type(ty));
         }
 
         // add a new scope to distinguish between extern/builtin declarations
@@ -154,8 +155,6 @@ impl<'a> NamingAnalysis<'a> {
                 ),
             }
         }
-
-        self.check_type_declarations(&spec);
 
         // Store global declarations, i.e., constants, inputs, and outputs of the given specification
         for constant in &spec.constants {
@@ -286,62 +285,6 @@ impl<'a> NamingAnalysis<'a> {
                 .add_decl_for("self", Declaration::Out(output));
             self.check_expression(&output.expression);
             self.declarations.pop();
-        }
-    }
-
-    fn check_type_declarations(&mut self, spec: &'a LolaSpec) {
-        for type_decl in &spec.type_declarations {
-            self.declarations.push();
-            // check children
-            let mut field_names: Vec<(&'a String, &'a TypeDeclField)> = Vec::new();
-            type_decl.fields.iter().for_each(|field| {
-                self.check_type(&field.ty);
-            });
-
-            type_decl.fields.iter().for_each(|field| {
-                let mut found = false;
-                for previous_entry in field_names.iter() {
-                    match previous_entry {
-                        (ref name, ref previous_field) => {
-                            if field.name == **name {
-                                found = true;
-
-                                let mut builder = self.handler.build_error_with_span(
-                                    &format!("the field `{}` is defined multiple times", name),
-                                    LabeledSpan::new(
-                                        field._span,
-                                        &format!("`{}` redefined here", name),
-                                        true,
-                                    ),
-                                );
-                                builder.add_span_with_label(
-                                    previous_field._span,
-                                    &format!("previous definition of the value `{}` here", name),
-                                    false,
-                                );
-                                builder.emit();
-                                break;
-                            }
-                        }
-                    }
-                }
-                if !found {
-                    field_names.push((&field.name, &**field));
-                }
-            });
-
-            self.declarations.pop();
-
-            // only add the new type name after checking all fields
-            if let Some(name) = type_decl.name.as_ref() {
-                self.type_declarations
-                    .add_decl_for(&name.name, type_decl.into());
-            } else {
-                self.handler.error_with_span(
-                    "type declarations need to have a name",
-                    LabeledSpan::new(type_decl._span, "define here", true),
-                );
-            }
         }
     }
 
@@ -493,8 +436,7 @@ pub enum Declaration<'a> {
     Const(&'a Constant),
     In(&'a Input),
     Out(&'a Output),
-    UserDefinedType(&'a TypeDeclaration),
-    BuiltinType(super::common::BuiltinType),
+    Type(&'a Ty),
     Param(&'a Parameter),
     Func(&'a FuncDecl),
 }
@@ -505,9 +447,8 @@ impl<'a> Declaration<'a> {
             Declaration::Const(constant) => Some(constant.name.span),
             Declaration::In(input) => Some(input.name.span),
             Declaration::Out(output) => Some(output.name.span),
-            Declaration::UserDefinedType(ty) => ty.name.as_ref().map(|ident| ident.span),
             Declaration::Param(p) => Some(p.name.span),
-            Declaration::BuiltinType(_) | Declaration::Func(_) => None,
+            Declaration::Type(_) | Declaration::Func(_) => None,
         }
     }
 
@@ -516,15 +457,14 @@ impl<'a> Declaration<'a> {
             Declaration::Const(constant) => Some(&constant.name.name),
             Declaration::In(input) => Some(&input.name.name),
             Declaration::Out(output) => Some(&output.name.name),
-            Declaration::UserDefinedType(ty) => ty.name.as_ref().map(|ident| ident.name.as_str()),
             Declaration::Param(p) => Some(&p.name.name),
-            Declaration::BuiltinType(_) | Declaration::Func(_) => None,
+            Declaration::Type(_) | Declaration::Func(_) => None,
         }
     }
 
     fn is_type(&self) -> bool {
         match self {
-            Declaration::UserDefinedType(_) | Declaration::BuiltinType(_) => true,
+            Declaration::Type(_) => true,
             Declaration::Const(_)
             | Declaration::In(_)
             | Declaration::Out(_)
@@ -538,8 +478,7 @@ impl<'a> Declaration<'a> {
         match self {
             Declaration::In(_) | Declaration::Out(_) => true,
             Declaration::Const(_)
-            | Declaration::UserDefinedType(_)
-            | Declaration::BuiltinType(_)
+            | Declaration::Type(_)
             | Declaration::Param(_)
             | Declaration::Func(_) => false,
         }
@@ -567,12 +506,6 @@ impl<'a> Into<Declaration<'a>> for &'a Output {
 impl<'a> Into<Declaration<'a>> for &'a Parameter {
     fn into(self) -> Declaration<'a> {
         Declaration::Param(self)
-    }
-}
-
-impl<'a> Into<Declaration<'a>> for &'a TypeDeclaration {
-    fn into(self) -> Declaration<'a> {
-        Declaration::UserDefinedType(self)
     }
 }
 
