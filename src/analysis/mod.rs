@@ -9,14 +9,13 @@ mod common;
 mod id_assignment;
 mod lola_version;
 mod naming;
-mod reporting;
 mod type_checker;
 
 use self::lola_version::LolaVersionAnalysis;
 use self::naming::NamingAnalysis;
-use self::reporting::Handler;
 use super::ast::LolaSpec;
 use crate::parse::SourceMapper;
+use crate::reporting::Handler;
 
 pub trait AnalysisError<'a>: std::fmt::Debug {}
 

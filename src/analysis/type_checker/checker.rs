@@ -5,7 +5,7 @@ use std::collections::HashMap;
 extern crate ast_node;
 use super::candidates::*;
 use super::TypeCheckResult;
-use analysis::reporting::{Handler, LabeledSpan};
+use crate::reporting::{Handler, LabeledSpan};
 use ast_node::Span;
 use ast_node::{AstNode, NodeId};
 use parse::Ident;

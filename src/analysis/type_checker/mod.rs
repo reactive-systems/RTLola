@@ -6,7 +6,7 @@ mod checker;
 
 use super::common::Type;
 use super::type_checker::checker::*;
-use crate::analysis::reporting::Handler;
+use crate::reporting::Handler;
 use ast_node::NodeId;
 
 use std::collections::HashMap;
@@ -30,10 +30,10 @@ pub(crate) fn type_check<'a>(
 mod tests {
     use analysis::id_assignment::*;
     use analysis::naming::*;
-    use analysis::reporting::Handler;
     use analysis::type_checker::type_check;
     use analysis::type_checker::TypeCheckResult;
     use parse::*;
+    use reporting::Handler;
     use std::path::PathBuf;
 
     fn setup(spec: &str) -> (TypeCheckResult, Handler) {

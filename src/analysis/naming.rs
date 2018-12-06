@@ -2,8 +2,8 @@
 
 use super::super::ast::Offset::*;
 use super::super::ast::*;
-use super::reporting::{Handler, LabeledSpan};
 use crate::analysis::*;
+use crate::reporting::{Handler, LabeledSpan};
 use ast_node::{AstNode, NodeId, Span};
 use std::collections::HashMap;
 
