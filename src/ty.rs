@@ -17,6 +17,8 @@ pub enum Ty {
     Tuple(Vec<Ty>),
     EventStream(Box<Ty>), // todo: probably need info if parametric
     TimedStream(Box<Ty>), // todo: probably need frequency as well
+    /// an optional value type, e.g., accessing a stream with offset -1
+    Option(Box<Ty>),
     /// Used during type inference
     Infer(NodeId),
     Error,
@@ -69,8 +71,8 @@ impl Ty {
         PRIMITIVE_TYPES.iter()
     }
 
-    pub(crate) fn satisfies(&self, constraint: GenricTypeConstraint) -> bool {
-        use self::GenricTypeConstraint::*;
+    pub(crate) fn satisfies(&self, constraint: GenericTypeConstraint) -> bool {
+        use self::GenericTypeConstraint::*;
         use self::Ty::*;
         match (self, constraint) {
             (Float(_), FloatingPoint) => true,
@@ -96,6 +98,7 @@ impl std::fmt::Display for Ty {
             Ty::Float(F64) => write!(f, "Float64"),
             Ty::String => write!(f, "String"),
             Ty::EventStream(ty) => write!(f, "EventStream<{}>", ty),
+            Ty::Option(ty) => write!(f, "Option<{}>", ty),
             Ty::Infer(id) => write!(f, "?{}", id),
             _ => unimplemented!(),
         }
@@ -103,16 +106,16 @@ impl std::fmt::Display for Ty {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum GenricTypeConstraint {
+pub enum GenericTypeConstraint {
     Integer,
     SignedInteger,
     UnsignedInteger,
     FloatingPoint,
 }
 
-impl std::fmt::Display for GenricTypeConstraint {
+impl std::fmt::Display for GenericTypeConstraint {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        use self::GenricTypeConstraint::*;
+        use self::GenericTypeConstraint::*;
         match self {
             Integer => write!(f, "integer"),
             FloatingPoint => write!(f, "floating point"),

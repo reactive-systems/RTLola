@@ -1,10 +1,10 @@
 //! This module contains the Lola standard library.
 
-use crate::ty::{GenricTypeConstraint, Ty};
+use crate::ty::{GenericTypeConstraint, Ty};
 
 #[derive(Debug)]
 struct Generic {
-    constraint: GenricTypeConstraint,
+    constraint: GenericTypeConstraint,
 }
 
 #[derive(Debug)]
@@ -38,7 +38,7 @@ lazy_static! {
     static ref SQRT: FuncDecl = FuncDecl {
         name: "sqrt".to_string(),
         generics: vec![Generic {
-            constraint: GenricTypeConstraint::FloatingPoint,
+            constraint: GenericTypeConstraint::FloatingPoint,
         }],
         parameters: vec![Parameter::Generic(0)],
         return_type: Parameter::Generic(0),

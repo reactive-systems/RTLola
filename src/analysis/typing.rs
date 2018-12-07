@@ -5,10 +5,10 @@
 //! * https://eli.thegreenplace.net/2018/unification/
 
 use crate::ast::LolaSpec;
-use crate::ty::{GenricTypeConstraint, Ty};
+use crate::ty::{GenericTypeConstraint, Ty};
 use analysis::naming::{Declaration, DeclarationTable};
 use analysis::reporting::Handler;
-use ast::{Expression, Literal, TypeKind};
+use ast::{BinOp, Expression, Literal, Offset, TypeKind};
 use ast_node::NodeId;
 use std::collections::HashMap;
 
@@ -66,17 +66,30 @@ impl<'a> TypeAnalysis<'a> {
         for input in &spec.inputs {
             if let Some(ty) = self.declarations.get(&input.ty._id) {
                 match ty {
-                    Declaration::Type(ty) => self.equations.push(TypeEquation::new_concrete(
-                        input._id,
-                        Ty::EventStream(Box::new((*ty).clone())),
-                        input._id,
-                    )),
+                    Declaration::Type(ty) => {
+                        // constraints:
+                        // - ?1 = `ty`
+                        // - in = EventStream<?1>
+                        self.equations.push(TypeEquation::new_concrete(
+                            input.ty._id,
+                            (*ty).clone(),
+                            input._id,
+                        ));
+                        self.equations.push(TypeEquation::new_concrete(
+                            input._id,
+                            Ty::EventStream(Box::new(Ty::Infer(input.ty._id))),
+                            input._id,
+                        ));
+                    }
                     _ => unreachable!(),
                 }
             }
         }
 
         for output in &spec.outputs {
+            // generate constraint for expression
+            self.generate_equations_for_expression(&output.expression);
+
             // generate constraint in case a type is annotated
             match output.ty.kind {
                 TypeKind::Inferred => {
@@ -107,9 +120,6 @@ impl<'a> TypeAnalysis<'a> {
                 output.expression._id,
                 output._id,
             ));
-
-            // generate constraint for expression
-            self.generate_equations_for_expression(&output.expression);
         }
     }
 
@@ -118,9 +128,9 @@ impl<'a> TypeAnalysis<'a> {
         match lit.kind {
             Str(_) | RawStr(_) => TypeEquation::new_concrete(node, Ty::String, lit._id),
             Bool(_) => TypeEquation::new_concrete(node, Ty::Bool, lit._id),
-            Int(_) => TypeEquation::new_constraint(node, GenricTypeConstraint::Integer, lit._id),
+            Int(_) => TypeEquation::new_constraint(node, GenericTypeConstraint::Integer, lit._id),
             Float(_) => {
-                TypeEquation::new_constraint(node, GenricTypeConstraint::FloatingPoint, lit._id)
+                TypeEquation::new_constraint(node, GenericTypeConstraint::FloatingPoint, lit._id)
             }
         }
     }
@@ -137,6 +147,7 @@ impl<'a> TypeAnalysis<'a> {
                     Some(decl) => decl,
                     None => return, // TODO: do we need error message? Should be already handeled in naming analysis
                 };
+                unimplemented!();
                 match decl {
                     Declaration::Const(_) => unimplemented!(),
                     Declaration::In(input) => self
@@ -147,6 +158,89 @@ impl<'a> TypeAnalysis<'a> {
                         .push(TypeEquation::new_symbolic(expr._id, output._id, expr._id)),
                     _ => unreachable!(),
                 }
+            }
+            Ite(cond, left, right) => {
+                // recursion
+                self.generate_equations_for_expression(cond);
+                self.generate_equations_for_expression(left);
+                self.generate_equations_for_expression(right);
+
+                // constraints
+                // - cond = bool
+                // - left = right
+                // - expr = left
+                self.equations
+                    .push(TypeEquation::new_concrete(cond._id, Ty::Bool, expr._id));
+                self.equations
+                    .push(TypeEquation::new_symbolic(left._id, right._id, expr._id));
+                self.equations
+                    .push(TypeEquation::new_symbolic(expr._id, left._id, expr._id));
+            }
+            Binary(op, left, right) => {
+                // recursion
+                self.generate_equations_for_expression(left);
+                self.generate_equations_for_expression(right);
+
+                use self::BinOp::*;
+                match op {
+                    Eq => {
+                        self.equations
+                            .push(TypeEquation::new_symbolic(left._id, right._id, expr._id));
+                    }
+                    _ => unimplemented!(),
+                }
+            }
+            // discrete offset
+            Lookup(stream, Offset::DiscreteOffset(off_expr), None) => {
+                // recursion
+                self.generate_equations_for_expression(off_expr);
+
+                // constraints
+                // off_expr = {integer}
+                // stream = EventStream<?1>
+                // expr = Option<?1>
+                self.equations.push(TypeEquation::new_constraint(
+                    off_expr._id,
+                    GenericTypeConstraint::Integer,
+                    expr._id,
+                ));
+                // need to derive "inner" type `?1`
+                let decl = match self.declarations.get(&stream._id) {
+                    Some(decl) => decl,
+                    None => return, // TODO: check if error message is needed
+                };
+                let inner_ty: NodeId = match decl {
+                    Declaration::In(input) => input.ty._id,
+                    Declaration::Out(_) => unimplemented!(),
+                    Declaration::Const(_) => unimplemented!(),
+                    _ => unreachable!(),
+                };
+                self.equations.push(TypeEquation::new_concrete(
+                    stream._id,
+                    Ty::EventStream(Box::new(Ty::Infer(inner_ty))),
+                    expr._id,
+                ));
+                self.equations.push(TypeEquation::new_concrete(
+                    expr._id,
+                    Ty::Option(Box::new(Ty::Infer(inner_ty))),
+                    expr._id,
+                ));
+            }
+            Default(left, right) => {
+                // recursion
+                self.generate_equations_for_expression(left);
+                self.generate_equations_for_expression(right);
+
+                // constraints
+                // left = Option<expr>
+                // right = expr
+                self.equations.push(TypeEquation::new_concrete(
+                    left._id,
+                    Ty::Option(Box::new(Ty::Infer(expr._id))),
+                    expr._id,
+                ));
+                self.equations
+                    .push(TypeEquation::new_symbolic(right._id, expr._id, expr._id));
             }
             _ => unimplemented!(),
         }
@@ -187,6 +281,7 @@ impl Substitution {
             (Symbolic(n), _) => self.unify_variable(n, right),
             (_, Symbolic(n)) => self.unify_variable(n, left),
             (Concrete(ty), Constraint(c)) => ty.satisfies(*c),
+            (Concrete(Ty::Option(ty1)), Concrete(Ty::Option(ty2))) => unimplemented!(),
             _ => {
                 println!("{} {}", left, right);
                 unimplemented!()
@@ -232,7 +327,7 @@ impl Substitution {
             }
             TypeRef::Concrete(Ty::TimedStream(_)) => unimplemented!(),
             TypeRef::Concrete(Ty::Tuple(_)) => unimplemented!(),
-            TypeRef::Concrete(Ty::Infer(t)) => t != n,
+            TypeRef::Concrete(Ty::Infer(t)) => t == n,
             _ => false,
         }
     }
@@ -251,7 +346,7 @@ impl std::fmt::Display for Substitution {
 enum TypeRef {
     Symbolic(NodeId),
     Concrete(Ty),
-    Constraint(GenricTypeConstraint),
+    Constraint(GenericTypeConstraint),
 }
 
 /// Asserts that `lhs` == `rhs` due to `orig`
@@ -274,7 +369,7 @@ impl std::fmt::Display for TypeRef {
 
 impl std::fmt::Display for TypeEquation {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}\t{}\t{}", self.lhs, self.rhs, self.orig)
+        write!(f, "{} == {}\t\t|\t{}", self.lhs, self.rhs, self.orig)
     }
 }
 
@@ -295,7 +390,7 @@ impl TypeEquation {
         }
     }
 
-    fn new_constraint(lhs: NodeId, rhs: GenricTypeConstraint, orig: NodeId) -> TypeEquation {
+    fn new_constraint(lhs: NodeId, rhs: GenericTypeConstraint, orig: NodeId) -> TypeEquation {
         TypeEquation {
             lhs: TypeRef::Symbolic(lhs),
             rhs: TypeRef::Constraint(rhs),
