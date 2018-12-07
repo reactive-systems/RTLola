@@ -1,3 +1,9 @@
+//! Implementation of the Hindley-Milner type inference through unification
+//!
+//! Relevant references:
+//! * https://eli.thegreenplace.net/2018/type-inference/
+//! * https://eli.thegreenplace.net/2018/unification/
+
 use crate::ast::LolaSpec;
 use crate::ty::{GenricTypeConstraint, Ty};
 use analysis::naming::{Declaration, DeclarationTable};
