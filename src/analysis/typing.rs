@@ -1,8 +1,9 @@
-use analysis::naming::{Declaration, DeclarationTable};
-use analysis::reporting::Handler;
-use ast_node::NodeId;
 use crate::ast::LolaSpec;
 use crate::ty::{GenricTypeConstraint, Ty};
+use analysis::naming::{Declaration, DeclarationTable};
+use analysis::reporting::Handler;
+use ast::{Expression, Literal, TypeKind};
+use ast_node::NodeId;
 use std::collections::HashMap;
 
 pub(crate) struct TypeAnalysis<'a> {
@@ -53,29 +54,8 @@ impl<'a> TypeAnalysis<'a> {
                 }
             }
             // generate constraint from literal
-            use ast::LitKind::*;
-            match constant.literal.kind {
-                Str(_) | RawStr(_) => self.equations.push(TypeEquation::new_concrete(
-                    constant._id,
-                    Ty::String,
-                    constant.literal._id,
-                )),
-                Bool(_) => self.equations.push(TypeEquation::new_concrete(
-                    constant._id,
-                    Ty::Bool,
-                    constant.literal._id,
-                )),
-                Int(_) => self.equations.push(TypeEquation::new_constraint(
-                    constant._id,
-                    GenricTypeConstraint::Integer,
-                    constant.literal._id,
-                )),
-                Float(_) => self.equations.push(TypeEquation::new_constraint(
-                    constant._id,
-                    GenricTypeConstraint::FloatingPoint,
-                    constant.literal._id,
-                )),
-            }
+            let equation = self.get_equation_for_literal(constant._id, &constant.literal);
+            self.equations.push(equation);
         }
         for input in &spec.inputs {
             if let Some(ty) = self.declarations.get(&input.ty._id) {
@@ -92,20 +72,77 @@ impl<'a> TypeAnalysis<'a> {
 
         for output in &spec.outputs {
             // generate constraint in case a type is annotated
-            if let Some(type_name) = output.ty.as_ref() {
-                if let Some(ty) = self.declarations.get(&type_name._id) {
-                    match ty {
-                        Declaration::Type(ty) => self.equations.push(TypeEquation::new_concrete(
-                            output._id,
-                            Ty::EventStream(Box::new((*ty).clone())),
-                            output._id,
-                        )),
-                        _ => unreachable!(),
+            match output.ty.kind {
+                TypeKind::Inferred => {
+                    self.equations.push(TypeEquation::new_concrete(
+                        output._id,
+                        Ty::EventStream(Box::new(Ty::Infer(output.ty._id))),
+                        output._id,
+                    ));
+                }
+                _ => {
+                    if let Some(ty) = self.declarations.get(&output.ty._id) {
+                        match ty {
+                            Declaration::Type(ty) => {
+                                self.equations.push(TypeEquation::new_concrete(
+                                    output._id,
+                                    Ty::EventStream(Box::new((*ty).clone())),
+                                    output._id,
+                                ))
+                            }
+                            _ => unreachable!(),
+                        }
                     }
                 }
             }
+
+            self.equations.push(TypeEquation::new_symbolic(
+                output.ty._id,
+                output.expression._id,
+                output._id,
+            ));
+
             // generate constraint for expression
-            unimplemented!();
+            self.generate_equations_for_expression(&output.expression);
+        }
+    }
+
+    fn get_equation_for_literal(&self, node: NodeId, lit: &Literal) -> TypeEquation {
+        use ast::LitKind::*;
+        match lit.kind {
+            Str(_) | RawStr(_) => TypeEquation::new_concrete(node, Ty::String, lit._id),
+            Bool(_) => TypeEquation::new_concrete(node, Ty::Bool, lit._id),
+            Int(_) => TypeEquation::new_constraint(node, GenricTypeConstraint::Integer, lit._id),
+            Float(_) => {
+                TypeEquation::new_constraint(node, GenricTypeConstraint::FloatingPoint, lit._id)
+            }
+        }
+    }
+
+    fn generate_equations_for_expression(&mut self, expr: &Expression) {
+        use ast::ExpressionKind::*;
+        match &expr.kind {
+            Lit(l) => {
+                let eq = self.get_equation_for_literal(expr._id, &l);
+                self.equations.push(eq)
+            }
+            Ident(ident) => {
+                let decl = match self.declarations.get(&expr._id) {
+                    Some(decl) => decl,
+                    None => return, // TODO: do we need error message? Should be already handeled in naming analysis
+                };
+                match decl {
+                    Declaration::Const(_) => unimplemented!(),
+                    Declaration::In(input) => self
+                        .equations
+                        .push(TypeEquation::new_symbolic(expr._id, input._id, expr._id)),
+                    Declaration::Out(output) => self
+                        .equations
+                        .push(TypeEquation::new_symbolic(expr._id, output._id, expr._id)),
+                    _ => unreachable!(),
+                }
+            }
+            _ => unimplemented!(),
         }
     }
 
@@ -113,7 +150,9 @@ impl<'a> TypeAnalysis<'a> {
     fn unify_equations(&mut self) -> Substitution {
         let mut substitution = Substitution::new();
         for equation in &self.equations {
-            substitution.unify(&equation.lhs, &equation.rhs);
+            if !substitution.unify(&equation.lhs, &equation.rhs) {
+                error!("failed to unify {} {}", equation.lhs, equation.rhs);
+            }
         }
         substitution
     }
@@ -133,6 +172,7 @@ impl Substitution {
     /// Unify to types under the given substitution.
     /// Returns false if there is no substitution.
     fn unify(&mut self, left: &TypeRef, right: &TypeRef) -> bool {
+        trace!("unify {} {}", left, right);
         if left == right {
             return true;
         }
@@ -145,13 +185,13 @@ impl Substitution {
                 println!("{} {}", left, right);
                 unimplemented!()
             }
-        };
-        false
+        }
     }
 
     /// Unifies variable n with type def using current substitutions.
     /// Returns false if there is no substitution.
     fn unify_variable(&mut self, n: &NodeId, def: &TypeRef) -> bool {
+        trace!("unify variable {} {}", n, def);
         if self.map.contains_key(n) {
             let val = &self.map[n].clone();
             return self.unify(val, def);
@@ -162,7 +202,7 @@ impl Substitution {
                 return self.unify(&TypeRef::Symbolic(*n), val);
             }
         }
-        if self.occurs_check(n, def) {
+        if self.check_occurrence(n, def) {
             false
         } else {
             // update substitution
@@ -172,19 +212,21 @@ impl Substitution {
     }
 
     /// Does the variable `n` occur anywhere inside def?
-    fn occurs_check(&self, n: &NodeId, def: &TypeRef) -> bool {
+    fn check_occurrence(&self, n: &NodeId, def: &TypeRef) -> bool {
+        trace!("check occurrence {} {}", n, def);
         match def {
             TypeRef::Symbolic(t) if t == n => true,
             TypeRef::Symbolic(t) if self.map.contains_key(t) => {
                 assert!(t != n);
                 // recursion
-                self.occurs_check(n, &self.map[t])
+                self.check_occurrence(n, &self.map[t])
             }
             TypeRef::Concrete(Ty::EventStream(ty)) => {
-                self.occurs_check(n, &TypeRef::Concrete(*ty.clone()))
+                self.check_occurrence(n, &TypeRef::Concrete(*ty.clone()))
             }
             TypeRef::Concrete(Ty::TimedStream(_)) => unimplemented!(),
             TypeRef::Concrete(Ty::Tuple(_)) => unimplemented!(),
+            TypeRef::Concrete(Ty::Infer(t)) => t != n,
             _ => false,
         }
     }

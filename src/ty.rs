@@ -2,6 +2,8 @@
 //!
 //! It is inspired by https://doc.rust-lang.org/nightly/nightly-rustc/rustc/ty/index.html
 
+use ast_node::NodeId;
+
 /// Representation of types
 #[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub enum Ty {
@@ -15,6 +17,8 @@ pub enum Ty {
     Tuple(Vec<Ty>),
     EventStream(Box<Ty>), // todo: probably need info if parametric
     TimedStream(Box<Ty>), // todo: probably need frequency as well
+    /// Used during type inference
+    Infer(NodeId),
     Error,
 }
 
@@ -70,6 +74,7 @@ impl Ty {
         use self::Ty::*;
         match (self, constraint) {
             (Float(_), FloatingPoint) => true,
+            (Float(_), Integer) => false,
             (_, _) => unimplemented!(),
         }
     }
@@ -91,6 +96,7 @@ impl std::fmt::Display for Ty {
             Ty::Float(F64) => write!(f, "Float64"),
             Ty::String => write!(f, "String"),
             Ty::EventStream(ty) => write!(f, "EventStream<{}>", ty),
+            Ty::Infer(id) => write!(f, "?{}", id),
             _ => unimplemented!(),
         }
     }

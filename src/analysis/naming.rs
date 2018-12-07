@@ -9,6 +9,7 @@ use crate::analysis::*;
 use crate::stdlib;
 use crate::stdlib::FuncDecl;
 use crate::ty::Ty;
+use ast_node::{AstNode, NodeId, Span};
 use parse::Ident;
 use std::collections::HashMap;
 
@@ -100,6 +101,7 @@ impl<'a> NamingAnalysis<'a> {
             TypeKind::Tuple(ref elements) => elements.iter().for_each(|ty| {
                 self.check_type(ty);
             }),
+            TypeKind::Inferred => {}
         }
     }
 
@@ -179,9 +181,7 @@ impl<'a> NamingAnalysis<'a> {
 
         for output in &spec.outputs {
             self.add_decl_for(output.into());
-            if let Some(ty) = output.ty.as_ref() {
-                self.check_type(ty)
-            }
+            self.check_type(&output.ty);
         }
 
         self.check_outputs(&spec);

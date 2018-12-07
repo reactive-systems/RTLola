@@ -83,7 +83,7 @@ pub struct Input {
 #[derive(AstNode, Debug)]
 pub struct Output {
     pub name: Ident,
-    pub ty: Option<Type>,
+    pub ty: Type,
     pub params: Vec<Parameter>,
     pub template_spec: Option<TemplateSpec>,
     pub expression: Expression,
@@ -195,6 +195,14 @@ impl Type {
             _span: span,
         }
     }
+
+    pub fn new_inferred() -> Type {
+        Type {
+            _id: NodeId::DUMMY,
+            kind: TypeKind::Inferred,
+            _span: Span::unknown(),
+        }
+    }
 }
 
 #[derive(AstNode, Debug)]
@@ -214,10 +222,12 @@ impl Parenthesis {
 
 #[derive(Debug)]
 pub enum TypeKind {
-    /// A tuple type, e.g., (Int, Float)
-    Tuple(Vec<Box<Type>>),
     /// A simple type, e.g., Int
     Simple(String),
+    /// A tuple type, e.g., (Int32, Float32)
+    Tuple(Vec<Box<Type>>),
+    /// Should be inferred, i.e., is not annotated
+    Inferred,
     /// Malformed type, e.g, `mis$ing`
     Malformed(String),
 }

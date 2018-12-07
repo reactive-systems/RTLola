@@ -48,6 +48,16 @@ pub struct Span {
     // lineOffsetLSP: usize,
 }
 
+impl Span {
+    pub fn unknown() -> Span {
+        use std::usize;
+        Span {
+            start: usize::MAX,
+            end: usize::MAX,
+        }
+    }
+}
+
 impl<'a> From<pest::Span<'a>> for Span {
     fn from(span: pest::Span<'a>) -> Self {
         Span {

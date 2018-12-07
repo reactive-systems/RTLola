@@ -86,10 +86,11 @@ impl<'a> TypeChecker<'a> {
         // First register all expected types, then check each in separation.
         for output in &self.spec.outputs {
             let ti: TimingInfo = TypeChecker::extract_timing_info(output);
-            let declared = self
-                .check_optional_type(&output.ty)
-                .meet(&Candidates::Any(ti));
-            self.register_cand(*output.id(), declared);
+            unimplemented!();
+            /*let declared = self
+            .check_optional_type(&Some(output.ty))
+            .meet(&Candidates::Any(ti));
+            self.register_cand(*output.id(), declared);*/
         }
         for output in &self.spec.outputs {
             // Check whether this output is time- or event-driven.
@@ -561,6 +562,7 @@ impl<'a> TypeChecker<'a> {
                 let res = self.retrieve_from_declaration(ty);
                 self.register_cand(*ty.id(), res)
             }
+            TypeKind::Inferred => unreachable!(),
         }
     }
 

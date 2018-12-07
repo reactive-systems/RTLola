@@ -180,10 +180,12 @@ fn parse_output(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> Output {
         Vec::new()
     };
 
-    let mut ty = None;
+    let ty;
     if let Rule::Type = pair.as_rule() {
-        ty = Some(parse_type(spec, pair));
+        ty = parse_type(spec, pair);
         pair = pairs.next().expect("mismatch between grammar and AST");
+    } else {
+        ty = Type::new_inferred();
     }
 
     let mut tspec = None;

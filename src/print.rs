@@ -65,10 +65,15 @@ impl Display for Output {
         if !self.params.is_empty() {
             write_delim_list(f, &self.params, " <", ">", ", ")?;
         }
+        match self.ty.kind {
+            TypeKind::Inferred => {}
+            _ => {
+                write!(f, ": {}", self.ty)?;
+            }
+        }
         write!(
             f,
-            "{}{} := {}",
-            format_type(&self.ty),
+            "{} := {}",
             format_opt(&self.template_spec, " ", ""),
             self.expression
         )
@@ -162,6 +167,7 @@ impl Display for TypeKind {
             TypeKind::Simple(name) => write!(f, "{}", name),
             TypeKind::Malformed(s) => write!(f, "{}", s),
             TypeKind::Tuple(types) => write_delim_list(f, types, "(", ")", ", "),
+            TypeKind::Inferred => write!(f, "?"),
         }
     }
 }

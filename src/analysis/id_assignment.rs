@@ -37,9 +37,8 @@ pub(crate) fn assign_ids(spec: &mut LolaSpec) {
     for o in &mut spec.outputs {
         assert_eq!(*o.id(), NodeId::DUMMY, "Ids already assigned.");
         o.set_id(next_id());
-        if let Some(ref mut t) = o.ty {
-            assign_ids_type(t, &mut next_id);
-        }
+        assign_ids_type(&mut o.ty, &mut next_id);
+
         for param in o.params.iter_mut() {
             assign_ids_parameter(param, &mut next_id);
         }
