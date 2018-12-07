@@ -41,6 +41,8 @@ impl<'a> TypeAnalysis<'a> {
         let subst = self.unify_equations();
         debug!("Substitutions:\n{}", subst);
 
+        self.assign_types(spec, &subst);
+
         unimplemented!();
     }
 
@@ -256,6 +258,19 @@ impl<'a> TypeAnalysis<'a> {
         }
         substitution
     }
+
+    /// Assigns types as infered
+    fn assign_types(&mut self, spec: &LolaSpec, subst: &Substitution) {
+        for constant in &spec.constants {
+            debug!("{} has type {}", constant, subst.get_type(constant._id));
+        }
+        for input in &spec.inputs {
+            debug!("{} has type {}", input, subst.get_type(input._id));
+        }
+        for output in &spec.outputs {
+            debug!("{} has type {}", output, subst.get_type(output._id));
+        }
+    }
 }
 
 struct Substitution {
@@ -331,6 +346,24 @@ impl Substitution {
             TypeRef::Type(Ty::TimedStream(_)) => unimplemented!(),
             TypeRef::Type(Ty::Tuple(_)) => unimplemented!(),
             _ => false,
+        }
+    }
+
+    fn get_type(&self, nid: NodeId) -> Ty {
+        if let Some(ty_ref) = self.map.get(&nid) {
+            match ty_ref {
+                TypeRef::Type(Ty::EventStream(ty)) => {
+                    let inner = match **ty {
+                        Ty::Infer(other) => self.get_type(other),
+                        ref t => t.clone(),
+                    };
+                    Ty::EventStream(Box::new(inner))
+                }
+                TypeRef::Type(ty) => ty.clone(),
+                TypeRef::Constraint(_) => Ty::Error,
+            }
+        } else {
+            Ty::Error
         }
     }
 }
