@@ -278,10 +278,13 @@ impl Substitution {
         }
         use self::TypeRef::*;
         match (left, right) {
-            (Symbolic(n), _) => self.unify_variable(n, right),
-            (_, Symbolic(n)) => self.unify_variable(n, left),
-            (Concrete(ty), Constraint(c)) => ty.satisfies(*c),
-            (Concrete(Ty::Option(ty1)), Concrete(Ty::Option(ty2))) => unimplemented!(),
+            (Type(Ty::Infer(n)), _) => self.unify_variable(n, right),
+            (_, Type(Ty::Infer(n))) => self.unify_variable(n, left),
+            (Type(ty), Constraint(c)) => ty.satisfies(*c),
+            (Type(Ty::Option(ty1)), Type(Ty::Option(ty2))) => self.unify(
+                &TypeRef::Type((**ty1).clone()),
+                &TypeRef::Type((**ty2).clone()),
+            ),
             _ => {
                 println!("{} {}", left, right);
                 unimplemented!()
@@ -297,10 +300,10 @@ impl Substitution {
             let val = &self.map[n].clone();
             return self.unify(val, def);
         }
-        if let TypeRef::Symbolic(t) = def {
+        if let TypeRef::Type(Ty::Infer(t)) = def {
             if self.map.contains_key(t) {
                 let val = &self.map[t].clone();
-                return self.unify(&TypeRef::Symbolic(*n), val);
+                return self.unify(&TypeRef::Type(Ty::Infer(*n)), val);
             }
         }
         if self.check_occurrence(n, def) {
@@ -316,18 +319,17 @@ impl Substitution {
     fn check_occurrence(&self, n: &NodeId, def: &TypeRef) -> bool {
         trace!("check occurrence {} {}", n, def);
         match def {
-            TypeRef::Symbolic(t) if t == n => true,
-            TypeRef::Symbolic(t) if self.map.contains_key(t) => {
+            TypeRef::Type(Ty::Infer(t)) if t == n => true,
+            TypeRef::Type(Ty::Infer(t)) if self.map.contains_key(t) => {
                 assert!(t != n);
                 // recursion
                 self.check_occurrence(n, &self.map[t])
             }
-            TypeRef::Concrete(Ty::EventStream(ty)) => {
-                self.check_occurrence(n, &TypeRef::Concrete(*ty.clone()))
+            TypeRef::Type(Ty::EventStream(ty)) => {
+                self.check_occurrence(n, &TypeRef::Type(*ty.clone()))
             }
-            TypeRef::Concrete(Ty::TimedStream(_)) => unimplemented!(),
-            TypeRef::Concrete(Ty::Tuple(_)) => unimplemented!(),
-            TypeRef::Concrete(Ty::Infer(t)) => t == n,
+            TypeRef::Type(Ty::TimedStream(_)) => unimplemented!(),
+            TypeRef::Type(Ty::Tuple(_)) => unimplemented!(),
             _ => false,
         }
     }
@@ -344,8 +346,7 @@ impl std::fmt::Display for Substitution {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 enum TypeRef {
-    Symbolic(NodeId),
-    Concrete(Ty),
+    Type(Ty),
     Constraint(GenericTypeConstraint),
 }
 
@@ -360,8 +361,7 @@ struct TypeEquation {
 impl std::fmt::Display for TypeRef {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            TypeRef::Symbolic(n) => write!(f, "t{}", n),
-            TypeRef::Concrete(ty) => write!(f, "{}", ty),
+            TypeRef::Type(ty) => write!(f, "{}", ty),
             TypeRef::Constraint(c) => write!(f, "{{{}}}", c),
         }
     }
@@ -376,23 +376,23 @@ impl std::fmt::Display for TypeEquation {
 impl TypeEquation {
     fn new_symbolic(lhs: NodeId, rhs: NodeId, orig: NodeId) -> TypeEquation {
         TypeEquation {
-            lhs: TypeRef::Symbolic(lhs),
-            rhs: TypeRef::Symbolic(rhs),
+            lhs: TypeRef::Type(Ty::Infer(lhs)),
+            rhs: TypeRef::Type(Ty::Infer(rhs)),
             orig,
         }
     }
 
     fn new_concrete(lhs: NodeId, rhs: Ty, orig: NodeId) -> TypeEquation {
         TypeEquation {
-            lhs: TypeRef::Symbolic(lhs),
-            rhs: TypeRef::Concrete(rhs),
+            lhs: TypeRef::Type(Ty::Infer(lhs)),
+            rhs: TypeRef::Type(rhs),
             orig,
         }
     }
 
     fn new_constraint(lhs: NodeId, rhs: GenericTypeConstraint, orig: NodeId) -> TypeEquation {
         TypeEquation {
-            lhs: TypeRef::Symbolic(lhs),
+            lhs: TypeRef::Type(Ty::Infer(lhs)),
             rhs: TypeRef::Constraint(rhs),
             orig,
         }

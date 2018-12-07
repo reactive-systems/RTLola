@@ -77,7 +77,11 @@ impl Ty {
         match (self, constraint) {
             (Float(_), FloatingPoint) => true,
             (Float(_), Integer) => false,
-            (_, _) => unimplemented!(),
+            (UInt(_), Integer) => true,
+            (_, _) => {
+                println!("{} {}", self, constraint);
+                unimplemented!();
+            }
         }
     }
 }
