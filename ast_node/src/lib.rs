@@ -1,5 +1,5 @@
-extern crate pest;
-extern crate pest_derive;
+use pest;
+
 use std::fmt::Debug;
 
 /// Every node in the AST gets a unique id, represented by a 32bit unsiged integer.

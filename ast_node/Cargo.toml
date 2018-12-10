@@ -6,6 +6,7 @@ authors = [
     "Maximilian Schwenger <schwenger@react.uni-saarland.de>",
     "Leander Tentrup <tentrup@react.uni-saarland.de>"
 ]
+edition = "2018"
 
 [dependencies]
 pest = "^2.0"         # parser generator
