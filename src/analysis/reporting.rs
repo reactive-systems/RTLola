@@ -1,8 +1,8 @@
 //! This module contains helper to report messages (warnings/errors)
 
 use self::Level::*;
-use ast_node::Span;
 use crate::parse::{CodeLine, SourceMapper};
+use ast_node::Span;
 use std::cell::RefCell;
 use std::io::Write;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
@@ -131,7 +131,8 @@ impl StderrEmitter {
                 mapper
                     .get_line(s.span)
                     .map(|l| (l, s.label.clone(), s.primary))
-            }).collect();
+            })
+            .collect();
 
         if !snippets.is_empty() && snippets.len() == diagnostic.span.len() {
             let line_number_length = snippets

@@ -361,16 +361,18 @@ impl<'a> From<&'a Candidates> for OType {
         match cand {
             Candidates::Any(_) => unreachable!(), // Explicit type annotations should make this case impossible.
             Candidates::Concrete(t, _) => OType::BuiltIn(*t),
-            Candidates::Numeric(cfg, _) => if cfg.def_float {
-                let width = if cfg.width >= 32 { cfg.width } else { 32 };
-                OType::BuiltIn(BuiltinType::Float(width))
-            } else if cfg.def_signed {
-                let width = if cfg.width >= 32 { cfg.width } else { 32 };
-                OType::BuiltIn(BuiltinType::Int(width))
-            } else {
-                let width = if cfg.width >= 32 { cfg.width } else { 32 };
-                OType::BuiltIn(BuiltinType::UInt(width))
-            },
+            Candidates::Numeric(cfg, _) => {
+                if cfg.def_float {
+                    let width = if cfg.width >= 32 { cfg.width } else { 32 };
+                    OType::BuiltIn(BuiltinType::Float(width))
+                } else if cfg.def_signed {
+                    let width = if cfg.width >= 32 { cfg.width } else { 32 };
+                    OType::BuiltIn(BuiltinType::Int(width))
+                } else {
+                    let width = if cfg.width >= 32 { cfg.width } else { 32 };
+                    OType::BuiltIn(BuiltinType::UInt(width))
+                }
+            }
             Candidates::Tuple(v) => {
                 // Just make sure there are no nested tuples.
                 assert!(v.iter().all(|t| match t {
@@ -383,7 +385,8 @@ impl<'a> From<&'a Candidates> for OType {
                     .map(|ot| match ot {
                         OType::BuiltIn(t) => t,
                         OType::Tuple(_v) => unreachable!(),
-                    }).collect();
+                    })
+                    .collect();
                 OType::Tuple(transformed)
             }
             Candidates::None => unreachable!(),

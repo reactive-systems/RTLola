@@ -1,7 +1,7 @@
 extern crate proc_macro;
 
 //#[macro_use]
-extern crate syn;
+use syn;
 #[macro_use]
 extern crate quote;
 

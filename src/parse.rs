@@ -501,7 +501,8 @@ fn parse_vec_of_expressions(spec: &mut LolaSpec, pairs: Pairs<Rule>) -> Vec<Box<
         .map(|expr| {
             let span = expr.as_span().into();
             build_expression_ast(spec, expr.into_inner(), span)
-        }).map(Box::new)
+        })
+        .map(Box::new)
         .collect()
 }
 
@@ -861,7 +862,8 @@ mod tests {
         let _ = LolaParser::parse(
             Rule::Spec,
             "input in: Int\noutput out: Int := in\ntrigger in ≠ out",
-        ).unwrap_or_else(|e| panic!("{}", e));
+        )
+        .unwrap_or_else(|e| panic!("{}", e));
     }
 
     //    #[allow(clippy::cyclomatic_complexity)]
