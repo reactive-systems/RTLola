@@ -196,11 +196,7 @@ mod tests {
 
     fn get_id_o(s: Option<&Output>) -> &NodeId {
         if let Some(o) = s {
-            if let Some(ref ty) = o.ty {
-                ty.id()
-            } else {
-                panic!("Assigning ids must not remove types!")
-            }
+            &o.ty._id
         } else {
             panic!("Assigning ids must not remove streams!")
         }
@@ -248,7 +244,7 @@ mod tests {
         Output {
             _id: NodeId::DUMMY,
             name: ident(),
-            ty: Some(ty()),
+            ty: ty(),
             params: Vec::new(),
             template_spec: None,
             expression: expr,

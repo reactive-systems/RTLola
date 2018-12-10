@@ -1175,4 +1175,11 @@ mod tests {
         let ast = parse(spec).unwrap_or_else(|e| panic!("{}", e));
         cmp_ast_spec(&ast, spec);
     }
+
+    #[test]
+    fn parse_method_call() {
+        let spec = "output count := count.offset(-1).default(0) + 1";
+        let ast = parse(spec).unwrap_or_else(|e| panic!("{}", e));
+        cmp_ast_spec(&ast, spec);
+    }
 }
