@@ -280,6 +280,8 @@ pub enum ExpressionKind {
     Tuple(Vec<Box<Expression>>),
     /// Access of a named (`obj.foo`) or unnamed (`obj.0`) struct field
     Field(Box<Expression>, Ident),
+    /// A method call, e.g., `foo.offset(-1)`
+    Method(Box<Expression>, Ident, Vec<Box<Expression>>),
     /// A function call
     Function(Ident, Vec<Box<Expression>>),
 }

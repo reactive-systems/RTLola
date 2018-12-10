@@ -158,6 +158,7 @@ impl<'a> TypeChecker<'a> {
                 //self.check_function(e, *kind, args)
             }
             ExpressionKind::Field(ref expr, ref ident) => self.check_field_access(e, expr, ident),
+            ExpressionKind::Method(_, _, _) => unimplemented!(),
         }
     }
 

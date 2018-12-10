@@ -384,6 +384,10 @@ impl<'a> NamingAnalysis<'a> {
             Field(expr, _) => {
                 self.check_expression(expr);
             }
+            Method(expr, _, args) => {
+                self.check_expression(expr);
+                args.iter().for_each(|expr| self.check_expression(expr));
+            }
         }
     }
 }

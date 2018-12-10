@@ -75,6 +75,12 @@ fn analyse_expression(
             });
         }
         ExpressionKind::Field(expr, _) => analyse_expression(version_tracker, expr, false),
+        ExpressionKind::Method(expr, _, args) => {
+            analyse_expression(version_tracker, expr, false);
+            args.iter().for_each(|arg| {
+                analyse_expression(version_tracker, arg, false);
+            });
+        }
     }
 }
 

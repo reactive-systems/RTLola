@@ -712,10 +712,10 @@ fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>, span: Span)
                 Rule::Equal => BinOp::Eq,
                 Rule::NotEqual => BinOp::Ne,
                 Rule::Dot => {
-                    // access to a tuple
-                    let ident = match rhs.kind {
+                    match rhs.kind {
+                        // access to a tuple
                         ExpressionKind::Lit(l) => {
-                            match l.kind {
+                            let ident = match l.kind {
                                 LitKind::Int(i) => {
                                     assert!(i >= 0);
                                     Ident::new(format!("{}", i), l._span)
@@ -723,11 +723,14 @@ fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>, span: Span)
                                 _ => {
                                     panic!("expected unsigned integer");
                                 }
-                            }
+                            };
+                            return Expression::new(ExpressionKind::Field(Box::new(lhs), ident), span);
+                        },
+                        ExpressionKind::Function(ident, args) => {
+                            return Expression::new(ExpressionKind::Method(Box::new(lhs), ident, args), span);
                         }
                         _ => panic!("tuple accesses require a number"),
-                    };
-                    return Expression::new(ExpressionKind::Field(Box::new(lhs), ident), span);
+                    }                    
                 }
                 _ => unreachable!(),
             };
@@ -1178,7 +1181,7 @@ mod tests {
 
     #[test]
     fn parse_method_call() {
-        let spec = "output count := count.offset(-1).default(0) + 1";
+        let spec = "output count := count.offset(-1).default(0) + 1\n";
         let ast = parse(spec).unwrap_or_else(|e| panic!("{}", e));
         cmp_ast_spec(&ast, spec);
     }
