@@ -3,12 +3,12 @@
 use crate::ty::{GenericTypeConstraint, Ty};
 
 #[derive(Debug)]
-struct Generic {
+pub struct Generic {
     constraint: GenericTypeConstraint,
 }
 
 #[derive(Debug)]
-enum Parameter {
+pub enum Parameter {
     Type(Ty),
     /// Index into associated generics array
     Generic(u8),
@@ -25,10 +25,10 @@ pub enum TypeDecl {
 /// A (possibly generic) function declaration
 #[derive(Debug)]
 pub struct FuncDecl {
-    name: String,
-    generics: Vec<Generic>,
-    parameters: Vec<Parameter>,
-    return_type: Parameter,
+    pub name: String,
+    pub generics: Vec<Generic>,
+    pub parameters: Vec<Parameter>,
+    pub return_type: Parameter,
 }
 
 use crate::analysis::naming::{Declaration, ScopedDecl};

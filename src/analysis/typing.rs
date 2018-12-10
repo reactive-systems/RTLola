@@ -5,6 +5,7 @@
 //! * https://eli.thegreenplace.net/2018/unification/
 
 use crate::ast::LolaSpec;
+use crate::stdlib::Parameter;
 use crate::ty::{GenericTypeConstraint, Ty};
 use analysis::naming::{Declaration, DeclarationTable};
 use analysis::reporting::Handler;
@@ -149,15 +150,13 @@ impl<'a> TypeAnalysis<'a> {
                     Some(decl) => decl,
                     None => return, // TODO: do we need error message? Should be already handeled in naming analysis
                 };
-                unimplemented!();
+
                 match decl {
-                    Declaration::Const(_) => unimplemented!(),
-                    Declaration::In(input) => self
+                    Declaration::Const(constant) => self
                         .equations
-                        .push(TypeEquation::new_symbolic(expr._id, input._id, expr._id)),
-                    Declaration::Out(output) => self
-                        .equations
-                        .push(TypeEquation::new_symbolic(expr._id, output._id, expr._id)),
+                        .push(TypeEquation::new_symbolic(expr._id, constant._id, expr._id)),
+                    Declaration::In(_) => unimplemented!(),
+                    Declaration::Out(_) => unimplemented!(),
                     _ => unreachable!(),
                 }
             }
@@ -243,6 +242,64 @@ impl<'a> TypeAnalysis<'a> {
                 ));
                 self.equations
                     .push(TypeEquation::new_symbolic(right._id, expr._id, expr._id));
+            }
+            Function(_, params) => {
+                let decl = match self.declarations.get(&expr._id) {
+                    Some(decl) => decl,
+                    None => return,
+                };
+                let fun_decl = match decl {
+                    Declaration::Func(fun_decl) => fun_decl,
+                    _ => unreachable!("expected function declaration"),
+                };
+                assert_eq!(params.len(), fun_decl.parameters.len());
+                println!("{:?}", fun_decl);
+
+                // recursion
+                for param in params {
+                    self.generate_equations_for_expression(param);
+                }
+
+                // generic type arguments, stores first occurrence to implement equality over all occurrences
+                // Note: it would be more elegant to create new symbolic names for generics, but this is currently not possible
+                // TODO: one has to check the infered type whether it satisfies the given constraint
+                let mut generics: Vec<Option<NodeId>> = vec![None; fun_decl.generics.len()];
+                for (type_param, parameter) in fun_decl.parameters.iter().zip(params) {
+                    match type_param {
+                        Parameter::Generic(num) => {
+                            if let Some(other) = generics[*num as usize] {
+                                // generic type has been used as argument before
+                                self.equations.push(TypeEquation::new_symbolic(
+                                    other,
+                                    parameter._id,
+                                    expr._id,
+                                ))
+                            } else {
+                                generics[*num as usize] = Some(parameter._id);
+                            }
+                        }
+                        Parameter::Type(ty) => self.equations.push(TypeEquation::new_concrete(
+                            parameter._id,
+                            ty.clone(),
+                            expr._id,
+                        )),
+                    }
+                }
+                // return type
+                match fun_decl.return_type {
+                    Parameter::Generic(num) => {
+                        if let Some(other) = generics[num as usize] {
+                            // generic type has been used as argument before
+                            self.equations
+                                .push(TypeEquation::new_symbolic(other, expr._id, expr._id))
+                        }
+                    }
+                    Parameter::Type(ref ty) => self.equations.push(TypeEquation::new_concrete(
+                        expr._id,
+                        ty.clone(),
+                        expr._id,
+                    )),
+                }
             }
             _ => unimplemented!(),
         }
