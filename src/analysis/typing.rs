@@ -300,7 +300,8 @@ impl<'a> TypeAnalysis<'a> {
                         expr._id,
                     )),
                 }
-            }
+            },
+            Method(_, _, _) => unimplemented!(),
             _ => unimplemented!(),
         }
     }
@@ -521,6 +522,12 @@ mod tests {
     #[test]
     fn simple_input() {
         let spec = "input i: Int8";
+        assert_eq!(0, num_type_errors(spec));
+    }
+
+    #[test]
+    fn method_call() {
+        let spec = "output count := count.offset(-1).default(0) + 1\n";
         assert_eq!(0, num_type_errors(spec));
     }
 }
