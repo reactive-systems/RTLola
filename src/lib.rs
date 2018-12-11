@@ -24,5 +24,10 @@ mod util;
 mod stdlib;
 mod ty;
 
+pub trait LolaBackend {
+    /// Returns collection of feature flags supported by the `LolaBackend`.
+    fn supported_feature_flags() -> Vec<FeatureFlag>;
+}
+
 // Re-export on the root level
-pub use crate::ir::LolaIR;
+pub use crate::ir::*;

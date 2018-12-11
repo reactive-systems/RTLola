@@ -37,16 +37,20 @@ pub enum Type {
 pub struct InputStream {
     pub name: String,
     pub ty: Type,
+    pub values_to_memorize: u16,
 }
 
-/// Represents an output stream in a Lola specification. The optional `message` is supposed to be
-/// printed when any instance of this stream produces a `true` output.
+/// Represents an output stream in a Lola specification.
 #[derive(Debug)]
 pub struct OutputStream {
     pub name: String,
     pub ty: Type,
     pub params: Vec<Parameter>,
     pub expr: Expression,
+    /// `Duration` representing the extend rate. `None` if event-driven.
+    pub extend_rate: Option<Duration>,
+    pub evaluation_rand: usize,
+    pub values_to_memorize: u16,
 }
 
 #[derive(Debug)]
@@ -129,10 +133,14 @@ pub struct StreamInstance {
 /// Offset used in the lookup expression
 #[derive(Debug)]
 pub enum Offset {
-    /// A discrete offset, e.g., `0`, `-4`, or `42`
-    DiscreteOffset(Constant),
-    /// A real-time offset, e.g., `3ms`, `4min`, `2.3h`
-    RealTimeOffset(Duration),
+    /// A positive discrete offset, e.g., `4`, or `42`
+    FutureDiscreteOffset(u128),
+    /// A non-positive discrete offset, e.g., `0`, `-4`, or `-42`
+    PastDiscreteOffset(u128),
+    /// A positive real-time offset, e.g., `-3ms`, `-4min`, `-2.3h`
+    FutureRealTimeOffset(Duration),
+    /// A non-positive real-time offset, e.g., `0`, `4min`, `2.3h`
+    PastRealTimeOffset(Duration),
 }
 
 #[derive(Debug)]
@@ -207,12 +215,9 @@ pub enum FunctionKind {
     Ceil,
 }
 
-/// Specifies a duration as well as a rate, normalized to ms.
-#[derive(Debug)]
-pub struct Duration {
-    pub constant: Constant,
-    pub factor: f64,
-}
+/// Specifies a duration as well as a rate, normalized to ns.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Duration(pub u128);
 
 /// Represents an instance of a sliding window.
 #[derive(Debug)]
@@ -349,10 +354,8 @@ impl LolaIR {
 }
 
 impl InputStream {
-    fn from(input: &ast::Input, decl: &DeclarationTable, tt: &TypeTable) -> InputStream {
-        let name = input.name.name.clone();
-        let ty = unimplemented!();
-        InputStream { name, ty }
+    fn from(input: &ast::Input, decl: &DeclarationTable, tt: &TypeTable, ) -> InputStream {
+        unimplemented!()
     }
 }
 
