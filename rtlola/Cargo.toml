@@ -2,6 +2,7 @@
 name = "rtlola"
 version = "0.1.0"
 authors = ["Maximilian Schwenger <schwenger@react.uni-saarland.de>"]
+edition = "2018" 
 
 [dependencies]
 lola-parser = {path = "../frontend/"}
