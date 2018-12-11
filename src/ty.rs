@@ -115,6 +115,7 @@ pub enum GenericTypeConstraint {
     SignedInteger,
     UnsignedInteger,
     FloatingPoint,
+    Unconstrained,
 }
 
 impl std::fmt::Display for GenericTypeConstraint {

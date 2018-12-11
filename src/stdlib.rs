@@ -1,6 +1,7 @@
 //! This module contains the Lola standard library.
 
 use crate::ty::{GenericTypeConstraint, Ty};
+use std::collections::HashMap;
 
 #[derive(Debug)]
 pub struct Generic {
@@ -47,4 +48,33 @@ lazy_static! {
 
 pub(crate) fn import_math_module<'a>(scope: &mut ScopedDecl<'a>) {
     scope.add_decl_for(&SQRT.name, Declaration::Func(&SQRT))
+}
+
+pub(crate) struct MethodLookup {
+
+}
+
+impl MethodLookup {
+    pub(crate) fn new() -> MethodLookup {
+        MethodLookup {}
+    }
+
+    pub(crate) fn get(&self, ty: &Ty, name: &str) -> Option<FuncDecl> {
+        match ty {
+            Ty::EventStream(inner) => Some( FuncDecl {
+                name: "offset".to_string(),
+                generics: vec![Generic {
+                    constraint: GenericTypeConstraint::Integer,
+                }],
+                parameters: vec![Parameter::Type(ty.clone()), Parameter::Generic(0)],
+                return_type: Parameter::Type(Ty::Option(inner.clone())),
+            }),
+            _ => unimplemented!()
+        }
+    }
+}
+
+
+pub(crate) fn import_core_methods() -> MethodLookup {
+   unimplemented!();
 }
