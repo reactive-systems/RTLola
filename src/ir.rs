@@ -354,7 +354,7 @@ impl LolaIR {
 }
 
 impl InputStream {
-    fn from(input: &ast::Input, decl: &DeclarationTable, tt: &TypeTable, ) -> InputStream {
+    fn from(input: &ast::Input, decl: &DeclarationTable, tt: &TypeTable) -> InputStream {
         unimplemented!()
     }
 }

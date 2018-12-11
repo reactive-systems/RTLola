@@ -11,7 +11,6 @@ mod lola_version;
 pub(crate) mod naming;
 pub(crate) mod typing;
 
-use self::lola_version::LolaVersionAnalysis;
 use self::naming::NamingAnalysis;
 use self::typing::TypeAnalysis;
 use super::ast::LolaSpec;
@@ -22,6 +21,7 @@ use crate::analysis::graph_based_analysis::space_requirements::determine_buffer_
 use crate::analysis::graph_based_analysis::space_requirements::determine_tracking_size;
 use crate::parse::SourceMapper;
 use crate::reporting::Handler;
+use crate::analysis::lola_version::LolaVersionAnalysis;
 
 pub trait AnalysisError<'a>: std::fmt::Debug {}
 
