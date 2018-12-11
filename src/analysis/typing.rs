@@ -16,7 +16,10 @@ use std::collections::HashMap;
 pub(crate) struct TypeAnalysis<'a> {
     handler: &'a Handler,
     declarations: &'a DeclarationTable<'a>,
+    /// List of type equations
     equations: Vec<TypeEquation>,
+    /// unresolved method calls
+    method_calls: Vec<&'a Expression>,
 }
 
 impl<'a> TypeAnalysis<'a> {
@@ -28,10 +31,11 @@ impl<'a> TypeAnalysis<'a> {
             handler,
             declarations,
             equations: Vec::new(),
+            method_calls: Vec::new(),
         }
     }
 
-    pub(crate) fn check(&mut self, spec: &LolaSpec) {
+    pub(crate) fn check(&mut self, spec: &'a LolaSpec) {
         self.add_equations(spec);
 
         debug!("Equations:");
@@ -47,7 +51,7 @@ impl<'a> TypeAnalysis<'a> {
         unimplemented!();
     }
 
-    fn add_equations(&mut self, spec: &LolaSpec) {
+    fn add_equations(&mut self, spec: &'a LolaSpec) {
         for constant in &spec.constants {
             // generate constraint in case a type is annotated
             if let Some(type_name) = constant.ty.as_ref() {
@@ -138,7 +142,7 @@ impl<'a> TypeAnalysis<'a> {
         }
     }
 
-    fn generate_equations_for_expression(&mut self, expr: &Expression) {
+    fn generate_equations_for_expression(&mut self, expr: &'a Expression) {
         use ast::ExpressionKind::*;
         match &expr.kind {
             Lit(l) => {
@@ -301,7 +305,18 @@ impl<'a> TypeAnalysis<'a> {
                     )),
                 }
             },
-            Method(_, _, _) => unimplemented!(),
+            Method(base, _, params) => {
+                // recursion
+                self.generate_equations_for_expression(base);
+                for param in params {
+                    self.generate_equations_for_expression(param);
+                }
+
+                // save for later inspection
+                self.method_calls.push(expr);
+
+                unimplemented!();
+            },
             _ => unimplemented!(),
         }
     }
