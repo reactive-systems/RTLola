@@ -69,6 +69,10 @@ impl Handler {
         builder
     }
 
+    pub(crate) fn build_diagnostic(&self, message: &str, level: Level) -> DiagnosticBuilder {
+        DiagnosticBuilder::new(&self, level, message)
+    }
+
     pub(crate) fn bug_with_span(&self, message: &str, span: LabeledSpan) {
         self.emit(&Diagnostic {
             level: Bug,
@@ -167,8 +171,8 @@ impl StderrEmitter {
             let mut prev_line_number = None;
 
             for (snippet, label, primary) in snippets {
-                assert!(
-                    path == snippet.path,
+                assert_eq!(
+                    path, snippet.path,
                     "assume snippets to be in same source file, use `SubDiagnostic` if not"
                 );
 
