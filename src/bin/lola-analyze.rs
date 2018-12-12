@@ -1,4 +1,4 @@
-extern crate lola_parser;
+use lola_parser;
 
 use std::env;
 use std::process;

@@ -6,7 +6,7 @@ use std::fmt::{Display, Formatter, Result};
 
 /// Writes out the joined vector `v`, enclosed by the given strings `pref` and `suff`.
 pub(crate) fn write_delim_list<T: Display>(
-    f: &mut Formatter,
+    f: &mut Formatter<'_>,
     v: &[T],
     pref: &str,
     suff: &str,
@@ -38,7 +38,7 @@ fn format_type(ty: &Option<Type>) -> String {
 }
 
 impl Display for Constant {
-    fn fmt(&self, f: &mut Formatter) -> Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         write!(
             f,
             "constant {}{} := {}",
@@ -50,7 +50,7 @@ impl Display for Constant {
 }
 
 impl Display for Input {
-    fn fmt(&self, f: &mut Formatter) -> Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         write!(f, "input {}", self.name)?;
         if !self.params.is_empty() {
             write_delim_list(f, &self.params, " <", ">", ", ")?;
@@ -60,7 +60,7 @@ impl Display for Input {
 }
 
 impl Display for Output {
-    fn fmt(&self, f: &mut Formatter) -> Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         write!(f, "output {}", self.name)?;
         if !self.params.is_empty() {
             write_delim_list(f, &self.params, " <", ">", ", ")?;
@@ -76,7 +76,7 @@ impl Display for Output {
 }
 
 impl Display for TemplateSpec {
-    fn fmt(&self, f: &mut Formatter) -> Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         let mut vec = Vec::new();
         if let Some(ref i) = self.inv {
             vec.push(format!("{}", i));
@@ -92,13 +92,13 @@ impl Display for TemplateSpec {
 }
 
 impl Display for Parameter {
-    fn fmt(&self, f: &mut Formatter) -> Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         write!(f, "{}{}", self.name, format_type(&self.ty))
     }
 }
 
 impl Display for InvokeSpec {
-    fn fmt(&self, f: &mut Formatter) -> Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         match self.condition {
             Some(ref c) => write!(
                 f,
@@ -113,7 +113,7 @@ impl Display for InvokeSpec {
 }
 
 impl Display for ExtendSpec {
-    fn fmt(&self, f: &mut Formatter) -> Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         write!(
             f,
             "extend {}{}",
@@ -124,7 +124,7 @@ impl Display for ExtendSpec {
 }
 
 impl Display for ExtendRate {
-    fn fmt(&self, f: &mut Formatter) -> Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         match self {
             ExtendRate::Frequency(e, fu) => write!(f, "{}{}", e, fu),
             ExtendRate::Duration(e, tu) => write!(f, "{}{}", e, tu),
@@ -133,13 +133,13 @@ impl Display for ExtendRate {
 }
 
 impl Display for TerminateSpec {
-    fn fmt(&self, f: &mut Formatter) -> Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         write!(f, "terminate {}", self.target)
     }
 }
 
 impl Display for Trigger {
-    fn fmt(&self, f: &mut Formatter) -> Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         write!(
             f,
             "trigger{} {}{}",
@@ -151,13 +151,13 @@ impl Display for Trigger {
 }
 
 impl Display for Type {
-    fn fmt(&self, f: &mut Formatter) -> Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         write!(f, "{}", self.kind)
     }
 }
 
 impl Display for TypeKind {
-    fn fmt(&self, f: &mut Formatter) -> Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         match &self {
             TypeKind::Simple(name) => write!(f, "{}", name),
             TypeKind::Malformed(s) => write!(f, "{}", s),
@@ -167,20 +167,20 @@ impl Display for TypeKind {
 }
 
 impl Display for TypeDeclField {
-    fn fmt(&self, f: &mut Formatter) -> Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         write!(f, "{}: {}", &self.name, &self.ty)
     }
 }
 
 impl Display for TypeDeclaration {
-    fn fmt(&self, f: &mut Formatter) -> Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         write!(f, "type {}", format_opt(&self.name, "", ""))?;
         write_delim_list(f, &self.fields, " { ", " }", ", ")
     }
 }
 
 impl Display for Expression {
-    fn fmt(&self, f: &mut Formatter) -> Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         match &self.kind {
             ExpressionKind::Lit(l) => write!(f, "{}", l),
             ExpressionKind::Ident(ident) => write!(f, "{}", ident),
@@ -213,7 +213,7 @@ impl Display for Expression {
 }
 
 impl Display for StreamInstance {
-    fn fmt(&self, f: &mut Formatter) -> Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         write!(f, "{}", self.stream_identifier)?;
         if !self.arguments.is_empty() {
             write_delim_list(f, &self.arguments, "(", ")", ", ")
@@ -224,7 +224,7 @@ impl Display for StreamInstance {
 }
 
 impl Display for FunctionKind {
-    fn fmt(&self, f: &mut Formatter) -> Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         write!(
             f,
             "{}",
@@ -246,7 +246,7 @@ impl Display for FunctionKind {
 }
 
 impl Display for Offset {
-    fn fmt(&self, f: &mut Formatter) -> Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         match self {
             Offset::DiscreteOffset(e) => write!(f, "{}", e),
             Offset::RealTimeOffset(e, u) => write!(f, "{}{}", e, u),
@@ -255,7 +255,7 @@ impl Display for Offset {
 }
 
 impl Display for TimeUnit {
-    fn fmt(&self, f: &mut Formatter) -> Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         write!(
             f,
             "{}",
@@ -275,7 +275,7 @@ impl Display for TimeUnit {
 }
 
 impl Display for FreqUnit {
-    fn fmt(&self, f: &mut Formatter) -> Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         write!(
             f,
             "{}",
@@ -292,7 +292,7 @@ impl Display for FreqUnit {
 }
 
 impl Display for WindowOperation {
-    fn fmt(&self, f: &mut Formatter) -> Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         write!(
             f,
             "{}",
@@ -308,7 +308,7 @@ impl Display for WindowOperation {
 }
 
 impl Display for UnOp {
-    fn fmt(&self, f: &mut Formatter) -> Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         write!(
             f,
             "{}",
@@ -321,7 +321,7 @@ impl Display for UnOp {
 }
 
 impl Display for Literal {
-    fn fmt(&self, f: &mut Formatter) -> Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         match &self.kind {
             LitKind::Bool(val) => write!(f, "{}", val),
             LitKind::Int(i) => write!(f, "{}", i),
@@ -346,13 +346,13 @@ impl Display for Literal {
 }
 
 impl Display for Ident {
-    fn fmt(&self, f: &mut Formatter) -> Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         write!(f, "{}", self.name)
     }
 }
 
 impl Display for BinOp {
-    fn fmt(&self, f: &mut Formatter) -> Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         match &self {
             BinOp::Add => write!(f, "+"),
             BinOp::Sub => write!(f, "-"),
@@ -373,7 +373,7 @@ impl Display for BinOp {
 }
 
 impl Display for LanguageSpec {
-    fn fmt(&self, f: &mut Formatter) -> Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         match &self {
             LanguageSpec::Classic => write!(f, "ClassicLola"),
             LanguageSpec::Lola2 => write!(f, "Lola 2.0"),
@@ -383,7 +383,7 @@ impl Display for LanguageSpec {
 }
 
 impl Display for LolaSpec {
-    fn fmt(&self, f: &mut Formatter) -> Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         if let Some(v) = &self.language {
             writeln!(f, "version {}", v)?
         }

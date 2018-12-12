@@ -1,6 +1,6 @@
 use super::super::common::BuiltinType;
 use super::super::common::Type as OType;
-use ast::*;
+use crate::ast::*;
 use std::fmt::{Display, Formatter, Result};
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
@@ -61,7 +61,7 @@ impl TimingInfo {
 }
 
 impl Display for TimingInfo {
-    fn fmt(&self, f: &mut Formatter) -> Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         write!(
             f,
             "{}",
@@ -129,8 +129,8 @@ impl Candidates {
 }
 
 impl Display for Candidates {
-    fn fmt(&self, f: &mut Formatter) -> Result {
-        use print::write_delim_list;
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        use crate::print::write_delim_list;
         match self {
             Candidates::Numeric(cfg, ti) if cfg.def_float => {
                 write!(f, "Float≥{}/{}", cfg.width, ti)
@@ -316,11 +316,11 @@ impl<'a> From<&'a Literal> for Candidates {
             let exact = 128 - (if i >= 0 { i } else { !i }).leading_zeros();
             match exact {
                 // I'm pretty sure this can be performed more efficiently.
-                0...8 => 8,
-                9...16 => 16,
-                17...32 => 32,
-                33...64 => 64,
-                65...128 => 128,
+                0..=8 => 8,
+                9..=16 => 16,
+                17..=32 => 32,
+                33..=64 => 64,
+                65..=128 => 128,
                 _ => unreachable!(),
             }
         }

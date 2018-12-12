@@ -85,7 +85,7 @@ impl Config {
             3 | _ => LevelFilter::Trace,
         };
 
-        let mut logger: Vec<Box<SharedLogger>> = Vec::new();
+        let mut logger: Vec<Box<dyn SharedLogger>> = Vec::new();
         if let Some(term_logger) = TermLogger::new(verbosity, simplelog::Config::default()) {
             logger.push(term_logger);
         } else {
@@ -157,7 +157,7 @@ impl Config {
         }
     }
 
-    pub fn run(&self) -> Result<(), Box<Error>> {
+    pub fn run(&self) -> Result<(), Box<dyn Error>> {
         let mut file = File::open(&self.filename)?;
         let mut contents = String::new();
         file.read_to_string(&mut contents)?;

@@ -75,13 +75,13 @@ impl Handler {
         &self,
         message: &str,
         span: LabeledSpan,
-    ) -> DiagnosticBuilder {
+    ) -> DiagnosticBuilder<'_> {
         let mut builder = DiagnosticBuilder::new(&self, Error, message);
         builder.add_labeled_span(span);
         builder
     }
 
-    pub(crate) fn build_diagnostic(&self, message: &str, level: Level) -> DiagnosticBuilder {
+    pub(crate) fn build_diagnostic(&self, message: &str, level: Level) -> DiagnosticBuilder<'_> {
         DiagnosticBuilder::new(&self, level, message)
     }
 

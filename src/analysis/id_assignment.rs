@@ -1,5 +1,5 @@
 use super::super::ast::*;
-extern crate ast_node;
+use ast_node;
 use ast_node::{AstNode, NodeId};
 
 pub(crate) fn assign_ids(spec: &mut LolaSpec) {

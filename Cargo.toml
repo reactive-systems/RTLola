@@ -6,6 +6,7 @@ authors = [
     "Maximilian Schwenger <schwenger@react.uni-saarland.de>",
     "Leander Tentrup <tentrup@react.uni-saarland.de>"
 ]
+edition = "2018"
 
 [dependencies]
 log = "0.4.6"  # logging macros

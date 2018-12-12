@@ -1,14 +1,14 @@
 use super::super::common::BuiltinType;
 use super::super::naming::{Declaration, DeclarationTable};
-use ast::*;
-use std::collections::HashMap;
-extern crate ast_node;
 use super::candidates::*;
 use super::TypeCheckResult;
+use crate::ast::*;
+use crate::parse::Ident;
 use crate::reporting::{Handler, LabeledSpan};
+use ast_node;
 use ast_node::Span;
 use ast_node::{AstNode, NodeId};
-use parse::Ident;
+use std::collections::HashMap;
 
 pub(crate) struct TypeChecker<'a> {
     declarations: &'a DeclarationTable<'a>,
@@ -27,7 +27,7 @@ pub(crate) struct TypeChecker<'a> {
 /// do not report errors, nor register types.
 impl<'a> TypeChecker<'a> {
     pub(crate) fn new(
-        dt: &'a DeclarationTable,
+        dt: &'a DeclarationTable<'_>,
         spec: &'a LolaSpec,
         handler: &'a Handler,
     ) -> TypeChecker<'a> {
@@ -159,7 +159,7 @@ impl<'a> TypeChecker<'a> {
 
     fn check_default(
         &mut self,
-        e: &'a AstNode<'a>,
+        e: &'a dyn AstNode<'a>,
         expr: &'a Expression,
         dft: &'a Expression,
     ) -> Candidates {
@@ -527,7 +527,7 @@ impl<'a> TypeChecker<'a> {
 
     fn check_n_ary_fn(
         &mut self,
-        call: &'a AstNode<'a>,
+        call: &'a dyn AstNode<'a>,
         args: &[&'a Expression],
         expected: &[&Candidates],
     ) {
@@ -568,7 +568,7 @@ impl<'a> TypeChecker<'a> {
             .unwrap_or(Candidates::Any(TimingInfo::Unknown))
     }
 
-    fn retrieve_from_declaration(&mut self, node: &'a AstNode<'a>) -> Candidates {
+    fn retrieve_from_declaration(&mut self, node: &'a dyn AstNode<'a>) -> Candidates {
         let mut cand = match self.declarations.get(node.id()) {
             Some(Declaration::Const(ref c)) => self.retrieve_from_tt(*c.id()),
             Some(Declaration::In(ref i)) => self.retrieve_from_tt(*i.id()),
@@ -606,11 +606,11 @@ impl<'a> TypeChecker<'a> {
         accu
     }
 
-    fn retrieve_ti(&mut self, node: &'a AstNode<'a>) -> Option<TimingInfo> {
+    fn retrieve_ti(&mut self, node: &'a dyn AstNode<'a>) -> Option<TimingInfo> {
         self.retrieve_type(node).timing_info()
     }
 
-    fn retrieve_type(&mut self, node: &'a AstNode<'a>) -> Candidates {
+    fn retrieve_type(&mut self, node: &'a dyn AstNode<'a>) -> Candidates {
         if let Some(c) = self.retrieve_from_tt(*node.id()) {
             c
         } else {
@@ -637,7 +637,7 @@ impl<'a> TypeChecker<'a> {
         res
     }
 
-    fn report_unknown_identifier(&mut self, node: &'a AstNode<'a>) {
+    fn report_unknown_identifier(&mut self, node: &'a dyn AstNode<'a>) {
         let span = LabeledSpan::new(*node.span(), "Identifier unknown.", true);
         self.handler.bug_with_span(
             "Found unknown identifier. This must not happen after the naming analysis.",
@@ -649,12 +649,12 @@ impl<'a> TypeChecker<'a> {
         self.handler.error(msg)
     }
 
-    fn report_invalid_argument(&mut self, arg: &'a AstNode<'a>, msg: &str, label: &str) {
+    fn report_invalid_argument(&mut self, arg: &'a dyn AstNode<'a>, msg: &str, label: &str) {
         let span = LabeledSpan::new(*arg.span(), label, true);
         self.handler.error_with_span(msg, span);
     }
 
-    fn report_not_constant(&mut self, expr: &'a AstNode<'a>) {
+    fn report_not_constant(&mut self, expr: &'a dyn AstNode<'a>) {
         let span = LabeledSpan::new(*expr.span(), "Unknown at compile time.", true);
         self.handler
             .error_with_span("Value cannot be determined statically.", span);
@@ -664,7 +664,7 @@ impl<'a> TypeChecker<'a> {
         &mut self,
         expected: &Candidates,
         was: &Candidates,
-        expr: &'a AstNode<'a>,
+        expr: &'a dyn AstNode<'a>,
         label: Option<&str>,
         msg: Option<&str>,
     ) {
@@ -679,7 +679,7 @@ impl<'a> TypeChecker<'a> {
             .error_with_span(msg.unwrap_or_else(|| msg_dft.as_str()), span);
     }
 
-    fn report_wrong_num_of_args(&mut self, expected: u8, was: u8, expr: &'a AstNode<'a>) {
+    fn report_wrong_num_of_args(&mut self, expected: u8, was: u8, expr: &'a dyn AstNode<'a>) {
         let span = LabeledSpan::new(*expr.span(), "Identifier not declared.", true);
         self.handler.error_with_span(
             format!("Expected {} argument but got {}.", expected, was).as_str(),
@@ -687,12 +687,12 @@ impl<'a> TypeChecker<'a> {
         )
     }
 
-    fn report_incompatible_types(&mut self, expr: &'a AstNode<'a>, msg: &str) {
+    fn report_incompatible_types(&mut self, expr: &'a dyn AstNode<'a>, msg: &str) {
         let span = LabeledSpan::new(*expr.span(), "Incompatible types.", true);
         self.handler.error_with_span(msg, span);
     }
 
-    fn report_value_not_present(&mut self, node: &'a AstNode<'a>) {
+    fn report_value_not_present(&mut self, node: &'a dyn AstNode<'a>) {
         let span = LabeledSpan::new(*node.span(), "Should have been reported before.", true);
         self.handler.bug_with_span(
             "Expected type to be computed already, but it was not.",

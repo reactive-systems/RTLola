@@ -71,7 +71,7 @@ pub(crate) const KEYWORDS: [&str; 28] = [
 ];
 
 impl Display for BuiltinType {
-    fn fmt(&self, f: &mut Formatter) -> Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         match self {
             BuiltinType::Int(w) => write!(f, "Int{}", w),
             BuiltinType::UInt(w) => write!(f, "UInt{}", w),

@@ -1,6 +1,6 @@
 use super::super::ast::*;
-extern crate ast_node;
 use crate::analysis::AnalysisError;
+use ast_node;
 use ast_node::{AstNode, NodeId};
 use std::collections::HashMap;
 

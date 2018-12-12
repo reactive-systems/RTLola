@@ -1,5 +1,5 @@
 use super::naming::DeclarationTable;
-use ast::LolaSpec;
+use crate::ast::LolaSpec;
 
 mod candidates;
 mod checker;
@@ -19,7 +19,7 @@ pub(crate) struct TypeCheckResult {
 }
 
 pub(crate) fn type_check<'a>(
-    dt: &'a DeclarationTable,
+    dt: &'a DeclarationTable<'_>,
     spec: &'a LolaSpec,
     handler: &'a Handler,
 ) -> TypeCheckResult {
@@ -28,12 +28,12 @@ pub(crate) fn type_check<'a>(
 
 #[cfg(test)]
 mod tests {
-    use analysis::id_assignment::*;
-    use analysis::naming::*;
-    use analysis::type_checker::type_check;
-    use analysis::type_checker::TypeCheckResult;
-    use parse::*;
-    use reporting::Handler;
+    use crate::analysis::id_assignment::*;
+    use crate::analysis::naming::*;
+    use crate::analysis::type_checker::type_check;
+    use crate::analysis::type_checker::TypeCheckResult;
+    use crate::parse::*;
+    use crate::reporting::Handler;
     use std::path::PathBuf;
 
     fn setup(spec: &str) -> (TypeCheckResult, Handler) {

@@ -83,7 +83,7 @@ pub(crate) fn parse(content: &str) -> Result<LolaSpec, pest::error::Error<Rule>>
  * - Rule::Type
  * - Rule::Literal
  */
-fn parse_constant(spec: &mut LolaSpec, pair: Pair<Rule>) -> Constant {
+fn parse_constant(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> Constant {
     assert_eq!(pair.as_rule(), Rule::ConstantStream);
     let span = pair.as_span().into();
     let mut pairs = pair.into_inner();
@@ -110,7 +110,7 @@ fn parse_constant(spec: &mut LolaSpec, pair: Pair<Rule>) -> Constant {
  * - (Rule::ParamList)?
  * - Rule::Type
  */
-fn parse_inputs(spec: &mut LolaSpec, pair: Pair<Rule>) -> Vec<Input> {
+fn parse_inputs(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> Vec<Input> {
     assert_eq!(pair.as_rule(), Rule::InputStream);
     let mut inputs = Vec::new();
     let mut pairs = pair.into_inner();
@@ -149,7 +149,7 @@ fn parse_inputs(spec: &mut LolaSpec, pair: Pair<Rule>) -> Vec<Input> {
  * - Rule::Type
  * - Rule::Expr
  */
-fn parse_output(spec: &mut LolaSpec, pair: Pair<Rule>) -> Output {
+fn parse_output(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> Output {
     assert_eq!(pair.as_rule(), Rule::OutputStream);
     let span = pair.as_span().into();
     let mut pairs = pair.into_inner();
@@ -190,7 +190,7 @@ fn parse_output(spec: &mut LolaSpec, pair: Pair<Rule>) -> Output {
     }
 }
 
-fn parse_parameter_list(spec: &mut LolaSpec, param_list: Pairs<Rule>) -> Vec<Parameter> {
+fn parse_parameter_list(spec: &mut LolaSpec, param_list: Pairs<'_, Rule>) -> Vec<Parameter> {
     let mut params = Vec::new();
     for param_decl in param_list {
         assert_eq!(Rule::ParameterDecl, param_decl.as_rule());
@@ -213,7 +213,7 @@ fn parse_parameter_list(spec: &mut LolaSpec, param_list: Pairs<Rule>) -> Vec<Par
     params
 }
 
-fn parse_template_spec(spec: &mut LolaSpec, pair: Pair<Rule>) -> TemplateSpec {
+fn parse_template_spec(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> TemplateSpec {
     let span = pair.as_span().into();
     let mut decls = pair.into_inner();
     let mut pair = decls.next();
@@ -256,7 +256,7 @@ fn parse_template_spec(spec: &mut LolaSpec, pair: Pair<Rule>) -> TemplateSpec {
     }
 }
 
-fn parse_frequency(spec: &mut LolaSpec, freq: Pair<Rule>) -> ExtendRate {
+fn parse_frequency(spec: &mut LolaSpec, freq: Pair<'_, Rule>) -> ExtendRate {
     let freq_rule = freq.as_rule();
     let mut children = freq.into_inner();
     let expr = children.next().expect("mismatch between grammar and AST");
@@ -279,7 +279,7 @@ fn parse_frequency(spec: &mut LolaSpec, freq: Pair<Rule>) -> ExtendRate {
     }
 }
 
-fn parse_ext_spec(spec: &mut LolaSpec, ext_pair: Pair<Rule>) -> ExtendSpec {
+fn parse_ext_spec(spec: &mut LolaSpec, ext_pair: Pair<'_, Rule>) -> ExtendSpec {
     let span_ext = ext_pair.as_span().into();
     let mut children = ext_pair.into_inner();
 
@@ -307,7 +307,7 @@ fn parse_ext_spec(spec: &mut LolaSpec, ext_pair: Pair<Rule>) -> ExtendSpec {
     }
 }
 
-fn parse_inv_spec(spec: &mut LolaSpec, inv_pair: Pair<Rule>) -> InvokeSpec {
+fn parse_inv_spec(spec: &mut LolaSpec, inv_pair: Pair<'_, Rule>) -> InvokeSpec {
     let span_inv = inv_pair.as_span().into();
     let mut inv_children = inv_pair.into_inner();
     let expr_pair = inv_children
@@ -352,7 +352,7 @@ fn parse_inv_spec(spec: &mut LolaSpec, inv_pair: Pair<Rule>) -> InvokeSpec {
  * - Rule::Expr
  * - (Rule::StringLiteral)?
  */
-fn parse_trigger(spec: &mut LolaSpec, pair: Pair<Rule>) -> Trigger {
+fn parse_trigger(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> Trigger {
     assert_eq!(pair.as_rule(), Rule::Trigger);
     let span = pair.as_span().into();
     let mut pairs = pair.into_inner();
@@ -387,7 +387,7 @@ fn parse_trigger(spec: &mut LolaSpec, pair: Pair<Rule>) -> Trigger {
  * Transforms a `Rule::Ident` into `Ident` AST node.
  * Panics if input is not `Rule::Ident`.
  */
-fn parse_ident(pair: &Pair<Rule>) -> Ident {
+fn parse_ident(pair: &Pair<'_, Rule>) -> Ident {
     assert_eq!(pair.as_rule(), Rule::Ident);
     let name = pair.as_str().to_string();
     Ident::new(name, pair.as_span().into())
@@ -397,7 +397,7 @@ fn parse_ident(pair: &Pair<Rule>) -> Ident {
  * Transforms a `Rule::TypeDecl` into `TypeDeclaration` AST node.
  * Panics if input is not `Rule::TypeDecl`.
  */
-fn parse_type_declaration(spec: &mut LolaSpec, pair: Pair<Rule>) -> TypeDeclaration {
+fn parse_type_declaration(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> TypeDeclaration {
     assert_eq!(pair.as_rule(), Rule::TypeDecl);
     let span = pair.as_span().into();
     let mut pairs = pair.into_inner();
@@ -429,7 +429,7 @@ fn parse_type_declaration(spec: &mut LolaSpec, pair: Pair<Rule>) -> TypeDeclarat
  * Transforms a `Rule::Type` into `Type` AST node.
  * Panics if input is not `Rule::Type`.
  */
-fn parse_type(spec: &mut LolaSpec, pair: Pair<Rule>) -> Type {
+fn parse_type(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> Type {
     assert_eq!(pair.as_rule(), Rule::Type);
     let span = pair.as_span();
     let mut tuple = Vec::new();
@@ -450,7 +450,7 @@ fn parse_type(spec: &mut LolaSpec, pair: Pair<Rule>) -> Type {
  * Transforms a `Rule::Literal` into `Literal` AST node.
  * Panics if input is not `Rule::Literal`.
  */
-fn parse_literal(pair: Pair<Rule>) -> Literal {
+fn parse_literal(pair: Pair<'_, Rule>) -> Literal {
     assert_eq!(pair.as_rule(), Rule::Literal);
     let inner = pair
         .into_inner()
@@ -481,7 +481,7 @@ fn parse_literal(pair: Pair<Rule>) -> Literal {
     }
 }
 
-fn parse_stream_instance(spec: &mut LolaSpec, instance: Pair<Rule>) -> StreamInstance {
+fn parse_stream_instance(spec: &mut LolaSpec, instance: Pair<'_, Rule>) -> StreamInstance {
     let span = instance.as_span().into();
     let mut children = instance.into_inner();
     // Parse the stream identifier in isolation.
@@ -496,7 +496,7 @@ fn parse_stream_instance(spec: &mut LolaSpec, instance: Pair<Rule>) -> StreamIns
     }
 }
 
-fn parse_vec_of_expressions(spec: &mut LolaSpec, pairs: Pairs<Rule>) -> Vec<Box<Expression>> {
+fn parse_vec_of_expressions(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>) -> Vec<Box<Expression>> {
     pairs
         .map(|expr| {
             let span = expr.as_span().into();
@@ -533,7 +533,7 @@ fn parse_frequency_unit(str: &str) -> FreqUnit {
     }
 }
 
-fn parse_lookup_expression(spec: &mut LolaSpec, pair: Pair<Rule>, span: Span) -> Expression {
+fn parse_lookup_expression(spec: &mut LolaSpec, pair: Pair<'_, Rule>, span: Span) -> Expression {
     let mut children = pair.into_inner();
     let stream_instance = children
         .next()
@@ -583,7 +583,7 @@ fn parse_lookup_expression(spec: &mut LolaSpec, pair: Pair<Rule>, span: Span) ->
     }
 }
 
-fn build_function_expression(spec: &mut LolaSpec, pair: Pair<Rule>, span: Span) -> Expression {
+fn build_function_expression(spec: &mut LolaSpec, pair: Pair<'_, Rule>, span: Span) -> Expression {
     let mut children = pair.into_inner();
     let name = children.next().unwrap().as_str();
     let function_kind = match name {
@@ -607,10 +607,10 @@ fn build_function_expression(spec: &mut LolaSpec, pair: Pair<Rule>, span: Span) 
 /**
  * Builds the Expr AST.
  */
-fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<Rule>, span: Span) -> Expression {
+fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>, span: Span) -> Expression {
     PREC_CLIMBER.climb(
         pairs,
-        |pair: Pair<Rule>| {
+        |pair: Pair<'_, Rule>| {
             let span = pair.as_span();
             match pair.as_rule() { // Map function from `Pair` to AST data structure `Expression`
                 Rule::Literal => {
@@ -691,7 +691,7 @@ fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<Rule>, span: Span) -> 
                 _ => panic!("Unexpected rule when parsing expression ast: {:?}", pair.as_rule()),
             }
         },
-        |lhs: Expression, op: Pair<Rule>, rhs: Expression| { // Reduce function combining `Expression`s to `Expression`s with the correct precs
+        |lhs: Expression, op: Pair<'_, Rule>, rhs: Expression| { // Reduce function combining `Expression`s to `Expression`s with the correct precs
             let op = match op.as_rule() {
                 Rule::Add => BinOp::Add,
                 Rule::Subtract => BinOp::Sub,
@@ -850,6 +850,7 @@ impl SourceMapper {
 mod tests {
 
     use super::*;
+    use pest::{consumes_to, parses_to};
 
     fn cmp_ast_spec(ast: &LolaSpec, spec: &str) -> bool {
         // Todo: Make more robust, e.g. against changes in whitespace.
@@ -866,7 +867,7 @@ mod tests {
         .unwrap_or_else(|e| panic!("{}", e));
     }
 
-    //    #[allow(clippy::cyclomatic_complexity)]
+    #[allow(clippy::cyclomatic_complexity)]
     #[test]
     fn parse_constant() {
         parses_to! {
@@ -948,7 +949,7 @@ mod tests {
         cmp_ast_spec(&ast, spec);
     }
 
-    //    #[allow(clippy::cyclomatic_complexity)]
+    #[allow(clippy::cyclomatic_complexity)]
     #[test]
     fn parse_output() {
         parses_to! {
@@ -984,7 +985,7 @@ mod tests {
         assert_eq!(format!("{}", ast), "output out: Int := in + 1")
     }
 
-    //    #[allow(clippy::cyclomatic_complexity)]
+    #[allow(clippy::cyclomatic_complexity)]
     #[test]
     fn parse_trigger() {
         parses_to! {
