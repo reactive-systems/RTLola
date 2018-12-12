@@ -11,6 +11,7 @@ use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 #[derive(Debug)]
 pub(crate) struct Handler {
     error_count: RefCell<usize>,
+    warning_count: RefCell<usize>,
     emitter: RefCell<Box<dyn Emitter>>,
     mapper: SourceMapper,
 }
@@ -19,6 +20,7 @@ impl Handler {
     pub(crate) fn new(mapper: SourceMapper) -> Self {
         Handler {
             error_count: RefCell::new(0),
+            warning_count: RefCell::new(0),
             emitter: RefCell::new(Box::new(StderrEmitter::new())),
             mapper,
         }
@@ -32,10 +34,18 @@ impl Handler {
         *self.error_count.borrow()
     }
 
+    pub(crate) fn emitted_warnings(&self) -> usize {
+        *self.warning_count.borrow()
+    }
+
     /// Displays diagnostic to user
     fn emit(&self, diagnostic: &Diagnostic) {
         if diagnostic.is_error() {
             let mut count = self.error_count.borrow_mut();
+            *count += 1;
+        }
+        if diagnostic.is_warning() {
+            let mut count = self.warning_count.borrow_mut();
             *count += 1;
         }
         self.emitter.borrow_mut().emit(&self.mapper, &diagnostic)
@@ -115,6 +125,7 @@ impl Emitter for StderrEmitter {
             writeln!(&mut stderr);
         }
         stderr.reset().expect("cannot reset output color");
+        stderr.flush();
     }
 }
 
@@ -203,8 +214,9 @@ impl StderrEmitter {
 
                     lines.push(render_source_line(&snippet));
                 } else {
-                    assert!(prev_line_number.unwrap() <= snippet.line_number);
-                    if prev_line_number.unwrap() + 1 < snippet.line_number {
+                    //                    assert!(prev_line_number.unwrap() <= snippet.line_number);
+                    if diagnostic.sort_spans && prev_line_number.unwrap() + 1 < snippet.line_number
+                    {
                         // print ...
                         let mut rendered_line = ColoredLine::new();
                         rendered_line
@@ -289,6 +301,12 @@ impl Diagnostic {
         match self.level {
             Bug | Fatal | Error => true,
             Warning | Note | Help => false,
+        }
+    }
+    fn is_warning(&self) -> bool {
+        match self.level {
+            Bug | Fatal | Error | Note | Help => false,
+            Warning => true,
         }
     }
 }
