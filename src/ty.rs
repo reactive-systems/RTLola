@@ -84,6 +84,26 @@ impl Ty {
             }
         }
     }
+
+    pub(crate) fn is_error(&self) -> bool {
+        use self::Ty::*;
+        match self {
+            Ty::Error => true,
+            Ty::Tuple(args) => args.iter().fold(false, |val, el| val || el.is_error()),
+            Ty::EventStream(ty) => ty.is_error(),
+            Ty::TimedStream(ty) => ty.is_error(),
+            Ty::Option(ty) => ty.is_error(),
+            _ => false,
+        }
+    }
+
+    pub(crate) fn is_primitive(&self) -> bool {
+        use self::Ty::*;
+        match self {
+            Ty::Bool | Ty::Int(_) | Ty::UInt(_) | Float(_) | String => true,
+            _ => false,
+        }
+    }
 }
 
 impl std::fmt::Display for Ty {
@@ -104,6 +124,7 @@ impl std::fmt::Display for Ty {
             Ty::EventStream(ty) => write!(f, "EventStream<{}>", ty),
             Ty::Option(ty) => write!(f, "Option<{}>", ty),
             Ty::Infer(id) => write!(f, "?{}", id),
+            Ty::Error => write!(f, "Error"),
             _ => unimplemented!(),
         }
     }

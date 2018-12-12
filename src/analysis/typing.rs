@@ -5,11 +5,11 @@
 //! * https://eli.thegreenplace.net/2018/unification/
 
 use crate::ast::LolaSpec;
-use crate::stdlib::Parameter;
+use crate::stdlib::{MethodLookup, Parameter};
 use crate::ty::{GenericTypeConstraint, Ty};
 use analysis::naming::{Declaration, DeclarationTable};
 use analysis::reporting::Handler;
-use ast::{BinOp, Expression, Literal, Offset, TypeKind};
+use ast::{BinOp, Expression, ExpressionKind, Literal, Offset, TypeKind};
 use ast_node::NodeId;
 use std::collections::HashMap;
 
@@ -20,6 +20,7 @@ pub(crate) struct TypeAnalysis<'a> {
     equations: Vec<TypeEquation>,
     /// unresolved method calls
     method_calls: Vec<&'a Expression>,
+    method_lookup: MethodLookup,
 }
 
 impl<'a> TypeAnalysis<'a> {
@@ -32,6 +33,7 @@ impl<'a> TypeAnalysis<'a> {
             declarations,
             equations: Vec::new(),
             method_calls: Vec::new(),
+            method_lookup: MethodLookup::new(),
         }
     }
 
@@ -45,6 +47,23 @@ impl<'a> TypeAnalysis<'a> {
 
         let subst = self.unify_equations();
         debug!("Substitutions:\n{}", subst);
+
+        for fun in &self.method_calls {
+            let (id, name, args) = match &fun.kind {
+                ExpressionKind::Method(base, ident, args) => (base._id, ident.name.as_str(), args),
+                _ => unreachable!(),
+            };
+            let infered = subst.get_type(id);
+            println!("{} {} {}", fun, infered, infered.is_error());
+            if infered.is_error() {
+                continue;
+            }
+            if let Some(fun_decl) = self.method_lookup.get(&infered, name) {
+                println!("{:?}", fun_decl);
+            }
+        }
+
+        assert!(self.method_calls.is_empty());
 
         self.assign_types(spec, &subst);
 
@@ -159,8 +178,12 @@ impl<'a> TypeAnalysis<'a> {
                     Declaration::Const(constant) => self
                         .equations
                         .push(TypeEquation::new_symbolic(expr._id, constant._id, expr._id)),
-                    Declaration::In(_) => unimplemented!(),
-                    Declaration::Out(_) => unimplemented!(),
+                    Declaration::In(input) => self
+                        .equations
+                        .push(TypeEquation::new_symbolic(expr._id, input._id, expr._id)),
+                    Declaration::Out(output) => self
+                        .equations
+                        .push(TypeEquation::new_symbolic(expr._id, output._id, expr._id)),
                     _ => unreachable!(),
                 }
             }
@@ -192,7 +215,14 @@ impl<'a> TypeAnalysis<'a> {
                         self.equations
                             .push(TypeEquation::new_symbolic(left._id, right._id, expr._id));
                     }
-                    _ => unimplemented!(),
+                    Add => {
+                        self.equations
+                            .push(TypeEquation::new_symbolic(left._id, right._id, expr._id));
+                    }
+                    _ => {
+                        println!("{}", op);
+                        unimplemented!()
+                    }
                 }
             }
             // discrete offset
@@ -304,7 +334,7 @@ impl<'a> TypeAnalysis<'a> {
                         expr._id,
                     )),
                 }
-            },
+            }
             Method(base, _, params) => {
                 // recursion
                 self.generate_equations_for_expression(base);
@@ -314,9 +344,7 @@ impl<'a> TypeAnalysis<'a> {
 
                 // save for later inspection
                 self.method_calls.push(expr);
-
-                unimplemented!();
-            },
+            }
             _ => unimplemented!(),
         }
     }
@@ -432,6 +460,7 @@ impl Substitution {
                     };
                     Ty::EventStream(Box::new(inner))
                 }
+                TypeRef::Type(Ty::Infer(other_nid)) => self.get_type(*other_nid),
                 TypeRef::Type(ty) => ty.clone(),
                 TypeRef::Constraint(_) => Ty::Error,
             }
