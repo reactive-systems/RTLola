@@ -47,6 +47,7 @@ impl Handler {
             message: message.to_owned(),
             span: Vec::new(),
             children: vec![],
+            sort_spans: true,
         });
     }
 
@@ -56,6 +57,7 @@ impl Handler {
             message: message.to_owned(),
             span: vec![span],
             children: vec![],
+            sort_spans: true,
         });
     }
 
@@ -79,6 +81,7 @@ impl Handler {
             message: message.to_owned(),
             span: vec![span],
             children: vec![],
+            sort_spans: true,
         });
     }
 }
@@ -166,7 +169,9 @@ impl StderrEmitter {
             };
 
             // we sort the code lines, i.e., earlier lines come first
-            snippets.sort_unstable();
+            if diagnostic.sort_spans {
+                snippets.sort_unstable();
+            }
 
             let mut prev_line_number = None;
 
@@ -276,6 +281,7 @@ pub struct Diagnostic {
     pub message: String,
     pub(crate) span: Vec<LabeledSpan>,
     pub children: Vec<SubDiagnostic>,
+    pub sort_spans: bool,
 }
 
 impl Diagnostic {
@@ -355,20 +361,26 @@ impl<'a> DiagnosticBuilder<'a> {
                 message: messgage.to_string(),
                 span: Vec::new(),
                 children: Vec::new(),
+                sort_spans: true,
             },
             status: DiagnosticBuilderStatus::Building,
         }
     }
 
     pub(crate) fn emit(&mut self) {
-        assert!(self.status == DiagnosticBuilderStatus::Building);
+        assert_eq!(self.status, DiagnosticBuilderStatus::Building);
         self.handler.emit(&self.diagnostic);
         self.status = DiagnosticBuilderStatus::Emitted;
     }
 
     pub(crate) fn cancel(&mut self) {
-        assert!(self.status == DiagnosticBuilderStatus::Building);
+        assert_eq!(self.status, DiagnosticBuilderStatus::Building);
         self.status = DiagnosticBuilderStatus::Cancelled;
+    }
+
+    pub(crate) fn prevent_sorting(&mut self) {
+        assert_eq!(self.status, DiagnosticBuilderStatus::Building);
+        self.diagnostic.sort_spans = false;
     }
 
     pub(crate) fn add_span_with_label(&mut self, span: Span, label: &str, primary: bool) {
