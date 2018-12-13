@@ -72,9 +72,9 @@ impl Ty {
         PRIMITIVE_TYPES.iter()
     }
 
-    pub(crate) fn satisfies(&self, constraint: GenericTypeConstraint) -> bool {
-        use self::GenericTypeConstraint::*;
+    pub(crate) fn satisfies(&self, constraint: TypeConstraint) -> bool {
         use self::Ty::*;
+        use self::TypeConstraint::*;
         match constraint {
             Unconstrained => true,
             Equality => self.is_primitive(),
@@ -140,12 +140,13 @@ impl std::fmt::Display for Ty {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum GenericTypeConstraint {
-    Integer,
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum TypeConstraint {
     SignedInteger,
     UnsignedInteger,
     FloatingPoint,
+    /// signed + unsigned integer
+    Integer,
     /// integer + floating point
     Numeric,
     /// Types that implement `==`
@@ -153,9 +154,9 @@ pub enum GenericTypeConstraint {
     Unconstrained,
 }
 
-impl GenericTypeConstraint {
+impl TypeConstraint {
     pub(crate) fn has_default(&self) -> Option<Ty> {
-        use self::GenericTypeConstraint::*;
+        use self::TypeConstraint::*;
         match self {
             Integer | SignedInteger | Numeric => Some(Ty::Int(I32)),
             UnsignedInteger => Some(Ty::UInt(U32)),
@@ -163,11 +164,34 @@ impl GenericTypeConstraint {
             _ => None,
         }
     }
+
+    pub(crate) fn conjunction(&self, other: TypeConstraint) -> Option<TypeConstraint> {
+        use self::TypeConstraint::*;
+        if *self > other {
+            return other.conjunction(*self);
+        }
+        if *self == other {
+            return Some(*self);
+        }
+        assert!(*self < other);
+        match other {
+            Unconstrained => Some(*self),
+            Equality => Some(*self),
+            Numeric => Some(*self),
+            Integer => match self {
+                FloatingPoint => None,
+                _ => Some(*self),
+            },
+            FloatingPoint => None,
+            SignedInteger => None,
+            UnsignedInteger => None,
+        }
+    }
 }
 
-impl std::fmt::Display for GenericTypeConstraint {
+impl std::fmt::Display for TypeConstraint {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        use self::GenericTypeConstraint::*;
+        use self::TypeConstraint::*;
         match self {
             Integer => write!(f, "integer"),
             FloatingPoint => write!(f, "floating point"),

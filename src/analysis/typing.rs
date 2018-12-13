@@ -11,7 +11,7 @@ use crate::ast::{
 };
 use crate::reporting::Handler;
 use crate::stdlib::{FuncDecl, MethodLookup, Parameter};
-use crate::ty::{GenericTypeConstraint, Ty};
+use crate::ty::{Ty, TypeConstraint};
 use ast_node::NodeId;
 use ena::unify::{EqUnifyValue, InPlaceUnificationTable, UnificationTable, UnifyKey};
 use log::{debug, error, trace};
@@ -177,8 +177,8 @@ impl<'a> TypeAnalysis<'a> {
         match lit.kind {
             Str(_) | RawStr(_) => ConstraintOrType::Type(Ty::String),
             Bool(_) => ConstraintOrType::Type(Ty::Bool),
-            Int(_) => ConstraintOrType::Constraint(GenericTypeConstraint::Integer),
-            Float(_) => ConstraintOrType::Constraint(GenericTypeConstraint::FloatingPoint),
+            Int(_) => ConstraintOrType::Constraint(TypeConstraint::Integer),
+            Float(_) => ConstraintOrType::Constraint(TypeConstraint::FloatingPoint),
         }
     }
 
@@ -250,13 +250,13 @@ impl<'a> TypeAnalysis<'a> {
                         self.unifier
                             .add_equality(Ty::Infer(left_var), Ty::Infer(right_var))?;
                         self.unifier
-                            .add_constraint(left_var, GenericTypeConstraint::Equality)?;
+                            .add_constraint(left_var, TypeConstraint::Equality)?;
                     }
                     Add => {
                         self.unifier
                             .add_equality(Ty::Infer(left_var), Ty::Infer(right_var))?;
                         self.unifier
-                            .add_constraint(left_var, GenericTypeConstraint::Numeric)?;
+                            .add_constraint(left_var, TypeConstraint::Numeric)?;
                     }
                     _ => {
                         println!("{}", op);
@@ -277,7 +277,7 @@ impl<'a> TypeAnalysis<'a> {
                 // stream = EventStream<?1>
                 // expr = Option<?1>
                 self.unifier
-                    .add_constraint(off_var, GenericTypeConstraint::Integer)?;
+                    .add_constraint(off_var, TypeConstraint::Integer)?;
                 // need to derive "inner" type `?1`
                 let decl = self.declarations[&stream._id];
                 let inner_var: InferVar = match decl {
@@ -436,7 +436,7 @@ impl<'a> TypeAnalysis<'a> {
 
 enum ConstraintOrType {
     Type(Ty),
-    Constraint(GenericTypeConstraint),
+    Constraint(TypeConstraint),
 }
 
 /// We have two types of constraints, equality constraints and subtype constraints
@@ -444,7 +444,7 @@ struct Unifier {
     /// union-find data structure representing the current state of the unification
     table: InPlaceUnificationTable<InferVar>,
     /// constraints associated with inference variables, if any
-    constraints: HashMap<InferVar, GenericTypeConstraint>,
+    constraints: HashMap<InferVar, TypeConstraint>,
 }
 
 impl Unifier {
@@ -525,10 +525,15 @@ impl Unifier {
         }
     }
 
-    fn add_constraint(&mut self, var: InferVar, constr: GenericTypeConstraint) -> InferResult {
+    fn add_constraint(&mut self, var: InferVar, constr: TypeConstraint) -> InferResult {
         debug!("constraint {} {}", var, constr);
         if let Some(&other) = self.constraints.get(&var) {
-            if other != constr {
+            if let Some(conj) = other.conjunction(constr) {
+                assert!(conj <= other);
+                assert!(conj <= constr);
+                // update constraint with more precise one
+                self.constraints.insert(var, conj);
+            } else {
                 return Err(format!(
                     "unsatisfiable conjunction of constraint {} and {}",
                     other, constr

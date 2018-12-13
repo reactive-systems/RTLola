@@ -1,11 +1,11 @@
 //! This module contains the Lola standard library.
 
-use crate::ty::{GenericTypeConstraint, Ty};
+use crate::ty::{Ty, TypeConstraint};
 use std::collections::HashMap;
 
 #[derive(Debug)]
 pub struct Generic {
-    pub constraint: GenericTypeConstraint,
+    pub constraint: TypeConstraint,
 }
 
 #[derive(Debug)]
@@ -39,7 +39,7 @@ lazy_static! {
     static ref SQRT: FuncDecl = FuncDecl {
         name: "sqrt".to_string(),
         generics: vec![Generic {
-            constraint: GenericTypeConstraint::FloatingPoint,
+            constraint: TypeConstraint::FloatingPoint,
         }],
         parameters: vec![Parameter::Generic(0)],
         return_type: Parameter::Generic(0),
@@ -62,7 +62,7 @@ impl MethodLookup {
             (Ty::EventStream(inner), "offset") => Some(FuncDecl {
                 name: "offset".to_string(),
                 generics: vec![Generic {
-                    constraint: GenericTypeConstraint::Integer,
+                    constraint: TypeConstraint::Integer,
                 }],
                 parameters: vec![Parameter::Type(ty.clone()), Parameter::Generic(0)],
                 return_type: Parameter::Type(Ty::Option(inner.clone())),
