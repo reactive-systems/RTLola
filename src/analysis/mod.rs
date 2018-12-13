@@ -8,16 +8,16 @@
 mod common;
 mod id_assignment;
 mod lola_version;
-mod naming;
+pub(crate) mod naming;
 mod type_checker;
 pub(crate) mod typing;
 
 use self::lola_version::LolaVersionAnalysis;
 use self::naming::NamingAnalysis;
+use self::typing::TypeAnalysis;
 use super::ast::LolaSpec;
 use crate::parse::SourceMapper;
 use crate::reporting::Handler;
-use analysis::typing::TypeAnalysis;
 
 pub trait AnalysisError<'a>: std::fmt::Debug {}
 

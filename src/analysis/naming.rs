@@ -3,14 +3,13 @@
 use super::super::ast::Offset::*;
 use super::super::ast::*;
 use crate::analysis::*;
-use crate::reporting::{Handler, LabeledSpan};
-use ast_node::{AstNode, NodeId, Span};
 use crate::analysis::*;
+use crate::parse::Ident;
+use crate::reporting::{Handler, LabeledSpan};
 use crate::stdlib;
 use crate::stdlib::FuncDecl;
 use crate::ty::Ty;
 use ast_node::{AstNode, NodeId, Span};
-use parse::Ident;
 use std::collections::HashMap;
 
 pub(crate) type DeclarationTable<'a> = HashMap<NodeId, Declaration<'a>>;

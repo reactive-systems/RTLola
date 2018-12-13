@@ -4,13 +4,14 @@
 //! * https://eli.thegreenplace.net/2018/type-inference/
 //! * https://eli.thegreenplace.net/2018/unification/
 
+use super::naming::{Declaration, DeclarationTable};
 use crate::ast::LolaSpec;
+use crate::ast::{BinOp, Constant, Expression, ExpressionKind, Literal, Offset, TypeKind};
+use crate::reporting::Handler;
 use crate::stdlib::{MethodLookup, Parameter};
 use crate::ty::{GenericTypeConstraint, Ty};
-use analysis::naming::{Declaration, DeclarationTable};
-use analysis::reporting::Handler;
-use ast::{BinOp, Constant, Expression, ExpressionKind, Literal, Offset, TypeKind};
 use ast_node::NodeId;
+use log::{debug, error, trace};
 use std::collections::HashMap;
 
 pub(crate) struct TypeAnalysis<'a> {
@@ -193,7 +194,7 @@ impl<'a> TypeAnalysis<'a> {
     }
 
     fn get_equation_for_literal(&self, node: NodeId, lit: &Literal) -> TypeEquation {
-        use ast::LitKind::*;
+        use crate::ast::LitKind::*;
         match lit.kind {
             Str(_) | RawStr(_) => TypeEquation::new_concrete(node, Ty::String, lit._id),
             Bool(_) => TypeEquation::new_concrete(node, Ty::Bool, lit._id),
@@ -205,7 +206,7 @@ impl<'a> TypeAnalysis<'a> {
     }
 
     fn get_constraint_for_literal(&self, lit: &Literal) -> ConstraintOrType {
-        use ast::LitKind::*;
+        use crate::ast::LitKind::*;
         match lit.kind {
             Str(_) | RawStr(_) => ConstraintOrType::Type(Ty::String),
             Bool(_) => ConstraintOrType::Type(Ty::Bool),
@@ -215,7 +216,7 @@ impl<'a> TypeAnalysis<'a> {
     }
 
     fn generate_equations_for_expression(&mut self, expr: &'a Expression) {
-        use ast::ExpressionKind::*;
+        use crate::ast::ExpressionKind::*;
         match &expr.kind {
             Lit(l) => {
                 let eq = self.get_equation_for_literal(expr._id, &l);
