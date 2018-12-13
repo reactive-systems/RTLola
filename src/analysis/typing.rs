@@ -1,8 +1,10 @@
 //! Implementation of the Hindley-Milner type inference through unification
 //!
 //! Relevant references:
-//! * https://eli.thegreenplace.net/2018/type-inference/
-//! * https://eli.thegreenplace.net/2018/unification/
+//! * Introduction to Hindley-Milner type inference https://eli.thegreenplace.net/2018/type-inference/
+//! * Unification algorithm https://eli.thegreenplace.net/2018/unification/
+//! * Unification in Rust http://smallcultfollowing.com/babysteps/blog/2017/03/25/unification-in-chalk-part-1/
+//! * Ena (union-find package) https://crates.io/crates/ena
 
 use super::naming::{Declaration, DeclarationTable};
 use crate::ast::LolaSpec;
@@ -245,16 +247,36 @@ impl<'a> TypeAnalysis<'a> {
                 use self::BinOp::*;
                 match op {
                     Eq => {
+                        // ?new_var :< Equality
+                        // ?new_var = ?left_var
+                        // ?new_var = ?right_var
+                        // ?new_var = ?var
+                        let new_var = self.unifier.new_var();
                         self.unifier
-                            .add_equality(Ty::Infer(left_var), Ty::Infer(right_var))?;
+                            .add_constraint(new_var, TypeConstraint::Equality)?;
+
                         self.unifier
-                            .add_constraint(left_var, TypeConstraint::Equality)?;
+                            .add_equality(Ty::Infer(new_var), Ty::Infer(left_var))?;
+                        self.unifier
+                            .add_equality(Ty::Infer(new_var), Ty::Infer(right_var))?;
+                        self.unifier
+                            .add_equality(Ty::Infer(new_var), Ty::Infer(var))?;
                     }
                     Add => {
+                        // ?new_var :< Numeric
+                        // ?new_var = ?left_var
+                        // ?new_var = ?right_var
+                        // ?new_var = ?var
+                        let new_var = self.unifier.new_var();
                         self.unifier
-                            .add_equality(Ty::Infer(left_var), Ty::Infer(right_var))?;
+                            .add_constraint(new_var, TypeConstraint::Numeric)?;
+
                         self.unifier
-                            .add_constraint(left_var, TypeConstraint::Numeric)?;
+                            .add_equality(Ty::Infer(new_var), Ty::Infer(left_var))?;
+                        self.unifier
+                            .add_equality(Ty::Infer(new_var), Ty::Infer(right_var))?;
+                        self.unifier
+                            .add_equality(Ty::Infer(new_var), Ty::Infer(var))?;
                     }
                     _ => {
                         println!("{}", op);
