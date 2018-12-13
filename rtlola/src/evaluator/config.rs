@@ -1,4 +1,3 @@
-
 pub struct EvalConfig {
     source: InputSource,
     verbosity: Verbosity,

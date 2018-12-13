@@ -1,19 +1,16 @@
-
 pub mod config;
 mod io_handler;
 
-use lola_parser::{LolaIR, StreamReference, Duration, Stream};
 use crate::evaluator::config::*;
 use crate::evaluator::io_handler::*;
-use std::collections::HashMap;
 use crate::util;
+use lola_parser::{Duration, LolaIR, Stream, StreamReference};
 
-struct TimeDrivenManager {
-
-}
+struct TimeDrivenManager {}
 
 /// Represents the current cycle count for time-driven events. `u128` is sufficient to represent
 /// 10^22 years of runtime for evaluation cycles that are 1ns apart.
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
 struct TimeDrivenCycleCount(u128);
 
 impl TimeDrivenManager {
@@ -40,10 +37,13 @@ impl TimeDrivenManager {
 }
 
 /// Represents the current cycle count for event-driven events.
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
 struct EventDrivenCycleCount(u128);
 
 impl From<u128> for EventDrivenCycleCount {
-    fn from(i: u128) -> EventDrivenCycleCount { EventDrivenCycleCount(i) }
+    fn from(i: u128) -> EventDrivenCycleCount {
+        EventDrivenCycleCount(i)
+    }
 }
 
 struct EventDrivenManager {
@@ -55,17 +55,21 @@ struct EventDrivenManager {
 impl EventDrivenManager {
     /// Creates a new EventDrivenManager managing event-driven output streams.
     fn new(ir: &LolaIR) -> EventDrivenManager {
-
         // Zip eval layer with stream reference.
-        let inputs = ir.inputs.iter()
+        let inputs = ir
+            .inputs
+            .iter()
             .map(|i| (i.eval_layer() as usize, i.as_stream_ref()));
         let ir_outputs = ir.outputs(); // Extend lifetime.
-        let outputs = ir_outputs.iter()
+        let outputs = ir_outputs
+            .iter()
             .map(|r| (ir.get_out(*r).eval_layer() as usize, *r));
-        let mut layered: Vec<(usize, StreamReference)> = inputs.chain(outputs).collect();
+        let layered: Vec<(usize, StreamReference)> = inputs.chain(outputs).collect();
         let max_layer = layered.iter().map(|(lay, r)| lay).max();
 
-        assert!(Self::check_layers(&layered.iter().map(|(ix,r)| *ix).collect()));
+        assert!(Self::check_layers(
+            &layered.iter().map(|(ix, r)| *ix).collect()
+        ));
 
         // Create vec where each element represents one layer.
         // `check_layers` guarantees that max_layer is defined.
@@ -82,7 +86,9 @@ impl EventDrivenManager {
     }
 
     fn check_layers(vec: &Vec<usize>) -> bool {
-        if vec.is_empty() { return false }
+        if vec.is_empty() {
+            return false;
+        }
         let mut indices = vec.clone();
         indices.sort();
         let successive = indices.iter().enumerate().all(|(ix, key)| ix == *key);
@@ -92,7 +98,10 @@ impl EventDrivenManager {
 
     /// Returns all event-driven streams that are due to be extended in time-driven evaluation
     /// cycle `c`. The returned collection is ordered according to the evaluation order.
-    fn next_evaluation_layer(&mut self, for_cycle: EventDrivenCycleCount) -> Option<&[StreamReference]> {
+    fn next_evaluation_layer(
+        &mut self,
+        for_cycle: EventDrivenCycleCount,
+    ) -> Option<&[StreamReference]> {
         unimplemented!()
     }
 }
@@ -112,7 +121,7 @@ pub struct Evaluator {
     extend_period: Duration,
 
     /// Intermediate representation of input Lola specification.
-    spec: LolaIR
+    spec: LolaIR,
 }
 
 impl lola_parser::LolaBackend for Evaluator {
@@ -122,9 +131,9 @@ impl lola_parser::LolaBackend for Evaluator {
 }
 
 impl Evaluator {
-
     /// Create a new `Evaluator` for RTLola specifications. Respects settings passed in `config`.
     pub fn new(ir: LolaIR, config: EvalConfig) -> Evaluator {
+        // TODO: Return Result<Evaluator>
         let output_handler = OutputHandler::new(&config);
         let input_handler = InputHandler::new(&config);
         let time_manager = TimeDrivenManager::new(&ir);
@@ -143,31 +152,27 @@ impl Evaluator {
 
     /// Starts the evaluation process, i.e. periodically computes outputs for time-driven streams
     /// and fetches/expects events from specified input source.
-    pub fn start() {
+    pub fn start(&mut self) {
         unimplemented!()
     }
-
 
     //////////// Private Functions ////////////
 
     fn find_extend_period(ir: &LolaIR) -> Duration {
         assert!(!ir.time_outputs.is_empty());
-        let mut rates: Vec<u128> = ir.time_outputs
+        let rates: Vec<u128> = ir
+            .time_outputs
             .iter()
             .flat_map(|s| s.extend_rate.map(|r| r.0))
             .collect();
-        let res = rates.iter().fold(rates[0], |a,b| util::gcd(a, *b));
+        let res = rates.iter().fold(rates[0], |a, b| util::gcd(a, *b));
         Duration(res)
     }
-
-
-
 }
-
 
 mod tests {
     use crate::evaluator::Evaluator;
-    use lola_parser::{LolaIR, Duration};
+    use lola_parser::{Duration, LolaIR};
 
     fn to_ir(spec: &str) -> LolaIR {
         unimplemented!("We need some interface from the parser.")
