@@ -39,19 +39,60 @@ impl TimeDrivenManager {
     }
 }
 
-struct EventDrivenManager {
+/// Represents the current cycle count for event-driven events.
+struct EventDrivenCycleCount(u128);
 
+impl From<u128> for EventDrivenCycleCount {
+    fn from(i: u128) -> EventDrivenCycleCount { EventDrivenCycleCount(i) }
+}
+
+struct EventDrivenManager {
+    completed_cycle: EventDrivenCycleCount,
+    layer_counter: u16,
+    layers: Vec<Vec<StreamReference>>,
 }
 
 impl EventDrivenManager {
     /// Creates a new EventDrivenManager managing event-driven output streams.
     fn new(ir: &LolaIR) -> EventDrivenManager {
-        unimplemented!()
+
+        // Zip eval layer with stream reference.
+        let inputs = ir.inputs.iter()
+            .map(|i| (i.eval_layer() as usize, i.as_stream_ref()));
+        let ir_outputs = ir.outputs(); // Extend lifetime.
+        let outputs = ir_outputs.iter()
+            .map(|r| (ir.get_out(*r).eval_layer() as usize, *r));
+        let mut layered: Vec<(usize, StreamReference)> = inputs.chain(outputs).collect();
+        let max_layer = layered.iter().map(|(lay, r)| lay).max();
+
+        assert!(Self::check_layers(&layered.iter().map(|(ix,r)| *ix).collect()));
+
+        // Create vec where each element represents one layer.
+        // `check_layers` guarantees that max_layer is defined.
+        let mut layers = vec![Vec::new(); *max_layer.unwrap()];
+        for (ix, stream) in layered {
+            layers[ix].push(stream)
+        }
+
+        EventDrivenManager {
+            completed_cycle: 0.into(),
+            layer_counter: 0,
+            layers,
+        }
+    }
+
+    fn check_layers(vec: &Vec<usize>) -> bool {
+        if vec.is_empty() { return false }
+        let mut indices = vec.clone();
+        indices.sort();
+        let successive = indices.iter().enumerate().all(|(ix, key)| ix == *key);
+        let starts_at_0 = *indices.first().unwrap() == 0 as usize; // Fail for empty.
+        successive && starts_at_0
     }
 
     /// Returns all event-driven streams that are due to be extended in time-driven evaluation
     /// cycle `c`. The returned collection is ordered according to the evaluation order.
-    fn next_evaluation_layer(&mut self) -> &[StreamReference] {
+    fn next_evaluation_layer(&mut self, for_cycle: EventDrivenCycleCount) -> Option<&[StreamReference]> {
         unimplemented!()
     }
 }
