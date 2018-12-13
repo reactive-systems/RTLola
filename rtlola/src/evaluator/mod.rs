@@ -5,6 +5,7 @@ use crate::evaluator::config::*;
 use crate::evaluator::io_handler::*;
 use crate::util;
 use lola_parser::{Duration, LolaIR, Stream, StreamReference};
+use std::ops::AddAssign;
 
 struct TimeDrivenManager {}
 
@@ -46,9 +47,15 @@ impl From<u128> for EventDrivenCycleCount {
     }
 }
 
+impl AddAssign<u128> for EventDrivenCycleCount {
+    fn add_assign(&mut self, i: u128) {
+        *self = EventDrivenCycleCount(self.0 + i)
+    }
+}
+
 struct EventDrivenManager {
-    completed_cycle: EventDrivenCycleCount,
-    layer_counter: u16,
+    current_cycle: EventDrivenCycleCount,
+    layer_counter: usize,
     layers: Vec<Vec<StreamReference>>,
 }
 
@@ -79,7 +86,7 @@ impl EventDrivenManager {
         }
 
         EventDrivenManager {
-            completed_cycle: 0.into(),
+            current_cycle: 0.into(),
             layer_counter: 0,
             layers,
         }
@@ -96,13 +103,27 @@ impl EventDrivenManager {
         successive && starts_at_0
     }
 
-    /// Returns all event-driven streams that are due to be extended in time-driven evaluation
-    /// cycle `c`. The returned collection is ordered according to the evaluation order.
+    /// Returns a collection of all event-driven streams that need to be extended next according to
+    /// the evaluation order for evaluation cycle `for_cycle`. Returns `None` if the evaluation
+    /// cycle is over.
+    /// `panics` if the old cycle is not completed before the next one is requested.
     fn next_evaluation_layer(
         &mut self,
         for_cycle: EventDrivenCycleCount,
     ) -> Option<&[StreamReference]> {
-        unimplemented!()
+        assert_eq!(for_cycle, self.current_cycle, "Requested new eval cycle before completing the last one.");
+        if self.layer_counter as usize == self.layers.len() {
+            self.progress_cycle();
+            None
+        } else {
+            self.layer_counter += 1;
+            Some(&self.layers[self.layer_counter - 1])
+        }
+    }
+
+    fn progress_cycle(&mut self) {
+        self.layer_counter = 0;
+        self.current_cycle += 1;
     }
 }
 
