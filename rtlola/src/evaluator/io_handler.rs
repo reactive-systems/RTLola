@@ -1,17 +1,17 @@
 use crate::evaluator::config::{EvalConfig, Verbosity};
 
-pub(crate) struct OutputHandler {
+pub struct OutputHandler {
     verbosity: Verbosity,
 }
 
 impl OutputHandler {
-    pub(crate) fn new(config: &EvalConfig) -> OutputHandler {
+    pub fn new(config: &EvalConfig) -> OutputHandler {
         unimplemented!()
     }
 
     /// Accepts a message and forwards it to the appropriate output channel.
     /// If the configuration prohibits printing the message, `msg` is never called.
-    pub(crate) fn emit<T>(&self, kind: OutputKind, msg: T)
+    pub fn emit<T>(&self, kind: OutputKind, msg: T)
     where
         T: FnOnce() -> String,
     {
@@ -40,8 +40,9 @@ impl OutputHandler {
     }
 }
 
+#[allow(dead_code)]
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
-pub(crate) enum OutputKind {
+pub enum OutputKind {
     /// Information about trigger events.
     Trigger,
     /// Information about the values of output streams.
@@ -53,10 +54,10 @@ pub(crate) enum OutputKind {
     RuntimeWarning,
 }
 
-pub(crate) struct InputHandler {}
+pub struct InputHandler {}
 
 impl InputHandler {
-    pub(crate) fn new(config: &EvalConfig) -> InputHandler {
+    pub fn new(config: &EvalConfig) -> InputHandler {
         unimplemented!()
     }
 }

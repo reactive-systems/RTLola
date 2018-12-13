@@ -1,9 +1,11 @@
+#[allow(dead_code)]
 pub struct EvalConfig {
     source: InputSource,
     verbosity: Verbosity,
     output_channel: OutputChannel,
 }
 
+#[allow(dead_code)]
 pub enum Verbosity {
     /// Prints fine-grained debug information. Not suitable for production.
     Debug,
@@ -19,27 +21,20 @@ pub enum Verbosity {
     Silent,
 }
 
+#[allow(dead_code)]
 pub enum OutputChannel {
     StdOut,
     StdErr,
     File(String),
 }
 
+#[allow(dead_code)]
 pub enum InputSource {
     StdIn,
     File(String),
 }
 
-impl Default for EvalConfig {
-    fn default() -> EvalConfig {
-        EvalConfig {
-            source: InputSource::StdIn,
-            verbosity: Verbosity::Triggers,
-            output_channel: OutputChannel::StdOut,
-        }
-    }
-}
-
+#[allow(dead_code)]
 impl EvalConfig {
     fn print_outputs(mut self) -> Self {
         self.verbosity = Verbosity::Outputs;
@@ -89,5 +84,15 @@ impl EvalConfig {
     fn with_output_file(mut self, path: &str) -> Self {
         self.output_channel = OutputChannel::File(String::from(path));
         self
+    }
+}
+
+impl Default for EvalConfig {
+    fn default() -> EvalConfig {
+        EvalConfig {
+            source: InputSource::StdIn,
+            verbosity: Verbosity::Triggers,
+            output_channel: OutputChannel::StdOut,
+        }
     }
 }
