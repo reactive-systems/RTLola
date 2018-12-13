@@ -75,14 +75,23 @@ impl Ty {
     pub(crate) fn satisfies(&self, constraint: GenericTypeConstraint) -> bool {
         use self::GenericTypeConstraint::*;
         use self::Ty::*;
-        match (self, constraint) {
-            (Float(_), FloatingPoint) => true,
-            (Float(_), Integer) => false,
-            (UInt(_), Integer) => true,
-            (_, _) => {
-                println!("{} {}", self, constraint);
-                unimplemented!();
-            }
+        match constraint {
+            Unconstrained => true,
+            Equality => self.is_primitive(),
+            Numeric => self.satisfies(Integer) || self.satisfies(FloatingPoint),
+            FloatingPoint => match self {
+                Float(_) => true,
+                _ => false,
+            },
+            Integer => self.satisfies(SignedInteger) || self.satisfies(UnsignedInteger),
+            SignedInteger => match self {
+                Int(_) => true,
+                _ => false,
+            },
+            UnsignedInteger => match self {
+                UInt(_) => true,
+                _ => false,
+            },
         }
     }
 
@@ -142,6 +151,18 @@ pub enum GenericTypeConstraint {
     /// Types that implement `==`
     Equality,
     Unconstrained,
+}
+
+impl GenericTypeConstraint {
+    pub(crate) fn has_default(&self) -> Option<Ty> {
+        use self::GenericTypeConstraint::*;
+        match self {
+            Integer | SignedInteger | Numeric => Some(Ty::Int(I32)),
+            UnsignedInteger => Some(Ty::UInt(U32)),
+            FloatingPoint => Some(Ty::Float(F32)),
+            _ => None,
+        }
+    }
 }
 
 impl std::fmt::Display for GenericTypeConstraint {

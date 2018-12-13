@@ -10,7 +10,7 @@ use crate::ast::{
     BinOp, Constant, Expression, ExpressionKind, Input, Literal, Offset, Output, TypeKind,
 };
 use crate::reporting::Handler;
-use crate::stdlib::{MethodLookup, Parameter};
+use crate::stdlib::{FuncDecl, MethodLookup, Parameter};
 use crate::ty::{GenericTypeConstraint, Ty};
 use ast_node::NodeId;
 use ena::unify::{EqUnifyValue, InPlaceUnificationTable, UnificationTable, UnifyKey};
@@ -20,8 +20,6 @@ use std::collections::HashMap;
 pub(crate) struct TypeAnalysis<'a> {
     handler: &'a Handler,
     declarations: &'a DeclarationTable<'a>,
-    /// unresolved method calls
-    method_calls: Vec<&'a Expression>,
     method_lookup: MethodLookup,
     unifier: Unifier,
     /// maps `NodeId`'s to the variables used in `unifier`
@@ -36,7 +34,6 @@ impl<'a> TypeAnalysis<'a> {
         TypeAnalysis {
             handler,
             declarations,
-            method_calls: Vec::new(),
             method_lookup: MethodLookup::new(),
             unifier: Unifier::new(),
             var_lookup: HashMap::new(),
@@ -45,23 +42,7 @@ impl<'a> TypeAnalysis<'a> {
 
     pub(crate) fn check(&mut self, spec: &'a LolaSpec) {
         self.infer_types(spec);
-
-        for fun in &self.method_calls {
-            let (id, name, args) = match &fun.kind {
-                ExpressionKind::Method(base, ident, args) => (base._id, ident.name.as_str(), args),
-                _ => unreachable!(),
-            };
-            let infered = self.unifier.get_type(self.var_lookup[&id]);
-            println!("{} {} {}", fun, infered, infered.is_error());
-            if infered.is_error() {
-                continue;
-            }
-            if let Some(fun_decl) = self.method_lookup.get(&infered, name) {
-                println!("{:?}", fun_decl);
-            }
-        }
-
-        assert!(self.method_calls.is_empty());
+        self.unifier.check_and_resolve_constraints();
 
         self.assign_types(spec);
 
@@ -69,6 +50,7 @@ impl<'a> TypeAnalysis<'a> {
     }
 
     fn infer_types(&mut self, spec: &'a LolaSpec) {
+        trace!("infer types");
         for constant in &spec.constants {
             self.infer_constant(constant).unwrap_or_else(|e| {
                 panic!("type inference failed: {}", e);
@@ -315,8 +297,8 @@ impl<'a> TypeAnalysis<'a> {
             }
             Default(left, right) => {
                 // recursion
-                self.infer_expression(left);
-                self.infer_expression(right);
+                self.infer_expression(left)?;
+                self.infer_expression(right)?;
 
                 let left_var = self.var_lookup[&left._id];
                 let right_var = self.var_lookup[&right._id];
@@ -340,72 +322,90 @@ impl<'a> TypeAnalysis<'a> {
 
                 // recursion
                 for param in params {
-                    self.infer_expression(param);
+                    self.infer_expression(param)?;
                 }
 
-                // build symbolic names for generic arguments
-                let generics: Vec<InferVar> = fun_decl
-                    .generics
-                    .iter()
-                    .map(|gen| {
-                        let var = self.unifier.new_var();
-                        self.unifier
-                            .add_constraint(var, gen.constraint)
-                            .expect("cannot fail as var is freshly created");
-                        var
-                    })
-                    .collect();
+                let params: Vec<&Expression> = params.iter().map(|e| e.as_ref()).collect();
 
-                for (type_param, parameter) in fun_decl.parameters.iter().zip(params) {
-                    let param_var = self.var_lookup[&parameter._id];
-                    match type_param {
-                        Parameter::Generic(num) => {
-                            // ?generic = ?type_var
-                            self.unifier.add_equality(
-                                Ty::Infer(generics[*num as usize]),
-                                Ty::Infer(param_var),
-                            )?;
-                        }
-                        Parameter::Type(ty) => {
-                            // ?param_var = `ty`
-                            self.unifier
-                                .add_equality(Ty::Infer(param_var), ty.clone())?;
-                        }
-                    }
-                }
-                // return type
-                match fun_decl.return_type {
-                    Parameter::Generic(num) => {
-                        // ?generic = ?var
-                        self.unifier
-                            .add_equality(Ty::Infer(generics[num as usize]), Ty::Infer(var))?;
-                    }
-                    Parameter::Type(ref ty) => {
-                        // ?param_var = `ty`
-                        self.unifier.add_equality(Ty::Infer(var), ty.clone())?;
-                    }
-                }
+                self.infer_function_application(var, fun_decl, params.as_slice())?;
             }
             Method(base, name, params) => {
                 // recursion
                 self.infer_expression(base)?;
 
-                let infered = self.unifier.get_type(self.var_lookup[&base._id]);
-                println!("{} {} {}", base, infered, infered.is_error());
-                if !infered.is_error() {
+                if let Some(infered) = self.unifier.get_type(self.var_lookup[&base._id]) {
+                    println!("{} {}", base, infered);
                     if let Some(fun_decl) = self.method_lookup.get(&infered, name.name.as_str()) {
                         println!("{:?}", fun_decl);
+
+                        // recursion
+                        for param in params {
+                            self.infer_expression(param)?;
+                        }
+
+                        let mut parameters = vec![base.as_ref()];
+                        parameters.extend(params.iter().map(|e| e.as_ref()));
+
+                        self.infer_function_application(var, &fun_decl, parameters.as_slice())?;
+                    } else {
+                        panic!("could not find `{}`", name);
                     }
+                } else {
+                    panic!("could not get type of `{}`", base);
                 }
-
-                for param in params {
-                    self.infer_expression(param)?;
-                }
-
-                // save for later inspection
-                self.method_calls.push(expr);
             }
             _ => unimplemented!(),
+        }
+        Ok(())
+    }
+
+    fn infer_function_application(
+        &mut self,
+        var: InferVar,
+        fun_decl: &FuncDecl,
+        params: &[&'a Expression],
+    ) -> InferResult {
+        assert_eq!(params.len(), fun_decl.parameters.len());
+
+        // build symbolic names for generic arguments
+        let generics: Vec<InferVar> = fun_decl
+            .generics
+            .iter()
+            .map(|gen| {
+                let var = self.unifier.new_var();
+                self.unifier
+                    .add_constraint(var, gen.constraint)
+                    .expect("cannot fail as var is freshly created");
+                var
+            })
+            .collect();
+
+        for (type_param, parameter) in fun_decl.parameters.iter().zip(params) {
+            let param_var = self.var_lookup[&parameter._id];
+            match type_param {
+                Parameter::Generic(num) => {
+                    // ?generic = ?type_var
+                    self.unifier
+                        .add_equality(Ty::Infer(generics[*num as usize]), Ty::Infer(param_var))?;
+                }
+                Parameter::Type(ty) => {
+                    // ?param_var = `ty`
+                    self.unifier
+                        .add_equality(Ty::Infer(param_var), ty.clone())?;
+                }
+            }
+        }
+        // return type
+        match fun_decl.return_type {
+            Parameter::Generic(num) => {
+                // ?generic = ?var
+                self.unifier
+                    .add_equality(Ty::Infer(generics[num as usize]), Ty::Infer(var))?;
+            }
+            Parameter::Type(ref ty) => {
+                // ?param_var = `ty`
+                self.unifier.add_equality(Ty::Infer(var), ty.clone())?;
+            }
         }
         Ok(())
     }
@@ -416,21 +416,21 @@ impl<'a> TypeAnalysis<'a> {
             debug!(
                 "{} has type {}",
                 constant,
-                self.unifier.get_type(self.var_lookup[&constant._id])
+                self.unifier.get_final_type(self.var_lookup[&constant._id])
             );
         }
         for input in &spec.inputs {
             debug!(
                 "{} has type {}",
                 input,
-                self.unifier.get_type(self.var_lookup[&input._id])
+                self.unifier.get_final_type(self.var_lookup[&input._id])
             );
         }
         for output in &spec.outputs {
             debug!(
                 "{} has type {}",
                 output,
-                self.unifier.get_type(self.var_lookup[&output._id])
+                self.unifier.get_final_type(self.var_lookup[&output._id])
             );
         }
     }
@@ -509,6 +509,7 @@ impl Unifier {
         }
     }
 
+    /// Checks recursively if types are equal. Tries to unify type parameters if possible.
     fn types_equal_rec(&mut self, left: &Ty, right: &Ty) -> bool {
         println!("comp {} {}", left, right);
         match (left, right) {
@@ -541,18 +542,41 @@ impl Unifier {
         Ok(())
     }
 
-    fn get_type(&mut self, var: InferVar) -> Ty {
+    /// Returns type where every inference variable is substituted
+    fn get_final_type(&mut self, var: InferVar) -> Ty {
         match self.table.probe_value(var) {
             None => Ty::Error,
-            Some(Ty::Infer(other)) => self.get_type(other),
+            Some(Ty::Infer(other)) => self.get_final_type(other),
             Some(Ty::EventStream(ty)) => {
                 let inner = match *ty {
-                    Ty::Infer(other) => self.get_type(other),
+                    Ty::Infer(other) => self.get_final_type(other),
                     ref t => t.clone(),
                 };
                 Ty::EventStream(Box::new(inner))
             }
             Some(t) => t.clone(),
+        }
+    }
+
+    /// returns current value of inference variable
+    fn get_type(&mut self, var: InferVar) -> Option<Ty> {
+        self.table.probe_value(var)
+    }
+
+    fn check_and_resolve_constraints(&mut self) {
+        for (&var, &constr) in &self.constraints {
+            debug!("{} :< {}", var, constr);
+            if let Some(ty) = self.table.probe_value(var) {
+                if !ty.satisfies(constr) {
+                    panic!("Type {} does not satisfy {}", ty, constr);
+                }
+            } else if let Some(default) = constr.has_default() {
+                self.table
+                    .unify_var_value(var, Some(default))
+                    .expect("variable has no value, i.e., unifcation should not fail");
+            } else {
+                panic!("unbound variable {} with constraint {}", var, constr);
+            }
         }
     }
 }
@@ -588,10 +612,10 @@ type InferResult = Result<(), String>;
 mod tests {
 
     use super::*;
-    use analysis::id_assignment::*;
-    use analysis::naming::*;
-    use analysis::reporting::Handler;
-    use parse::*;
+    use crate::analysis::id_assignment::*;
+    use crate::analysis::naming::*;
+    use crate::parse::*;
+    use crate::reporting::Handler;
     use std::path::PathBuf;
 
     fn num_type_errors(spec: &str) -> usize {

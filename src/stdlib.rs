@@ -58,8 +58,8 @@ impl MethodLookup {
     }
 
     pub(crate) fn get(&self, ty: &Ty, name: &str) -> Option<FuncDecl> {
-        match ty {
-            Ty::EventStream(inner) => Some(FuncDecl {
+        match (ty, name) {
+            (Ty::EventStream(inner), "offset") => Some(FuncDecl {
                 name: "offset".to_string(),
                 generics: vec![Generic {
                     constraint: GenericTypeConstraint::Integer,
@@ -67,7 +67,16 @@ impl MethodLookup {
                 parameters: vec![Parameter::Type(ty.clone()), Parameter::Generic(0)],
                 return_type: Parameter::Type(Ty::Option(inner.clone())),
             }),
-            _ => unimplemented!(),
+            (Ty::Option(inner), "default") => Some(FuncDecl {
+                name: "default".to_string(),
+                generics: Vec::new(),
+                parameters: vec![
+                    Parameter::Type(ty.clone()),
+                    Parameter::Type((**inner).clone()),
+                ],
+                return_type: Parameter::Type((**inner).clone()),
+            }),
+            _ => unimplemented!("{} for {}", name, ty),
         }
     }
 }
