@@ -3,7 +3,6 @@
 //! It is inspired by https://doc.rust-lang.org/nightly/nightly-rustc/rustc/ty/index.html
 
 use crate::analysis::typing::InferVar;
-use ast_node::NodeId;
 
 /// Representation of types
 #[derive(Debug, PartialEq, Eq, Clone, Hash)]
@@ -98,11 +97,11 @@ impl Ty {
     pub(crate) fn is_error(&self) -> bool {
         use self::Ty::*;
         match self {
-            Ty::Error => true,
-            Ty::Tuple(args) => args.iter().fold(false, |val, el| val || el.is_error()),
-            Ty::EventStream(ty) => ty.is_error(),
-            Ty::TimedStream(ty) => ty.is_error(),
-            Ty::Option(ty) => ty.is_error(),
+            Error => true,
+            Tuple(args) => args.iter().fold(false, |val, el| val || el.is_error()),
+            EventStream(ty) => ty.is_error(),
+            TimedStream(ty) => ty.is_error(),
+            Option(ty) => ty.is_error(),
             _ => false,
         }
     }
@@ -110,7 +109,7 @@ impl Ty {
     pub(crate) fn is_primitive(&self) -> bool {
         use self::Ty::*;
         match self {
-            Ty::Bool | Ty::Int(_) | Ty::UInt(_) | Float(_) | String => true,
+            Bool | Int(_) | UInt(_) | Float(_) | String => true,
             _ => false,
         }
     }

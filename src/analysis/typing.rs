@@ -6,15 +6,13 @@
 
 use super::naming::{Declaration, DeclarationTable};
 use crate::ast::LolaSpec;
-use crate::ast::{
-    BinOp, Constant, Expression, ExpressionKind, Input, Literal, Offset, Output, TypeKind,
-};
+use crate::ast::{BinOp, Constant, Expression, Input, Literal, Offset, Output, TypeKind};
 use crate::reporting::Handler;
 use crate::stdlib::{FuncDecl, MethodLookup, Parameter};
 use crate::ty::{Ty, TypeConstraint};
 use ast_node::NodeId;
 use ena::unify::{EqUnifyValue, InPlaceUnificationTable, UnificationTable, UnifyKey};
-use log::{debug, error, trace};
+use log::{debug, trace};
 use std::collections::HashMap;
 
 pub(crate) struct TypeAnalysis<'a> {

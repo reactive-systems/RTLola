@@ -1,7 +1,6 @@
 //! This module contains the Lola standard library.
 
 use crate::ty::{Ty, TypeConstraint};
-use std::collections::HashMap;
 
 #[derive(Debug)]
 pub struct Generic {
@@ -44,10 +43,30 @@ lazy_static! {
         parameters: vec![Parameter::Generic(0)],
         return_type: Parameter::Generic(0),
     };
+    // fn cos<T: FloatingPoint>(T) -> T
+    static ref COS: FuncDecl = FuncDecl {
+        name: "cos".to_string(),
+        generics: vec![Generic {
+            constraint: TypeConstraint::FloatingPoint,
+        }],
+        parameters: vec![Parameter::Generic(0)],
+        return_type: Parameter::Generic(0),
+    };
+    // fn sin<T: FloatingPoint>(T) -> T
+    static ref SIN: FuncDecl = FuncDecl {
+        name: "sin".to_string(),
+        generics: vec![Generic {
+            constraint: TypeConstraint::FloatingPoint,
+        }],
+        parameters: vec![Parameter::Generic(0)],
+        return_type: Parameter::Generic(0),
+    };
 }
 
 pub(crate) fn import_math_module<'a>(scope: &mut ScopedDecl<'a>) {
-    scope.add_decl_for(&SQRT.name, Declaration::Func(&SQRT))
+    scope.add_decl_for(&SQRT.name, Declaration::Func(&SQRT));
+    scope.add_decl_for(&COS.name, Declaration::Func(&COS));
+    scope.add_decl_for(&SIN.name, Declaration::Func(&SIN));
 }
 
 pub(crate) struct MethodLookup {}

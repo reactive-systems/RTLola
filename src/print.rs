@@ -233,28 +233,6 @@ impl Display for StreamInstance {
     }
 }
 
-impl Display for FunctionKind {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                FunctionKind::NthRoot => "nroot",
-                FunctionKind::Sqrt => "sqrt",
-                FunctionKind::Sin => "sin",
-                FunctionKind::Cos => "cos",
-                FunctionKind::Tan => "tan",
-                FunctionKind::Arcsin => "arcsin",
-                FunctionKind::Arccos => "arccos",
-                FunctionKind::Arctan => "arctan",
-                FunctionKind::Exp => "exp",
-                FunctionKind::Floor => "floor",
-                FunctionKind::Ceil => "ceil",
-            }
-        )
-    }
-}
-
 impl Display for Offset {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         match self {

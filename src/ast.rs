@@ -287,21 +287,6 @@ pub enum ExpressionKind {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub enum FunctionKind {
-    NthRoot,
-    Sqrt,
-    Sin,
-    Cos,
-    Tan,
-    Arcsin,
-    Arccos,
-    Arctan,
-    Exp,
-    Floor,
-    Ceil,
-}
-
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum WindowOperation {
     Sum,
     Product,

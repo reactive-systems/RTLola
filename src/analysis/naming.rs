@@ -2,8 +2,6 @@
 
 use super::super::ast::Offset::*;
 use super::super::ast::*;
-use crate::analysis::*;
-use crate::analysis::*;
 use crate::parse::Ident;
 use crate::reporting::{Handler, LabeledSpan};
 use crate::stdlib;
@@ -11,6 +9,37 @@ use crate::stdlib::FuncDecl;
 use crate::ty::Ty;
 use ast_node::{AstNode, NodeId, Span};
 use std::collections::HashMap;
+
+// These MUST all be lowercase
+// TODO add an static assertion for this
+pub(crate) const KEYWORDS: [&str; 26] = [
+    "input",
+    "output",
+    "trigger",
+    "import",
+    "type",
+    "self",
+    "include",
+    "invoke",
+    "inv",
+    "extend",
+    "ext",
+    "terminate",
+    "ter",
+    "unless",
+    "if",
+    "then",
+    "else",
+    "and",
+    "or",
+    "not",
+    "forall",
+    "exists",
+    "any",
+    "true",
+    "false",
+    "error",
+];
 
 pub(crate) type DeclarationTable<'a> = HashMap<NodeId, Declaration<'a>>;
 
@@ -57,7 +86,7 @@ impl<'a> NamingAnalysis<'a> {
 
         // check for keyword
         let lower = name.to_lowercase();
-        if common::KEYWORDS.contains(&lower.as_str()) {
+        if KEYWORDS.contains(&lower.as_str()) {
             self.handler.error_with_span(
                 &format!("`{}` is a reserved keyword", name),
                 LabeledSpan::new(span, "use a different name here", true),
@@ -517,7 +546,7 @@ mod tests {
 
     use super::*;
     use crate::analysis::id_assignment;
-    use crate::parse::parse;
+    use crate::parse::{parse, SourceMapper};
     use std::path::PathBuf;
 
     /// Parses the content, runs naming analysis, and returns number of errors
