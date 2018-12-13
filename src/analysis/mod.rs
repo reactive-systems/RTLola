@@ -9,7 +9,6 @@ mod common;
 mod id_assignment;
 mod lola_version;
 pub(crate) mod naming;
-mod type_checker;
 pub(crate) mod typing;
 
 use self::lola_version::LolaVersionAnalysis;
@@ -34,13 +33,6 @@ pub(crate) fn analyze(spec: &mut LolaSpec, mapper: SourceMapper) -> bool {
 
     let mut type_analysis = TypeAnalysis::new(&handler, &naming_analyzer.result);
     type_analysis.check(&spec);
-    if handler.contains_error() {
-        handler.error("aborting due to previous error");
-        return false;
-    }
-
-    let _tc_result = type_checker::type_check(&naming_analyzer.result, spec, &handler);
-
     if handler.contains_error() {
         handler.error("aborting due to previous error");
         return false;
