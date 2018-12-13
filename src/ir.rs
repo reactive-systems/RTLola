@@ -32,12 +32,19 @@ pub enum Type {
     Tuple(Vec<PrimitiveType>),
 }
 
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum MemorizationBound {
+    Unbounded,
+    Bounded(u16),
+}
+
 /// Represents an input stream of a Lola specification.
 #[derive(Debug)]
 pub struct InputStream {
     pub name: String,
     pub ty: Type,
-    pub values_to_memorize: u16,
+    _values_to_memorize: MemorizationBound,
+    _eval_layer: u16,
 }
 
 /// Represents an output stream in a Lola specification.
@@ -50,7 +57,8 @@ pub struct OutputStream {
     /// `Duration` representing the extend rate. `None` if event-driven.
     pub extend_rate: Option<Duration>,
     pub evaluation_rand: usize,
-    pub values_to_memorize: u16,
+    _values_to_memorize: MemorizationBound,
+    _eval_layer: u16,
 }
 
 #[derive(Debug)]
@@ -236,6 +244,7 @@ pub enum FeatureFlag {
     RealTimeFutureOffset,
     SlidingWindows,
     DiscreteWindows,
+    UnboundedMemory,
 }
 
 /////// Referencing Structures ///////
@@ -254,29 +263,88 @@ pub enum StreamReference {
     TimeOutRef(usize),
 }
 
-/// A super-type for any kind of stream.
-#[derive(Debug)]
-pub enum Stream<'a> {
-    In(&'a InputStream),
-    Out(&'a OutputStream),
+/// A trait for any kind of stream.
+pub trait Stream {
+    fn eval_layer(&self) -> u16;
+    fn is_input(&self) -> bool;
+    fn values_to_memorize(&self) -> MemorizationBound;
 }
 
 ////////// Implementations //////////
 
+impl MemorizationBound {
+    pub fn unwrap(&self) -> u16 {
+        match self {
+            MemorizationBound::Bounded(b) => *b,
+            MemorizationBound::Unbounded => panic!("Called `MemorizationBound::unwrap()` on an `Unbounded` value."),
+        }
+    }
+    pub fn unwrap_or(&self, dft: u16) -> u16 {
+        match self {
+            MemorizationBound::Bounded(b) => *b,
+            MemorizationBound::Unbounded => dft,
+        }
+    }
+}
+
+impl Stream for OutputStream {
+    fn eval_layer(&self) -> u16 {
+        self._eval_layer
+    }
+    fn is_input(&self) -> bool {
+        false
+    }
+    fn values_to_memorize(&self) -> MemorizationBound {
+        self._values_to_memorize
+    }
+}
+
+impl Stream for InputStream {
+    fn eval_layer(&self) -> u16 {
+        self._eval_layer
+    }
+    fn is_input(&self) -> bool {
+        true
+    }
+    fn values_to_memorize(&self) -> MemorizationBound {
+        self._values_to_memorize
+    }
+}
+
 impl<'a> LolaIR {
-    pub fn outputs(&'a self) -> Vec<Stream<'a>> {
+    pub fn outputs(&'a self) -> Vec<StreamReference> {
         self.event_outputs
             .iter()
-            .chain(self.time_outputs.iter())
-            .map(|s| Stream::Out(s))
+            .enumerate()
+            .map(|(i, _)| StreamReference::EventOutRef(i))
+            .chain(self.time_outputs
+                .iter()
+                .enumerate()
+                .map(|(i, _)| StreamReference::TimeOutRef(i))
+            )
             .collect()
     }
-    pub fn get(&'a self, reference: StreamReference) -> Stream<'a> {
+    pub fn get_in(&'a self, reference: StreamReference) -> &InputStream {
         match reference {
-            StreamReference::InRef(ix) => Stream::In(&self.inputs[ix]),
-            StreamReference::EventOutRef(ix) => Stream::Out(&self.event_outputs[ix]),
-            StreamReference::TimeOutRef(ix) => Stream::Out(&self.time_outputs[ix]),
+            StreamReference::InRef(ix) => &self.inputs[ix],
+            StreamReference::EventOutRef(ix) => panic!("Called `LolaIR::get_out` with a `StreamReference::EventOutRef`."),
+            StreamReference::TimeOutRef(ix) => panic!("Called `LolaIR::get_out` with a `StreamReference::TimeOutRef`."),
         }
+    }
+    pub fn get_out(&'a self, reference: StreamReference) -> &OutputStream {
+        match reference {
+            StreamReference::InRef(ix) => panic!("Called `LolaIR::get_out` with a `StreamReference::InRef`."),
+            StreamReference::EventOutRef(ix) => &self.event_outputs[ix],
+            StreamReference::TimeOutRef(ix) => &self.time_outputs[ix],
+        }
+    }
+    pub fn all_streams(&'a self) -> Vec<StreamReference> {
+        self.inputs
+            .iter()
+            .enumerate()
+            .map(|(ix,_)| StreamReference::InRef(ix))
+            .chain(self.outputs().iter().map(|r| *r))
+            .collect()
     }
 }
 
