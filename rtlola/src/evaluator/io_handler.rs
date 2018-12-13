@@ -1,4 +1,4 @@
-use evaluator::config::{EvalConfig, Verbosity};
+use crate::evaluator::config::{EvalConfig, Verbosity};
 
 pub(crate) struct OutputHandler {
     verbosity: Verbosity,

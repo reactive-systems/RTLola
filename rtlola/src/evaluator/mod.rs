@@ -2,10 +2,11 @@
 pub mod config;
 mod io_handler;
 
-use lola_parser::{LolaIR, StreamReference, Duration};
-use evaluator::config::*;
-use evaluator::io_handler::*;
-
+use lola_parser::{LolaIR, StreamReference, Duration, Stream};
+use crate::evaluator::config::*;
+use crate::evaluator::io_handler::*;
+use std::collections::HashMap;
+use crate::util;
 
 struct TimeDrivenManager {
 
