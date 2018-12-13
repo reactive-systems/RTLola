@@ -277,15 +277,17 @@ pub trait Stream {
 ////////// Implementations //////////
 
 impl MemorizationBound {
-    pub fn unwrap(&self) -> u16 {
+    pub fn unwrap(self) -> u16 {
         match self {
-            MemorizationBound::Bounded(b) => *b,
-            MemorizationBound::Unbounded => panic!("Called `MemorizationBound::unwrap()` on an `Unbounded` value."),
+            MemorizationBound::Bounded(b) => b,
+            MemorizationBound::Unbounded => {
+                panic!("Called `MemorizationBound::unwrap()` on an `Unbounded` value.")
+            }
         }
     }
-    pub fn unwrap_or(&self, dft: u16) -> u16 {
+    pub fn unwrap_or(self, dft: u16) -> u16 {
         match self {
-            MemorizationBound::Bounded(b) => *b,
+            MemorizationBound::Bounded(b) => b,
             MemorizationBound::Unbounded => dft,
         }
     }
@@ -327,23 +329,30 @@ impl<'a> LolaIR {
             .iter()
             .enumerate()
             .map(|(i, _)| StreamReference::EventOutRef(i))
-            .chain(self.time_outputs
-                .iter()
-                .enumerate()
-                .map(|(i, _)| StreamReference::TimeOutRef(i))
+            .chain(
+                self.time_outputs
+                    .iter()
+                    .enumerate()
+                    .map(|(i, _)| StreamReference::TimeOutRef(i)),
             )
             .collect()
     }
     pub fn get_in(&'a self, reference: StreamReference) -> &InputStream {
         match reference {
             StreamReference::InRef(ix) => &self.inputs[ix],
-            StreamReference::EventOutRef(ix) => panic!("Called `LolaIR::get_out` with a `StreamReference::EventOutRef`."),
-            StreamReference::TimeOutRef(ix) => panic!("Called `LolaIR::get_out` with a `StreamReference::TimeOutRef`."),
+            StreamReference::EventOutRef(_) => {
+                panic!("Called `LolaIR::get_out` with a `StreamReference::EventOutRef`.")
+            }
+            StreamReference::TimeOutRef(_) => {
+                panic!("Called `LolaIR::get_out` with a `StreamReference::TimeOutRef`.")
+            }
         }
     }
     pub fn get_out(&'a self, reference: StreamReference) -> &OutputStream {
         match reference {
-            StreamReference::InRef(ix) => panic!("Called `LolaIR::get_out` with a `StreamReference::InRef`."),
+            StreamReference::InRef(_) => {
+                panic!("Called `LolaIR::get_out` with a `StreamReference::InRef`.")
+            }
             StreamReference::EventOutRef(ix) => &self.event_outputs[ix],
             StreamReference::TimeOutRef(ix) => &self.time_outputs[ix],
         }
@@ -352,8 +361,8 @@ impl<'a> LolaIR {
         self.inputs
             .iter()
             .enumerate()
-            .map(|(ix,_)| StreamReference::InRef(ix))
-            .chain(self.outputs().iter().map(|r| *r))
+            .map(|(ix, _)| StreamReference::InRef(ix))
+            .chain(self.outputs().iter().cloned())
             .collect()
     }
 }
@@ -376,7 +385,7 @@ pub struct ValSize(u32); // Needs to be reasonable large for compound types.
 
 impl From<u8> for ValSize {
     fn from(val: u8) -> ValSize {
-        ValSize(val as u32)
+        ValSize(u32::from(val))
     }
 }
 
