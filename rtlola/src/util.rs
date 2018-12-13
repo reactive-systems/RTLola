@@ -1,4 +1,3 @@
-
 pub(crate) fn gcd(mut a: u128, mut b: u128) -> u128 {
     // Courtesy of wikipedia.
     while b != 0 {

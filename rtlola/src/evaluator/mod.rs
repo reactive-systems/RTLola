@@ -179,6 +179,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_extension_rate_extraction() {
         let input = "input a: UInt8\n";
         let hz50 = "output b: UInt8 {extend @50Hz} := a";
