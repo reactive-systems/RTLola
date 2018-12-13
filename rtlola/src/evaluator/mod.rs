@@ -1,131 +1,14 @@
 pub mod config;
+mod event_driven_manager;
 mod io_handler;
+mod time_driven_manager;
 
-use crate::evaluator::config::*;
-use crate::evaluator::io_handler::*;
+use crate::evaluator::{
+    config::*, event_driven_manager::EventDrivenManager, io_handler::*,
+    time_driven_manager::TimeDrivenManager,
+};
 use crate::util;
 use lola_parser::{Duration, LolaIR, Stream, StreamReference};
-use std::ops::AddAssign;
-
-struct TimeDrivenManager {}
-
-/// Represents the current cycle count for time-driven events. `u128` is sufficient to represent
-/// 10^22 years of runtime for evaluation cycles that are 1ns apart.
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
-struct TimeDrivenCycleCount(u128);
-
-impl TimeDrivenManager {
-    /// Creates a new TimeDrivenManager managing time-driven output streams.
-    fn new(ir: &LolaIR) -> TimeDrivenManager {
-        unimplemented!()
-    }
-
-    /// Determines how long the current thread can wait until the next time-based evaluation cycle
-    /// needs to be started. Calls are time-sensitive, i.e. successive calls do not necessarily
-    /// yield identical results.
-    ///
-    /// *Returns:* `WaitingTime` _t_ and `TimeDrivenCycleCount` _i_ where _i_ nanoseconds can pass
-    /// until the _i_th time-driven evaluation cycle needs to be started.
-    fn wait_for(&self) -> (Duration, TimeDrivenCycleCount) {
-        unimplemented!()
-    }
-
-    /// Returns all time-driven streams that are due to be extended in time-driven evaluation
-    /// cycle `c`. The returned collection is ordered according to the evaluation order.
-    fn due_streams(&mut self, c: TimeDrivenCycleCount) -> &[StreamReference] {
-        unimplemented!()
-    }
-}
-
-/// Represents the current cycle count for event-driven events.
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
-struct EventDrivenCycleCount(u128);
-
-impl From<u128> for EventDrivenCycleCount {
-    fn from(i: u128) -> EventDrivenCycleCount {
-        EventDrivenCycleCount(i)
-    }
-}
-
-impl AddAssign<u128> for EventDrivenCycleCount {
-    fn add_assign(&mut self, i: u128) {
-        *self = EventDrivenCycleCount(self.0 + i)
-    }
-}
-
-struct EventDrivenManager {
-    current_cycle: EventDrivenCycleCount,
-    layer_counter: usize,
-    layers: Vec<Vec<StreamReference>>,
-}
-
-impl EventDrivenManager {
-    /// Creates a new EventDrivenManager managing event-driven output streams.
-    fn new(ir: &LolaIR) -> EventDrivenManager {
-        // Zip eval layer with stream reference.
-        let inputs = ir
-            .inputs
-            .iter()
-            .map(|i| (i.eval_layer() as usize, i.as_stream_ref()));
-        let ir_outputs = ir.outputs(); // Extend lifetime.
-        let outputs = ir_outputs
-            .iter()
-            .map(|r| (ir.get_out(*r).eval_layer() as usize, *r));
-        let layered: Vec<(usize, StreamReference)> = inputs.chain(outputs).collect();
-        let max_layer = layered.iter().map(|(lay, r)| lay).max();
-
-        assert!(Self::check_layers(
-            &layered.iter().map(|(ix, r)| *ix).collect()
-        ));
-
-        // Create vec where each element represents one layer.
-        // `check_layers` guarantees that max_layer is defined.
-        let mut layers = vec![Vec::new(); *max_layer.unwrap()];
-        for (ix, stream) in layered {
-            layers[ix].push(stream)
-        }
-
-        EventDrivenManager {
-            current_cycle: 0.into(),
-            layer_counter: 0,
-            layers,
-        }
-    }
-
-    fn check_layers(vec: &Vec<usize>) -> bool {
-        if vec.is_empty() {
-            return false;
-        }
-        let mut indices = vec.clone();
-        indices.sort();
-        let successive = indices.iter().enumerate().all(|(ix, key)| ix == *key);
-        let starts_at_0 = *indices.first().unwrap() == 0 as usize; // Fail for empty.
-        successive && starts_at_0
-    }
-
-    /// Returns a collection of all event-driven streams that need to be extended next according to
-    /// the evaluation order for evaluation cycle `for_cycle`. Returns `None` if the evaluation
-    /// cycle is over.
-    /// `panics` if the old cycle is not completed before the next one is requested.
-    fn next_evaluation_layer(
-        &mut self,
-        for_cycle: EventDrivenCycleCount,
-    ) -> Option<&[StreamReference]> {
-        assert_eq!(for_cycle, self.current_cycle, "Requested new eval cycle before completing the last one.");
-        if self.layer_counter as usize == self.layers.len() {
-            self.progress_cycle();
-            None
-        } else {
-            self.layer_counter += 1;
-            Some(&self.layers[self.layer_counter - 1])
-        }
-    }
-
-    fn progress_cycle(&mut self) {
-        self.layer_counter = 0;
-        self.current_cycle += 1;
-    }
-}
 
 pub struct Evaluator {
     /// Handles all kind of output behavior according to config.
@@ -205,7 +88,6 @@ mod tests {
         let input = "input a: UInt8\n";
         let hz50 = "output b: UInt8 {extend @50Hz} := a";
         let hz40 = "output b: UInt8 {extend @40Hz} := a";
-        let hz100 = "output b: UInt8 {extend @100Hz} := a";
         let ms20 = "output b: UInt8 {extend @20ms} := a"; // 5Hz
         let ms1 = "output b: UInt8 {extend @1ms} := a"; // 100Hz
 
