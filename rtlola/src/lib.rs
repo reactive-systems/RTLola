@@ -3,5 +3,6 @@
 
 extern crate lola_parser;
 mod evaluator;
+mod util;
 
 pub use crate::evaluator::{Evaluator, config::EvalConfig};

@@ -115,39 +115,21 @@ impl Evaluator {
             .iter()
             .flat_map(|s| s.extend_rate.map(|r| r.0))
             .collect();
-        let res = rates.iter().fold(rates[0], |a,b| Evaluator::gcd(a, *b));
+        let res = rates.iter().fold(rates[0], |a,b| util::gcd(a, *b));
         Duration(res)
     }
 
-    fn gcd(mut a: u128, mut b: u128) -> u128 {
-        // Courtesy of wikipedia.
-        while b != 0 {
-            let temp = b;
-            b = a % b;
-            a = temp;
-        }
-        return a;
-    }
+
 
 }
 
 
 mod tests {
-    use evaluator::Evaluator;
+    use crate::evaluator::Evaluator;
     use lola_parser::{LolaIR, Duration};
 
     fn to_ir(spec: &str) -> LolaIR {
         unimplemented!("We need some interface from the parser.")
-    }
-
-    #[test]
-    fn test_gcd() {
-        assert_eq!(Evaluator::gcd(3, 18), 3);
-        assert_eq!(Evaluator::gcd(18, 3), 3);
-        assert_eq!(Evaluator::gcd(1, 25), 1);
-        assert_eq!(Evaluator::gcd(5, 13), 1);
-        assert_eq!(Evaluator::gcd(25, 40), 5);
-        assert_eq!(Evaluator::gcd(7, 7), 7);
     }
 
     #[test]
