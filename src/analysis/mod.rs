@@ -19,9 +19,9 @@ use crate::analysis::graph_based_analysis::evaluation_order::determine_evaluatio
 use crate::analysis::graph_based_analysis::future_dependency::future_dependent_stream;
 use crate::analysis::graph_based_analysis::space_requirements::determine_buffer_size;
 use crate::analysis::graph_based_analysis::space_requirements::determine_tracking_size;
+use crate::analysis::lola_version::LolaVersionAnalysis;
 use crate::parse::SourceMapper;
 use crate::reporting::Handler;
-use crate::analysis::lola_version::LolaVersionAnalysis;
 
 pub trait AnalysisError<'a>: std::fmt::Debug {}
 

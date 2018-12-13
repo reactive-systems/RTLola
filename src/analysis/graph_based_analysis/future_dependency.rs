@@ -75,8 +75,6 @@ mod tests {
     use crate::parse::parse;
     use crate::parse::SourceMapper;
     use crate::reporting::Handler;
-    use crate::util::get_node_id_from_spec;
-    use ast_node::Span;
     use std::path::PathBuf;
 
     fn check_future_dependence(

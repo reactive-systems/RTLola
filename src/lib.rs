@@ -20,7 +20,6 @@ mod ir;
 mod parse;
 mod print;
 mod reporting;
-mod util;
 mod stdlib;
 mod ty;
 

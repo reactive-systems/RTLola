@@ -305,7 +305,6 @@ mod tests {
     use crate::analysis::id_assignment;
     use crate::parse::parse;
     use crate::parse::SourceMapper;
-    use crate::util::get_node_id_from_spec;
     use std::path::PathBuf;
 
     #[derive(Debug, Clone, Copy)]
