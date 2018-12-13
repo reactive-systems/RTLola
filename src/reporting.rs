@@ -120,12 +120,12 @@ impl Emitter for StderrEmitter {
                 stderr
                     .set_color(&part.color)
                     .expect("cannot set output color");
-                write!(&mut stderr, "{}", part.string);
+                write!(&mut stderr, "{}", part.string).expect("writing to stderr failed");
             }
-            writeln!(&mut stderr);
+            writeln!(&mut stderr).expect("writing to stderr failed");
         }
         stderr.reset().expect("cannot reset output color");
-        stderr.flush();
+        stderr.flush().expect("flushing stderr failed");
     }
 }
 

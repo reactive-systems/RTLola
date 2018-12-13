@@ -1,6 +1,7 @@
 //! Parser for the Lola language.
 
 #![deny(unsafe_code)] // disallow unsafe code by default
+#![forbid(unused_must_use)] // disallow discarding errors
 
 extern crate log;
 

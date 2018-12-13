@@ -389,19 +389,19 @@ impl Display for LolaSpec {
         }
 
         for decl in &self.type_declarations {
-            writeln!(f, "{}", decl);
+            writeln!(f, "{}", decl)?;
         }
         for constant in &self.constants {
-            writeln!(f, "{}", constant);
+            writeln!(f, "{}", constant)?;
         }
         for input in &self.inputs {
-            writeln!(f, "{}", input);
+            writeln!(f, "{}", input)?;
         }
         for output in &self.outputs {
-            writeln!(f, "{}", output);
+            writeln!(f, "{}", output)?;
         }
         for trigger in &self.trigger {
-            writeln!(f, "{}", trigger);
+            writeln!(f, "{}", trigger)?;
         }
         Ok(())
     }
