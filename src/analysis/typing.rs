@@ -6,19 +6,20 @@
 
 use super::naming::{Declaration, DeclarationTable};
 use crate::ast::LolaSpec;
-use crate::ast::{BinOp, Constant, Expression, ExpressionKind, Literal, Offset, TypeKind};
+use crate::ast::{
+    BinOp, Constant, Expression, ExpressionKind, Input, Literal, Offset, Output, TypeKind,
+};
 use crate::reporting::Handler;
 use crate::stdlib::{MethodLookup, Parameter};
 use crate::ty::{GenericTypeConstraint, Ty};
 use ast_node::NodeId;
+use ena::unify::{EqUnifyValue, InPlaceUnificationTable, UnificationTable, UnifyKey};
 use log::{debug, error, trace};
 use std::collections::HashMap;
 
 pub(crate) struct TypeAnalysis<'a> {
     handler: &'a Handler,
     declarations: &'a DeclarationTable<'a>,
-    /// List of type equations
-    equations: Vec<TypeEquation>,
     /// unresolved method calls
     method_calls: Vec<&'a Expression>,
     method_lookup: MethodLookup,
@@ -35,7 +36,6 @@ impl<'a> TypeAnalysis<'a> {
         TypeAnalysis {
             handler,
             declarations,
-            equations: Vec::new(),
             method_calls: Vec::new(),
             method_lookup: MethodLookup::new(),
             unifier: Unifier::new(),
@@ -46,24 +46,12 @@ impl<'a> TypeAnalysis<'a> {
     pub(crate) fn check(&mut self, spec: &'a LolaSpec) {
         self.infer_types(spec);
 
-        unimplemented!();
-
-        self.add_equations(spec);
-
-        debug!("Equations:");
-        for equation in &self.equations {
-            debug!("{}", equation);
-        }
-
-        let subst = self.unify_equations();
-        debug!("Substitutions:\n{}", subst);
-
         for fun in &self.method_calls {
             let (id, name, args) = match &fun.kind {
                 ExpressionKind::Method(base, ident, args) => (base._id, ident.name.as_str(), args),
                 _ => unreachable!(),
             };
-            let infered = subst.get_type(id);
+            let infered = self.unifier.get_type(self.var_lookup[&id]);
             println!("{} {} {}", fun, infered, infered.is_error());
             if infered.is_error() {
                 continue;
@@ -75,7 +63,7 @@ impl<'a> TypeAnalysis<'a> {
 
         assert!(self.method_calls.is_empty());
 
-        self.assign_types(spec, &subst);
+        self.assign_types(spec);
 
         unimplemented!();
     }
@@ -86,12 +74,36 @@ impl<'a> TypeAnalysis<'a> {
                 panic!("type inference failed: {}", e);
             });
         }
+
+        for input in &spec.inputs {
+            self.infer_input(input).unwrap_or_else(|e| {
+                panic!("type inference failed: {}", e);
+            });
+        }
+
+        for output in &spec.outputs {
+            self.infer_output(output).unwrap_or_else(|e| {
+                panic!("type inference failed: {}", e);
+            });
+        }
+
+        for output in &spec.outputs {
+            self.infer_output_expression(output).unwrap_or_else(|e| {
+                panic!("type inference failed: {}", e);
+            });
+        }
+    }
+
+    fn new_var(&mut self, node: NodeId) -> InferVar {
+        assert!(!self.var_lookup.contains_key(&node));
+        let var = self.unifier.new_var();
+        self.var_lookup.insert(node, var);
+        var
     }
 
     fn infer_constant(&mut self, constant: &'a Constant) -> Result<(), String> {
         trace!("infer type for {}", constant);
-        assert!(!self.var_lookup.contains_key(&constant._id));
-        let var = self.unifier.new_var();
+        let var = self.new_var(constant._id);
 
         // generate constraint in case a type is annotated
         if let Some(type_name) = constant.ty.as_ref() {
@@ -99,110 +111,85 @@ impl<'a> TypeAnalysis<'a> {
 
             if let Some(ty) = self.declarations.get(&type_name._id) {
                 match ty {
-                    Declaration::Type(ty) => self
-                        .unifier
-                        .add_equality(Ty::NewInfer(var), (*ty).clone())?,
+                    Declaration::Type(ty) => {
+                        self.unifier.add_equality(Ty::Infer(var), (*ty).clone())?
+                    }
                     _ => unreachable!(),
                 }
             }
         }
         // generate constraint from literal
         match self.get_constraint_for_literal(&constant.literal) {
-            ConstraintOrType::Type(ty) => self.unifier.add_equality(Ty::NewInfer(var), ty)?,
-            ConstraintOrType::Constraint(constr) => self.unifier.add_constraint(var, constr),
+            ConstraintOrType::Type(ty) => self.unifier.add_equality(Ty::Infer(var), ty)?,
+            ConstraintOrType::Constraint(constr) => self.unifier.add_constraint(var, constr)?,
         };
         Ok(())
     }
 
-    fn add_equations(&mut self, spec: &'a LolaSpec) {
-        for constant in &spec.constants {
-            // generate constraint in case a type is annotated
-            if let Some(type_name) = constant.ty.as_ref() {
-                if let Some(ty) = self.declarations.get(&type_name._id) {
-                    match ty {
-                        Declaration::Type(ty) => self.equations.push(TypeEquation::new_concrete(
-                            constant._id,
-                            (*ty).clone(),
-                            constant._id,
-                        )),
-                        _ => unreachable!(),
-                    }
-                }
-            }
-            // generate constraint from literal
-            let equation = self.get_equation_for_literal(constant._id, &constant.literal);
-            self.equations.push(equation);
-        }
-        for input in &spec.inputs {
-            if let Some(ty) = self.declarations.get(&input.ty._id) {
-                match ty {
-                    Declaration::Type(ty) => {
-                        // constraints:
-                        // - ?1 = `ty`
-                        // - in = EventStream<?1>
-                        self.equations.push(TypeEquation::new_concrete(
-                            input.ty._id,
-                            (*ty).clone(),
-                            input._id,
-                        ));
-                        self.equations.push(TypeEquation::new_concrete(
-                            input._id,
-                            Ty::EventStream(Box::new(Ty::Infer(input.ty._id))),
-                            input._id,
-                        ));
-                    }
-                    _ => unreachable!(),
-                }
-            }
-        }
+    fn infer_input(&mut self, input: &'a Input) -> Result<(), String> {
+        trace!("infer type for {}", input);
+        let var = self.new_var(input._id);
+        let ty_var = self.new_var(input.ty._id);
 
-        for output in &spec.outputs {
-            // generate constraint for expression
-            self.generate_equations_for_expression(&output.expression);
-
-            // generate constraint in case a type is annotated
-            match output.ty.kind {
-                TypeKind::Inferred => {
-                    self.equations.push(TypeEquation::new_concrete(
-                        output._id,
-                        Ty::EventStream(Box::new(Ty::Infer(output.ty._id))),
-                        output._id,
-                    ));
+        if let Some(ty) = self.declarations.get(&input.ty._id) {
+            match ty {
+                Declaration::Type(ty) => {
+                    // constraints:
+                    // - ?ty_var = `ty`
+                    // - ?var = EventStream<?ty_var>
+                    self.unifier
+                        .add_equality(Ty::Infer(ty_var), (*ty).clone())?;
+                    self.unifier
+                        .add_equality(Ty::Infer(var), Ty::EventStream(Box::new(Ty::Infer(ty_var))))
                 }
-                _ => {
-                    if let Some(ty) = self.declarations.get(&output.ty._id) {
-                        match ty {
-                            Declaration::Type(ty) => {
-                                self.equations.push(TypeEquation::new_concrete(
-                                    output._id,
-                                    Ty::EventStream(Box::new((*ty).clone())),
-                                    output._id,
-                                ))
-                            }
-                            _ => unreachable!(),
-                        }
-                    }
-                }
+                _ => unreachable!(),
             }
-
-            self.equations.push(TypeEquation::new_symbolic(
-                output.ty._id,
-                output.expression._id,
-                output._id,
-            ));
+        } else {
+            unreachable!();
         }
     }
 
-    fn get_equation_for_literal(&self, node: NodeId, lit: &Literal) -> TypeEquation {
-        use crate::ast::LitKind::*;
-        match lit.kind {
-            Str(_) | RawStr(_) => TypeEquation::new_concrete(node, Ty::String, lit._id),
-            Bool(_) => TypeEquation::new_concrete(node, Ty::Bool, lit._id),
-            Int(_) => TypeEquation::new_constraint(node, GenericTypeConstraint::Integer, lit._id),
-            Float(_) => {
-                TypeEquation::new_constraint(node, GenericTypeConstraint::FloatingPoint, lit._id)
+    fn infer_output(&mut self, output: &'a Output) -> Result<(), String> {
+        trace!("infer type for {}", output);
+        let var = self.new_var(output._id);
+
+        // generate constraint in case a type is annotated
+        let ty_var = self.new_var(output.ty._id);
+        match output.ty.kind {
+            TypeKind::Inferred => {}
+            _ => {
+                if let Some(ty) = self.declarations.get(&output.ty._id) {
+                    match ty {
+                        // ?ty_var = `ty`
+                        Declaration::Type(ty) => self
+                            .unifier
+                            .add_equality(Ty::Infer(ty_var), (*ty).clone())?,
+                        _ => unreachable!(),
+                    }
+                } else {
+                    unreachable!();
+                }
             }
         }
+
+        // ?var = EventStream<?ty_var>
+        self.unifier
+            .add_equality(Ty::Infer(var), Ty::EventStream(Box::new(Ty::Infer(ty_var))))
+    }
+
+    fn infer_output_expression(&mut self, output: &'a Output) -> Result<(), String> {
+        trace!("infer type for {}", output);
+        let ty_var = self.var_lookup[&output.ty._id];
+
+        // generate constraint for expression
+        self.infer_expression(&output.expression)?;
+
+        // match stream type with expression type
+        // ?ty_var = ?expr_var
+        self.unifier.add_equality(
+            Ty::Infer(ty_var),
+            Ty::Infer(self.var_lookup[&output.expression._id]),
+        )
     }
 
     fn get_constraint_for_literal(&self, lit: &Literal) -> ConstraintOrType {
@@ -215,63 +202,81 @@ impl<'a> TypeAnalysis<'a> {
         }
     }
 
-    fn generate_equations_for_expression(&mut self, expr: &'a Expression) {
+    fn infer_expression(&mut self, expr: &'a Expression) -> InferResult {
+        let var = self.new_var(expr._id);
+
         use crate::ast::ExpressionKind::*;
         match &expr.kind {
             Lit(l) => {
-                let eq = self.get_equation_for_literal(expr._id, &l);
-                self.equations.push(eq)
-            }
-            Ident(ident) => {
-                let decl = match self.declarations.get(&expr._id) {
-                    Some(decl) => decl,
-                    None => return, // TODO: do we need error message? Should be already handeled in naming analysis
+                // generate constraint from literal
+                match self.get_constraint_for_literal(&l) {
+                    ConstraintOrType::Type(ty) => self.unifier.add_equality(Ty::Infer(var), ty)?,
+                    ConstraintOrType::Constraint(constr) => {
+                        self.unifier.add_constraint(var, constr)?
+                    }
                 };
+            }
+            Ident(_) => {
+                let decl = self.declarations[&expr._id];
 
                 match decl {
-                    Declaration::Const(constant) => self
-                        .equations
-                        .push(TypeEquation::new_symbolic(expr._id, constant._id, expr._id)),
-                    Declaration::In(input) => self
-                        .equations
-                        .push(TypeEquation::new_symbolic(expr._id, input._id, expr._id)),
-                    Declaration::Out(output) => self
-                        .equations
-                        .push(TypeEquation::new_symbolic(expr._id, output._id, expr._id)),
+                    Declaration::Const(constant) => {
+                        let const_var = self.var_lookup[&constant._id];
+                        self.unifier
+                            .add_equality(Ty::Infer(var), Ty::Infer(const_var))?;
+                    }
+                    Declaration::In(input) => {
+                        let in_var = self.var_lookup[&input._id];
+                        self.unifier
+                            .add_equality(Ty::Infer(var), Ty::Infer(in_var))?;
+                    }
+                    Declaration::Out(output) => {
+                        let out_var = self.var_lookup[&output._id];
+                        self.unifier
+                            .add_equality(Ty::Infer(var), Ty::Infer(out_var))?;
+                    }
                     _ => unreachable!(),
                 }
             }
             Ite(cond, left, right) => {
                 // recursion
-                self.generate_equations_for_expression(cond);
-                self.generate_equations_for_expression(left);
-                self.generate_equations_for_expression(right);
+                self.infer_expression(cond)?;
+                self.infer_expression(left)?;
+                self.infer_expression(right)?;
 
                 // constraints
                 // - cond = bool
                 // - left = right
                 // - expr = left
-                self.equations
-                    .push(TypeEquation::new_concrete(cond._id, Ty::Bool, expr._id));
-                self.equations
-                    .push(TypeEquation::new_symbolic(left._id, right._id, expr._id));
-                self.equations
-                    .push(TypeEquation::new_symbolic(expr._id, left._id, expr._id));
+                let cond_var = self.var_lookup[&cond._id];
+                let left_var = self.var_lookup[&left._id];
+                let right_var = self.var_lookup[&right._id];
+                self.unifier.add_equality(Ty::Infer(cond_var), Ty::Bool)?;
+                self.unifier
+                    .add_equality(Ty::Infer(left_var), Ty::Infer(right_var))?;
+                self.unifier
+                    .add_equality(Ty::Infer(var), Ty::Infer(left_var))?;
             }
             Binary(op, left, right) => {
                 // recursion
-                self.generate_equations_for_expression(left);
-                self.generate_equations_for_expression(right);
+                self.infer_expression(left)?;
+                self.infer_expression(right)?;
 
+                let left_var = self.var_lookup[&left._id];
+                let right_var = self.var_lookup[&right._id];
                 use self::BinOp::*;
                 match op {
                     Eq => {
-                        self.equations
-                            .push(TypeEquation::new_symbolic(left._id, right._id, expr._id));
+                        self.unifier
+                            .add_equality(Ty::Infer(left_var), Ty::Infer(right_var))?;
+                        self.unifier
+                            .add_constraint(left_var, GenericTypeConstraint::Equality)?;
                     }
                     Add => {
-                        self.equations
-                            .push(TypeEquation::new_symbolic(left._id, right._id, expr._id));
+                        self.unifier
+                            .add_equality(Ty::Infer(left_var), Ty::Infer(right_var))?;
+                        self.unifier
+                            .add_constraint(left_var, GenericTypeConstraint::Numeric)?;
                     }
                     _ => {
                         println!("{}", op);
@@ -282,60 +287,50 @@ impl<'a> TypeAnalysis<'a> {
             // discrete offset
             Lookup(stream, Offset::DiscreteOffset(off_expr), None) => {
                 // recursion
-                self.generate_equations_for_expression(off_expr);
+                self.infer_expression(off_expr)?;
+                let off_var = self.var_lookup[&off_expr._id];
+
+                let stream_var = self.new_var(stream._id);
 
                 // constraints
                 // off_expr = {integer}
                 // stream = EventStream<?1>
                 // expr = Option<?1>
-                self.equations.push(TypeEquation::new_constraint(
-                    off_expr._id,
-                    GenericTypeConstraint::Integer,
-                    expr._id,
-                ));
+                self.unifier
+                    .add_constraint(off_var, GenericTypeConstraint::Integer)?;
                 // need to derive "inner" type `?1`
-                let decl = match self.declarations.get(&stream._id) {
-                    Some(decl) => decl,
-                    None => return, // TODO: check if error message is needed
-                };
-                let inner_ty: NodeId = match decl {
-                    Declaration::In(input) => input.ty._id,
+                let decl = self.declarations[&stream._id];
+                let inner_var: InferVar = match decl {
+                    Declaration::In(input) => self.var_lookup[&input.ty._id],
                     Declaration::Out(_) => unimplemented!(),
                     Declaration::Const(_) => unimplemented!(),
                     _ => unreachable!(),
                 };
-                self.equations.push(TypeEquation::new_concrete(
-                    stream._id,
-                    Ty::EventStream(Box::new(Ty::Infer(inner_ty))),
-                    expr._id,
-                ));
-                self.equations.push(TypeEquation::new_concrete(
-                    expr._id,
-                    Ty::Option(Box::new(Ty::Infer(inner_ty))),
-                    expr._id,
-                ));
+                self.unifier.add_equality(
+                    Ty::Infer(stream_var),
+                    Ty::EventStream(Box::new(Ty::Infer(inner_var))),
+                )?;
+                self.unifier
+                    .add_equality(Ty::Infer(var), Ty::Option(Box::new(Ty::Infer(inner_var))))?;
             }
             Default(left, right) => {
                 // recursion
-                self.generate_equations_for_expression(left);
-                self.generate_equations_for_expression(right);
+                self.infer_expression(left);
+                self.infer_expression(right);
+
+                let left_var = self.var_lookup[&left._id];
+                let right_var = self.var_lookup[&right._id];
 
                 // constraints
                 // left = Option<expr>
-                // right = expr
-                self.equations.push(TypeEquation::new_concrete(
-                    left._id,
-                    Ty::Option(Box::new(Ty::Infer(expr._id))),
-                    expr._id,
-                ));
-                self.equations
-                    .push(TypeEquation::new_symbolic(right._id, expr._id, expr._id));
+                // expr = right
+                self.unifier
+                    .add_equality(Ty::Infer(left_var), Ty::Option(Box::new(Ty::Infer(var))))?;
+                self.unifier
+                    .add_equality(Ty::Infer(var), Ty::Infer(right_var))?;
             }
             Function(_, params) => {
-                let decl = match self.declarations.get(&expr._id) {
-                    Some(decl) => decl,
-                    None => return,
-                };
+                let decl = self.declarations[&expr._id];
                 let fun_decl = match decl {
                     Declaration::Func(fun_decl) => fun_decl,
                     _ => unreachable!("expected function declaration"),
@@ -345,55 +340,66 @@ impl<'a> TypeAnalysis<'a> {
 
                 // recursion
                 for param in params {
-                    self.generate_equations_for_expression(param);
+                    self.infer_expression(param);
                 }
 
-                // generic type arguments, stores first occurrence to implement equality over all occurrences
-                // Note: it would be more elegant to create new symbolic names for generics, but this is currently not possible
-                // TODO: one has to check the infered type whether it satisfies the given constraint
-                let mut generics: Vec<Option<NodeId>> = vec![None; fun_decl.generics.len()];
+                // build symbolic names for generic arguments
+                let generics: Vec<InferVar> = fun_decl
+                    .generics
+                    .iter()
+                    .map(|gen| {
+                        let var = self.unifier.new_var();
+                        self.unifier
+                            .add_constraint(var, gen.constraint)
+                            .expect("cannot fail as var is freshly created");
+                        var
+                    })
+                    .collect();
+
                 for (type_param, parameter) in fun_decl.parameters.iter().zip(params) {
+                    let param_var = self.var_lookup[&parameter._id];
                     match type_param {
                         Parameter::Generic(num) => {
-                            if let Some(other) = generics[*num as usize] {
-                                // generic type has been used as argument before
-                                self.equations.push(TypeEquation::new_symbolic(
-                                    other,
-                                    parameter._id,
-                                    expr._id,
-                                ))
-                            } else {
-                                generics[*num as usize] = Some(parameter._id);
-                            }
+                            // ?generic = ?type_var
+                            self.unifier.add_equality(
+                                Ty::Infer(generics[*num as usize]),
+                                Ty::Infer(param_var),
+                            )?;
                         }
-                        Parameter::Type(ty) => self.equations.push(TypeEquation::new_concrete(
-                            parameter._id,
-                            ty.clone(),
-                            expr._id,
-                        )),
+                        Parameter::Type(ty) => {
+                            // ?param_var = `ty`
+                            self.unifier
+                                .add_equality(Ty::Infer(param_var), ty.clone())?;
+                        }
                     }
                 }
                 // return type
                 match fun_decl.return_type {
                     Parameter::Generic(num) => {
-                        if let Some(other) = generics[num as usize] {
-                            // generic type has been used as argument before
-                            self.equations
-                                .push(TypeEquation::new_symbolic(other, expr._id, expr._id))
-                        }
+                        // ?generic = ?var
+                        self.unifier
+                            .add_equality(Ty::Infer(generics[num as usize]), Ty::Infer(var))?;
                     }
-                    Parameter::Type(ref ty) => self.equations.push(TypeEquation::new_concrete(
-                        expr._id,
-                        ty.clone(),
-                        expr._id,
-                    )),
+                    Parameter::Type(ref ty) => {
+                        // ?param_var = `ty`
+                        self.unifier.add_equality(Ty::Infer(var), ty.clone())?;
+                    }
                 }
             }
-            Method(base, _, params) => {
+            Method(base, name, params) => {
                 // recursion
-                self.generate_equations_for_expression(base);
+                self.infer_expression(base)?;
+
+                let infered = self.unifier.get_type(self.var_lookup[&base._id]);
+                println!("{} {} {}", base, infered, infered.is_error());
+                if !infered.is_error() {
+                    if let Some(fun_decl) = self.method_lookup.get(&infered, name.name.as_str()) {
+                        println!("{:?}", fun_decl);
+                    }
+                }
+
                 for param in params {
-                    self.generate_equations_for_expression(param);
+                    self.infer_expression(param)?;
                 }
 
                 // save for later inspection
@@ -401,29 +407,31 @@ impl<'a> TypeAnalysis<'a> {
             }
             _ => unimplemented!(),
         }
-    }
-
-    /// Computes the most general unifier.
-    fn unify_equations(&mut self) -> Substitution {
-        let mut substitution = Substitution::new();
-        for equation in &self.equations {
-            if !substitution.unify(&equation.lhs, &equation.rhs) {
-                error!("failed to unify {} {}", equation.lhs, equation.rhs);
-            }
-        }
-        substitution
+        Ok(())
     }
 
     /// Assigns types as infered
-    fn assign_types(&mut self, spec: &LolaSpec, subst: &Substitution) {
+    fn assign_types(&mut self, spec: &LolaSpec) {
         for constant in &spec.constants {
-            debug!("{} has type {}", constant, subst.get_type(constant._id));
+            debug!(
+                "{} has type {}",
+                constant,
+                self.unifier.get_type(self.var_lookup[&constant._id])
+            );
         }
         for input in &spec.inputs {
-            debug!("{} has type {}", input, subst.get_type(input._id));
+            debug!(
+                "{} has type {}",
+                input,
+                self.unifier.get_type(self.var_lookup[&input._id])
+            );
         }
         for output in &spec.outputs {
-            debug!("{} has type {}", output, subst.get_type(output._id));
+            debug!(
+                "{} has type {}",
+                output,
+                self.unifier.get_type(self.var_lookup[&output._id])
+            );
         }
     }
 }
@@ -435,47 +443,138 @@ enum ConstraintOrType {
 
 /// We have two types of constraints, equality constraints and subtype constraints
 struct Unifier {
-    /// current state of the unification, mapping from variables to types
-    substitutions: HashMap<InferVar, Ty>,
+    /// union-find data structure representing the current state of the unification
+    table: InPlaceUnificationTable<InferVar>,
     /// constraints associated with inference variables, if any
     constraints: HashMap<InferVar, GenericTypeConstraint>,
-    next_variable_id: u32,
 }
 
 impl Unifier {
     fn new() -> Unifier {
         Unifier {
-            substitutions: HashMap::new(),
+            table: UnificationTable::new(),
             constraints: HashMap::new(),
-            next_variable_id: 0,
         }
     }
 
     fn new_var(&mut self) -> InferVar {
-        let res = InferVar(self.next_variable_id);
-        self.next_variable_id += 1;
-        res
+        self.table.new_key(None)
     }
 
     fn add_equality(&mut self, left: Ty, right: Ty) -> InferResult {
-        debug!("unify {} {}", left, right);
+        debug!("unify ty ty {} {}", left, right);
+        assert!(left != right);
 
-        unimplemented!();
+        match (left, right) {
+            (Ty::Infer(l), Ty::Infer(r)) => self
+                .table
+                .unify_var_var(l, r)
+                .map_err(|(ty_l, ty_r)| format!("cannot merge types {} and {}", ty_l, ty_r)),
+            (Ty::Infer(n), ty) => self.unify_var_type(n, ty),
+            (ty, Ty::Infer(n)) => self.unify_var_type(n, ty),
+            (_, _) => unreachable!(),
+        }
     }
 
-    fn add_constraint(&mut self, var: InferVar, constr: GenericTypeConstraint) {
+    fn unify_var_type(&mut self, var: InferVar, ty: Ty) -> InferResult {
+        debug!("unify var ty {} {}", var, ty);
+        match &ty {
+            Ty::Infer(_) => unreachable!(),
+            _ => {}
+        }
+        if self.check_occurrence(var, &ty) {
+            return Err(format!("unification impossible, `var` occurs in `ty`"));
+        }
+        match self.table.unify_var_value(var, Some(ty)) {
+            Ok(_) => Ok(()),
+            Err((ty_l, ty_r)) => {
+                if self.types_equal_rec(&ty_l, &ty_r) {
+                    Ok(())
+                } else {
+                    Err(format!("cannot merge types {} and {}", ty_l, ty_r))
+                }
+            }
+        }
+    }
+
+    /// Checks if `var` occurs in `ty`
+    fn check_occurrence(&mut self, var: InferVar, ty: &Ty) -> bool {
+        trace!("check occurrence {} {}", var, ty);
+        match ty {
+            Ty::Infer(t) => self.table.unioned(var, *t),
+            Ty::EventStream(ty) => self.check_occurrence(var, &ty),
+            Ty::TimedStream(_) => unimplemented!(),
+            Ty::Tuple(_) => unimplemented!(),
+            _ => false,
+        }
+    }
+
+    fn types_equal_rec(&mut self, left: &Ty, right: &Ty) -> bool {
+        println!("comp {} {}", left, right);
+        match (left, right) {
+            (&Ty::Infer(l), &Ty::Infer(r)) => {
+                if self.table.unioned(l, r) {
+                    true
+                } else {
+                    // try to unify values
+                    self.table.unify_var_var(l, r).is_ok()
+                }
+            }
+            (Ty::Option(l), Ty::Option(r)) => self.types_equal_rec(l, r),
+            (Ty::EventStream(l), Ty::EventStream(r)) => self.types_equal_rec(l, r),
+            (l, r) => l == r,
+        }
+    }
+
+    fn add_constraint(&mut self, var: InferVar, constr: GenericTypeConstraint) -> InferResult {
         debug!("constraint {} {}", var, constr);
-        assert!(self.constraints.get(&var) == None);
-        self.constraints.insert(var, constr);
+        if let Some(&other) = self.constraints.get(&var) {
+            if other != constr {
+                return Err(format!(
+                    "unsatisfiable conjunction of constraint {} and {}",
+                    other, constr
+                ));
+            }
+        } else {
+            self.constraints.insert(var, constr);
+        }
+        Ok(())
     }
 
-    fn normalize(&self, ty: Ty) -> Option<Ty> {
-        unimplemented!();
+    fn get_type(&mut self, var: InferVar) -> Ty {
+        match self.table.probe_value(var) {
+            None => Ty::Error,
+            Some(Ty::Infer(other)) => self.get_type(other),
+            Some(Ty::EventStream(ty)) => {
+                let inner = match *ty {
+                    Ty::Infer(other) => self.get_type(other),
+                    ref t => t.clone(),
+                };
+                Ty::EventStream(Box::new(inner))
+            }
+            Some(t) => t.clone(),
+        }
     }
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Copy, Clone)]
 pub struct InferVar(u32);
+
+// used in UnifcationTable
+impl UnifyKey for InferVar {
+    type Value = Option<Ty>;
+    fn index(&self) -> u32 {
+        self.0
+    }
+    fn from_index(u: u32) -> InferVar {
+        InferVar(u)
+    }
+    fn tag() -> &'static str {
+        "InferVar"
+    }
+}
+
+impl EqUnifyValue for Ty {}
 
 impl std::fmt::Display for InferVar {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -484,166 +583,6 @@ impl std::fmt::Display for InferVar {
 }
 
 type InferResult = Result<(), String>;
-
-struct Substitution {
-    map: HashMap<NodeId, TypeRef>,
-}
-
-impl Substitution {
-    fn new() -> Substitution {
-        Substitution {
-            map: HashMap::new(),
-        }
-    }
-
-    /// Unify to types under the given substitution.
-    /// Returns false if there is no substitution.
-    fn unify(&mut self, left: &TypeRef, right: &TypeRef) -> bool {
-        trace!("unify {} {}", left, right);
-        if left == right {
-            return true;
-        }
-        use self::TypeRef::*;
-        match (left, right) {
-            (Type(Ty::Infer(n)), _) => self.unify_variable(n, right),
-            (_, Type(Ty::Infer(n))) => self.unify_variable(n, left),
-            (Type(ty), Constraint(c)) => ty.satisfies(*c),
-            (Type(Ty::Option(ty1)), Type(Ty::Option(ty2))) => self.unify(
-                &TypeRef::Type((**ty1).clone()),
-                &TypeRef::Type((**ty2).clone()),
-            ),
-            _ => {
-                println!("{} {}", left, right);
-                unimplemented!()
-            }
-        }
-    }
-
-    /// Unifies variable n with type def using current substitutions.
-    /// Returns false if there is no substitution.
-    fn unify_variable(&mut self, n: &NodeId, def: &TypeRef) -> bool {
-        trace!("unify variable {} {}", n, def);
-        if self.map.contains_key(n) {
-            let val = &self.map[n].clone();
-            return self.unify(val, def);
-        }
-        if let TypeRef::Type(Ty::Infer(t)) = def {
-            if self.map.contains_key(t) {
-                let val = &self.map[t].clone();
-                return self.unify(&TypeRef::Type(Ty::Infer(*n)), val);
-            }
-        }
-        if self.check_occurrence(n, def) {
-            false
-        } else {
-            // update substitution
-            self.map.insert(*n, def.clone());
-            true
-        }
-    }
-
-    /// Does the variable `n` occur anywhere inside def?
-    fn check_occurrence(&self, n: &NodeId, def: &TypeRef) -> bool {
-        trace!("check occurrence {} {}", n, def);
-        match def {
-            TypeRef::Type(Ty::Infer(t)) if t == n => true,
-            TypeRef::Type(Ty::Infer(t)) if self.map.contains_key(t) => {
-                assert!(t != n);
-                // recursion
-                self.check_occurrence(n, &self.map[t])
-            }
-            TypeRef::Type(Ty::EventStream(ty)) => {
-                self.check_occurrence(n, &TypeRef::Type(*ty.clone()))
-            }
-            TypeRef::Type(Ty::TimedStream(_)) => unimplemented!(),
-            TypeRef::Type(Ty::Tuple(_)) => unimplemented!(),
-            _ => false,
-        }
-    }
-
-    fn get_type(&self, nid: NodeId) -> Ty {
-        if let Some(ty_ref) = self.map.get(&nid) {
-            match ty_ref {
-                TypeRef::Type(Ty::EventStream(ty)) => {
-                    let inner = match **ty {
-                        Ty::Infer(other) => self.get_type(other),
-                        ref t => t.clone(),
-                    };
-                    Ty::EventStream(Box::new(inner))
-                }
-                TypeRef::Type(Ty::Infer(other_nid)) => self.get_type(*other_nid),
-                TypeRef::Type(ty) => ty.clone(),
-                TypeRef::Constraint(_) => Ty::Error,
-            }
-        } else {
-            Ty::Error
-        }
-    }
-}
-
-impl std::fmt::Display for Substitution {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        for (id, ty) in self.map.iter() {
-            writeln!(f, "{} -> {}", id, ty)?;
-        }
-        Ok(())
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-enum TypeRef {
-    Type(Ty),
-    Constraint(GenericTypeConstraint),
-}
-
-/// Asserts that `lhs` == `rhs` due to `orig`
-#[derive(Debug)]
-struct TypeEquation {
-    lhs: TypeRef,
-    rhs: TypeRef,
-    orig: NodeId,
-}
-
-impl std::fmt::Display for TypeRef {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            TypeRef::Type(ty) => write!(f, "{}", ty),
-            TypeRef::Constraint(c) => write!(f, "{{{}}}", c),
-        }
-    }
-}
-
-impl std::fmt::Display for TypeEquation {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{} == {}\t\t|\t{}", self.lhs, self.rhs, self.orig)
-    }
-}
-
-impl TypeEquation {
-    fn new_symbolic(lhs: NodeId, rhs: NodeId, orig: NodeId) -> TypeEquation {
-        TypeEquation {
-            lhs: TypeRef::Type(Ty::Infer(lhs)),
-            rhs: TypeRef::Type(Ty::Infer(rhs)),
-            orig,
-        }
-    }
-
-    fn new_concrete(lhs: NodeId, rhs: Ty, orig: NodeId) -> TypeEquation {
-        TypeEquation {
-            lhs: TypeRef::Type(Ty::Infer(lhs)),
-            rhs: TypeRef::Type(rhs),
-            orig,
-        }
-    }
-
-    fn new_constraint(lhs: NodeId, rhs: GenericTypeConstraint, orig: NodeId) -> TypeEquation {
-        TypeEquation {
-            lhs: TypeRef::Type(Ty::Infer(lhs)),
-            rhs: TypeRef::Constraint(rhs),
-            orig,
-        }
-    }
-}
 
 #[cfg(test)]
 mod tests {

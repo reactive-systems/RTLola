@@ -21,9 +21,7 @@ pub enum Ty {
     /// an optional value type, e.g., accessing a stream with offset -1
     Option(Box<Ty>),
     /// Used during type inference
-    Infer(NodeId),
-    /// Used during type inference
-    NewInfer(InferVar),
+    Infer(InferVar),
     Error,
 }
 
@@ -127,7 +125,6 @@ impl std::fmt::Display for Ty {
             Ty::EventStream(ty) => write!(f, "EventStream<{}>", ty),
             Ty::Option(ty) => write!(f, "Option<{}>", ty),
             Ty::Infer(id) => write!(f, "?{}", id),
-            Ty::NewInfer(id) => write!(f, "?{}", id),
             Ty::Error => write!(f, "Error"),
             _ => unimplemented!(),
         }
@@ -140,6 +137,10 @@ pub enum GenericTypeConstraint {
     SignedInteger,
     UnsignedInteger,
     FloatingPoint,
+    /// integer + floating point
+    Numeric,
+    /// Types that implement `==`
+    Equality,
     Unconstrained,
 }
 
@@ -149,6 +150,8 @@ impl std::fmt::Display for GenericTypeConstraint {
         match self {
             Integer => write!(f, "integer"),
             FloatingPoint => write!(f, "floating point"),
+            Numeric => write!(f, "numeric"),
+            Equality => write!(f, "equality"),
             _ => unimplemented!(),
         }
     }
