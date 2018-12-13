@@ -45,6 +45,7 @@ pub struct InputStream {
     pub ty: Type,
     _values_to_memorize: MemorizationBound,
     _eval_layer: u16,
+    reference: StreamReference,
 }
 
 /// Represents an output stream in a Lola specification.
@@ -59,6 +60,8 @@ pub struct OutputStream {
     pub evaluation_rand: usize,
     _values_to_memorize: MemorizationBound,
     _eval_layer: u16,
+
+    reference: StreamReference,
 }
 
 #[derive(Debug)]
@@ -268,6 +271,7 @@ pub trait Stream {
     fn eval_layer(&self) -> u16;
     fn is_input(&self) -> bool;
     fn values_to_memorize(&self) -> MemorizationBound;
+    fn as_stream_ref(&self) -> StreamReference;
 }
 
 ////////// Implementations //////////
@@ -297,6 +301,9 @@ impl Stream for OutputStream {
     fn values_to_memorize(&self) -> MemorizationBound {
         self._values_to_memorize
     }
+    fn as_stream_ref(&self) -> StreamReference {
+        self.reference
+    }
 }
 
 impl Stream for InputStream {
@@ -308,6 +315,9 @@ impl Stream for InputStream {
     }
     fn values_to_memorize(&self) -> MemorizationBound {
         self._values_to_memorize
+    }
+    fn as_stream_ref(&self) -> StreamReference {
+        self.reference
     }
 }
 
