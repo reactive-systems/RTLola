@@ -10,14 +10,14 @@ mod id_assignment;
 mod lola_version;
 mod naming;
 mod type_checker;
-mod typing;
+pub(crate) mod typing;
 
 use self::lola_version::LolaVersionAnalysis;
 use self::naming::NamingAnalysis;
 use super::ast::LolaSpec;
-use analysis::typing::TypeAnalysis;
 use crate::parse::SourceMapper;
 use crate::reporting::Handler;
+use analysis::typing::TypeAnalysis;
 
 pub trait AnalysisError<'a>: std::fmt::Debug {}
 

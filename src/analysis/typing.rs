@@ -9,7 +9,7 @@ use crate::stdlib::{MethodLookup, Parameter};
 use crate::ty::{GenericTypeConstraint, Ty};
 use analysis::naming::{Declaration, DeclarationTable};
 use analysis::reporting::Handler;
-use ast::{BinOp, Expression, ExpressionKind, Literal, Offset, TypeKind};
+use ast::{BinOp, Constant, Expression, ExpressionKind, Literal, Offset, TypeKind};
 use ast_node::NodeId;
 use std::collections::HashMap;
 
@@ -21,6 +21,9 @@ pub(crate) struct TypeAnalysis<'a> {
     /// unresolved method calls
     method_calls: Vec<&'a Expression>,
     method_lookup: MethodLookup,
+    unifier: Unifier,
+    /// maps `NodeId`'s to the variables used in `unifier`
+    var_lookup: HashMap<NodeId, InferVar>,
 }
 
 impl<'a> TypeAnalysis<'a> {
@@ -34,10 +37,16 @@ impl<'a> TypeAnalysis<'a> {
             equations: Vec::new(),
             method_calls: Vec::new(),
             method_lookup: MethodLookup::new(),
+            unifier: Unifier::new(),
+            var_lookup: HashMap::new(),
         }
     }
 
     pub(crate) fn check(&mut self, spec: &'a LolaSpec) {
+        self.infer_types(spec);
+
+        unimplemented!();
+
         self.add_equations(spec);
 
         debug!("Equations:");
@@ -68,6 +77,40 @@ impl<'a> TypeAnalysis<'a> {
         self.assign_types(spec, &subst);
 
         unimplemented!();
+    }
+
+    fn infer_types(&mut self, spec: &'a LolaSpec) {
+        for constant in &spec.constants {
+            self.infer_constant(constant).unwrap_or_else(|e| {
+                panic!("type inference failed: {}", e);
+            });
+        }
+    }
+
+    fn infer_constant(&mut self, constant: &'a Constant) -> Result<(), String> {
+        trace!("infer type for {}", constant);
+        assert!(!self.var_lookup.contains_key(&constant._id));
+        let var = self.unifier.new_var();
+
+        // generate constraint in case a type is annotated
+        if let Some(type_name) = constant.ty.as_ref() {
+            assert!(!self.var_lookup.contains_key(&type_name._id));
+
+            if let Some(ty) = self.declarations.get(&type_name._id) {
+                match ty {
+                    Declaration::Type(ty) => self
+                        .unifier
+                        .add_equality(Ty::NewInfer(var), (*ty).clone())?,
+                    _ => unreachable!(),
+                }
+            }
+        }
+        // generate constraint from literal
+        match self.get_constraint_for_literal(&constant.literal) {
+            ConstraintOrType::Type(ty) => self.unifier.add_equality(Ty::NewInfer(var), ty)?,
+            ConstraintOrType::Constraint(constr) => self.unifier.add_constraint(var, constr),
+        };
+        Ok(())
     }
 
     fn add_equations(&mut self, spec: &'a LolaSpec) {
@@ -158,6 +201,16 @@ impl<'a> TypeAnalysis<'a> {
             Float(_) => {
                 TypeEquation::new_constraint(node, GenericTypeConstraint::FloatingPoint, lit._id)
             }
+        }
+    }
+
+    fn get_constraint_for_literal(&self, lit: &Literal) -> ConstraintOrType {
+        use ast::LitKind::*;
+        match lit.kind {
+            Str(_) | RawStr(_) => ConstraintOrType::Type(Ty::String),
+            Bool(_) => ConstraintOrType::Type(Ty::Bool),
+            Int(_) => ConstraintOrType::Constraint(GenericTypeConstraint::Integer),
+            Float(_) => ConstraintOrType::Constraint(GenericTypeConstraint::FloatingPoint),
         }
     }
 
@@ -374,6 +427,63 @@ impl<'a> TypeAnalysis<'a> {
     }
 }
 
+enum ConstraintOrType {
+    Type(Ty),
+    Constraint(GenericTypeConstraint),
+}
+
+/// We have two types of constraints, equality constraints and subtype constraints
+struct Unifier {
+    /// current state of the unification, mapping from variables to types
+    substitutions: HashMap<InferVar, Ty>,
+    /// constraints associated with inference variables, if any
+    constraints: HashMap<InferVar, GenericTypeConstraint>,
+    next_variable_id: u32,
+}
+
+impl Unifier {
+    fn new() -> Unifier {
+        Unifier {
+            substitutions: HashMap::new(),
+            constraints: HashMap::new(),
+            next_variable_id: 0,
+        }
+    }
+
+    fn new_var(&mut self) -> InferVar {
+        let res = InferVar(self.next_variable_id);
+        self.next_variable_id += 1;
+        res
+    }
+
+    fn add_equality(&mut self, left: Ty, right: Ty) -> InferResult {
+        debug!("unify {} {}", left, right);
+
+        unimplemented!();
+    }
+
+    fn add_constraint(&mut self, var: InferVar, constr: GenericTypeConstraint) {
+        debug!("constraint {} {}", var, constr);
+        assert!(self.constraints.get(&var) == None);
+        self.constraints.insert(var, constr);
+    }
+
+    fn normalize(&self, ty: Ty) -> Option<Ty> {
+        unimplemented!();
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Hash, Copy, Clone)]
+pub struct InferVar(u32);
+
+impl std::fmt::Display for InferVar {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+type InferResult = Result<(), String>;
+
 struct Substitution {
     map: HashMap<NodeId, TypeRef>,
 }
@@ -561,6 +671,12 @@ mod tests {
         let mut type_analysis = TypeAnalysis::new(&handler, &na.result);
         type_analysis.check(&spec);
         handler.emitted_errors()
+    }
+
+    #[test]
+    fn simple_constant() {
+        let spec = "constant c: Float32 := 2.0";
+        assert_eq!(0, num_type_errors(spec));
     }
 
     #[test]

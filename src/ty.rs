@@ -2,6 +2,7 @@
 //!
 //! It is inspired by https://doc.rust-lang.org/nightly/nightly-rustc/rustc/ty/index.html
 
+use crate::analysis::typing::InferVar;
 use ast_node::NodeId;
 
 /// Representation of types
@@ -21,6 +22,8 @@ pub enum Ty {
     Option(Box<Ty>),
     /// Used during type inference
     Infer(NodeId),
+    /// Used during type inference
+    NewInfer(InferVar),
     Error,
 }
 
@@ -124,6 +127,7 @@ impl std::fmt::Display for Ty {
             Ty::EventStream(ty) => write!(f, "EventStream<{}>", ty),
             Ty::Option(ty) => write!(f, "Option<{}>", ty),
             Ty::Infer(id) => write!(f, "?{}", id),
+            Ty::NewInfer(id) => write!(f, "?{}", id),
             Ty::Error => write!(f, "Error"),
             _ => unimplemented!(),
         }
