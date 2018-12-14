@@ -17,7 +17,9 @@ use crate::stdlib::{FuncDecl, MethodLookup, Parameter};
 use crate::ty::{Ty, TypeConstraint};
 use ast_node::NodeId;
 use ast_node::Span;
-use ena::unify::{EqUnifyValue, InPlaceUnificationTable, UnificationTable, UnifyKey};
+use ena::unify::{
+    EqUnifyValue, InPlaceUnificationTable, NoError, UnificationTable, UnifyKey, UnifyValue,
+};
 use log::{debug, trace};
 use std::collections::HashMap;
 
@@ -126,24 +128,33 @@ impl<'a> TypeAnalysis<'a> {
         let var = self.new_var(input._id);
         let ty_var = self.new_var(input.ty._id);
 
-        if let Some(ty) = self.declarations.get(&input.ty._id) {
-            match ty {
-                Declaration::Type(ty) => {
-                    // constraints:
-                    // - ?ty_var = `ty`
-                    // - ?var = EventStream<?ty_var>
-                    self.unifier
-                        .unify_var_ty(ty_var, (*ty).clone())
-                        .map_err(|err| self.handle_error(err, input.ty._span))?;
-                    self.unifier
-                        .unify_var_ty(var, Ty::EventStream(Box::new(Ty::Infer(ty_var))))
-                        .map_err(|err| self.handle_error(err, input.name.span))
+        match &input.ty.kind {
+            TypeKind::Simple(_) => {
+                let ty = self.declarations[&input.ty._id];
+                match ty {
+                    Declaration::Type(ty) => {
+                        // constraints:
+                        // - ?ty_var = `ty`
+                        // - ?var = EventStream<?ty_var>
+                        self.unifier
+                            .unify_var_ty(ty_var, (*ty).clone())
+                            .map_err(|err| self.handle_error(err, input.ty._span))?;
+                    }
+                    _ => unreachable!(),
                 }
-                _ => unreachable!(),
             }
-        } else {
-            unreachable!();
+            TypeKind::Tuple(tuple) => {
+                let ty = self.get_tuple_type(tuple);
+                // ?ty_var = `ty`
+                self.unifier
+                    .unify_var_ty(ty_var, ty)
+                    .map_err(|err| self.handle_error(err, input.ty._span))?;
+            }
+            _ => unreachable!(),
         }
+        self.unifier
+            .unify_var_ty(var, Ty::EventStream(Box::new(Ty::Infer(ty_var))))
+            .map_err(|err| self.handle_error(err, input.name.span))
     }
 
     fn infer_output(&mut self, output: &'a Output) -> Result<(), ()> {
@@ -439,9 +450,9 @@ impl<'a> TypeAnalysis<'a> {
                 self.infer_expression(base)?;
 
                 if let Some(infered) = self.unifier.get_type(self.var_lookup[&base._id]) {
-                    println!("{} {}", base, infered);
+                    debug!("{} {}", base, infered);
                     if let Some(fun_decl) = self.method_lookup.get(&infered, name.name.as_str()) {
-                        println!("{:?}", fun_decl);
+                        debug!("{:?}", fun_decl);
 
                         // recursion
                         for param in params {
@@ -485,7 +496,41 @@ impl<'a> TypeAnalysis<'a> {
                     )
                     .map_err(|err| self.handle_error(err, expr._span))?;
             }
-            _ => unimplemented!(),
+            Field(base, ident) => {
+                // recursion
+                self.infer_expression(base)?;
+
+                if let Some(infered) = self.unifier.get_type(self.var_lookup[&base._id]) {
+                    debug!("{} {}", base, infered);
+                    match infered {
+                        Ty::Tuple(inner) => {
+                            let num: usize = ident
+                                .name
+                                .parse::<usize>()
+                                .expect("verify that this is checked earlier");
+                            if num >= inner.len() {
+                                self.handler.error_with_span(
+                                    &format!("Try to access tuple at position {}", num),
+                                    LabeledSpan::new(ident.span, "", true),
+                                );
+                                return Err(());
+                            }
+                            // ?var = inner[num]
+                            self.unifier
+                                .unify_var_ty(var, inner[num].clone())
+                                .map_err(|err| self.handle_error(err, expr._span))?;
+                        }
+                        _ => {
+                            self.handler.error_with_span(
+                                &format!("Type `{}` has no field `{}`", infered, ident.name),
+                                LabeledSpan::new(ident.span, "unknown field", true),
+                            );
+                            return Err(());
+                        }
+                    }
+                }
+            }
+            t => unimplemented!("expression `{:?}`", t),
         }
         Ok(())
     }
@@ -677,9 +722,7 @@ impl Unifier {
         match (self.table.probe_value(left), self.table.probe_value(right)) {
             (Some(ty_l), Some(ty_r)) => {
                 if self.types_equal_rec(&ty_l, &ty_r) {
-                    self.table
-                        .unify_var_value(right, None)
-                        .expect("erasing types should not fail");
+                    return Ok(());
                 } else {
                     return Err(InferError::TypeMismatch(ty_l, ty_r));
                 }
@@ -857,6 +900,27 @@ impl UnifyKey for InferVar {
     }
     fn tag() -> &'static str {
         "InferVar"
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+enum TypeVariableValue {
+    Known(Ty),
+    Unknown,
+}
+
+impl UnifyValue for TypeVariableValue {
+    type Error = NoError;
+    fn unify_values(left: &Self, right: &Self) -> Result<Self, NoError> {
+        use self::TypeVariableValue::*;
+        match (left, right) {
+            (Known(_), Known(_)) => {
+                unreachable!("Never relate two known types");
+            }
+            (Known(_), Unknown) => Ok(left.clone()),
+            (Unknown, Known(_)) => Ok(right.clone()),
+            (Unknown, Unknown) => Ok(Unknown),
+        }
     }
 }
 
