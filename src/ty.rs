@@ -131,10 +131,14 @@ impl std::fmt::Display for Ty {
             Ty::Float(F64) => write!(f, "Float64"),
             Ty::String => write!(f, "String"),
             Ty::EventStream(ty) => write!(f, "EventStream<{}>", ty),
+            Ty::TimedStream(_) => unimplemented!(),
             Ty::Option(ty) => write!(f, "Option<{}>", ty),
+            Ty::Tuple(inner) => {
+                let joined: Vec<String> = inner.iter().map(|e| format!("{}", e)).collect();
+                write!(f, "({})", joined.join(", "))
+            }
             Ty::Infer(id) => write!(f, "?{}", id),
             Ty::Error => write!(f, "Error"),
-            _ => unimplemented!(),
         }
     }
 }

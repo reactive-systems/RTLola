@@ -8,7 +8,9 @@
 
 use super::naming::{Declaration, DeclarationTable};
 use crate::ast::LolaSpec;
-use crate::ast::{BinOp, Constant, Expression, Input, Literal, Offset, Output, TypeKind, UnOp};
+use crate::ast::{
+    BinOp, Constant, Expression, Input, Literal, Offset, Output, Type, TypeKind, UnOp,
+};
 use crate::reporting::Handler;
 use crate::reporting::LabeledSpan;
 use crate::stdlib::{FuncDecl, MethodLookup, Parameter};
@@ -153,21 +155,24 @@ impl<'a> TypeAnalysis<'a> {
         match &output.ty.kind {
             TypeKind::Inferred => {}
             TypeKind::Simple(_) => {
-                if let Some(ty) = self.declarations.get(&output.ty._id) {
-                    match ty {
-                        // ?ty_var = `ty`
-                        Declaration::Type(ty) => {
-                            self.unifier
-                                .unify_var_ty(ty_var, (*ty).clone())
-                                .map_err(|err| self.handle_error(err, output.ty._span))?;
-                        }
-                        _ => unreachable!(),
+                let ty = self.declarations[&output.ty._id];
+                match ty {
+                    // ?ty_var = `ty`
+                    Declaration::Type(ty) => {
+                        self.unifier
+                            .unify_var_ty(ty_var, (*ty).clone())
+                            .map_err(|err| self.handle_error(err, output.ty._span))?;
                     }
-                } else {
-                    unreachable!();
+                    _ => unreachable!(),
                 }
             }
-            TypeKind::Tuple(_) => unimplemented!("tuples are not yet implemented"),
+            TypeKind::Tuple(tuple) => {
+                let ty = self.get_tuple_type(tuple);
+                // ?ty_var = `ty`
+                self.unifier
+                    .unify_var_ty(ty_var, ty)
+                    .map_err(|err| self.handle_error(err, output.ty._span))?;
+            }
             TypeKind::Malformed(_) => unreachable!(),
         }
 
@@ -347,11 +352,9 @@ impl<'a> TypeAnalysis<'a> {
                             .map_err(|err| {
                                 self.handle_error(err, right._span);
                             })?;
-                        self.unifier
-                            .unify_ty_ty(Ty::Infer(new_var), Ty::Infer(var))
-                            .map_err(|err| {
-                                self.handle_error(err, expr._span);
-                            })?;
+                        self.unifier.unify_var_var(new_var, var).map_err(|err| {
+                            self.handle_error(err, expr._span);
+                        })?;
                     }
                     _ => {
                         println!("{}", op);
@@ -461,6 +464,27 @@ impl<'a> TypeAnalysis<'a> {
                     panic!("could not get type of `{}`", base);
                 }
             }
+            Tuple(expressions) => {
+                // recursion
+                for element in expressions {
+                    self.infer_expression(element)?;
+                }
+                // ?var = Tuple(?expr1, ?expr2, ..)
+                self.unifier
+                    .unify_var_ty(
+                        var,
+                        Ty::Tuple(
+                            expressions
+                                .iter()
+                                .map(|e| {
+                                    let infer_var = self.var_lookup[&e._id];
+                                    Ty::Infer(infer_var)
+                                })
+                                .collect(),
+                        ),
+                    )
+                    .map_err(|err| self.handle_error(err, expr._span))?;
+            }
             _ => unimplemented!(),
         }
         Ok(())
@@ -521,6 +545,24 @@ impl<'a> TypeAnalysis<'a> {
             }
         }
         Ok(())
+    }
+
+    fn get_tuple_type(&mut self, tuple: &[Box<Type>]) -> Ty {
+        let mut inner = Vec::new();
+        for t in tuple {
+            match t.kind {
+                TypeKind::Simple(_) => {
+                    let ty = self.declarations[&t._id];
+                    match ty {
+                        Declaration::Type(ty) => inner.push(ty.clone()),
+                        _ => unreachable!(),
+                    }
+                }
+                TypeKind::Tuple(_) => unimplemented!(),
+                _ => unreachable!(),
+            }
+        }
+        Ty::Tuple(inner)
     }
 
     /// Assigns types as infered
@@ -632,6 +674,18 @@ impl Unifier {
 
     fn unify_var_var(&mut self, left: InferVar, right: InferVar) -> InferResult {
         debug!("unify var var {} {}", left, right);
+        match (self.table.probe_value(left), self.table.probe_value(right)) {
+            (Some(ty_l), Some(ty_r)) => {
+                if self.types_equal_rec(&ty_l, &ty_r) {
+                    self.table
+                        .unify_var_value(right, None)
+                        .expect("erasing types should not fail");
+                } else {
+                    return Err(InferError::TypeMismatch(ty_l, ty_r));
+                }
+            }
+            _ => {}
+        }
         self.table
             .unify_var_var(left, right)
             .map_err(|(ty_l, ty_r)| InferError::TypeMismatch(ty_l, ty_r))?;
@@ -684,7 +738,7 @@ impl Unifier {
             Ty::Infer(t) => self.table.unioned(var, *t),
             Ty::EventStream(ty) => self.check_occurrence(var, &ty),
             Ty::TimedStream(_) => unimplemented!(),
-            Ty::Tuple(_) => unimplemented!(),
+            Ty::Tuple(t) => t.iter().any(|e| self.check_occurrence(var, e)),
             _ => false,
         }
     }
@@ -701,8 +755,25 @@ impl Unifier {
                     self.table.unify_var_var(l, r).is_ok()
                 }
             }
+            (&Ty::Infer(var), ty) => {
+                // try to unify
+                self.table.unify_var_value(var, Some(ty.clone())).is_ok()
+            }
+            (ty, &Ty::Infer(var)) => {
+                // try to unify
+                self.table.unify_var_value(var, Some(ty.clone())).is_ok()
+            }
             (Ty::Option(l), Ty::Option(r)) => self.types_equal_rec(l, r),
             (Ty::EventStream(l), Ty::EventStream(r)) => self.types_equal_rec(l, r),
+            (Ty::Tuple(l), Ty::Tuple(r)) => {
+                if l.len() != r.len() {
+                    return false;
+                }
+                l.iter()
+                    .zip(r)
+                    .all(|(e_l, e_r)| self.types_equal_rec(e_l, e_r))
+            }
+            (Ty::TimedStream(_), Ty::TimedStream(_)) => unimplemented!(),
             (l, r) => l == r,
         }
     }
