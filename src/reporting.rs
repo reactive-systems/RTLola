@@ -51,6 +51,16 @@ impl Handler {
         self.emitter.borrow_mut().emit(&self.mapper, &diagnostic)
     }
 
+    pub(crate) fn warn(&self, message: &str) {
+        self.emit(&Diagnostic {
+            level: Warning,
+            message: message.to_owned(),
+            span: Vec::new(),
+            children: vec![],
+            sort_spans: true,
+        });
+    }
+
     pub(crate) fn error(&self, message: &str) {
         self.emit(&Diagnostic {
             level: Error,

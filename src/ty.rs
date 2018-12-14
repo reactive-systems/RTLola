@@ -196,6 +196,8 @@ impl std::fmt::Display for TypeConstraint {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         use self::TypeConstraint::*;
         match self {
+            SignedInteger => write!(f, "signed integer"),
+            UnsignedInteger => write!(f, "unsigned integer"),
             Integer => write!(f, "integer"),
             FloatingPoint => write!(f, "floating point"),
             Numeric => write!(f, "numeric"),

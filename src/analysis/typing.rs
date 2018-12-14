@@ -51,7 +51,7 @@ impl<'a> TypeAnalysis<'a> {
         if self.handler.contains_error() {
             return;
         }
-        self.unifier.check_and_resolve_constraints();
+        self.unifier.check_and_resolve_constraints(self.handler);
 
         self.assign_types(spec);
     }
@@ -212,7 +212,11 @@ impl<'a> TypeAnalysis<'a> {
         match lit.kind {
             Str(_) | RawStr(_) => ConstraintOrType::Type(Ty::String),
             Bool(_) => ConstraintOrType::Type(Ty::Bool),
-            Int(_) => ConstraintOrType::Constraint(TypeConstraint::Integer),
+            Int(i) => ConstraintOrType::Constraint(if i < 0 {
+                TypeConstraint::SignedInteger
+            } else {
+                TypeConstraint::Integer
+            }),
             Float(_) => ConstraintOrType::Constraint(TypeConstraint::FloatingPoint),
         }
     }
@@ -394,8 +398,7 @@ impl<'a> TypeAnalysis<'a> {
                 let decl = self.declarations[&stream._id];
                 let inner_var: InferVar = match decl {
                     Declaration::In(input) => self.var_lookup[&input.ty._id],
-                    Declaration::Out(_) => unimplemented!(),
-                    Declaration::Const(_) => unimplemented!(),
+                    Declaration::Out(output) => self.var_lookup[&output.ty._id],
                     _ => unreachable!(),
                 };
                 self.unifier
@@ -873,7 +876,7 @@ impl Unifier {
         self.table.probe_value(var)
     }
 
-    fn check_and_resolve_constraints(&mut self) {
+    fn check_and_resolve_constraints(&mut self, handler: &Handler) {
         for (&var, &constr) in &self.constraints {
             debug!("{} :< {}", var, constr);
             if let Some(ty) = self.table.probe_value(var) {
@@ -885,6 +888,7 @@ impl Unifier {
                 self.table
                     .unify_var_value(var, Some(default))
                     .expect("variable has no value, i.e., unifcation should not fail");
+                handler.warn("some types were infered, consider using annotations instead");
             } else {
                 panic!("unbound variable {} with constraint {}", var, constr);
             }
