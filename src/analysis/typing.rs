@@ -150,9 +150,9 @@ impl<'a> TypeAnalysis<'a> {
 
         // generate constraint in case a type is annotated
         let ty_var = self.new_var(output.ty._id);
-        match output.ty.kind {
+        match &output.ty.kind {
             TypeKind::Inferred => {}
-            _ => {
+            TypeKind::Simple(_) => {
                 if let Some(ty) = self.declarations.get(&output.ty._id) {
                     match ty {
                         // ?ty_var = `ty`
@@ -167,6 +167,8 @@ impl<'a> TypeAnalysis<'a> {
                     unreachable!();
                 }
             }
+            TypeKind::Tuple(_) => unimplemented!("tuples are not yet implemented"),
+            TypeKind::Malformed(_) => unreachable!(),
         }
 
         // ?var = EventStream<?ty_var>
