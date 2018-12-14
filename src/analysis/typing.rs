@@ -9,7 +9,7 @@
 use super::naming::{Declaration, DeclarationTable};
 use crate::ast::LolaSpec;
 use crate::ast::{
-    BinOp, Constant, Expression, Input, Literal, Offset, Output, Type, TypeKind, UnOp,
+    BinOp, Constant, Expression, Input, Literal, Offset, Output, Type, TypeKind, UnOp, ExpressionKind, LitKind
 };
 use crate::reporting::Handler;
 use crate::reporting::LabeledSpan;
@@ -382,10 +382,24 @@ impl<'a> TypeAnalysis<'a> {
 
                 let stream_var = self.new_var(stream._id);
 
+                let negative_offset = match &off_expr.kind {
+                    ExpressionKind::Lit(l) => {
+                        match l.kind {
+                            LitKind::Int(i) => {
+                                i < 0
+                            }
+                            _ => {
+                                unreachable!("offset expressions have to be integers")
+                            }
+                        }
+                    },
+                    _ => unreachable!("offset expressions have to be literal"),
+                };
+
                 // constraints
                 // off_expr = {integer}
                 // stream = EventStream<?1>
-                // expr = Option<?1>
+                // if negative_offset { expr = Option<?1> } else { expr = ?1 }
                 self.unifier
                     .add_constraint(off_var, TypeConstraint::Integer)
                     .map_err(|err| {
@@ -403,11 +417,20 @@ impl<'a> TypeAnalysis<'a> {
                     .map_err(|err| {
                         self.handle_error(err, stream._span);
                     })?;
-                self.unifier
+                if negative_offset {
+self.unifier
                     .unify_var_ty(var, Ty::Option(Box::new(Ty::Infer(inner_var))))
                     .map_err(|err| {
                         self.handle_error(err, expr._span);
+                    })?;    
+                } else {
+                    self.unifier
+                    .unify_var_var(var, inner_var)
+                    .map_err(|err| {
+                        self.handle_error(err, expr._span);
                     })?;
+                }
+                
             }
             Default(left, right) => {
                 // recursion
