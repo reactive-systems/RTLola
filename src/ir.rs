@@ -456,7 +456,12 @@ impl OutputStream {
         unimplemented!()
     }
     fn get_dependencies(&self) -> Vec<StreamReference> {
-        let mut vec: Vec<StreamReference> = self.expr.stmts.iter().flat_map(|stm| get_dependencies(stm)).collect();
+        let mut vec: Vec<StreamReference> = self
+            .expr
+            .stmts
+            .iter()
+            .flat_map(|stm| get_dependencies(stm))
+            .collect();
         let set: HashSet<StreamReference> = vec.drain(..).collect();
         vec.extend(set.into_iter());
         vec
