@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 #[derive(Debug)]
 pub struct LolaIR {
     /// All input streams.
@@ -225,10 +227,6 @@ pub enum FunctionKind {
     Floor,
     Ceil,
 }
-
-/// Specifies a duration as well as a rate, normalized to ns.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Duration(pub u128);
 
 /// Represents an instance of a sliding window.
 #[derive(Debug)]
