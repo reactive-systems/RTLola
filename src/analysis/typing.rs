@@ -8,11 +8,13 @@
 
 use super::naming::{Declaration, DeclarationTable};
 use crate::ast::LolaSpec;
-use crate::ast::{BinOp, Constant, Expression, Input, Literal, Offset, Output, TypeKind};
+use crate::ast::{BinOp, Constant, Expression, Input, Literal, Offset, Output, TypeKind, UnOp};
 use crate::reporting::Handler;
+use crate::reporting::LabeledSpan;
 use crate::stdlib::{FuncDecl, MethodLookup, Parameter};
 use crate::ty::{Ty, TypeConstraint};
 use ast_node::NodeId;
+use ast_node::Span;
 use ena::unify::{EqUnifyValue, InPlaceUnificationTable, UnificationTable, UnifyKey};
 use log::{debug, trace};
 use std::collections::HashMap;
@@ -42,6 +44,9 @@ impl<'a> TypeAnalysis<'a> {
 
     pub(crate) fn check(&mut self, spec: &'a LolaSpec) {
         self.infer_types(spec);
+        if self.handler.contains_error() {
+            return;
+        }
         self.unifier.check_and_resolve_constraints();
 
         self.assign_types(spec);
@@ -50,26 +55,26 @@ impl<'a> TypeAnalysis<'a> {
     fn infer_types(&mut self, spec: &'a LolaSpec) {
         trace!("infer types");
         for constant in &spec.constants {
-            self.infer_constant(constant).unwrap_or_else(|e| {
-                panic!("type inference failed: {}", e);
+            self.infer_constant(constant).unwrap_or_else(|_| {
+                debug!("type inference failed for {}", constant);
             });
         }
 
         for input in &spec.inputs {
-            self.infer_input(input).unwrap_or_else(|e| {
-                panic!("type inference failed: {}", e);
+            self.infer_input(input).unwrap_or_else(|_| {
+                debug!("type inference failed for {}", input);
             });
         }
 
         for output in &spec.outputs {
-            self.infer_output(output).unwrap_or_else(|e| {
-                panic!("type inference failed: {}", e);
+            self.infer_output(output).unwrap_or_else(|_| {
+                debug!("type inference failed for {}", output);
             });
         }
 
         for output in &spec.outputs {
-            self.infer_output_expression(output).unwrap_or_else(|e| {
-                panic!("type inference failed: {}", e);
+            self.infer_output_expression(output).unwrap_or_else(|_| {
+                debug!("type inference failed for {}", output);
             });
         }
     }
@@ -81,7 +86,7 @@ impl<'a> TypeAnalysis<'a> {
         var
     }
 
-    fn infer_constant(&mut self, constant: &'a Constant) -> Result<(), String> {
+    fn infer_constant(&mut self, constant: &'a Constant) -> Result<(), ()> {
         trace!("infer type for {}", constant);
         let var = self.new_var(constant._id);
 
@@ -92,7 +97,9 @@ impl<'a> TypeAnalysis<'a> {
             if let Some(ty) = self.declarations.get(&type_name._id) {
                 match ty {
                     Declaration::Type(ty) => {
-                        self.unifier.add_equality(Ty::Infer(var), (*ty).clone())?
+                        self.unifier
+                            .unify_ty_ty(Ty::Infer(var), (*ty).clone())
+                            .map_err(|err| self.handle_error(err, type_name._span))?;
                     }
                     _ => unreachable!(),
                 }
@@ -100,13 +107,19 @@ impl<'a> TypeAnalysis<'a> {
         }
         // generate constraint from literal
         match self.get_constraint_for_literal(&constant.literal) {
-            ConstraintOrType::Type(ty) => self.unifier.add_equality(Ty::Infer(var), ty)?,
-            ConstraintOrType::Constraint(constr) => self.unifier.add_constraint(var, constr)?,
+            ConstraintOrType::Type(ty) => self
+                .unifier
+                .unify_var_ty(var, ty)
+                .map_err(|err| self.handle_error(err, constant.literal._span))?,
+            ConstraintOrType::Constraint(constr) => self
+                .unifier
+                .add_constraint(var, constr)
+                .map_err(|err| self.handle_error(err, constant.literal._span))?,
         };
         Ok(())
     }
 
-    fn infer_input(&mut self, input: &'a Input) -> Result<(), String> {
+    fn infer_input(&mut self, input: &'a Input) -> Result<(), ()> {
         trace!("infer type for {}", input);
         let var = self.new_var(input._id);
         let ty_var = self.new_var(input.ty._id);
@@ -118,9 +131,11 @@ impl<'a> TypeAnalysis<'a> {
                     // - ?ty_var = `ty`
                     // - ?var = EventStream<?ty_var>
                     self.unifier
-                        .add_equality(Ty::Infer(ty_var), (*ty).clone())?;
+                        .unify_var_ty(ty_var, (*ty).clone())
+                        .map_err(|err| self.handle_error(err, input.ty._span))?;
                     self.unifier
-                        .add_equality(Ty::Infer(var), Ty::EventStream(Box::new(Ty::Infer(ty_var))))
+                        .unify_var_ty(var, Ty::EventStream(Box::new(Ty::Infer(ty_var))))
+                        .map_err(|err| self.handle_error(err, input.name.span))
                 }
                 _ => unreachable!(),
             }
@@ -129,7 +144,7 @@ impl<'a> TypeAnalysis<'a> {
         }
     }
 
-    fn infer_output(&mut self, output: &'a Output) -> Result<(), String> {
+    fn infer_output(&mut self, output: &'a Output) -> Result<(), ()> {
         trace!("infer type for {}", output);
         let var = self.new_var(output._id);
 
@@ -141,9 +156,11 @@ impl<'a> TypeAnalysis<'a> {
                 if let Some(ty) = self.declarations.get(&output.ty._id) {
                     match ty {
                         // ?ty_var = `ty`
-                        Declaration::Type(ty) => self
-                            .unifier
-                            .add_equality(Ty::Infer(ty_var), (*ty).clone())?,
+                        Declaration::Type(ty) => {
+                            self.unifier
+                                .unify_var_ty(ty_var, (*ty).clone())
+                                .map_err(|err| self.handle_error(err, output.ty._span))?;
+                        }
                         _ => unreachable!(),
                     }
                 } else {
@@ -154,10 +171,11 @@ impl<'a> TypeAnalysis<'a> {
 
         // ?var = EventStream<?ty_var>
         self.unifier
-            .add_equality(Ty::Infer(var), Ty::EventStream(Box::new(Ty::Infer(ty_var))))
+            .unify_var_ty(var, Ty::EventStream(Box::new(Ty::Infer(ty_var))))
+            .map_err(|err| self.handle_error(err, output.name.span))
     }
 
-    fn infer_output_expression(&mut self, output: &'a Output) -> Result<(), String> {
+    fn infer_output_expression(&mut self, output: &'a Output) -> Result<(), ()> {
         trace!("infer type for {}", output);
         let ty_var = self.var_lookup[&output.ty._id];
 
@@ -166,10 +184,9 @@ impl<'a> TypeAnalysis<'a> {
 
         // match stream type with expression type
         // ?ty_var = ?expr_var
-        self.unifier.add_equality(
-            Ty::Infer(ty_var),
-            Ty::Infer(self.var_lookup[&output.expression._id]),
-        )
+        self.unifier
+            .unify_var_var(ty_var, self.var_lookup[&output.expression._id])
+            .map_err(|err| self.handle_error(err, output.expression._span))
     }
 
     fn get_constraint_for_literal(&self, lit: &Literal) -> ConstraintOrType {
@@ -182,7 +199,7 @@ impl<'a> TypeAnalysis<'a> {
         }
     }
 
-    fn infer_expression(&mut self, expr: &'a Expression) -> InferResult {
+    fn infer_expression(&mut self, expr: &'a Expression) -> Result<(), ()> {
         let var = self.new_var(expr._id);
 
         use crate::ast::ExpressionKind::*;
@@ -190,9 +207,14 @@ impl<'a> TypeAnalysis<'a> {
             Lit(l) => {
                 // generate constraint from literal
                 match self.get_constraint_for_literal(&l) {
-                    ConstraintOrType::Type(ty) => self.unifier.add_equality(Ty::Infer(var), ty)?,
+                    ConstraintOrType::Type(ty) => self
+                        .unifier
+                        .unify_var_ty(var, ty)
+                        .map_err(|err| self.handle_error(err, expr._span))?,
                     ConstraintOrType::Constraint(constr) => {
-                        self.unifier.add_constraint(var, constr)?
+                        self.unifier
+                            .add_constraint(var, constr)
+                            .map_err(|err| self.handle_error(err, expr._span))?;
                     }
                 };
             }
@@ -203,17 +225,20 @@ impl<'a> TypeAnalysis<'a> {
                     Declaration::Const(constant) => {
                         let const_var = self.var_lookup[&constant._id];
                         self.unifier
-                            .add_equality(Ty::Infer(var), Ty::Infer(const_var))?;
+                            .unify_var_var(var, const_var)
+                            .map_err(|err| self.handle_error(err, expr._span))?;
                     }
                     Declaration::In(input) => {
                         let in_var = self.var_lookup[&input._id];
                         self.unifier
-                            .add_equality(Ty::Infer(var), Ty::Infer(in_var))?;
+                            .unify_var_var(var, in_var)
+                            .map_err(|err| self.handle_error(err, expr._span))?;
                     }
                     Declaration::Out(output) => {
                         let out_var = self.var_lookup[&output._id];
                         self.unifier
-                            .add_equality(Ty::Infer(var), Ty::Infer(out_var))?;
+                            .unify_var_var(var, out_var)
+                            .map_err(|err| self.handle_error(err, expr._span))?;
                     }
                     _ => unreachable!(),
                 }
@@ -231,11 +256,41 @@ impl<'a> TypeAnalysis<'a> {
                 let cond_var = self.var_lookup[&cond._id];
                 let left_var = self.var_lookup[&left._id];
                 let right_var = self.var_lookup[&right._id];
-                self.unifier.add_equality(Ty::Infer(cond_var), Ty::Bool)?;
                 self.unifier
-                    .add_equality(Ty::Infer(left_var), Ty::Infer(right_var))?;
+                    .unify_var_ty(cond_var, Ty::Bool)
+                    .map_err(|err| {
+                        self.handle_error(err, cond._span);
+                    })?;
                 self.unifier
-                    .add_equality(Ty::Infer(var), Ty::Infer(left_var))?;
+                    .unify_var_var(left_var, right_var)
+                    .map_err(|err| {
+                        self.handle_error(err, right._span);
+                    })?;
+                self.unifier.unify_var_var(var, left_var).map_err(|err| {
+                    self.handle_error(err, expr._span);
+                })?;
+            }
+            Unary(op, appl) => {
+                // recursion
+                self.infer_expression(appl)?;
+
+                let appl_var = self.var_lookup[&appl._id];
+                use self::UnOp::*;
+                match op {
+                    Not => {
+                        // ?appl_var = Bool
+                        // ?var = Bool
+                        self.unifier
+                            .unify_var_ty(appl_var, Ty::Bool)
+                            .map_err(|err| {
+                                self.handle_error(err, appl._span);
+                            })?;
+                        self.unifier.unify_var_ty(var, Ty::Bool).map_err(|err| {
+                            self.handle_error(err, expr._span);
+                        })?;
+                    }
+                    _ => unimplemented!("unary operator {}", op),
+                }
             }
             Binary(op, left, right) => {
                 // recursion
@@ -253,14 +308,22 @@ impl<'a> TypeAnalysis<'a> {
                         // ?new_var = ?var
                         let new_var = self.unifier.new_var();
                         self.unifier
-                            .add_constraint(new_var, TypeConstraint::Equality)?;
+                            .add_constraint(new_var, TypeConstraint::Equality)
+                            .expect("adding constraint cannot fail, new_var is a fresh variable");
 
                         self.unifier
-                            .add_equality(Ty::Infer(new_var), Ty::Infer(left_var))?;
+                            .unify_var_var(new_var, left_var)
+                            .map_err(|err| {
+                                self.handle_error(err, left._span);
+                            })?;
                         self.unifier
-                            .add_equality(Ty::Infer(new_var), Ty::Infer(right_var))?;
-                        self.unifier
-                            .add_equality(Ty::Infer(new_var), Ty::Infer(var))?;
+                            .unify_var_var(new_var, right_var)
+                            .map_err(|err| {
+                                self.handle_error(err, right._span);
+                            })?;
+                        self.unifier.unify_var_var(new_var, var).map_err(|err| {
+                            self.handle_error(err, expr._span);
+                        })?;
                     }
                     Add => {
                         // ?new_var :< Numeric
@@ -269,14 +332,24 @@ impl<'a> TypeAnalysis<'a> {
                         // ?new_var = ?var
                         let new_var = self.unifier.new_var();
                         self.unifier
-                            .add_constraint(new_var, TypeConstraint::Numeric)?;
+                            .add_constraint(new_var, TypeConstraint::Numeric)
+                            .expect("adding constraint cannot fail, new_var is a fresh variable");
 
                         self.unifier
-                            .add_equality(Ty::Infer(new_var), Ty::Infer(left_var))?;
+                            .unify_var_var(new_var, left_var)
+                            .map_err(|err| {
+                                self.handle_error(err, left._span);
+                            })?;
                         self.unifier
-                            .add_equality(Ty::Infer(new_var), Ty::Infer(right_var))?;
+                            .unify_var_var(new_var, right_var)
+                            .map_err(|err| {
+                                self.handle_error(err, right._span);
+                            })?;
                         self.unifier
-                            .add_equality(Ty::Infer(new_var), Ty::Infer(var))?;
+                            .unify_ty_ty(Ty::Infer(new_var), Ty::Infer(var))
+                            .map_err(|err| {
+                                self.handle_error(err, expr._span);
+                            })?;
                     }
                     _ => {
                         println!("{}", op);
@@ -297,7 +370,10 @@ impl<'a> TypeAnalysis<'a> {
                 // stream = EventStream<?1>
                 // expr = Option<?1>
                 self.unifier
-                    .add_constraint(off_var, TypeConstraint::Integer)?;
+                    .add_constraint(off_var, TypeConstraint::Integer)
+                    .map_err(|err| {
+                        self.handle_error(err, off_expr._span);
+                    })?;
                 // need to derive "inner" type `?1`
                 let decl = self.declarations[&stream._id];
                 let inner_var: InferVar = match decl {
@@ -306,12 +382,16 @@ impl<'a> TypeAnalysis<'a> {
                     Declaration::Const(_) => unimplemented!(),
                     _ => unreachable!(),
                 };
-                self.unifier.add_equality(
-                    Ty::Infer(stream_var),
-                    Ty::EventStream(Box::new(Ty::Infer(inner_var))),
-                )?;
                 self.unifier
-                    .add_equality(Ty::Infer(var), Ty::Option(Box::new(Ty::Infer(inner_var))))?;
+                    .unify_var_ty(stream_var, Ty::EventStream(Box::new(Ty::Infer(inner_var))))
+                    .map_err(|err| {
+                        self.handle_error(err, stream._span);
+                    })?;
+                self.unifier
+                    .unify_var_ty(var, Ty::Option(Box::new(Ty::Infer(inner_var))))
+                    .map_err(|err| {
+                        self.handle_error(err, expr._span);
+                    })?;
             }
             Default(left, right) => {
                 // recursion
@@ -325,9 +405,11 @@ impl<'a> TypeAnalysis<'a> {
                 // left = Option<expr>
                 // expr = right
                 self.unifier
-                    .add_equality(Ty::Infer(left_var), Ty::Option(Box::new(Ty::Infer(var))))?;
+                    .unify_var_ty(left_var, Ty::Option(Box::new(Ty::Infer(var))))
+                    .map_err(|err| self.handle_error(err, left._span))?;
                 self.unifier
-                    .add_equality(Ty::Infer(var), Ty::Infer(right_var))?;
+                    .unify_var_var(var, right_var)
+                    .map_err(|err| self.handle_error(err, right._span))?;
             }
             Function(_, params) => {
                 let decl = self.declarations[&expr._id];
@@ -345,7 +427,7 @@ impl<'a> TypeAnalysis<'a> {
 
                 let params: Vec<&Expression> = params.iter().map(|e| e.as_ref()).collect();
 
-                self.infer_function_application(var, fun_decl, params.as_slice())?;
+                self.infer_function_application(var, expr._span, fun_decl, params.as_slice())?;
             }
             Method(base, name, params) => {
                 // recursion
@@ -364,7 +446,12 @@ impl<'a> TypeAnalysis<'a> {
                         let mut parameters = vec![base.as_ref()];
                         parameters.extend(params.iter().map(|e| e.as_ref()));
 
-                        self.infer_function_application(var, &fun_decl, parameters.as_slice())?;
+                        self.infer_function_application(
+                            var,
+                            expr._span,
+                            &fun_decl,
+                            parameters.as_slice(),
+                        )?;
                     } else {
                         panic!("could not find `{}`", name);
                     }
@@ -380,9 +467,10 @@ impl<'a> TypeAnalysis<'a> {
     fn infer_function_application(
         &mut self,
         var: InferVar,
+        span: Span,
         fun_decl: &FuncDecl,
         params: &[&'a Expression],
-    ) -> InferResult {
+    ) -> Result<(), ()> {
         assert_eq!(params.len(), fun_decl.parameters.len());
 
         // build symbolic names for generic arguments
@@ -404,12 +492,14 @@ impl<'a> TypeAnalysis<'a> {
                 Parameter::Generic(num) => {
                     // ?generic = ?type_var
                     self.unifier
-                        .add_equality(Ty::Infer(generics[*num as usize]), Ty::Infer(param_var))?;
+                        .unify_var_var(generics[*num as usize], param_var)
+                        .map_err(|err| self.handle_error(err, parameter._span))?;
                 }
                 Parameter::Type(ty) => {
                     // ?param_var = `ty`
                     self.unifier
-                        .add_equality(Ty::Infer(param_var), ty.clone())?;
+                        .unify_var_ty(param_var, ty.clone())
+                        .map_err(|err| self.handle_error(err, parameter._span))?;
                 }
             }
         }
@@ -418,11 +508,14 @@ impl<'a> TypeAnalysis<'a> {
             Parameter::Generic(num) => {
                 // ?generic = ?var
                 self.unifier
-                    .add_equality(Ty::Infer(generics[num as usize]), Ty::Infer(var))?;
+                    .unify_var_var(generics[num as usize], var)
+                    .map_err(|err| self.handle_error(err, span))?;
             }
             Parameter::Type(ref ty) => {
                 // ?param_var = `ty`
-                self.unifier.add_equality(Ty::Infer(var), ty.clone())?;
+                self.unifier
+                    .unify_var_ty(var, ty.clone())
+                    .map_err(|err| self.handle_error(err, span))?;
             }
         }
         Ok(())
@@ -452,6 +545,47 @@ impl<'a> TypeAnalysis<'a> {
             );
         }
     }
+
+    fn handle_error(&self, err: InferError, span: Span) {
+        match err {
+            InferError::TypeMismatch(ty_l, ty_r) => {
+                self.handler.error_with_span(
+                    &format!("Type mismatch between `{}` and `{}`", ty_l, ty_r),
+                    LabeledSpan::new(
+                        span,
+                        &format!("expected `{}`, found `{}`", ty_l, ty_r),
+                        true,
+                    ),
+                );
+            }
+            InferError::UnsatisfiedConstraint(ty, constr) => {
+                self.handler.error_with_span(
+                    &format!("Type `{}` does not satisfy constraint `{}`", ty, constr),
+                    LabeledSpan::new(
+                        span,
+                        &format!("expected `{}`, found `{}`", constr, ty),
+                        true,
+                    ),
+                );
+            }
+            InferError::ConflictingConstraint(left, right) => {
+                self.handler.error_with_span(
+                    &format!("Conflicting constraints `{}` and `{}`", left, right),
+                    LabeledSpan::new(
+                        span,
+                        &format!("no concrete type satisfies `{}` and `{}`", left, right),
+                        true,
+                    ),
+                );
+            }
+            InferError::CyclicDependency(_, _) => {
+                self.handler.error_with_span(
+                    "Cannot infer type",
+                    LabeledSpan::new(span, "consider using a type annotation", true),
+                );
+            }
+        }
+    }
 }
 
 enum ConstraintOrType {
@@ -479,7 +613,7 @@ impl Unifier {
         self.table.new_key(None)
     }
 
-    fn add_equality(&mut self, left: Ty, right: Ty) -> InferResult {
+    fn unify_ty_ty(&mut self, left: Ty, right: Ty) -> InferResult {
         debug!("unify ty ty {} {}", left, right);
         assert!(left != right);
 
@@ -487,21 +621,47 @@ impl Unifier {
             (Ty::Infer(l), Ty::Infer(r)) => self
                 .table
                 .unify_var_var(l, r)
-                .map_err(|(ty_l, ty_r)| format!("cannot merge types {} and {}", ty_l, ty_r)),
-            (Ty::Infer(n), ty) => self.unify_var_type(n, ty),
-            (ty, Ty::Infer(n)) => self.unify_var_type(n, ty),
+                .map_err(|(ty_l, ty_r)| InferError::TypeMismatch(ty_l, ty_r)),
+            (Ty::Infer(n), ty) => self.unify_var_ty(n, ty),
+            (ty, Ty::Infer(n)) => self.unify_var_ty(n, ty),
             (_, _) => unreachable!(),
         }
     }
 
-    fn unify_var_type(&mut self, var: InferVar, ty: Ty) -> InferResult {
+    fn unify_var_var(&mut self, left: InferVar, right: InferVar) -> InferResult {
+        debug!("unify var var {} {}", left, right);
+        self.table
+            .unify_var_var(left, right)
+            .map_err(|(ty_l, ty_r)| InferError::TypeMismatch(ty_l, ty_r))?;
+        let val = match self.table.probe_value(left) {
+            None => return Ok(()),
+            Some(v) => v,
+        };
+        // TODO: update constraint (conjunction) for root node
+        if let Some(&constr) = self.constraints.get(&left) {
+            if !val.satisfies(constr) {
+                return Err(InferError::UnsatisfiedConstraint(val, constr));
+            }
+        }
+        if let Some(&constr) = self.constraints.get(&right) {
+            if !val.satisfies(constr) {
+                return Err(InferError::UnsatisfiedConstraint(val, constr));
+            }
+        }
+        Ok(())
+    }
+
+    fn unify_var_ty(&mut self, var: InferVar, ty: Ty) -> InferResult {
         debug!("unify var ty {} {}", var, ty);
+        if let Ty::Infer(other) = ty {
+            return self.unify_var_var(var, other);
+        }
         match &ty {
-            Ty::Infer(_) => unreachable!(),
+            Ty::Infer(other) => unreachable!(),
             _ => {}
         }
         if self.check_occurrence(var, &ty) {
-            return Err(format!("unification impossible, `var` occurs in `ty`"));
+            return Err(InferError::CyclicDependency(var, ty));
         }
         match self.table.unify_var_value(var, Some(ty)) {
             Ok(_) => Ok(()),
@@ -509,7 +669,7 @@ impl Unifier {
                 if self.types_equal_rec(&ty_l, &ty_r) {
                     Ok(())
                 } else {
-                    Err(format!("cannot merge types {} and {}", ty_l, ty_r))
+                    Err(InferError::TypeMismatch(ty_l, ty_r))
                 }
             }
         }
@@ -546,21 +706,26 @@ impl Unifier {
     }
 
     fn add_constraint(&mut self, var: InferVar, constr: TypeConstraint) -> InferResult {
-        debug!("constraint {} {}", var, constr);
-        if let Some(&other) = self.constraints.get(&var) {
+        debug!("add constraint {} {}", var, constr);
+        let combined = if let Some(&other) = self.constraints.get(&var) {
             if let Some(conj) = other.conjunction(constr) {
                 assert!(conj <= other);
                 assert!(conj <= constr);
                 // update constraint with more precise one
                 self.constraints.insert(var, conj);
+                conj
             } else {
-                return Err(format!(
-                    "unsatisfiable conjunction of constraint {} and {}",
-                    other, constr
-                ));
+                return Err(InferError::ConflictingConstraint(other, constr));
             }
         } else {
             self.constraints.insert(var, constr);
+            constr
+        };
+        // Check if current type satisfies constraint
+        if let Some(ty) = self.table.probe_value(var) {
+            if !ty.satisfies(combined) {
+                return Err(InferError::UnsatisfiedConstraint(ty, combined));
+            }
         }
         Ok(())
     }
@@ -630,7 +795,15 @@ impl std::fmt::Display for InferVar {
     }
 }
 
-type InferResult = Result<(), String>;
+type InferResult = Result<(), InferError>;
+
+#[derive(Debug)]
+enum InferError {
+    TypeMismatch(Ty, Ty),
+    UnsatisfiedConstraint(Ty, TypeConstraint),
+    ConflictingConstraint(TypeConstraint, TypeConstraint),
+    CyclicDependency(InferVar, Ty),
+}
 
 #[cfg(test)]
 mod tests {
