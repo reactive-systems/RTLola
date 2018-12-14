@@ -721,6 +721,7 @@ impl Unifier {
         debug!("unify var var {} {}", left, right);
         match (self.table.probe_value(left), self.table.probe_value(right)) {
             (Some(ty_l), Some(ty_r)) => {
+                // if both variables have values, we try to unify them recursively
                 if self.types_equal_rec(&ty_l, &ty_r) {
                     return Ok(());
                 } else {
@@ -732,20 +733,15 @@ impl Unifier {
         self.table
             .unify_var_var(left, right)
             .map_err(|(ty_l, ty_r)| InferError::TypeMismatch(ty_l, ty_r))?;
-        let val = match self.table.probe_value(left) {
-            None => return Ok(()),
-            Some(v) => v,
-        };
-        // TODO: update constraint (conjunction) for root node
+
+        // update constraint (conjunction) for root node
+        let root = self.table.find(left);
+        assert_eq!(root, self.table.find(right));
         if let Some(&constr) = self.constraints.get(&left) {
-            if !val.satisfies(constr) {
-                return Err(InferError::UnsatisfiedConstraint(val, constr));
-            }
+            self.add_constraint(root, constr)?;
         }
         if let Some(&constr) = self.constraints.get(&right) {
-            if !val.satisfies(constr) {
-                return Err(InferError::UnsatisfiedConstraint(val, constr));
-            }
+            self.add_constraint(root, constr)?;
         }
         Ok(())
     }
@@ -756,11 +752,21 @@ impl Unifier {
             return self.unify_var_var(var, other);
         }
         match &ty {
-            Ty::Infer(other) => unreachable!(),
+            Ty::Infer(_) => unreachable!(),
             _ => {}
         }
         if self.check_occurrence(var, &ty) {
             return Err(InferError::CyclicDependency(var, ty));
+        }
+        if let Some(&constr) = self.constraints.get(&var) {
+            if !ty.satisfies(constr) {
+                return Err(InferError::UnsatisfiedConstraint(ty, constr));
+            }
+        }
+        if let Some(&constr) = self.constraints.get(&self.table.find(var)) {
+            if !ty.satisfies(constr) {
+                return Err(InferError::UnsatisfiedConstraint(ty, constr));
+            }
         }
         match self.table.unify_var_value(var, Some(ty)) {
             Ok(_) => Ok(()),
@@ -788,23 +794,23 @@ impl Unifier {
 
     /// Checks recursively if types are equal. Tries to unify type parameters if possible.
     fn types_equal_rec(&mut self, left: &Ty, right: &Ty) -> bool {
-        println!("comp {} {}", left, right);
+        debug!("comp {} {}", left, right);
         match (left, right) {
             (&Ty::Infer(l), &Ty::Infer(r)) => {
                 if self.table.unioned(l, r) {
                     true
                 } else {
                     // try to unify values
-                    self.table.unify_var_var(l, r).is_ok()
+                    self.unify_var_var(l, r).is_ok()
                 }
             }
             (&Ty::Infer(var), ty) => {
                 // try to unify
-                self.table.unify_var_value(var, Some(ty.clone())).is_ok()
+                self.unify_var_ty(var, ty.clone()).is_ok()
             }
             (ty, &Ty::Infer(var)) => {
                 // try to unify
-                self.table.unify_var_value(var, Some(ty.clone())).is_ok()
+                self.unify_var_ty(var, ty.clone()).is_ok()
             }
             (Ty::Option(l), Ty::Option(r)) => self.types_equal_rec(l, r),
             (Ty::EventStream(l), Ty::EventStream(r)) => self.types_equal_rec(l, r),
