@@ -472,20 +472,11 @@ fn get_dependencies(stm: &Statement) -> Vec<StreamReference> {
     match &stm.op {
         Op::LoadConstant(_) => Vec::new(),
         Op::ArithLog(_, _) => Vec::new(),
-        Op::StreamLookup {
-            instance,
-            offset: _,
-            default: _,
-        } => vec![instance.reference],
+        Op::StreamLookup { instance, .. } => vec![instance.reference],
         Op::WindowLookup(_) => unimplemented!(),
-        Op::Ite {
-            condition,
-            lhs,
-            rhs,
-        } => unimplemented!(),
+        Op::Ite { .. } => unimplemented!(),
         Op::Tuple(_) => unimplemented!(),
         Op::Function(_, _) => unimplemented!(),
-        _ => unimplemented!(),
     }
 }
 
