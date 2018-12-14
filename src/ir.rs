@@ -458,7 +458,7 @@ impl OutputStream {
             .expr
             .stmts
             .iter()
-            .flat_map(|stm| get_dependencies(stm))
+            .flat_map(|stm| stm.get_dependencies())
             .collect();
         let set: HashSet<StreamReference> = vec.drain(..).collect();
         vec.extend(set.into_iter());
@@ -466,15 +466,23 @@ impl OutputStream {
     }
 }
 
-fn get_dependencies(stm: &Statement) -> Vec<StreamReference> {
-    match &stm.op {
-        Op::LoadConstant(_) => Vec::new(),
-        Op::ArithLog(_, _) => Vec::new(),
-        Op::StreamLookup { instance, .. } => vec![instance.reference],
-        Op::WindowLookup(_) => unimplemented!(),
-        Op::Ite { .. } => unimplemented!(),
-        Op::Tuple(_) => unimplemented!(),
-        Op::Function(_, _) => unimplemented!(),
+impl Statement {
+    fn get_dependencies(&self) -> Vec<StreamReference> {
+        match &self.op {
+            Op::LoadConstant(_) | Op::ArithLog(_, _) | Op::Tuple(_) | Op::Function(_, _) => {
+                Vec::new()
+            }
+            Op::StreamLookup { instance, .. } => vec![instance.reference],
+            Op::Ite { lhs, rhs, .. } => {
+                let mut lhs: Vec<StreamReference> =
+                    lhs.iter().flat_map(|stm| stm.get_dependencies()).collect();
+                let mut rhs: Vec<StreamReference> =
+                    rhs.iter().flat_map(|stm| stm.get_dependencies()).collect();
+                lhs.append(&mut rhs);
+                lhs
+            }
+            Op::WindowLookup(_) => unimplemented!(),
+        }
     }
 }
 
@@ -489,6 +497,6 @@ mod dependencies_test {
             op: Op::LoadConstant(Constant::Bool(true)),
             args: Vec::new(),
         };
-        //get_dependencies(stm);
+        let res = stm.get_dependencies();
     }
 }
