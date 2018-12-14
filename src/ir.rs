@@ -259,7 +259,7 @@ pub struct WindowReference {
 }
 
 /// Allows for referencing a stream within the specification.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum StreamReference {
     InRef(usize),
     EventOutRef(usize),
@@ -415,7 +415,7 @@ impl Type {
 
 use crate::analysis::naming::DeclarationTable;
 use crate::ast;
-use std::cmp::Ordering;
+use std::collections::HashSet;
 
 // Placeholder for the actual type table
 pub(crate) struct TypeTable {}
@@ -456,18 +456,9 @@ impl OutputStream {
         unimplemented!()
     }
     fn get_dependencies(&self) -> Vec<StreamReference> {
-        let results: Vec<Vec<StreamReference>> = self
-            .expr
-            .stmts
-            .iter()
-            .map(|stm| get_dependencies(stm))
-            .collect();
-        let mut vec = Vec::new();
-        for mut cur in results {
-            vec.append(&mut cur);
-        }
-        vec.sort();
-        vec.dedup();
+        let mut vec: Vec<StreamReference> = self.expr.stmts.iter().flat_map(|stm| get_dependencies(stm)).collect();
+        let set: HashSet<StreamReference> = vec.drain(..).collect();
+        vec.extend(set.into_iter());
         vec
     }
 }
@@ -492,54 +483,6 @@ fn get_dependencies(stm: &Statement) -> Vec<StreamReference> {
         _ => unimplemented!(),
     }
 }
-
-//define a order for StreamReferences, such that we can delete duplicates in the vector
-impl Ord for StreamReference {
-    fn cmp(&self, other: &StreamReference) -> Ordering {
-        match &self {
-            StreamReference::InRef(self_ix) => match other {
-                StreamReference::InRef(other_ix) => self_ix.cmp(other_ix),
-                _ => Ordering::Greater,
-            },
-            StreamReference::EventOutRef(self_ix) => match other {
-                StreamReference::InRef(_) => Ordering::Less,
-                StreamReference::EventOutRef(other_ix) => self_ix.cmp(other_ix),
-                StreamReference::TimeOutRef(_) => Ordering::Greater,
-            },
-            StreamReference::TimeOutRef(self_ix) => match other {
-                StreamReference::TimeOutRef(other_ix) => self_ix.cmp(other_ix),
-                _ => Ordering::Less,
-            },
-        }
-    }
-}
-
-impl PartialOrd for StreamReference {
-    fn partial_cmp(&self, other: &StreamReference) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl PartialEq for StreamReference {
-    fn eq(&self, other: &StreamReference) -> bool {
-        match &self {
-            StreamReference::InRef(self_ix) => match other {
-                StreamReference::InRef(other_ix) => self_ix == other_ix,
-                _ => false,
-            },
-            StreamReference::EventOutRef(self_ix) => match other {
-                StreamReference::EventOutRef(other_ix) => self_ix == other_ix,
-                _ => false,
-            },
-            StreamReference::TimeOutRef(self_ix) => match other {
-                StreamReference::TimeOutRef(other_ix) => self_ix == other_ix,
-                _ => false,
-            },
-        }
-    }
-}
-
-impl Eq for StreamReference {}
 
 #[cfg(test)]
 mod dependencies_test {
