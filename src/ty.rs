@@ -21,6 +21,7 @@ pub enum Ty {
     Option(Box<Ty>),
     /// Used during type inference
     Infer(InferVar),
+    Constr(TypeConstraint),
     Error,
 }
 
@@ -138,6 +139,7 @@ impl std::fmt::Display for Ty {
                 write!(f, "({})", joined.join(", "))
             }
             Ty::Infer(id) => write!(f, "?{}", id),
+            Ty::Constr(constr) => write!(f, "<{}", constr),
             Ty::Error => write!(f, "Error"),
         }
     }

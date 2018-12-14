@@ -17,9 +17,7 @@ use crate::stdlib::{FuncDecl, MethodLookup, Parameter};
 use crate::ty::{Ty, TypeConstraint};
 use ast_node::NodeId;
 use ast_node::Span;
-use ena::unify::{
-    EqUnifyValue, InPlaceUnificationTable, NoError, UnificationTable, UnifyKey, UnifyValue,
-};
+use ena::unify::{EqUnifyValue, InPlaceUnificationTable, UnificationTable, UnifyKey, UnifyValue};
 use log::{debug, trace};
 use std::collections::HashMap;
 
@@ -51,7 +49,6 @@ impl<'a> TypeAnalysis<'a> {
         if self.handler.contains_error() {
             return;
         }
-        self.unifier.check_and_resolve_constraints(self.handler);
 
         self.assign_types(spec);
     }
@@ -689,20 +686,17 @@ enum ConstraintOrType {
 struct Unifier {
     /// union-find data structure representing the current state of the unification
     table: InPlaceUnificationTable<InferVar>,
-    /// constraints associated with inference variables, if any
-    constraints: HashMap<InferVar, TypeConstraint>,
 }
 
 impl Unifier {
     fn new() -> Unifier {
         Unifier {
             table: UnificationTable::new(),
-            constraints: HashMap::new(),
         }
     }
 
     fn new_var(&mut self) -> InferVar {
-        self.table.new_key(None)
+        self.table.new_key(InferVarVal::Unknown)
     }
 
     fn unify_ty_ty(&mut self, left: Ty, right: Ty) -> InferResult {
@@ -710,10 +704,7 @@ impl Unifier {
         assert!(left != right);
 
         match (left, right) {
-            (Ty::Infer(l), Ty::Infer(r)) => self
-                .table
-                .unify_var_var(l, r)
-                .map_err(|(ty_l, ty_r)| InferError::TypeMismatch(ty_l, ty_r)),
+            (Ty::Infer(l), Ty::Infer(r)) => self.table.unify_var_var(l, r),
             (Ty::Infer(n), ty) => self.unify_var_ty(n, ty),
             (ty, Ty::Infer(n)) => self.unify_var_ty(n, ty),
             (_, _) => unreachable!(),
@@ -723,7 +714,7 @@ impl Unifier {
     fn unify_var_var(&mut self, left: InferVar, right: InferVar) -> InferResult {
         debug!("unify var var {} {}", left, right);
         match (self.table.probe_value(left), self.table.probe_value(right)) {
-            (Some(ty_l), Some(ty_r)) => {
+            (InferVarVal::Known(ty_l), InferVarVal::Known(ty_r)) => {
                 // if both variables have values, we try to unify them recursively
                 if self.types_equal_rec(&ty_l, &ty_r) {
                     return Ok(());
@@ -733,20 +724,7 @@ impl Unifier {
             }
             _ => {}
         }
-        self.table
-            .unify_var_var(left, right)
-            .map_err(|(ty_l, ty_r)| InferError::TypeMismatch(ty_l, ty_r))?;
-
-        // update constraint (conjunction) for root node
-        let root = self.table.find(left);
-        assert_eq!(root, self.table.find(right));
-        if let Some(&constr) = self.constraints.get(&left) {
-            self.add_constraint(root, constr)?;
-        }
-        if let Some(&constr) = self.constraints.get(&right) {
-            self.add_constraint(root, constr)?;
-        }
-        Ok(())
+        self.table.unify_var_var(left, right)
     }
 
     fn unify_var_ty(&mut self, var: InferVar, ty: Ty) -> InferResult {
@@ -761,25 +739,14 @@ impl Unifier {
         if self.check_occurrence(var, &ty) {
             return Err(InferError::CyclicDependency(var, ty));
         }
-        if let Some(&constr) = self.constraints.get(&var) {
-            if !ty.satisfies(constr) {
-                return Err(InferError::UnsatisfiedConstraint(ty, constr));
+        if let InferVarVal::Known(val) = self.table.probe_value(var) {
+            if self.types_equal_rec(&val, &ty) {
+                self.table.unify_var_value(var, InferVarVal::Known(ty))
+            } else {
+                Err(InferError::TypeMismatch(val, ty))
             }
-        }
-        if let Some(&constr) = self.constraints.get(&self.table.find(var)) {
-            if !ty.satisfies(constr) {
-                return Err(InferError::UnsatisfiedConstraint(ty, constr));
-            }
-        }
-        match self.table.unify_var_value(var, Some(ty)) {
-            Ok(_) => Ok(()),
-            Err((ty_l, ty_r)) => {
-                if self.types_equal_rec(&ty_l, &ty_r) {
-                    Ok(())
-                } else {
-                    Err(InferError::TypeMismatch(ty_l, ty_r))
-                }
-            }
+        } else {
+            self.table.unify_var_value(var, InferVarVal::Known(ty))
         }
     }
 
@@ -815,6 +782,11 @@ impl Unifier {
                 // try to unify
                 self.unify_var_ty(var, ty.clone()).is_ok()
             }
+            (Ty::Constr(constr_l), &Ty::Constr(constr_r)) => {
+                constr_l.conjunction(constr_r).is_some()
+            }
+            (&Ty::Constr(constr), other) => other.satisfies(constr),
+            (other, &Ty::Constr(constr)) => other.satisfies(constr),
             (Ty::Option(l), Ty::Option(r)) => self.types_equal_rec(l, r),
             (Ty::EventStream(l), Ty::EventStream(r)) => self.types_equal_rec(l, r),
             (Ty::Tuple(l), Ty::Tuple(r)) => {
@@ -832,66 +804,41 @@ impl Unifier {
 
     fn add_constraint(&mut self, var: InferVar, constr: TypeConstraint) -> InferResult {
         debug!("add constraint {} {}", var, constr);
-        let combined = if let Some(&other) = self.constraints.get(&var) {
-            if let Some(conj) = other.conjunction(constr) {
-                assert!(conj <= other);
-                assert!(conj <= constr);
-                // update constraint with more precise one
-                self.constraints.insert(var, conj);
-                conj
-            } else {
-                return Err(InferError::ConflictingConstraint(other, constr));
-            }
-        } else {
-            self.constraints.insert(var, constr);
-            constr
-        };
-        // Check if current type satisfies constraint
-        if let Some(ty) = self.table.probe_value(var) {
-            if !ty.satisfies(combined) {
-                return Err(InferError::UnsatisfiedConstraint(ty, combined));
-            }
-        }
-        Ok(())
+        self.table
+            .unify_var_value(var, InferVarVal::Known(Ty::Constr(constr)))
     }
 
     /// Returns type where every inference variable is substituted
     fn get_final_type(&mut self, var: InferVar) -> Ty {
+        use self::InferVarVal::*;
         match self.table.probe_value(var) {
-            None => Ty::Error,
-            Some(Ty::Infer(other)) => self.get_final_type(other),
-            Some(Ty::EventStream(ty)) => {
+            Unknown => Ty::Error,
+            Known(Ty::Infer(other)) => self.get_final_type(other),
+            Known(Ty::Constr(constr)) => {
+                if let Some(ty) = constr.has_default() {
+                    // TODO: emit warning that default type has been used
+                    ty
+                } else {
+                    Ty::Error
+                }
+            }
+            Known(Ty::EventStream(ty)) => {
                 let inner = match *ty {
                     Ty::Infer(other) => self.get_final_type(other),
                     ref t => t.clone(),
                 };
                 Ty::EventStream(Box::new(inner))
             }
-            Some(t) => t.clone(),
+            Known(t) => t.clone(),
         }
     }
 
     /// returns current value of inference variable
     fn get_type(&mut self, var: InferVar) -> Option<Ty> {
-        self.table.probe_value(var)
-    }
-
-    fn check_and_resolve_constraints(&mut self, handler: &Handler) {
-        for (&var, &constr) in &self.constraints {
-            debug!("{} :< {}", var, constr);
-            if let Some(ty) = self.table.probe_value(var) {
-                if !ty.satisfies(constr) {
-                    panic!("Type {} does not satisfy {}", ty, constr);
-                }
-            } else if let Some(default) = constr.has_default() {
-                // use default value, should emit a warning
-                self.table
-                    .unify_var_value(var, Some(default))
-                    .expect("variable has no value, i.e., unifcation should not fail");
-                handler.warn("some types were infered, consider using annotations instead");
-            } else {
-                panic!("unbound variable {} with constraint {}", var, constr);
-            }
+        if let InferVarVal::Known(ty) = self.table.probe_value(var) {
+            Some(ty)
+        } else {
+            None
         }
     }
 }
@@ -901,7 +848,7 @@ pub struct InferVar(u32);
 
 // used in UnifcationTable
 impl UnifyKey for InferVar {
-    type Value = Option<Ty>;
+    type Value = InferVarVal;
     fn index(&self) -> u32 {
         self.0
     }
@@ -914,22 +861,73 @@ impl UnifyKey for InferVar {
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
-enum TypeVariableValue {
+pub enum InferVarVal {
     Known(Ty),
     Unknown,
 }
 
-impl UnifyValue for TypeVariableValue {
-    type Error = NoError;
-    fn unify_values(left: &Self, right: &Self) -> Result<Self, NoError> {
-        use self::TypeVariableValue::*;
+impl UnifyValue for InferVarVal {
+    type Error = InferError;
+
+    /// the idea of the unification is to merge two types and always taking the more concrete value
+    fn unify_values(left: &Self, right: &Self) -> Result<Self, InferError> {
+        use self::InferVarVal::*;
         match (left, right) {
-            (Known(_), Known(_)) => {
-                unreachable!("Never relate two known types");
-            }
+            (Known(ty_l), Known(ty_r)) => Ok(Known(ty_l.unify(ty_r)?)),
             (Known(_), Unknown) => Ok(left.clone()),
             (Unknown, Known(_)) => Ok(right.clone()),
             (Unknown, Unknown) => Ok(Unknown),
+        }
+    }
+}
+
+impl Ty {
+    fn unify(&self, other: &Ty) -> Result<Ty, InferError> {
+        match (self, other) {
+            (&Ty::Infer(l), &Ty::Infer(r)) => Ok(self.clone()),
+            (&Ty::Infer(_), _) => Ok(other.clone()),
+            (_, &Ty::Infer(_)) => Ok(self.clone()),
+            (&Ty::Constr(constr_l), &Ty::Constr(constr_r)) => {
+                if let Some(combined) = constr_l.conjunction(constr_r) {
+                    Ok(Ty::Constr(combined))
+                } else {
+                    Err(InferError::ConflictingConstraint(constr_l, constr_r))
+                }
+            }
+            (&Ty::Constr(constr), other) => {
+                if other.satisfies(constr) {
+                    Ok(other.clone())
+                } else {
+                    Err(InferError::TypeMismatch(self.clone(), other.clone()))
+                }
+            }
+            (other, &Ty::Constr(constr)) => {
+                if other.satisfies(constr) {
+                    Ok(other.clone())
+                } else {
+                    Err(InferError::TypeMismatch(self.clone(), other.clone()))
+                }
+            }
+            (Ty::Option(l), Ty::Option(r)) => Ok(Ty::Option(Box::new(l.unify(r)?))),
+            (Ty::EventStream(l), Ty::EventStream(r)) => Ok(Ty::EventStream(Box::new(l.unify(r)?))),
+            (Ty::Tuple(l), Ty::Tuple(r)) => {
+                if l.len() != r.len() {
+                    return Err(InferError::TypeMismatch(self.clone(), other.clone()));
+                }
+                let mut inner = Vec::new();
+                for (e_l, e_r) in l.iter().zip(r) {
+                    inner.push(e_l.unify(e_r)?);
+                }
+                Ok(Ty::Tuple(inner))
+            }
+            (Ty::TimedStream(_), Ty::TimedStream(_)) => unimplemented!(),
+            (l, r) => {
+                if l == r {
+                    Ok(self.clone())
+                } else {
+                    Err(InferError::TypeMismatch(self.clone(), other.clone()))
+                }
+            }
         }
     }
 }
@@ -945,7 +943,7 @@ impl std::fmt::Display for InferVar {
 type InferResult = Result<(), InferError>;
 
 #[derive(Debug)]
-enum InferError {
+pub enum InferError {
     TypeMismatch(Ty, Ty),
     UnsatisfiedConstraint(Ty, TypeConstraint),
     ConflictingConstraint(TypeConstraint, TypeConstraint),
@@ -1063,7 +1061,7 @@ mod tests {
 
     #[test]
     fn underspecified_ite_type() {
-        let spec = "output o: Float64 := if false then 1.3 else -2";
+        let spec = "output o := if false then 1.3 else -2.0";
         assert_eq!(0, num_type_errors(spec));
     }
 
