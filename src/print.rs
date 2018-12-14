@@ -383,7 +383,7 @@ impl Display for LolaSpec {
         }
 
         for import in &self.imports {
-            writeln!(f, "{}", import);
+            writeln!(f, "{}", import)?;
         }
         for decl in &self.type_declarations {
             writeln!(f, "{}", decl)?;
