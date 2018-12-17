@@ -322,13 +322,13 @@ impl<'a> TypeAnalysis<'a> {
                 use self::BinOp::*;
                 match op {
                     Eq => {
-                        // ?new_var :< Equality
+                        // ?new_var :< Equatable
                         // ?new_var = ?left_var
                         // ?new_var = ?right_var
                         // ?new_var = ?var
                         let new_var = self.unifier.new_var();
                         self.unifier
-                            .add_constraint(new_var, TypeConstraint::Equality)
+                            .add_constraint(new_var, TypeConstraint::Equatable)
                             .expect("adding constraint cannot fail, new_var is a fresh variable");
 
                         self.unifier
@@ -650,9 +650,11 @@ impl<'a> TypeAnalysis<'a> {
         }
     }
 
-    fn handle_error(&self, err: InferError, span: Span) {
+    fn handle_error(&mut self, err: InferError, span: Span) {
         match err {
             InferError::TypeMismatch(ty_l, ty_r) => {
+                let ty_l = self.unifier.normalize_ty(ty_l);
+                let ty_r = self.unifier.normalize_ty(ty_r);
                 self.handler.error_with_span(
                     &format!("Type mismatch between `{}` and `{}`", ty_l, ty_r),
                     LabeledSpan::new(
@@ -854,6 +856,22 @@ impl Unifier {
             Some(ty)
         } else {
             None
+        }
+    }
+
+    /// Tries to remove variables used for inference by their values.
+    fn normalize_ty(&mut self, ty: Ty) -> Ty {
+        match ty {
+            Ty::Infer(var) => match self.get_type(var) {
+                None => ty,
+                Some(other_ty) => self.normalize_ty(other_ty),
+            },
+            Ty::Tuple(t) => Ty::Tuple(t.into_iter().map(|el| self.normalize_ty(el)).collect()),
+            Ty::EventStream(ty) => Ty::EventStream(Box::new(self.normalize_ty(*ty))),
+            Ty::Option(ty) => Ty::Option(Box::new(self.normalize_ty(*ty))),
+            _ if ty.is_primitive() => ty,
+            Ty::Constr(_) => ty,
+            _ => unreachable!(),
         }
     }
 }

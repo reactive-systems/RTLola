@@ -77,7 +77,8 @@ impl Ty {
         use self::TypeConstraint::*;
         match constraint {
             Unconstrained => true,
-            Equality => self.is_primitive(),
+            Comparable => self.is_primitive(),
+            Equatable => self.is_primitive(),
             Numeric => self.satisfies(Integer) || self.satisfies(FloatingPoint),
             FloatingPoint => match self {
                 Float(_) => true,
@@ -139,7 +140,7 @@ impl std::fmt::Display for Ty {
                 write!(f, "({})", joined.join(", "))
             }
             Ty::Infer(id) => write!(f, "?{}", id),
-            Ty::Constr(constr) => write!(f, "<{}", constr),
+            Ty::Constr(constr) => write!(f, "{{{}}}", constr),
             Ty::Error => write!(f, "Error"),
         }
     }
@@ -154,8 +155,10 @@ pub enum TypeConstraint {
     Integer,
     /// integer + floating point
     Numeric,
-    /// Types that implement `==`
-    Equality,
+    /// Types that can be comparaed, i.e., implement `==`
+    Equatable,
+    /// Types that can be ordered, i.e., implement `<`, `>`,
+    Comparable,
     Unconstrained,
 }
 
@@ -181,7 +184,8 @@ impl TypeConstraint {
         assert!(*self < other);
         match other {
             Unconstrained => Some(*self),
-            Equality => Some(*self),
+            Comparable => Some(*self),
+            Equatable => Some(*self),
             Numeric => Some(*self),
             Integer => match self {
                 FloatingPoint => None,
@@ -202,8 +206,9 @@ impl std::fmt::Display for TypeConstraint {
             UnsignedInteger => write!(f, "unsigned integer"),
             Integer => write!(f, "integer"),
             FloatingPoint => write!(f, "floating point"),
-            Numeric => write!(f, "numeric"),
-            Equality => write!(f, "equality"),
+            Numeric => write!(f, "numeric type"),
+            Equatable => write!(f, "equatable type"),
+            Comparable => write!(f, "comparable type"),
             _ => unimplemented!(),
         }
     }
