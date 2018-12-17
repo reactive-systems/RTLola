@@ -440,7 +440,7 @@ impl<'a> TypeAnalysis<'a> {
                     .map_err(|err| self.handle_error(err, left._span))?;
                 self.unifier
                     .unify_var_var(var, right_var)
-                    .map_err(|err| self.handle_error(err, right._span))?;
+                    .map_err(|err| self.handle_error(err, expr._span))?;
             }
             Function(_, params) => {
                 let decl = self.declarations[&expr._id];
@@ -664,16 +664,6 @@ impl<'a> TypeAnalysis<'a> {
                     ),
                 );
             }
-            InferError::UnsatisfiedConstraint(ty, constr) => {
-                self.handler.error_with_span(
-                    &format!("Type `{}` does not satisfy constraint `{}`", ty, constr),
-                    LabeledSpan::new(
-                        span,
-                        &format!("expected `{}`, found `{}`", constr, ty),
-                        true,
-                    ),
-                );
-            }
             InferError::ConflictingConstraint(left, right) => {
                 self.handler.error_with_span(
                     &format!("Conflicting constraints `{}` and `{}`", left, right),
@@ -735,6 +725,8 @@ impl Unifier {
                 // if both variables have values, we try to unify them recursively
                 if self.types_equal_rec(&ty_l, &ty_r) {
                     return Ok(());
+                } else if self.types_coerce(&ty_l, &ty_r) {
+                    return Ok(());
                 } else {
                     return Err(InferError::TypeMismatch(ty_l, ty_r));
                 }
@@ -759,6 +751,8 @@ impl Unifier {
         if let InferVarVal::Known(val) = self.table.probe_value(var) {
             if self.types_equal_rec(&val, &ty) {
                 self.table.unify_var_value(var, InferVarVal::Known(ty))
+            } else if self.types_coerce(&val, &ty) {
+                return Ok(())
             } else {
                 Err(InferError::TypeMismatch(val, ty))
             }
@@ -817,6 +811,23 @@ impl Unifier {
             (Ty::TimedStream(_), Ty::TimedStream(_)) => unimplemented!(),
             (l, r) => l == r,
         }
+    }
+
+    /// Checks recursively if the `right` type can be transformed to match `left`.
+    fn types_coerce(&mut self, left: &Ty, right: &Ty) -> bool {
+        debug!("coerce {} {}", left, right);
+        // types_equal_rec has side effects, thus, create snapshot before
+        let snapshot = self.table.snapshot();
+        let res = match right {
+            Ty::EventStream(ty) => self.types_equal_rec(left, ty),
+            _ => false
+        };
+        if !res {
+            self.table.rollback_to(snapshot);
+        } else {
+            self.table.commit(snapshot);
+        }
+        res
     }
 
     fn add_constraint(&mut self, var: InferVar, constr: TypeConstraint) -> InferResult {
@@ -917,7 +928,7 @@ impl UnifyValue for InferVarVal {
 impl Ty {
     fn unify(&self, other: &Ty) -> Result<Ty, InferError> {
         match (self, other) {
-            (&Ty::Infer(l), &Ty::Infer(r)) => Ok(self.clone()),
+            (&Ty::Infer(_), &Ty::Infer(_)) => Ok(self.clone()),
             (&Ty::Infer(_), _) => Ok(other.clone()),
             (_, &Ty::Infer(_)) => Ok(self.clone()),
             (&Ty::Constr(constr_l), &Ty::Constr(constr_r)) => {
@@ -978,9 +989,20 @@ type InferResult = Result<(), InferError>;
 #[derive(Debug)]
 pub enum InferError {
     TypeMismatch(Ty, Ty),
-    UnsatisfiedConstraint(Ty, TypeConstraint),
     ConflictingConstraint(TypeConstraint, TypeConstraint),
     CyclicDependency(InferVar, Ty),
+}
+
+impl InferError {
+    fn normalize_types(&mut self, unifier: &mut Unifier) {
+        match self {
+            InferError::TypeMismatch(ref mut expected, ref mut found) => {
+                std::mem::replace(expected, unifier.normalize_ty(expected.clone()));
+                std::mem::replace(found, unifier.normalize_ty(found.clone()));
+            }
+            _ => {}
+        }
+    }
 }
 
 #[cfg(test)]
@@ -1112,13 +1134,13 @@ mod tests {
 
     #[test]
     fn test_underspecified_type() {
-        let spec = "output o: Float32 := 2";
+        let spec = "output o := 2";
         assert_eq!(0, num_type_errors(spec));
     }
 
     #[test]
     fn test_trigonometric() {
-        let spec = "import math\noutput o: Float32 := sin(2)";
+        let spec = "import math\noutput o: Float32 := sin(2.0)";
         assert_eq!(0, num_type_errors(spec));
     }
 
@@ -1160,13 +1182,13 @@ mod tests {
 
     #[test]
     fn test_stream_lookup_dft() {
-        let spec = "output a: UInt8 := 3\n output b: UInt8 := a[0] ? 3";
+        let spec = "output a: UInt8 := 3\n output b: UInt8 := a[-1] ? 3";
         assert_eq!(0, num_type_errors(spec));
     }
 
     #[test]
     fn test_stream_lookup_dft_fault() {
-        let spec = "output a: UInt8 := 3\n output b: Bool := a[0] ? false";
+        let spec = "output a: UInt8 := 3\n output b: Bool := a[-1] ? false";
         assert_eq!(1, num_type_errors(spec));
     }
 
@@ -1241,19 +1263,19 @@ mod tests {
 
     #[test]
     fn test_tuple_access() {
-        let spec = "input in: (Int8, Bool)\noutput out: Bool := in.1";
+        let spec = "input in: (Int8, Bool)\noutput out: Bool := in[0].1";
         assert_eq!(0, num_type_errors(spec));
     }
 
     #[test]
     fn test_tuple_access_faulty_type() {
-        let spec = "input in: (Int8, Bool)\noutput out: Bool := in.0";
+        let spec = "input in: (Int8, Bool)\noutput out: Bool := in[0].0";
         assert_eq!(1, num_type_errors(spec));
     }
 
     #[test]
     fn test_tuple_access_faulty_len() {
-        let spec = "input in: (Int8, Bool)\noutput out: Bool := in.2";
+        let spec = "input in: (Int8, Bool)\noutput out: Bool := in[0].2";
         assert_eq!(1, num_type_errors(spec));
     }
 

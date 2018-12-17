@@ -115,6 +115,13 @@ impl Ty {
             _ => false,
         }
     }
+
+    pub(crate) fn can_be_converted_to(&self, candidate: &Ty) -> bool {
+        match self {
+            Ty::EventStream(ty) => ty.as_ref() == candidate,
+            _ => false,
+        }
+    }
 }
 
 impl std::fmt::Display for Ty {
