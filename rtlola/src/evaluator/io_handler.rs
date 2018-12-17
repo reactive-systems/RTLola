@@ -18,9 +18,7 @@ impl OutputHandler {
         match self.verbosity {
             Verbosity::Debug => self.print(msg()),
             Verbosity::Outputs => match kind {
-                OutputKind::Trigger | OutputKind::Output | OutputKind::RuntimeWarning => {
-                    self.print(msg())
-                }
+                OutputKind::Trigger | OutputKind::Output | OutputKind::RuntimeWarning => self.print(msg()),
                 OutputKind::Debug => {}
             },
             Verbosity::Triggers => match kind {

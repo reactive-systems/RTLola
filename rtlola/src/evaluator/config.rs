@@ -89,10 +89,6 @@ impl EvalConfig {
 
 impl Default for EvalConfig {
     fn default() -> EvalConfig {
-        EvalConfig {
-            source: InputSource::StdIn,
-            verbosity: Verbosity::Triggers,
-            output_channel: OutputChannel::StdOut,
-        }
+        EvalConfig { source: InputSource::StdIn, verbosity: Verbosity::Triggers, output_channel: OutputChannel::StdOut }
     }
 }
