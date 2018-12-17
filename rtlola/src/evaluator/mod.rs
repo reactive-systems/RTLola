@@ -38,7 +38,6 @@ impl Evaluator {
         let time_manager = TimeDrivenManager::new(&ir);
         let event_manager = EventDrivenManager::new(&ir);
 
-
         Evaluator { output_handler, input_handler, time_manager, event_manager, spec: ir }
     }
 
@@ -47,6 +46,4 @@ impl Evaluator {
     pub fn start(&mut self) {
         unimplemented!()
     }
-
 }
-

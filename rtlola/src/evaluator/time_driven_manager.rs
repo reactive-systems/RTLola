@@ -1,7 +1,7 @@
-use lola_parser::{LolaIR, StreamReference, OutputStream, Stream};
 use crate::util;
-use std::time::{Duration, SystemTime};
+use lola_parser::{LolaIR, OutputStream, Stream, StreamReference};
 use std::cmp::Ordering;
+use std::time::{Duration, SystemTime};
 
 const NANOS_PER_SEC: u128 = 1_000_000_000;
 
@@ -17,7 +17,7 @@ enum StateCompare {
     Equal,
     TimeTravel,
     Next,
-    Skipped{ cycles: u64, deadlines: u64 }
+    Skipped { cycles: u64, deadlines: u64 },
 }
 
 /// Represents the current cycle count for time-driven events. `u128` is sufficient to represent
@@ -47,8 +47,9 @@ pub struct TimeDrivenManager {
 impl TimeDrivenManager {
     /// Creates a new TimeDrivenManager managing time-driven output streams.
     pub fn new(ir: &LolaIR) -> TimeDrivenManager {
-
-        fn extr_dur(s: &OutputStream) -> Duration { s.extend_rate.unwrap() }
+        fn extr_dur(s: &OutputStream) -> Duration {
+            s.extend_rate.unwrap()
+        }
 
         let streams = &ir.time_outputs;
         let rates: Vec<Duration> = streams.iter().map(extr_dur).collect();
@@ -58,14 +59,14 @@ impl TimeDrivenManager {
 
         let num_steps = TimeDrivenManager::divide_durations(hyper_period, gcd, true);
 
-        let mut extend_steps= vec![Vec::new(); num_steps];
+        let mut extend_steps = vec![Vec::new(); num_steps];
         for s in streams {
             let ix = Self::divide_durations(extr_dur(s), gcd, false) + 1;
             extend_steps[ix].push(s.as_stream_ref());
         }
 
         let mut init: (u32, Vec<Deadline>) = (0, Vec::new());
-        let (remaining, mut deadlines) = extend_steps.iter().fold(init, |(empty_counter, mut deadlines), step|
+        let (remaining, mut deadlines) = extend_steps.iter().fold(init, |(empty_counter, mut deadlines), step| {
             if step.is_empty() {
                 (empty_counter + 1, deadlines)
             } else {
@@ -74,21 +75,16 @@ impl TimeDrivenManager {
                 deadlines.push(deadline);
                 (0, deadlines)
             }
-        );
+        });
         if remaining != 0 {
             // There is some gcd periods left at the end of the hyper period.
             // We cannot add them to the first because this would off-set the very first iteration.
-            deadlines.push(Deadline{ pause: remaining * gcd, due: Vec::new() });
+            deadlines.push(Deadline { pause: remaining * gcd, due: Vec::new() });
         }
 
         // TODO: Sort by evaluation order!
 
-        TimeDrivenManager {
-            last_state: None,
-            deadlines,
-            hyper_period,
-            start_time: None,
-        }
+        TimeDrivenManager { last_state: None, deadlines, hyper_period, start_time: None }
     }
 
     pub fn start(&mut self, time: Option<SystemTime>) {
@@ -107,9 +103,9 @@ impl TimeDrivenManager {
         if let Some(last_state) = self.last_state {
             match self.compare_states(last_state, current_state) {
                 StateCompare::TimeTravel => unimplemented!(), // TODO: Actual bug in the implementation.
-                StateCompare::Skipped {..} => unimplemented!(), // TODO: Emit warning.
-                StateCompare::Equal => {} // TODO: Bug, but nothing game-breaking.
-                StateCompare::Next => {} // Nice! Do nothing.
+                StateCompare::Skipped { .. } => unimplemented!(), // TODO: Emit warning.
+                StateCompare::Equal => {}                     // TODO: Bug, but nothing game-breaking.
+                StateCompare::Next => {}                      // Nice! Do nothing.
             }
         }
 
@@ -119,7 +115,6 @@ impl TimeDrivenManager {
         (deadline.pause - offset, current_state.cycle)
     }
 
-
     /// Returns all time-driven streams that are due to be extended in time-driven evaluation
     /// cycle `c`. The returned collection is ordered according to the evaluation order.
     pub fn due_streams(&mut self, time: Option<SystemTime>) -> Option<&Vec<StreamReference>> {
@@ -127,10 +122,10 @@ impl TimeDrivenManager {
         let state = self.current_state(time);
         if let Some(old_state) = self.last_state {
             match self.compare_states(old_state, state) {
-                StateCompare::Next => {}, // Not a special case; skip.
-                StateCompare::TimeTravel => unimplemented!(), // Emit warning.
-                StateCompare::Equal => return None, // Nothing to do at all.
-                StateCompare::Skipped {..} => unimplemented!(), // Emit warning.
+                StateCompare::Next => {}                          // Not a special case; skip.
+                StateCompare::TimeTravel => unimplemented!(),     // Emit warning.
+                StateCompare::Equal => return None,               // Nothing to do at all.
+                StateCompare::Skipped { .. } => unimplemented!(), // Emit warning.
             }
         }
         self.last_state = Some(state);
@@ -160,7 +155,8 @@ impl TimeDrivenManager {
                         let diff = (d2 - d1) as u64; // Safe: d2 must be greater than d1.
                         if diff == 1 {
                             StateCompare::Next
-                        } else { // diff >= 2
+                        } else {
+                            // diff >= 2
                             StateCompare::Skipped { cycles: 0, deadlines: diff - 1 }
                         }
                     }
@@ -173,20 +169,20 @@ impl TimeDrivenManager {
                 } else {
                     let d_diff = (d2 as i128) - (d1 as i128); // Widen to assure safe arithmetic.
                     if d_diff > 0 {
-                        StateCompare::Skipped { cycles: diff, deadlines: (d_diff-1) as u64 }
-                    } else if d_diff == 0 { // d_diff <= 0
+                        StateCompare::Skipped { cycles: diff, deadlines: (d_diff - 1) as u64 }
+                    } else if d_diff == 0 {
+                        // d_diff <= 0
                         StateCompare::Skipped { cycles: diff - 1, deadlines: self.deadlines.len() as u64 }
-                    } else { // d_dif < 0
+                    } else {
+                        // d_dif < 0
                         let abs = -d_diff as u64;
                         let actual_d_diff = self.deadlines.len() as u64 - abs;
-                        StateCompare::Skipped { cycles: diff-1, deadlines: actual_d_diff - 1 }
+                        StateCompare::Skipped { cycles: diff - 1, deadlines: actual_d_diff - 1 }
                     }
-
                 }
             }
         }
     }
-
 
     /// Computes the last deadline that should have been evaluated according to the given `time`.
     /// The state's time is the earliest point in time where this state could have been the current
@@ -207,7 +203,7 @@ impl TimeDrivenManager {
             } else {
                 let offset_duration = Self::dur_from_nanos(hyper_nanos * cycle + sum);
                 let dl_time = start_time + offset_duration;
-                return TDMState { cycle: cycle.into(), deadline: ix, time: dl_time }
+                return TDMState { cycle: cycle.into(), deadline: ix, time: dl_time };
             }
         }
         unreachable!()
@@ -267,13 +263,12 @@ impl TimeDrivenManager {
         let nanos = (dur % NANOS_PER_SEC) as u32; // safe case
         Duration::new(secs, nanos)
     }
-
 }
 
 mod tests {
     use crate::evaluator::time_driven_manager::*;
     use lola_parser::LolaIR;
-    use std::time::{SystemTime, Duration};
+    use std::time::{Duration, SystemTime};
 
     fn to_ir(spec: &str) -> LolaIR {
         unimplemented!("We need some interface from the parser.")
@@ -296,10 +291,8 @@ mod tests {
 
         let cases = [case1, case2, case3, case4, case5];
         for (spec, expected) in cases.iter() {
-            let rates: Vec<std::time::Duration> = to_ir(spec).time_outputs
-                .iter()
-                .map(|s| s.extend_rate.unwrap())
-                .collect();
+            let rates: Vec<std::time::Duration> =
+                to_ir(spec).time_outputs.iter().map(|s| s.extend_rate.unwrap()).collect();
             let was = TimeDrivenManager::find_extend_period(&rates);
             let was = TimeDrivenManager::dur_as_nanos(was);
             assert_eq!(*expected, was);
@@ -318,7 +311,7 @@ mod tests {
 
         let cases = [case1, case2, case3, case4];
         for (a, b, expected) in &cases {
-            let to_dur = |(s,n)| Duration::new(s,n);
+            let to_dur = |(s, n)| Duration::new(s, n);
             let was = TimeDrivenManager::divide_durations(to_dur(*a), to_dur(*b), false);
             assert_eq!(was, *expected, "Expected {}, but was {}.", expected, was);
         }
@@ -333,50 +326,28 @@ mod tests {
         }
         // 1s, 0.1s, 2.3s, 1.6s
         let deadlines = vec![dl(1, 0), dl(0, 100_000_000), dl(2, 300_000_000), dl(1, 600_000_000)];
-        let tdm = TimeDrivenManager {
-            last_state: None,
-            deadlines,
-            hyper_period: dur(1, 0),
-            start_time: None,
-        };
-        fn state (cy: u128, dl: usize) -> TDMState {
+        let tdm = TimeDrivenManager { last_state: None, deadlines, hyper_period: dur(1, 0), start_time: None };
+        fn state(cy: u128, dl: usize) -> TDMState {
             let time = SystemTime::now();
-            TDMState{ cycle: cy.into(), deadline: dl, time }
+            TDMState { cycle: cy.into(), deadline: dl, time }
         }
         type Case = (TDMState, TDMState, StateCompare);
-        let cases: Vec<Case> = vec![(
-                state(0, 0),
-                state(0, 0),
-                StateCompare::Equal
-            ), (
-                state(1, 0),
-                state(0, 0),
-                StateCompare::TimeTravel
-            ), (
-                state(1, 2),
-                state(2, 1),
-                StateCompare::Skipped{ cycles: 0, deadlines: 2}
-            ), (
-                state(1, 2),
-                state(3, 1),
-                StateCompare::Skipped{ cycles: 1, deadlines: 2}
-            ), (
-                state(1, 2),
-                state(3, 0),
-                StateCompare::Skipped{ cycles: 1, deadlines: 1}
-            ), (
-                state(0, 0),
-                state(0, 1),
-                StateCompare::Next
-            ), (
-                state(4, 3),
-                state(5, 0),
-                StateCompare::Next
-            )
+        let cases: Vec<Case> = vec![
+            (state(0, 0), state(0, 0), StateCompare::Equal),
+            (state(1, 0), state(0, 0), StateCompare::TimeTravel),
+            (state(1, 2), state(2, 1), StateCompare::Skipped { cycles: 0, deadlines: 2 }),
+            (state(1, 2), state(3, 1), StateCompare::Skipped { cycles: 1, deadlines: 2 }),
+            (state(1, 2), state(3, 0), StateCompare::Skipped { cycles: 1, deadlines: 1 }),
+            (state(0, 0), state(0, 1), StateCompare::Next),
+            (state(4, 3), state(5, 0), StateCompare::Next),
         ];
         for (old, new, expected) in &cases {
             let was = tdm.compare_states(*old, *new);
-            assert_eq!(was, *expected, "Expected {:?}, but was {:?} for old: {:?} and new: {:?}.", expected, was, old, new)
+            assert_eq!(
+                was, *expected,
+                "Expected {:?}, but was {:?} for old: {:?} and new: {:?}.",
+                expected, was, old, new
+            )
         }
     }
 
@@ -392,7 +363,7 @@ mod tests {
 
         let cases = [case1, case2, case3, case4];
         for (a, b, expected) in &cases {
-            let to_dur = |(s,n)| Duration::new(s,n);
+            let to_dur = |(s, n)| Duration::new(s, n);
             let was = TimeDrivenManager::divide_durations(to_dur(*a), to_dur(*b), true);
             assert_eq!(was, *expected, "Expected {}, but was {}.", expected, was);
         }

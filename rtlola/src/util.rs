@@ -1,4 +1,3 @@
-
 pub(crate) fn gcd(mut a: u128, mut b: u128) -> u128 {
     // Courtesy of wikipedia.
     while b != 0 {
@@ -12,7 +11,7 @@ pub(crate) fn gcd(mut a: u128, mut b: u128) -> u128 {
 pub(crate) fn lcm(a: u128, b: u128) -> u128 {
     // Courtesy of wikipedia.
     let mul = a * b;
-    mul / gcd(a,b)
+    mul / gcd(a, b)
 }
 
 pub(crate) fn gcd_all(v: &[u128]) -> u128 {
@@ -24,7 +23,6 @@ pub(crate) fn lcm_all(v: &[u128]) -> u128 {
     assert!(!v.is_empty());
     v.iter().fold(v[0], |a, b| lcm(a, *b))
 }
-
 
 mod tests {
     use crate::util;
