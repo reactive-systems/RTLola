@@ -47,6 +47,16 @@ pub struct TimeDrivenManager {
 impl TimeDrivenManager {
     /// Creates a new TimeDrivenManager managing time-driven output streams.
     pub fn new(ir: &LolaIR) -> TimeDrivenManager {
+
+        if ir.time_outputs.is_empty() {
+            return TimeDrivenManager {
+                last_state: None,
+                deadlines: Vec![Deadline { pause: Duration::from_secs(0), due: Vec::new() }],
+                hyper_period: Duration::from_secs(100000), // Actual value does not matter.
+                start_time: None,
+            }
+        }
+
         fn extr_dur(s: &OutputStream) -> Duration {
             s.extend_rate.unwrap()
         }

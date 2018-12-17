@@ -26,6 +26,15 @@ pub struct EventDrivenManager {
 impl EventDrivenManager {
     /// Creates a new EventDrivenManager managing event-driven output streams.
     pub fn new(ir: &LolaIR) -> EventDrivenManager {
+
+        if ir.event_outputs.is_empty() {
+            return EventDrivenManager {
+                current_cycle: 0.into(),
+                layer_counter: 0,
+                layers: vec![Vec::new()],
+            }
+        }
+
         // Zip eval layer with stream reference.
         let layered = ir
             .inputs

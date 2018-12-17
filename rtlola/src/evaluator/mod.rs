@@ -32,7 +32,6 @@ impl lola_parser::LolaBackend for Evaluator {
 impl Evaluator {
     /// Create a new `Evaluator` for RTLola specifications. Respects settings passed in `config`.
     pub fn new(ir: LolaIR, config: EvalConfig) -> Evaluator {
-        // TODO: Return Result<Evaluator>, check streams empty etc.
         let output_handler = OutputHandler::new(&config);
         let input_handler = InputHandler::new(&config);
         let time_manager = TimeDrivenManager::new(&ir);
@@ -46,4 +45,5 @@ impl Evaluator {
     pub fn start(&mut self) {
         unimplemented!()
     }
+
 }
