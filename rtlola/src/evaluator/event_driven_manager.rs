@@ -27,33 +27,25 @@ impl EventDrivenManager {
     /// Creates a new EventDrivenManager managing event-driven output streams.
     pub fn new(ir: &LolaIR) -> EventDrivenManager {
         // Zip eval layer with stream reference.
-        let inputs = ir
+        let layered = ir
             .inputs
             .iter()
-            .map(|i| (i.eval_layer() as usize, i.as_stream_ref()));
-        let ir_outputs = ir.outputs(); // Extend lifetime.
-        let outputs = ir_outputs
-            .iter()
-            .map(|r| (ir.get_out(*r).eval_layer() as usize, *r));
-        let layered: Vec<(usize, StreamReference)> = inputs.chain(outputs).collect();
-        let max_layer = layered.iter().map(|(lay, r)| lay).max();
+            .map(|s| s as &Stream)
+            .chain(ir.event_outputs.iter().map(|s| s as &Stream))
+            .map(|r| (r.eval_layer() as usize, r.as_stream_ref()));
+        let max_layer = layered.clone().map(|(lay, r)| lay).max();
+        let layered: Vec<(usize, StreamReference)> = layered.collect();
 
-        assert!(Self::check_layers(
-            &layered.iter().map(|(ix, r)| *ix).collect()
-        ));
+        assert!(Self::check_layers(&layered.iter().map(|(ix, r)| *ix).collect()));
 
         // Create vec where each element represents one layer.
         // `check_layers` guarantees that max_layer is defined.
-        let mut layers = vec![Vec::new(); *max_layer.unwrap()];
+        let mut layers = vec![Vec::new(); max_layer.unwrap()];
         for (ix, stream) in layered {
             layers[ix].push(stream)
         }
 
-        EventDrivenManager {
-            current_cycle: 0.into(),
-            layer_counter: 0,
-            layers,
-        }
+        EventDrivenManager { current_cycle: 0.into(), layer_counter: 0, layers }
     }
 
     fn check_layers(vec: &Vec<usize>) -> bool {
@@ -70,15 +62,9 @@ impl EventDrivenManager {
     /// Returns a collection of all event-driven streams that need to be extended next according to
     /// the evaluation order for evaluation cycle `for_cycle`. Returns `None` if the evaluation
     /// cycle is over.
-    /// `panics` if the old cycle is not completed before the next one is requested.
-    pub fn next_evaluation_layer(
-        &mut self,
-        for_cycle: EventDrivenCycleCount,
-    ) -> Option<&[StreamReference]> {
-        assert_eq!(
-            for_cycle, self.current_cycle,
-            "Requested new eval cycle before completing the last one."
-        );
+    /// `panic`s if the old cycle is not completed before the next one is requested.
+    pub fn next_evaluation_layer(&mut self, for_cycle: EventDrivenCycleCount) -> Option<&[StreamReference]> {
+        assert_eq!(for_cycle, self.current_cycle, "Requested new eval cycle before completing the last one.");
         if self.layer_counter as usize == self.layers.len() {
             self.progress_cycle();
             None
