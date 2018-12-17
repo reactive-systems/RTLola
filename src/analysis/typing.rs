@@ -9,7 +9,8 @@
 use super::naming::{Declaration, DeclarationTable};
 use crate::ast::LolaSpec;
 use crate::ast::{
-    BinOp, Constant, Expression, Input, Literal, Offset, Output, Type, TypeKind, UnOp, ExpressionKind, LitKind
+    BinOp, Constant, Expression, ExpressionKind, Input, LitKind, Literal, Offset, Output, Type,
+    TypeKind, UnOp,
 };
 use crate::reporting::Handler;
 use crate::reporting::LabeledSpan;
@@ -383,15 +384,9 @@ impl<'a> TypeAnalysis<'a> {
                 let stream_var = self.new_var(stream._id);
 
                 let negative_offset = match &off_expr.kind {
-                    ExpressionKind::Lit(l) => {
-                        match l.kind {
-                            LitKind::Int(i) => {
-                                i < 0
-                            }
-                            _ => {
-                                unreachable!("offset expressions have to be integers")
-                            }
-                        }
+                    ExpressionKind::Lit(l) => match l.kind {
+                        LitKind::Int(i) => i < 0,
+                        _ => unreachable!("offset expressions have to be integers"),
                     },
                     _ => unreachable!("offset expressions have to be literal"),
                 };
@@ -418,19 +413,16 @@ impl<'a> TypeAnalysis<'a> {
                         self.handle_error(err, stream._span);
                     })?;
                 if negative_offset {
-self.unifier
-                    .unify_var_ty(var, Ty::Option(Box::new(Ty::Infer(inner_var))))
-                    .map_err(|err| {
-                        self.handle_error(err, expr._span);
-                    })?;    
-                } else {
                     self.unifier
-                    .unify_var_var(var, inner_var)
-                    .map_err(|err| {
+                        .unify_var_ty(var, Ty::Option(Box::new(Ty::Infer(inner_var))))
+                        .map_err(|err| {
+                            self.handle_error(err, expr._span);
+                        })?;
+                } else {
+                    self.unifier.unify_var_var(var, inner_var).map_err(|err| {
                         self.handle_error(err, expr._span);
                     })?;
                 }
-                
             }
             Default(left, right) => {
                 // recursion

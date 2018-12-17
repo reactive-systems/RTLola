@@ -730,7 +730,7 @@ fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>, span: Span)
                             return Expression::new(ExpressionKind::Method(Box::new(lhs), ident, args), span);
                         }
                         _ => panic!("tuple accesses require a number"),
-                    }                    
+                    }
                 }
                 _ => unreachable!(),
             };
