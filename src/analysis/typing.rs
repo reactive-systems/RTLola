@@ -854,6 +854,9 @@ impl Unifier {
                     .all(|(e_l, e_r)| self.types_equal_rec(e_l, e_r))
             }
             (Ty::TimedStream(_), Ty::TimedStream(_)) => unimplemented!(),
+            (Ty::Window(ty_l, d_l), Ty::Window(ty_r, d_r)) => {
+                self.types_equal_rec(ty_l, ty_r) && self.types_equal_rec(d_l, d_r)
+            }
             (l, r) => l == r,
         }
     }
@@ -1016,6 +1019,10 @@ impl Ty {
                 Ok(Ty::Tuple(inner))
             }
             (Ty::TimedStream(_), Ty::TimedStream(_)) => unimplemented!(),
+            (Ty::Window(ty_l, d_l), Ty::Window(ty_r, d_r)) => Ok(Ty::Window(
+                Box::new(ty_l.unify(ty_r)?),
+                Box::new(d_l.unify(d_r)?),
+            )),
             (l, r) => {
                 if l == r {
                     Ok(self.clone())
@@ -1346,6 +1353,12 @@ mod tests {
     #[test]
     fn test_input_offset() {
         let spec = "input a: UInt8\n output b: UInt8 := a[3]";
+        assert_eq!(0, num_type_errors(spec));
+    }
+
+    #[test]
+    fn test_window_new() {
+        let spec = "input in: Int8\noutput out: Int8 { extend @5Hz } := in.window<3s>().sum()";
         assert_eq!(0, num_type_errors(spec));
     }
 

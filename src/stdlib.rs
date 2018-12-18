@@ -117,6 +117,23 @@ impl MethodLookup {
                 ],
                 return_type: Ty::Param(0, "T".to_string()),
             }),
+            // sum<T:Numeric, D: Duration>(Window<T,D>) -> T
+            (Ty::Window(_, _), "sum") => Some(FuncDecl {
+                name: "sum".to_string(),
+                generics: vec![
+                    Generic {
+                        constraint: Ty::Constr(TypeConstraint::Numeric),
+                    },
+                    Generic {
+                        constraint: Ty::Constr(TypeConstraint::Duration),
+                    },
+                ],
+                parameters: vec![Ty::Window(
+                    Box::new(Ty::Param(0, "T".to_string())),
+                    Box::new(Ty::Param(1, "D".to_string())),
+                )],
+                return_type: Ty::Param(0, "T".to_string()),
+            }),
             _ => unimplemented!("{} for {}", name, ty),
         }
     }
