@@ -393,6 +393,34 @@ impl LolaIR {
             .chain(self.output_refs().iter().cloned())
             .collect()
     }
+
+    pub fn get_triggers(&self) -> Vec<&OutputStream> {
+        self.triggers
+            .iter()
+            .map(|t| self.get_out(t.reference))
+            .collect()
+    }
+
+    pub fn get_event_driven(&self) -> Vec<&OutputStream> {
+        self.event_driven
+            .iter()
+            .map(|t| self.get_out(t.reference))
+            .collect()
+    }
+
+    pub fn get_time_driven(&self) -> Vec<&OutputStream> {
+        self.time_driven
+            .iter()
+            .map(|t| self.get_out(t.reference))
+            .collect()
+    }
+
+    pub fn get_parametrized(&self) -> Vec<&OutputStream> {
+        self.parametrized
+            .iter()
+            .map(|t| self.get_out(t.reference))
+            .collect()
+    }
 }
 
 impl PrimitiveType {
