@@ -307,6 +307,12 @@ impl MemorizationBound {
             MemorizationBound::Unbounded => dft,
         }
     }
+    pub fn as_opt(self) -> Option<u16> {
+        match self {
+            MemorizationBound::Bounded(b) => Some(b),
+            MemorizationBound::Unbounded => None,
+        }
+    }
 }
 
 impl Stream for OutputStream {
