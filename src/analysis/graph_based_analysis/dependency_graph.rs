@@ -1,14 +1,19 @@
-use crate::analysis::graph_based_analysis::dependency_graph::StreamNode::*;
+use crate::analysis::graph_based_analysis::DependencyGraph;
+use crate::analysis::graph_based_analysis::EIx;
+use crate::analysis::graph_based_analysis::Location;
+use crate::analysis::graph_based_analysis::NIx;
+use crate::analysis::graph_based_analysis::Offset;
+use crate::analysis::graph_based_analysis::StreamDependency;
+use crate::analysis::graph_based_analysis::StreamNode;
+use crate::analysis::graph_based_analysis::StreamNode::*;
 use crate::analysis::lola_version::LolaVersionTable;
 use crate::analysis::naming::Declaration;
 use crate::analysis::naming::DeclarationTable;
-use crate::analysis::AnalysisError;
 use crate::ast::ExpressionKind;
 use crate::ast::LanguageSpec;
 use crate::ast::LitKind;
 use crate::ast::Output;
 use crate::ast::TemplateSpec;
-use crate::ast::TimeUnit;
 use crate::ast::UnOp;
 use crate::reporting::DiagnosticBuilder;
 use crate::reporting::Handler;
@@ -19,21 +24,12 @@ use ast_node::AstNode;
 use ast_node::NodeId;
 use ast_node::Span;
 use petgraph::algo::tarjan_scc;
-use petgraph::dot::{Config, Dot};
 use petgraph::graph::edge_index;
 use petgraph::graph::node_index;
 use petgraph::graph::NodeIndex;
 use petgraph::visit::EdgeRef;
 use petgraph::visit::NodeIndexable;
-use petgraph::Directed;
-use petgraph::Graph;
 use std::collections::HashMap;
-
-pub(crate) type DependencyGraph = Graph<StreamNode, StreamDependency, Directed>;
-pub(crate) type NId = <DependencyGraph as petgraph::visit::GraphBase>::NodeId;
-pub(crate) type NIx = petgraph::prelude::NodeIndex;
-type EIx = petgraph::prelude::EdgeIndex;
-type EId = petgraph::prelude::EdgeIndex;
 
 #[derive(Debug, Copy, Clone)]
 pub(crate) struct StreamMappingInfo {
@@ -42,36 +38,7 @@ pub(crate) struct StreamMappingInfo {
 
 pub(crate) type StreamMapping = HashMap<ast_node::NodeId, StreamMappingInfo>;
 
-#[derive(Debug, Copy, Clone)]
-pub(crate) enum StreamNode {
-    ClassicInput(ast_node::NodeId),
-    ClassicOutput(ast_node::NodeId),
-    ParameterizedInput(ast_node::NodeId),
-    ParameterizedOutput(ast_node::NodeId),
-    RTOutput(ast_node::NodeId),
-    Trigger(ast_node::NodeId),
-}
-
-#[derive(Debug, Copy, Clone)]
-pub(crate) enum Offset {
-    Discrete(i32),
-    Time(f64, TimeUnit),
-}
-
-#[derive(Debug, Copy, Clone)]
-pub(crate) enum Location {
-    Invoke,
-    Extend,
-    Terminate,
-    Expression,
-}
-
-#[derive(Debug, Copy, Clone)]
-pub(crate) enum StreamDependency {
-    Access(Location, Offset, Span),
-    InvokeByName(Span),
-}
-
+#[derive(Copy, Clone)]
 enum CycleWeight {
     Positive,
     Zero,
@@ -106,6 +73,7 @@ struct DependencyAnalyser<'a> {
 #[derive(Debug)]
 pub(crate) struct DependencyAnalysis {
     pub dependency_graph: DependencyGraph,
+    pub nodes_with_positive_cycle: Vec<NodeId>,
 }
 
 struct CycleFinder<'a> {
@@ -175,11 +143,11 @@ impl<'a> CycleFinder<'a> {
         &mut self,
         node: NIx,
         starting_node: NIx,
-        nodes_in_scc: &Vec<NIx>,
+        nodes_in_scc: &[NIx],
     ) -> bool {
         let mut found = false;
         self.stack.push(node);
-        self.blocked[node.index()];
+        self.blocked[node.index()] = true;
         let mut neighbors: Vec<NodeIndex> = self.dependency_graph.neighbors(node).collect();
         neighbors.sort();
         neighbors.dedup();
@@ -224,7 +192,7 @@ fn find_elementary_cycles(graph: &DependencyGraph) -> Vec<Vec<NodeIndex<u32>>> {
 
 fn enumerate_paths(
     dependency_graph: &DependencyGraph,
-    cycle: &Vec<NodeIndex>,
+    cycle: &[NodeIndex],
     remaining_elements: usize,
     paths: &mut Vec<Vec<petgraph::prelude::EdgeIndex>>,
     stack: &mut Vec<petgraph::prelude::EdgeIndex>,
@@ -259,7 +227,11 @@ impl<'a> DependencyAnalyser<'a> {
         for trigger in &self.spec.trigger {
             let id = *trigger.id();
             match self.version_table[&id] {
-                LanguageSpec::Classic | LanguageSpec::Lola2 | LanguageSpec::RTLola => {
+                LanguageSpec::RTLola => {
+                    let normal_time_index = self.dependency_graph.add_node(RTTrigger(id));
+                    mapping.insert(id, StreamMappingInfo { normal_time_index });
+                }
+                LanguageSpec::Classic | LanguageSpec::Lola2 => {
                     let normal_time_index = self.dependency_graph.add_node(Trigger(id));
                     mapping.insert(id, StreamMappingInfo { normal_time_index });
                 }
@@ -471,7 +443,7 @@ impl<'a> DependencyAnalyser<'a> {
         }
     }
 
-    fn get_cycle_weight(&self, cycle_path: &Vec<EIx>) -> Option<CycleWeight> {
+    fn get_cycle_weight(&self, cycle_path: &[EIx]) -> Option<CycleWeight> {
         let any_rt =
             cycle_path.iter().any(
                 |&edge| match self.dependency_graph.edge_weight(edge).unwrap() {
@@ -510,7 +482,7 @@ impl<'a> DependencyAnalyser<'a> {
 
     fn find_all_cyclic_paths(
         &mut self,
-        cycles: &Vec<Vec<NodeIndex>>,
+        cycles: &[Vec<NodeIndex>],
     ) -> Vec<Vec<petgraph::prelude::EdgeIndex>> {
         let mut paths: Vec<Vec<petgraph::prelude::EdgeIndex>> = Vec::with_capacity(cycles.len());
         let mut path: Vec<petgraph::prelude::EdgeIndex> = Vec::new();
@@ -535,15 +507,15 @@ impl<'a> DependencyAnalyser<'a> {
         for output in &self.spec.outputs {
             let id = *output.id();
             let current_node = mapping[&id].normal_time_index;
-            self.handle_expression(&mut mapping, &output, &id, current_node);
+            self.handle_expression(&mut mapping, &output, id, current_node);
 
             match self.version_table[&id] {
                 LanguageSpec::Classic => {}
                 LanguageSpec::Lola2 | LanguageSpec::RTLola => {
                     if let Some(ref template_spec) = output.template_spec {
-                        self.handle_invoke(&mut mapping, id, current_node, template_spec);
-                        self.handle_extend(&mut mapping, id, current_node, template_spec);
-                        self.handle_terminate(&mut mapping, id, current_node, template_spec);
+                        self.handle_invoke(&mut mapping, current_node, template_spec);
+                        self.handle_extend(&mut mapping, current_node, template_spec);
+                        self.handle_terminate(&mut mapping, current_node, template_spec);
                     }
                 }
             }
@@ -553,7 +525,6 @@ impl<'a> DependencyAnalyser<'a> {
     fn handle_invoke(
         &mut self,
         mut mapping: &mut HashMap<ast_node::NodeId, StreamMappingInfo>,
-        id: ast_node::NodeId,
         current_node: NodeIndex<u32>,
         template_spec: &TemplateSpec,
     ) {
@@ -566,7 +537,7 @@ impl<'a> DependencyAnalyser<'a> {
                     Declaration::Out(output) => *output.id(),
                     _ => {
                         by_name = false;
-                        id
+                        NodeId::new(0)
                     }
                 };
                 if by_name {
@@ -598,7 +569,6 @@ impl<'a> DependencyAnalyser<'a> {
     fn handle_extend(
         &mut self,
         mut mapping: &mut HashMap<ast_node::NodeId, StreamMappingInfo>,
-        id: ast_node::NodeId,
         current_node: NodeIndex<u32>,
         template_spec: &TemplateSpec,
     ) {
@@ -617,7 +587,6 @@ impl<'a> DependencyAnalyser<'a> {
     fn handle_terminate(
         &mut self,
         mut mapping: &mut HashMap<ast_node::NodeId, StreamMappingInfo>,
-        id: ast_node::NodeId,
         current_node: NodeIndex<u32>,
         template_spec: &TemplateSpec,
     ) {
@@ -635,7 +604,7 @@ impl<'a> DependencyAnalyser<'a> {
         &mut self,
         mut mapping: &mut HashMap<ast_node::NodeId, StreamMappingInfo>,
         output: &Output,
-        id: &ast_node::NodeId,
+        id: ast_node::NodeId,
         current_node: NodeIndex<u32>,
     ) {
         self.add_edges_for_expression(
@@ -663,8 +632,6 @@ impl<'a> DependencyAnalyser<'a> {
     }
 
     fn analyse_dependencies(mut self) -> DependencyAnalysis {
-        let errors: Vec<Box<AnalysisError<'a> + 'a>> = Vec::new();
-
         let mut mapping: StreamMapping = StreamMapping::new();
 
         self.add_input_nodes(&mut mapping);
@@ -680,38 +647,28 @@ impl<'a> DependencyAnalyser<'a> {
         // Outputs need their expressions and their template_spec/stream_pattern checked checked
         self.add_output_dependencies(&mut mapping);
 
+        let nodes_with_positive_cycle = self.check_cycles();
+
+        DependencyAnalysis {
+            dependency_graph: self.dependency_graph,
+            nodes_with_positive_cycle,
+        }
+    }
+
+    fn check_cycles(&mut self) -> Vec<NodeId> {
         // find all cycles as a list of nodes
         let cycles: Vec<Vec<NodeIndex>> = find_elementary_cycles(&self.dependency_graph);
         // construct all paths -- this takes parallel edges into account
         let paths = self.find_all_cyclic_paths(&cycles);
-        //        println!("{:?}", Dot::with_config(&self.dependency_graph, &[]));
-        //        println!("{:?}", Dot::with_config(&dependency_graph, &[Config::NodeIndexLabel,Config::EdgeIndexLabel]));
-        //        println!("{:?}",cycles);
-        //        println!("{:?}", paths);
-        //        for node in dependency_graph.node_indices(){
-        //            println!("node {:?}",node);
-        //            let mut  neighbors : Vec<NodeIndex> = dependency_graph.neighbors(node).collect();
-        //            neighbors.sort();
-        //            neighbors.dedup();
-        //            for neighbor in neighbors {
-        //                print!(" {:?}",neighbor);
-        //
-        //            }
-        //            println!("");
-        //        }
-
         // TODO check each path individually
         // TODO check +/0/-
-
         // Map stream.index  -> (Vec<Vec<EIx>>,,)
         let mut cycles_per_stream: HashMap<NodeId, CycleTracker> =
             HashMap::with_capacity(self.spec.outputs.len());
-
         // add entry for each output
         for output in &self.spec.outputs {
             cycles_per_stream.insert(*output.id(), CycleTracker::default());
         }
-
         for (path_index, cyclic_path) in paths.iter().enumerate() {
             let weight = self.get_cycle_weight(&cyclic_path);
             if let Some(weight) = weight {
@@ -732,22 +689,20 @@ impl<'a> DependencyAnalyser<'a> {
                 }
             }
         }
-
+        let mut nodes_with_positive_cycle = Vec::new();
         for (id, cycle_tracker) in cycles_per_stream {
             if !cycle_tracker.negative.is_empty() && !cycle_tracker.positive.is_empty() {
                 unimplemented!("We still need to give an error")
             }
             if !cycle_tracker.positive.is_empty() {
+                nodes_with_positive_cycle.push(id);
                 for positive_cycle_index in cycle_tracker.positive {
                     let positive_cycle = &paths[positive_cycle_index];
                     self.build_positive_weight_cycle_warning(positive_cycle)
                 }
             }
         }
-
-        DependencyAnalysis {
-            dependency_graph: self.dependency_graph,
-        }
+        nodes_with_positive_cycle
     }
 
     fn get_stream_name(&self, node_index: NIx) -> &String {
@@ -756,17 +711,18 @@ impl<'a> DependencyAnalyser<'a> {
             StreamNode::ClassicOutput(id)
             | StreamNode::ParameterizedOutput(id)
             | StreamNode::RTOutput(id) => id,
-            StreamNode::ClassicInput(id)
-            | StreamNode::ParameterizedInput(id)
-            | StreamNode::Trigger(id) => {
+            StreamNode::ClassicInput(_)
+            | StreamNode::ParameterizedInput(_)
+            | StreamNode::Trigger(_)
+            | StreamNode::RTTrigger(_) => {
                 unreachable!("Inputs and triggers must never appear in a cycle.")
             }
         };
 
-        self.stream_names.get(stream_id).unwrap()
+        &self.stream_names[stream_id]
     }
 
-    fn build_zero_weight_cycle_error(&self, cyclic_path: &Vec<EIx>) {
+    fn build_zero_weight_cycle_error(&self, cyclic_path: &[EIx]) {
         let mut builder: Option<DiagnosticBuilder> = None;
         for edge_index in cyclic_path {
             let edge_weight = self.dependency_graph.edge_weight(*edge_index).unwrap();
@@ -819,7 +775,7 @@ impl<'a> DependencyAnalyser<'a> {
                 builder.add_span_with_label(span, label.as_str(), false);
             } else {
                 let mut diagnostic_builder = self.handler.build_error_with_span(
-                    &format!("There is a 0 weight cycle."),
+                    &"There is a 0 weight cycle.".to_string(),
                     LabeledSpan::new(span, label.as_str(), false),
                 );
                 diagnostic_builder.prevent_sorting();
@@ -829,7 +785,7 @@ impl<'a> DependencyAnalyser<'a> {
         builder.unwrap().emit();
     }
 
-    fn build_positive_weight_cycle_warning(&self, cyclic_path: &Vec<EIx>) {
+    fn build_positive_weight_cycle_warning(&self, cyclic_path: &[EIx]) {
         let mut builder: Option<DiagnosticBuilder> = None;
         for edge_index in cyclic_path {
             let edge_weight = self.dependency_graph.edge_weight(*edge_index).unwrap();
@@ -898,7 +854,7 @@ impl<'a> DependencyAnalyser<'a> {
         &mut self,
         cycles_per_stream: &mut HashMap<NodeId, CycleTracker>,
         path_index: usize,
-        cyclic_path: &Vec<EIx>,
+        cyclic_path: &[EIx],
         weight: CycleWeight,
     ) {
         if let CycleWeight::Positive = weight {
@@ -923,9 +879,10 @@ impl<'a> DependencyAnalyser<'a> {
             StreamNode::ClassicOutput(id)
             | StreamNode::ParameterizedOutput(id)
             | StreamNode::RTOutput(id) => id,
-            StreamNode::ClassicInput(id)
-            | StreamNode::ParameterizedInput(id)
-            | StreamNode::Trigger(id) => {
+            StreamNode::ClassicInput(_)
+            | StreamNode::ParameterizedInput(_)
+            | StreamNode::Trigger(_)
+            | StreamNode::RTTrigger(_) => {
                 unreachable!("Inputs and triggers must never appear in a cycle.")
             }
         }
@@ -937,7 +894,7 @@ pub(crate) fn analyse_dependencies<'a>(
     version_table: &'a LolaVersionTable,
     naming_table: &'a DeclarationTable,
     handler: &'a Handler,
-) {
+) -> DependencyAnalysis {
     let analyser = DependencyAnalyser {
         dependency_graph: DependencyGraph::default(),
         spec,
@@ -946,7 +903,7 @@ pub(crate) fn analyse_dependencies<'a>(
         handler,
         stream_names: HashMap::new(),
     };
-    analyser.analyse_dependencies();
+    analyser.analyse_dependencies()
 }
 
 #[cfg(test)]
@@ -969,7 +926,11 @@ mod tests {
         naming_analyzer.check(&ast);
         let mut version_analyzer = LolaVersionAnalysis::new(&handler);
         let version = version_analyzer.analyse(&ast);
-        let dependency_analysis = analyse_dependencies(
+        assert!(
+            !version.is_none(),
+            "We only analyze dependencies for specifications that so far seem to be ok."
+        );
+        let _dependency_analysis = analyse_dependencies(
             &ast,
             &version_analyzer.result,
             &naming_analyzer.result,

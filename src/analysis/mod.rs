@@ -16,6 +16,7 @@ use self::naming::NamingAnalysis;
 use self::typing::TypeAnalysis;
 use super::ast::LolaSpec;
 use crate::analysis::graph_based_analysis::dependency_graph::analyse_dependencies;
+use crate::analysis::graph_based_analysis::evaluation_order::determine_evaluation_order;
 use crate::parse::SourceMapper;
 use crate::reporting::Handler;
 
@@ -51,6 +52,8 @@ pub(crate) fn analyze(spec: &mut LolaSpec, mapper: SourceMapper) -> bool {
         &naming_analyzer.result,
         &handler,
     );
+
+    let _evaluation_order_result = determine_evaluation_order(dependency_analysis.dependency_graph);
 
     unimplemented!();
 }

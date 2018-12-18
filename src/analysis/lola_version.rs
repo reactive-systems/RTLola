@@ -120,6 +120,7 @@ impl<'a> LolaVersionAnalysis<'a> {
         analyse_expression(&mut version_tracker, &output.expression, false);
 
         // TODO check parameters for InvocationType
+        // TODO check extend for frequency
 
         if version_tracker.cannot_be_classic.is_none() {
             self.result.insert(*output.id(), LanguageSpec::Classic);
@@ -209,9 +210,8 @@ impl<'a> LolaVersionAnalysis<'a> {
                     if reason_against_classic_lola.is_none() {
                         *reason_against_classic_lola = Some((
                             span,
-                            format!(
-                                "Classic Lola is not possible due to this being a Lola2 trigger."
-                            ),
+                            "Classic Lola is not possible due to this being a Lola2 trigger."
+                                .to_string(),
                         ))
                     }
                 }
@@ -219,15 +219,14 @@ impl<'a> LolaVersionAnalysis<'a> {
                     if reason_against_classic_lola.is_none() {
                         *reason_against_classic_lola = Some((
                             span,
-                            format!(
-                                "Classic Lola is not possible due to this being a RTLola trigger."
-                            ),
+                            "Classic Lola is not possible due to this being a RTLola trigger."
+                                .to_string(),
                         ))
                     }
                     if reason_against_lola2.is_none() {
                         *reason_against_lola2 = Some((
                             span,
-                            format!("Lola2 is not possible due to this being a RTLola trigger."),
+                            "Lola2 is not possible due to this being a RTLola trigger.".to_string(),
                         ))
                     }
                 }
