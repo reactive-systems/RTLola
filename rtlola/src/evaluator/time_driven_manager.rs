@@ -308,8 +308,6 @@ impl TimeDrivenManager {
 mod tests {
     use crate::evaluator::{io_handler::OutputHandler, time_driven_manager::*};
     use lola_parser::LolaIR;
-    use std::rc::Rc;
-    use std::time::{Duration, SystemTime};
 
     fn to_ir(spec: &str) -> LolaIR {
         unimplemented!("We need some interface from the parser.")
@@ -332,8 +330,7 @@ mod tests {
 
         let cases = [case1, case2, case3, case4, case5];
         for (spec, expected) in cases.iter() {
-            let rates: Vec<std::time::Duration> =
-                to_ir(spec).time_outputs.iter().map(|s| s.extend_rate.unwrap()).collect();
+            let rates: Vec<std::time::Duration> = to_ir(spec).time_driven.iter().map(|s| s.extend_rate).collect();
             let was = TimeDrivenManager::find_extend_period(&rates);
             let was = TimeDrivenManager::dur_as_nanos(was);
             assert_eq!(*expected, was);
@@ -345,12 +342,12 @@ mod tests {
         type TestDurations = ((u64, u32), (u64, u32), usize);
         let case1: TestDurations = ((1, 0), (1, 0), 1);
         let case2: TestDurations = ((1, 0), (0, 100_000_000), 10);
-        let case2: TestDurations = ((1, 0), (0, 100_000), 10_000);
-        let case3: TestDurations = ((1, 0), (0, 20_000), 50_000);
-        let case4: TestDurations = ((0, 40_000), (0, 30_000), 1);
-        let case4: TestDurations = ((3, 1_000), (3, 5_000), 0);
+        let case3: TestDurations = ((1, 0), (0, 100_000), 10_000);
+        let case4: TestDurations = ((1, 0), (0, 20_000), 50_000);
+        let case5: TestDurations = ((0, 40_000), (0, 30_000), 1);
+        let case6: TestDurations = ((3, 1_000), (3, 5_000), 0);
 
-        let cases = [case1, case2, case3, case4];
+        let cases = [case1, case2, case3, case4, case5, case6];
         for (a, b, expected) in &cases {
             let to_dur = |(s, n)| Duration::new(s, n);
             let was = TimeDrivenManager::divide_durations(to_dur(*a), to_dur(*b), false);
@@ -398,12 +395,12 @@ mod tests {
         type TestDurations = ((u64, u32), (u64, u32), usize);
         let case1: TestDurations = ((1, 0), (1, 0), 1);
         let case2: TestDurations = ((1, 0), (0, 100_000_000), 10);
-        let case2: TestDurations = ((1, 0), (0, 100_000), 10_000);
-        let case3: TestDurations = ((1, 0), (0, 20_000), 50_000);
-        let case4: TestDurations = ((0, 40_000), (0, 30_000), 2);
-        let case4: TestDurations = ((3, 1_000), (3, 5_000), 1);
+        let case3: TestDurations = ((1, 0), (0, 100_000), 10_000);
+        let case4: TestDurations = ((1, 0), (0, 20_000), 50_000);
+        let case5: TestDurations = ((0, 40_000), (0, 30_000), 2);
+        let case6: TestDurations = ((3, 1_000), (3, 5_000), 1);
 
-        let cases = [case1, case2, case3, case4];
+        let cases = [case1, case2, case3, case4, case5, case6];
         for (a, b, expected) in &cases {
             let to_dur = |(s, n)| Duration::new(s, n);
             let was = TimeDrivenManager::divide_durations(to_dur(*a), to_dur(*b), true);
