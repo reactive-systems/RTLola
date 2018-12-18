@@ -359,15 +359,15 @@ impl Stream for InputStream {
     }
 }
 
-impl<'a> LolaIR {
-    pub fn output_refs(&'a self) -> Vec<StreamReference> {
+impl LolaIR {
+    pub fn output_refs(&self) -> Vec<StreamReference> {
         self.outputs
             .iter()
             .map(|s| (s as &Stream).as_stream_ref())
             .collect()
     }
 
-    pub fn get_in(&'a self, reference: StreamReference) -> &InputStream {
+    pub fn get_in(&self, reference: StreamReference) -> &InputStream {
         match reference {
             StreamReference::InRef(ix) => &self.inputs[ix],
             StreamReference::OutRef(_) => {
@@ -376,7 +376,7 @@ impl<'a> LolaIR {
         }
     }
 
-    pub fn get_out(&'a self, reference: StreamReference) -> &OutputStream {
+    pub fn get_out(&self, reference: StreamReference) -> &OutputStream {
         match reference {
             StreamReference::InRef(_) => {
                 panic!("Called `LolaIR::get_out` with a `StreamReference::InRef`.")
@@ -385,7 +385,7 @@ impl<'a> LolaIR {
         }
     }
 
-    pub fn all_streams(&'a self) -> Vec<StreamReference> {
+    pub fn all_streams(&self) -> Vec<StreamReference> {
         self.inputs
             .iter()
             .enumerate()
