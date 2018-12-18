@@ -29,22 +29,22 @@ pub struct EventDrivenManager {
 impl EventDrivenManager {
     /// Creates a new EventDrivenManager managing event-driven output streams.
     pub fn new(ir: &LolaIR, handler: Rc<OutputHandler>) -> EventDrivenManager {
-        if ir.event_outputs.is_empty() {
+        if ir.event_driven.is_empty() {
             return EventDrivenManager { current_cycle: 0.into(), layer_counter: 0, layers: vec![Vec::new()], handler };
         }
 
         // Zip eval layer with stream reference.
         let layered = ir
-            .inputs
-            .iter()
-            .map(|s| s as &Stream)
-            .chain(ir.event_outputs.iter().map(|s| s as &Stream))
-            .map(|r| (r.eval_layer() as usize, r.as_stream_ref()));
-        let max_layer = layered.clone().map(|(lay, r)| lay).max();
+            .get_event_driven()
+            .into_iter()
+            .map(|o| o as &Stream)
+            .chain(ir.inputs.iter().map(|i| i as &Stream))
+            .map(|s| (s.eval_layer() as usize, s.as_stream_ref()));
+        let max_layer = layered.clone().map(|(lay, _)| lay).max();
         let layered: Vec<(usize, StreamReference)> = layered.collect();
 
         if cfg!(debug_assertions) {
-            Self::check_layers(&layered.iter().map(|(ix, r)| *ix).collect());
+            Self::check_layers(&layered.iter().map(|(ix, _)| *ix).collect());
         }
 
         // Create vec where each element represents one layer.

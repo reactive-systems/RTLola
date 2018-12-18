@@ -1,6 +1,6 @@
 use crate::evaluator::io_handler::{OutputHandler, OutputKind};
 use crate::util;
-use lola_parser::{LolaIR, OutputStream, Stream, StreamReference};
+use lola_parser::{LolaIR, StreamReference};
 use std::cmp::Ordering;
 use std::rc::Rc;
 use std::time::{Duration, SystemTime};
@@ -50,7 +50,7 @@ pub struct TimeDrivenManager {
 impl TimeDrivenManager {
     /// Creates a new TimeDrivenManager managing time-driven output streams.
     pub fn new(ir: &LolaIR, handler: Rc<OutputHandler>) -> TimeDrivenManager {
-        if ir.time_outputs.is_empty() {
+        if ir.time_driven.is_empty() {
             return TimeDrivenManager {
                 last_state: None,
                 deadlines: vec![Deadline { pause: Duration::from_secs(0), due: Vec::new() }],
@@ -60,25 +60,19 @@ impl TimeDrivenManager {
             };
         }
 
-        fn extr_dur(s: &OutputStream) -> Duration {
-            s.extend_rate.unwrap()
-        }
-
-        let streams = &ir.time_outputs;
-        let rates: Vec<Duration> = streams.iter().map(extr_dur).collect();
-        let max = rates.iter().max().unwrap();
+        let rates: Vec<Duration> = ir.time_driven.iter().map(|s| s.extend_rate).collect();
         let gcd = Self::find_extend_period(&rates);
         let hyper_period = Self::find_hyper_period(&rates);
 
         let num_steps = TimeDrivenManager::divide_durations(hyper_period, gcd, true);
 
         let mut extend_steps = vec![Vec::new(); num_steps];
-        for s in streams {
-            let ix = Self::divide_durations(extr_dur(s), gcd, false) + 1;
-            extend_steps[ix].push(s.as_stream_ref());
+        for s in ir.time_driven.iter() {
+            let ix = Self::divide_durations(s.extend_rate, gcd, false) + 1;
+            extend_steps[ix].push(s.reference);
         }
 
-        let mut init: (u32, Vec<Deadline>) = (0, Vec::new());
+        let init: (u32, Vec<Deadline>) = (0, Vec::new());
         let (remaining, mut deadlines) = extend_steps.iter().fold(init, |(empty_counter, mut deadlines), step| {
             if step.is_empty() {
                 (empty_counter + 1, deadlines)
