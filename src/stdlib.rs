@@ -88,21 +88,21 @@ impl MethodLookup {
                 ],
                 return_type: Ty::Option(Box::new(Ty::Param(0, "T".to_string()))),
             }),
-            // window<T,D: Duration>(EventStream<T>, D) -> Window<T, D>
+            // window<D: Duration, T>(EventStream<T>, D) -> Window<T, D>
             (Ty::EventStream(_), "window") => Some(FuncDecl {
                 name: "window".to_string(),
                 generics: vec![
                     Generic {
-                        constraint: Ty::Constr(TypeConstraint::Unconstrained),
-                    },
-                    Generic {
                         constraint: Ty::Constr(TypeConstraint::Duration),
                     },
+                    Generic {
+                        constraint: Ty::Constr(TypeConstraint::Unconstrained),
+                    },
                 ],
-                parameters: vec![Ty::EventStream(Box::new(Ty::Param(0, "T".to_string())))],
+                parameters: vec![Ty::EventStream(Box::new(Ty::Param(1, "T".to_string())))],
                 return_type: Ty::Window(
-                    Box::new(Ty::Param(0, "T".to_string())),
-                    Box::new(Ty::Param(1, "D".to_string())),
+                    Box::new(Ty::Param(1, "T".to_string())),
+                    Box::new(Ty::Param(0, "D".to_string())),
                 ),
             }),
             // default<T>(Option<T>, T) -> T

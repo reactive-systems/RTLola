@@ -925,9 +925,14 @@ impl Unifier {
             Ty::Tuple(t) => Ty::Tuple(t.into_iter().map(|el| self.normalize_ty(el)).collect()),
             Ty::EventStream(ty) => Ty::EventStream(Box::new(self.normalize_ty(*ty))),
             Ty::Option(ty) => Ty::Option(Box::new(self.normalize_ty(*ty))),
+            Ty::Window(ty, d) => Ty::Window(
+                Box::new(self.normalize_ty(*ty)),
+                Box::new(self.normalize_ty(*d)),
+            ),
             _ if ty.is_primitive() => ty,
             Ty::Constr(_) => ty,
             Ty::Param(_, _) => ty,
+            Ty::Duration(_) => ty,
             _ => unreachable!("cannot normalize {}", ty),
         }
     }

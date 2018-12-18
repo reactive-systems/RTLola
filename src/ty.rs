@@ -157,6 +157,10 @@ impl Ty {
             &Ty::Param(id, _) => Ty::Infer(infer_vars[id as usize]),
             Ty::EventStream(t) => Ty::EventStream(Box::new(t.replace_params(infer_vars))),
             Ty::Option(t) => Ty::Option(Box::new(t.replace_params(infer_vars))),
+            Ty::Window(t, d) => Ty::Window(
+                Box::new(t.replace_params(infer_vars)),
+                Box::new(d.replace_params(infer_vars)),
+            ),
             Ty::Infer(_) => self.clone(),
             Ty::Constr(_) => self.clone(),
             _ if self.is_primitive() => self.clone(),
