@@ -17,6 +17,7 @@ mod analysis;
 pub mod app;
 mod ast;
 mod ir;
+mod lowering;
 mod parse;
 mod print;
 mod reporting;
