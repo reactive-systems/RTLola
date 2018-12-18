@@ -4,10 +4,14 @@ use std::time::Duration;
 pub struct LolaIR {
     /// All input streams.
     pub inputs: Vec<InputStream>,
-    /// All event-triggered output streams and triggers. See `OutputStream` for more information.
-    pub event_outputs: Vec<OutputStream>,
-    /// All time-triggered output streams and triggers. See `OutputStream` for more information.
-    pub time_outputs: Vec<OutputStream>,
+    /// All output streams with the bare minimum of information.
+    pub outputs: Vec<OutputStream>,
+    /// References to all time-driven streams.
+    pub time_driven: Vec<TimeDrivenStream>,
+    /// References to all event-driven streams.
+    pub event_driven: Vec<EventDrivenStream>,
+    /// References to all parametrized streams.
+    pub parametrized: Vec<ParametrizedStream>,
     /// A collection of all sliding windows.
     pub sliding_windows: Vec<SlidingWindow>,
     /// A collection of triggers
@@ -55,15 +59,30 @@ pub struct InputStream {
 pub struct OutputStream {
     pub name: String,
     pub ty: Type,
-    pub params: Vec<Parameter>,
     pub expr: Expression,
-    /// `Duration` representing the extend rate. `None` if event-driven.
-    pub extend_rate: Option<Duration>,
-    pub evaluation_rand: usize,
     _values_to_memorize: MemorizationBound,
     _eval_layer: u16,
+    pub reference: StreamReference,
+}
 
-    reference: StreamReference,
+#[derive(Debug)]
+pub struct TimeDrivenStream {
+    pub reference: StreamReference,
+    pub extend_rate: Duration,
+}
+
+#[derive(Debug)]
+pub struct EventDrivenStream {
+    pub reference: StreamReference,
+}
+
+#[derive(Debug)]
+pub struct ParametrizedStream {
+    pub reference: StreamReference,
+    pub params: Vec<Parameter>,
+    pub invoke: StreamReference,
+    pub extend: StreamReference,
+    pub terminate: StreamReference,
 }
 
 #[derive(Debug)]
@@ -260,8 +279,7 @@ pub struct WindowReference {
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum StreamReference {
     InRef(usize),
-    EventOutRef(usize),
-    TimeOutRef(usize),
+    OutRef(usize),
 }
 
 /// A trait for any kind of stream.
@@ -322,45 +340,34 @@ impl Stream for InputStream {
 }
 
 impl<'a> LolaIR {
-    pub fn outputs(&'a self) -> Vec<StreamReference> {
-        self.event_outputs
-            .iter()
-            .enumerate()
-            .map(|(i, _)| StreamReference::EventOutRef(i))
-            .chain(
-                self.time_outputs
-                    .iter()
-                    .enumerate()
-                    .map(|(i, _)| StreamReference::TimeOutRef(i)),
-            )
-            .collect()
+    pub fn output_refs(&'a self) -> Vec<StreamReference> {
+        self.outputs.iter().map(|s| (s as &Stream).as_stream_ref()).collect()
     }
+
     pub fn get_in(&'a self, reference: StreamReference) -> &InputStream {
         match reference {
             StreamReference::InRef(ix) => &self.inputs[ix],
-            StreamReference::EventOutRef(_) => {
-                panic!("Called `LolaIR::get_out` with a `StreamReference::EventOutRef`.")
-            }
-            StreamReference::TimeOutRef(_) => {
-                panic!("Called `LolaIR::get_out` with a `StreamReference::TimeOutRef`.")
+            StreamReference::OutRef(_) => {
+                panic!("Called `LolaIR::get_out` with a `StreamReference::OutRef`.")
             }
         }
     }
+
     pub fn get_out(&'a self, reference: StreamReference) -> &OutputStream {
         match reference {
             StreamReference::InRef(_) => {
                 panic!("Called `LolaIR::get_out` with a `StreamReference::InRef`.")
             }
-            StreamReference::EventOutRef(ix) => &self.event_outputs[ix],
-            StreamReference::TimeOutRef(ix) => &self.time_outputs[ix],
+            StreamReference::OutRef(ix) => &self.outputs[ix],
         }
     }
+
     pub fn all_streams(&'a self) -> Vec<StreamReference> {
         self.inputs
             .iter()
             .enumerate()
             .map(|(ix, _)| StreamReference::InRef(ix))
-            .chain(self.outputs().iter().cloned())
+            .chain(self.output_refs().iter().cloned())
             .collect()
     }
 }
