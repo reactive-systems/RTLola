@@ -182,6 +182,7 @@ impl<'a> TypeAnalysis<'a> {
                     .unify_var_ty(ty_var, ty)
                     .map_err(|err| self.handle_error(err, output.ty._span))?;
             }
+            TypeKind::Duration(_, _) => unreachable!(),
             TypeKind::Malformed(_) => unreachable!(),
         }
 
@@ -189,6 +190,40 @@ impl<'a> TypeAnalysis<'a> {
         self.unifier
             .unify_var_ty(var, Ty::EventStream(Box::new(Ty::Infer(ty_var))))
             .map_err(|err| self.handle_error(err, output.name.span))
+    }
+
+    fn infer_type(&mut self, ast_ty: &'a Type) -> Result<(), ()> {
+        trace!("infer type for {}", ast_ty);
+        let ty_var = self.new_var(ast_ty._id);
+        match &ast_ty.kind {
+            TypeKind::Inferred => Ok(()),
+            TypeKind::Simple(_) => {
+                match self.declarations[&ast_ty._id] {
+                    Declaration::Type(ty) => {
+                        // ?ty_var = `ty`
+                        self.unifier
+                            .unify_var_ty(ty_var, (*ty).clone())
+                            .map_err(|err| self.handle_error(err, ast_ty._span))
+                    }
+                    _ => unreachable!(),
+                }
+            }
+            TypeKind::Tuple(tuple) => {
+                let ty = self.get_tuple_type(tuple);
+                // ?ty_var = `ty`
+                self.unifier
+                    .unify_var_ty(ty_var, ty)
+                    .map_err(|err| self.handle_error(err, ast_ty._span))
+            }
+            &TypeKind::Duration(val, unit) => {
+                let ty = Ty::new_duration(val, unit);
+                // ?ty_var = `ty`
+                self.unifier
+                    .unify_var_ty(ty_var, ty)
+                    .map_err(|err| self.handle_error(err, ast_ty._span))
+            }
+            _ => unreachable!(),
+        }
     }
 
     fn infer_output_expression(&mut self, output: &'a Output) -> Result<(), ()> {
@@ -442,14 +477,19 @@ impl<'a> TypeAnalysis<'a> {
                     .unify_var_var(var, right_var)
                     .map_err(|err| self.handle_error(err, expr._span))?;
             }
-            Function(_, params) => {
+            Function(_, types, params) => {
                 let decl = self.declarations[&expr._id];
                 let fun_decl = match decl {
                     Declaration::Func(fun_decl) => fun_decl,
                     _ => unreachable!("expected function declaration"),
                 };
                 assert_eq!(params.len(), fun_decl.parameters.len());
+
                 println!("{:?}", fun_decl);
+
+                for ty in types {
+                    self.infer_type(ty)?;
+                }
 
                 // recursion
                 for param in params {
@@ -458,9 +498,15 @@ impl<'a> TypeAnalysis<'a> {
 
                 let params: Vec<&Expression> = params.iter().map(|e| e.as_ref()).collect();
 
-                self.infer_function_application(var, expr._span, fun_decl, params.as_slice())?;
+                self.infer_function_application(
+                    var,
+                    expr._span,
+                    fun_decl,
+                    types.as_slice(),
+                    params.as_slice(),
+                )?;
             }
-            Method(base, name, params) => {
+            Method(base, name, types, params) => {
                 // recursion
                 self.infer_expression(base)?;
 
@@ -468,6 +514,10 @@ impl<'a> TypeAnalysis<'a> {
                     debug!("{} {}", base, infered);
                     if let Some(fun_decl) = self.method_lookup.get(&infered, name.name.as_str()) {
                         debug!("{:?}", fun_decl);
+
+                        for ty in types {
+                            self.infer_type(ty)?;
+                        }
 
                         // recursion
                         for param in params {
@@ -481,6 +531,7 @@ impl<'a> TypeAnalysis<'a> {
                             var,
                             expr._span,
                             &fun_decl,
+                            types.as_slice(),
                             parameters.as_slice(),
                         )?;
                     } else {
@@ -555,8 +606,10 @@ impl<'a> TypeAnalysis<'a> {
         var: InferVar,
         span: Span,
         fun_decl: &FuncDecl,
+        types: &[Type],
         params: &[&'a Expression],
     ) -> Result<(), ()> {
+        assert!(types.len() <= fun_decl.generics.len());
         assert_eq!(params.len(), fun_decl.parameters.len());
 
         // build symbolic names for generic arguments
@@ -571,6 +624,12 @@ impl<'a> TypeAnalysis<'a> {
                 var
             })
             .collect();
+        for (provided_type, &generic) in types.iter().zip(&generics) {
+            println!("{} {}", provided_type, generic);
+            self.unifier
+                .unify_var_var(generic, self.var_lookup[&provided_type._id])
+                .map_err(|err| self.handle_error(err, provided_type._span))?;
+        }
 
         for (type_param, parameter) in fun_decl.parameters.iter().zip(params) {
             let param_var = self.var_lookup[&parameter._id];
@@ -724,7 +783,7 @@ impl Unifier {
             (InferVarVal::Known(ty_l), InferVarVal::Known(ty_r)) => {
                 // if both variables have values, we try to unify them recursively
                 if self.types_equal_rec(&ty_l, &ty_r) {
-                    return Ok(());
+                    // proceed with unification
                 } else if self.types_coerce(&ty_l, &ty_r) {
                     return Ok(());
                 } else {
@@ -752,7 +811,7 @@ impl Unifier {
             if self.types_equal_rec(&val, &ty) {
                 self.table.unify_var_value(var, InferVarVal::Known(ty))
             } else if self.types_coerce(&val, &ty) {
-                return Ok(())
+                return Ok(());
             } else {
                 Err(InferError::TypeMismatch(val, ty))
             }
@@ -820,7 +879,7 @@ impl Unifier {
         let snapshot = self.table.snapshot();
         let res = match right {
             Ty::EventStream(ty) => self.types_equal_rec(left, ty),
-            _ => false
+            _ => false,
         };
         if !res {
             self.table.rollback_to(snapshot);
@@ -1044,6 +1103,20 @@ mod tests {
     fn method_call() {
         let spec = "output count := count.offset(-1).default(0) + 1\n";
         assert_eq!(0, num_type_errors(spec));
+    }
+
+    #[test]
+    fn method_call_with_type_param() {
+        // provides type argument for index
+        let spec = "output count := count.offset<Int8>(-1).default(0) + 1\n";
+        assert_eq!(0, num_type_errors(spec));
+    }
+
+    #[test]
+    fn method_call_with_type_param_faulty() {
+        // provides type argument for index
+        let spec = "output count := count.offset<UInt8>(-1).default(0) + 1\n";
+        assert_eq!(1, num_type_errors(spec));
     }
 
     #[test]

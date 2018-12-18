@@ -3,6 +3,8 @@
 //! It is inspired by https://doc.rust-lang.org/nightly/nightly-rustc/rustc/ty/index.html
 
 use crate::analysis::typing::InferVar;
+use crate::ast::TimeUnit;
+use std::time::Duration;
 
 /// Representation of types
 #[derive(Debug, PartialEq, Eq, Clone, Hash)]
@@ -17,6 +19,7 @@ pub enum Ty {
     Tuple(Vec<Ty>),
     EventStream(Box<Ty>), // todo: probably need info if parametric
     TimedStream(Box<Ty>), // todo: probably need frequency as well
+    Duration(DurationTy),
     /// an optional value type, e.g., accessing a stream with offset -1
     Option(Box<Ty>),
     /// Used during type inference
@@ -49,6 +52,18 @@ pub enum FloatTy {
     F64,
 }
 use self::FloatTy::*;
+
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
+pub struct DurationTy {
+    repr: String,
+    d: Duration,
+}
+
+impl std::fmt::Display for DurationTy {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}", self.repr)
+    }
+}
 
 lazy_static! {
     static ref PRIMITIVE_TYPES: Vec<(&'static str, &'static Ty)> = vec![
@@ -93,6 +108,10 @@ impl Ty {
                 UInt(_) => true,
                 _ => false,
             },
+            TypeConstraint::Duration => match self {
+                Ty::Duration(_) => true,
+                _ => false,
+            },
         }
     }
 
@@ -116,11 +135,18 @@ impl Ty {
         }
     }
 
-    pub(crate) fn can_be_converted_to(&self, candidate: &Ty) -> bool {
-        match self {
-            Ty::EventStream(ty) => ty.as_ref() == candidate,
-            _ => false,
-        }
+    pub(crate) fn new_duration(val: u32, unit: TimeUnit) -> Ty {
+        let d = match unit {
+            TimeUnit::NanoSecond => Duration::from_nanos(val.into()),
+            TimeUnit::MicroSecond => Duration::from_micros(val.into()),
+            TimeUnit::MilliSecond => Duration::from_millis(val.into()),
+            TimeUnit::Second => Duration::from_secs(val.into()),
+            _ => unimplemented!(),
+        };
+        Ty::Duration(DurationTy {
+            repr: format!("{}{}", val, unit),
+            d,
+        })
     }
 }
 
@@ -141,6 +167,7 @@ impl std::fmt::Display for Ty {
             Ty::String => write!(f, "String"),
             Ty::EventStream(ty) => write!(f, "EventStream<{}>", ty),
             Ty::TimedStream(_) => unimplemented!(),
+            Ty::Duration(d) => write!(f, "{}", d),
             Ty::Option(ty) => write!(f, "Option<{}>", ty),
             Ty::Tuple(inner) => {
                 let joined: Vec<String> = inner.iter().map(|e| format!("{}", e)).collect();
@@ -166,6 +193,8 @@ pub enum TypeConstraint {
     Equatable,
     /// Types that can be ordered, i.e., implement `<`, `>`,
     Comparable,
+    /// Types that represents durations, e.g., `1s`
+    Duration,
     Unconstrained,
 }
 
@@ -201,6 +230,7 @@ impl TypeConstraint {
             FloatingPoint => None,
             SignedInteger => None,
             UnsignedInteger => None,
+            Duration => None,
         }
     }
 }
@@ -216,6 +246,7 @@ impl std::fmt::Display for TypeConstraint {
             Numeric => write!(f, "numeric type"),
             Equatable => write!(f, "equatable type"),
             Comparable => write!(f, "comparable type"),
+            Duration => write!(f, "duration"),
             _ => unimplemented!(),
         }
     }

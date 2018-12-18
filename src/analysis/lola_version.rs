@@ -69,13 +69,13 @@ fn analyse_expression(
                 analyse_expression(version_tracker, &*nested, false);
             });
         }
-        ExpressionKind::Function(_, arguments) => {
+        ExpressionKind::Function(_, _, arguments) => {
             arguments.iter().for_each(|arg| {
                 analyse_expression(version_tracker, &*arg, false);
             });
         }
         ExpressionKind::Field(expr, _) => analyse_expression(version_tracker, expr, false),
-        ExpressionKind::Method(expr, _, args) => {
+        ExpressionKind::Method(expr, _, _, args) => {
             analyse_expression(version_tracker, expr, false);
             args.iter().for_each(|arg| {
                 analyse_expression(version_tracker, arg, false);

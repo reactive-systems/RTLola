@@ -454,11 +454,27 @@ fn parse_type(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> Type {
     for pair in pair.into_inner() {
         match pair.as_rule() {
             Rule::Ident => {
-                let ty = Type::new_simple(pair.as_str().to_string(), pair.as_span().into());
-                return ty;
+                return Type::new_simple(pair.as_str().to_string(), pair.as_span().into());
             }
             Rule::Type => tuple.push(Box::new(parse_type(spec, pair))),
-            _ => unreachable!(),
+            Rule::Duration => {
+                let span = pair.as_span().into();
+                let mut inner = pair.into_inner();
+                let val = inner
+                    .next()
+                    .expect("mismatch between AST and parser: expect integer literal");
+                assert_eq!(val.as_rule(), Rule::IntegerLiteral);
+                let unit = inner
+                    .next()
+                    .expect("mismatch between AST and parser: expect time unit");
+                assert_eq!(unit.as_rule(), Rule::UnitOfTime);
+                return Type::new_duration(
+                    val.as_str().parse().unwrap(),
+                    parse_duration_unit(unit.as_str()),
+                    span,
+                );
+            }
+            _ => unreachable!("{:?} is not a type", pair.as_rule()),
         }
     }
     Type::new_tuple(tuple, span.into())
@@ -522,6 +538,10 @@ fn parse_vec_of_expressions(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>) -> Vec<
         })
         .map(Box::new)
         .collect()
+}
+
+fn parse_vec_of_types(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>) -> Vec<Type> {
+    pairs.map(|expr| parse_type(spec, expr)).collect()
 }
 
 fn parse_duration_unit(str: &str) -> TimeUnit {
@@ -604,8 +624,19 @@ fn parse_lookup_expression(spec: &mut LolaSpec, pair: Pair<'_, Rule>, span: Span
 fn build_function_expression(spec: &mut LolaSpec, pair: Pair<'_, Rule>, span: Span) -> Expression {
     let mut children = pair.into_inner();
     let ident = parse_ident(&children.next().unwrap());
-    let args = parse_vec_of_expressions(spec, children);
-    Expression::new(ExpressionKind::Function(ident, args), span)
+    let mut next = children.next().expect("Mismatch between AST and parser");
+    let type_params = match next.as_rule() {
+        Rule::GenericParam => {
+            let params = parse_vec_of_types(spec, next.into_inner());
+            next = children.next().expect("Mismatch between AST and parser");
+            params
+        }
+        Rule::FunctionArgs => Vec::new(),
+        _ => unreachable!(),
+    };
+    assert_eq!(next.as_rule(), Rule::FunctionArgs);
+    let args = parse_vec_of_expressions(spec, next.into_inner());
+    Expression::new(ExpressionKind::Function(ident, type_params, args), span)
 }
 
 /**
@@ -726,8 +757,8 @@ fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>, span: Span)
                             };
                             return Expression::new(ExpressionKind::Field(Box::new(lhs), ident), span);
                         },
-                        ExpressionKind::Function(ident, args) => {
-                            return Expression::new(ExpressionKind::Method(Box::new(lhs), ident, args), span);
+                        ExpressionKind::Function(ident, types, args) => {
+                            return Expression::new(ExpressionKind::Method(Box::new(lhs), ident, types, args), span);
                         }
                         _ => panic!("tuple accesses require a number"),
                     }
@@ -1182,6 +1213,13 @@ mod tests {
     #[test]
     fn parse_method_call() {
         let spec = "output count := count.offset(-1).default(0) + 1\n";
+        let ast = parse(spec).unwrap_or_else(|e| panic!("{}", e));
+        cmp_ast_spec(&ast, spec);
+    }
+
+    #[test]
+    fn parse_method_call_with_param() {
+        let spec = "output count := count.offset<Int8>(-1).default(0) + 1\n";
         let ast = parse(spec).unwrap_or_else(|e| panic!("{}", e));
         cmp_ast_spec(&ast, spec);
     }

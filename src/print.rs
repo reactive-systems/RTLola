@@ -167,6 +167,7 @@ impl Display for TypeKind {
             TypeKind::Simple(name) => write!(f, "{}", name),
             TypeKind::Malformed(s) => write!(f, "{}", s),
             TypeKind::Tuple(types) => write_delim_list(f, types, "(", ")", ", "),
+            TypeKind::Duration(val, unit) => write!(f, "{}{}", val, unit),
             TypeKind::Inferred => write!(f, "?"),
         }
     }
@@ -209,13 +210,19 @@ impl Display for Expression {
             ),
             ExpressionKind::MissingExpression() => Ok(()),
             ExpressionKind::Tuple(exprs) => write_delim_list(f, exprs, "(", ")", ", "),
-            ExpressionKind::Function(kind, args) => {
+            ExpressionKind::Function(kind, types, args) => {
                 write!(f, "{}", kind)?;
+                if !types.is_empty() {
+                    write_delim_list(f, types, "<", ">", ", ")?;
+                }
                 write_delim_list(f, args, "(", ")", ", ")
             }
             ExpressionKind::Field(expr, ident) => write!(f, "{}.{}", expr, ident),
-            ExpressionKind::Method(expr, ident, args) => {
+            ExpressionKind::Method(expr, ident, types, args) => {
                 write!(f, "{}.{}", expr, ident)?;
+                if !types.is_empty() {
+                    write_delim_list(f, types, "<", ">", ", ")?;
+                }
                 write_delim_list(f, args, "(", ")", ", ")
             }
         }

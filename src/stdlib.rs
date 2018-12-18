@@ -86,6 +86,14 @@ impl MethodLookup {
                 parameters: vec![Parameter::Type(ty.clone()), Parameter::Generic(0)],
                 return_type: Parameter::Type(Ty::Option(inner.clone())),
             }),
+            (Ty::EventStream(inner), "window") => Some(FuncDecl {
+                name: "window".to_string(),
+                generics: vec![Generic {
+                    constraint: TypeConstraint::Duration,
+                }],
+                parameters: vec![Parameter::Type(ty.clone())],
+                return_type: Parameter::Type(Ty::Option(inner.clone())),  // TODO: return type is wrong
+            }),
             (Ty::Option(inner), "default") => Some(FuncDecl {
                 name: "default".to_string(),
                 generics: Vec::new(),
@@ -98,8 +106,4 @@ impl MethodLookup {
             _ => unimplemented!("{} for {}", name, ty),
         }
     }
-}
-
-pub(crate) fn import_core_methods() -> MethodLookup {
-    unimplemented!();
 }

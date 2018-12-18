@@ -178,14 +178,16 @@ where
         }
         ExpressionKind::MissingExpression() => {}
         ExpressionKind::Tuple(exprs) => exprs.iter_mut().for_each(|e| assign_ids_expr(e, next_id)),
-        ExpressionKind::Function(_, args) => {
-            args.iter_mut().for_each(|e| assign_ids_expr(e, next_id))
+        ExpressionKind::Function(_, types, args) => {
+            types.iter_mut().for_each(|ty| assign_ids_type(ty, next_id));
+            args.iter_mut().for_each(|e| assign_ids_expr(e, next_id));
         }
         ExpressionKind::Field(expr, _) => {
             assign_ids_expr(expr, next_id);
         }
-        ExpressionKind::Method(expr, _, args) => {
+        ExpressionKind::Method(expr, _, types, args) => {
             assign_ids_expr(expr, next_id);
+            types.iter_mut().for_each(|ty| assign_ids_type(ty, next_id));
             args.iter_mut().for_each(|e| assign_ids_expr(e, next_id));
         }
     }

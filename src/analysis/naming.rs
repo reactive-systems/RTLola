@@ -129,6 +129,7 @@ impl<'a> NamingAnalysis<'a> {
             TypeKind::Tuple(ref elements) => elements.iter().for_each(|ty| {
                 self.check_type(ty);
             }),
+            TypeKind::Duration(val, unit) => {}
             TypeKind::Inferred => {}
         }
     }
@@ -397,8 +398,9 @@ impl<'a> NamingAnalysis<'a> {
             Tuple(exprs) => {
                 exprs.iter().for_each(|expr| self.check_expression(expr));
             }
-            Function(name, exprs) => {
+            Function(name, types, exprs) => {
                 self.check_ident(expression, name);
+                types.iter().for_each(|ty| self.check_type(ty));
                 exprs.iter().for_each(|expr| self.check_expression(expr));
             }
             Default(accessed, default) => {
@@ -412,8 +414,9 @@ impl<'a> NamingAnalysis<'a> {
             Field(expr, _) => {
                 self.check_expression(expr);
             }
-            Method(expr, _, args) => {
+            Method(expr, _, types, args) => {
                 self.check_expression(expr);
+                types.iter().for_each(|ty| self.check_type(ty));
                 args.iter().for_each(|expr| self.check_expression(expr));
             }
         }
@@ -648,6 +651,16 @@ mod tests {
         assert_eq!(
             0,
             number_of_naming_errors("import math\noutput x: Float32 := sqrt(2)")
+        )
+    }
+
+    #[test]
+    fn duration_type() {
+        assert_eq!(
+            0,
+            number_of_naming_errors(
+                "input in: Int8\noutput out: Int8 { extend @5Hz } := in.window<3s>()"
+            )
         )
     }
 }

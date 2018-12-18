@@ -173,6 +173,21 @@ pub struct StreamInstance {
 }
 
 #[derive(AstNode, Debug)]
+pub struct Parenthesis {
+    pub(crate) _id: NodeId,
+    pub(crate) _span: Span,
+}
+
+impl Parenthesis {
+    pub fn new(span: Span) -> Parenthesis {
+        Parenthesis {
+            _id: NodeId::DUMMY,
+            _span: span,
+        }
+    }
+}
+
+#[derive(AstNode, Debug)]
 pub struct Type {
     pub kind: TypeKind,
     pub(crate) _id: NodeId,
@@ -203,18 +218,11 @@ impl Type {
             _span: Span::unknown(),
         }
     }
-}
 
-#[derive(AstNode, Debug)]
-pub struct Parenthesis {
-    pub(crate) _id: NodeId,
-    pub(crate) _span: Span,
-}
-
-impl Parenthesis {
-    pub fn new(span: Span) -> Parenthesis {
-        Parenthesis {
+    pub(crate) fn new_duration(val: u32, unit: TimeUnit, span: Span) -> Type {
+        Type {
             _id: NodeId::DUMMY,
+            kind: TypeKind::Duration(val, unit),
             _span: span,
         }
     }
@@ -226,6 +234,8 @@ pub enum TypeKind {
     Simple(String),
     /// A tuple type, e.g., (Int32, Float32)
     Tuple(Vec<Box<Type>>),
+    /// A duration, e.g., `22s`
+    Duration(u32, TimeUnit),
     /// Should be inferred, i.e., is not annotated
     Inferred,
     /// Malformed type, e.g, `mis$ing`
@@ -281,9 +291,9 @@ pub enum ExpressionKind {
     /// Access of a named (`obj.foo`) or unnamed (`obj.0`) struct field
     Field(Box<Expression>, Ident),
     /// A method call, e.g., `foo.offset(-1)`
-    Method(Box<Expression>, Ident, Vec<Box<Expression>>),
+    Method(Box<Expression>, Ident, Vec<Type>, Vec<Box<Expression>>),
     /// A function call
-    Function(Ident, Vec<Box<Expression>>),
+    Function(Ident, Vec<Type>, Vec<Box<Expression>>),
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -420,7 +430,7 @@ pub enum Offset {
 }
 
 /// Supported time unit for real time expressions
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TimeUnit {
     NanoSecond,
     MicroSecond,

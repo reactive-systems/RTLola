@@ -72,7 +72,7 @@ Operation = _{ Add | Subtract | Power | Multiply | Divide | Mod | And | Or | Com
 UnaryOperation = _{ Add | Subtract | Neg }
     Neg      = { "!" | "¬" }
 
-Expr = { Term ~ (Operation ~ Term)* }
+Expr = { (Term ~ (Operation ~ Term)*) }
 // TODO Do we need Term to exist for the precedence climber?
 Term = _{ Literal | ParenthesizedExpression | DefaultExpr| LookupExpr | UnaryExpr | TernaryExpr | FunctionExpr | MissingExpression | Ident | Tuple}
 
@@ -89,7 +89,10 @@ LookupExpr = {
     | StreamInstance ~"["~ Duration~ "]"}
 
 FunctionExpr = { 
-      FunctionSymbol~ "(" ~Expr ~("," ~Expr)*~ ")" }
+      FunctionSymbol ~ GenericParam? ~ FunctionArgs }
+
+GenericParam = { "<" ~ Type ~ ("," ~ Type)* ~ ">" }
+FunctionArgs = { ( "(" ~ ")" ) | ( "(" ~ Expr ~ ("," ~ Expr)* ~ ")" ) }
 
 DefaultExpr = {
       LookupExpr~ "?"~ Expr}
@@ -143,15 +146,15 @@ True = @{"true"| "⊤"}
 False = @{"false"  | "⊥"}
 Literal = { StringLiteral | RawStringLiteral | NumberLiteral | BooleanLiteral}
 
-IntegerLiteral = @{ Digit*}
+IntegerLiteral = @{ Digit+ }
 
-Type = {"("~ (Type ~(","~Type)*)?~ ")" | Ident}
+Type = {"("~ (Type ~(","~Type)*)?~ ")" | Ident | Duration | "_"}  // _ => infer type
 
 //////////////////////////////////////////////////
 ////////////////// Time Related //////////////////
 //////////////////////////////////////////////////
 
-Duration = { Expr~ UnitOfTime}
+Duration = ${ IntegerLiteral ~ UnitOfTime}
 
 UnitOfTime = { "ns" | "μs" | "us" | "ms" | "s" | "min" | "h" | "d" | "w" | "a" }
 
