@@ -1,3 +1,4 @@
+use crate::ty::{FloatTy, IntTy, UIntTy, ValueTy};
 use std::time::Duration;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -20,22 +21,34 @@ pub struct LolaIR {
     pub feature_flags: Vec<FeatureFlag>,
 }
 
-/// Represents a primitive type, i.e. a type that is not composed of other types.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PrimitiveType {
-    Int(u8),
-    UInt(u8),
-    Float(u8),
-    String,
-    Bool,
-}
-
-/// Represents a type that is either primitive or a tuple.
-/// Allows for computing the required memory to store one value of this type.
+/// Represents a type.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Type {
-    Primitive(PrimitiveType),
-    Tuple(Vec<PrimitiveType>),
+    Bool,
+    Int(IntTy),
+    UInt(UIntTy),
+    Float(FloatTy),
+    // an abstract data type, e.g., structs, enums, etc.
+    //Adt(AdtDef),
+    String,
+    Tuple(Vec<Type>),
+    /// an optional value type, e.g., resulting from accessing a stream with offset -1
+    Option(Box<Type>),
+}
+
+impl From<ValueTy> for Type {
+    fn from(ty: ValueTy) -> Type {
+        match ty {
+            ValueTy::Bool => Type::Bool,
+            ValueTy::Int(i) => Type::Int(i),
+            ValueTy::UInt(u) => Type::UInt(u),
+            ValueTy::Float(f) => Type::Float(f),
+            ValueTy::String => Type::String,
+            ValueTy::Tuple(t) => Type::Tuple(t.into_iter().map(|e| e.into()).collect()),
+            ValueTy::Option(o) => Type::Option(Box::new((*o).into())),
+            _ => unreachable!("cannot lower `ValueTy` {}", ty),
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -64,7 +77,7 @@ pub struct InputStream {
     pub name: String,
     pub ty: Type,
     _values_to_memorize: MemorizationBound,
-    _eval_layer: u16,
+    _eval_layer: u32,
     reference: StreamReference,
 }
 
@@ -75,8 +88,28 @@ pub struct OutputStream {
     pub ty: Type,
     pub expr: Expression,
     _values_to_memorize: MemorizationBound,
-    _eval_layer: u16,
+    _eval_layer: u32,
     pub reference: StreamReference,
+}
+
+impl OutputStream {
+    pub(crate) fn new(
+        name: String,
+        ty: Type,
+        expr: Expression,
+        mem_bound: MemorizationBound,
+        layer: u32,
+        reference: StreamReference,
+    ) -> OutputStream {
+        OutputStream {
+            name,
+            ty,
+            expr,
+            _values_to_memorize: mem_bound,
+            _eval_layer: layer,
+            reference,
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -298,7 +331,7 @@ pub enum StreamReference {
 
 /// A trait for any kind of stream.
 pub trait Stream {
-    fn eval_layer(&self) -> u16;
+    fn eval_layer(&self) -> u32;
     fn is_input(&self) -> bool;
     fn values_to_memorize(&self) -> MemorizationBound;
     fn as_stream_ref(&self) -> StreamReference;
@@ -330,7 +363,7 @@ impl MemorizationBound {
 }
 
 impl Stream for OutputStream {
-    fn eval_layer(&self) -> u16 {
+    fn eval_layer(&self) -> u32 {
         self._eval_layer
     }
     fn is_input(&self) -> bool {
@@ -345,7 +378,7 @@ impl Stream for OutputStream {
 }
 
 impl Stream for InputStream {
-    fn eval_layer(&self) -> u16 {
+    fn eval_layer(&self) -> u32 {
         self._eval_layer
     }
     fn is_input(&self) -> bool {
@@ -423,18 +456,6 @@ impl LolaIR {
     }
 }
 
-impl PrimitiveType {
-    fn size(self) -> Option<ValSize> {
-        match self {
-            PrimitiveType::Int(w) | PrimitiveType::UInt(w) | PrimitiveType::Float(w) => {
-                Some(ValSize::from(w))
-            }
-            PrimitiveType::String => None, // Strings do not have a a priori fixed value
-            PrimitiveType::Bool => Some(ValSize::from(1)),
-        }
-    }
-}
-
 /// The size of a specific value in bytes.
 #[derive(Debug, Clone, Copy)]
 pub struct ValSize(u32); // Needs to be reasonable large for compound types.
@@ -454,7 +475,8 @@ impl std::ops::Add for ValSize {
 
 impl Type {
     fn size(&self) -> Option<ValSize> {
-        match self {
+        unimplemented!();
+        /*match self {
             Type::Primitive(a) => a.size(),
             Type::Tuple(v) => v.iter().map(|x| x.size()).fold(Some(ValSize(0)), |val, i| {
                 if let Some(val) = val {
@@ -463,7 +485,14 @@ impl Type {
                     None
                 }
             }),
-        }
+        }*/
+        /*match self {
+            PrimitiveType::Int(w) | PrimitiveType::UInt(w) | PrimitiveType::Float(w) => {
+                Some(ValSize::from(w))
+            }
+            PrimitiveType::String => None, // Strings do not have a a priori fixed value
+            PrimitiveType::Bool => Some(ValSize::from(1)),
+        }*/
     }
 }
 

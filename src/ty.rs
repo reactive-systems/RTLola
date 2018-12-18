@@ -41,7 +41,7 @@ pub enum ValueTy {
     Error,
 }
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Hash)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
 pub enum IntTy {
     I8,
     I16,
@@ -50,7 +50,7 @@ pub enum IntTy {
 }
 use self::IntTy::*;
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Hash)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
 pub enum UIntTy {
     U8,
     U16,
@@ -59,7 +59,7 @@ pub enum UIntTy {
 }
 use self::UIntTy::*;
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Hash)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
 pub enum FloatTy {
     F32,
     F64,
