@@ -4,14 +4,7 @@ use crate::ty::{Ty, TypeConstraint};
 
 #[derive(Debug)]
 pub struct Generic {
-    pub constraint: TypeConstraint,
-}
-
-#[derive(Debug)]
-pub enum Parameter {
-    Type(Ty),
-    /// Index into associated generics array
-    Generic(u8),
+    pub constraint: Ty,
 }
 
 /// different kinds of type declarations, can be e.g., alias, newtype, struct, enum
@@ -27,8 +20,8 @@ pub enum TypeDecl {
 pub struct FuncDecl {
     pub name: String,
     pub generics: Vec<Generic>,
-    pub parameters: Vec<Parameter>,
-    pub return_type: Parameter,
+    pub parameters: Vec<Ty>,
+    pub return_type: Ty,
 }
 
 use crate::analysis::naming::{Declaration, ScopedDecl};
@@ -38,28 +31,28 @@ lazy_static! {
     static ref SQRT: FuncDecl = FuncDecl {
         name: "sqrt".to_string(),
         generics: vec![Generic {
-            constraint: TypeConstraint::FloatingPoint,
+            constraint: Ty::Constr(TypeConstraint::FloatingPoint),
         }],
-        parameters: vec![Parameter::Generic(0)],
-        return_type: Parameter::Generic(0),
+        parameters: vec![Ty::Param(0, "T".to_string())],
+        return_type: Ty::Param(0, "T".to_string()),
     };
     // fn cos<T: FloatingPoint>(T) -> T
     static ref COS: FuncDecl = FuncDecl {
         name: "cos".to_string(),
         generics: vec![Generic {
-            constraint: TypeConstraint::FloatingPoint,
+            constraint: Ty::Constr(TypeConstraint::FloatingPoint),
         }],
-        parameters: vec![Parameter::Generic(0)],
-        return_type: Parameter::Generic(0),
+        parameters: vec![Ty::Param(0, "T".to_string())],
+        return_type: Ty::Param(0, "T".to_string()),
     };
     // fn sin<T: FloatingPoint>(T) -> T
     static ref SIN: FuncDecl = FuncDecl {
         name: "sin".to_string(),
         generics: vec![Generic {
-            constraint: TypeConstraint::FloatingPoint,
+            constraint: Ty::Constr(TypeConstraint::FloatingPoint),
         }],
-        parameters: vec![Parameter::Generic(0)],
-        return_type: Parameter::Generic(0),
+        parameters: vec![Ty::Param(0, "T".to_string())],
+        return_type: Ty::Param(0, "T".to_string()),
     };
 }
 
@@ -78,30 +71,51 @@ impl MethodLookup {
 
     pub(crate) fn get(&self, ty: &Ty, name: &str) -> Option<FuncDecl> {
         match (ty, name) {
-            (Ty::EventStream(inner), "offset") => Some(FuncDecl {
+            // offset<T,I:Integer>(EventStream<T>, I) -> Option<T>
+            (Ty::EventStream(_), "offset") => Some(FuncDecl {
                 name: "offset".to_string(),
-                generics: vec![Generic {
-                    constraint: TypeConstraint::Integer,
-                }],
-                parameters: vec![Parameter::Type(ty.clone()), Parameter::Generic(0)],
-                return_type: Parameter::Type(Ty::Option(inner.clone())),
-            }),
-            (Ty::EventStream(inner), "window") => Some(FuncDecl {
-                name: "window".to_string(),
-                generics: vec![Generic {
-                    constraint: TypeConstraint::Duration,
-                }],
-                parameters: vec![Parameter::Type(ty.clone())],
-                return_type: Parameter::Type(Ty::Option(inner.clone())),  // TODO: return type is wrong
-            }),
-            (Ty::Option(inner), "default") => Some(FuncDecl {
-                name: "default".to_string(),
-                generics: Vec::new(),
-                parameters: vec![
-                    Parameter::Type(ty.clone()),
-                    Parameter::Type((**inner).clone()),
+                generics: vec![
+                    Generic {
+                        constraint: Ty::Constr(TypeConstraint::Unconstrained),
+                    },
+                    Generic {
+                        constraint: Ty::Constr(TypeConstraint::Integer),
+                    },
                 ],
-                return_type: Parameter::Type((**inner).clone()),
+                parameters: vec![
+                    Ty::EventStream(Box::new(Ty::Param(0, "T".to_string()))),
+                    Ty::Param(1, "I".to_string()),
+                ],
+                return_type: Ty::Option(Box::new(Ty::Param(0, "T".to_string()))),
+            }),
+            // window<T,D: Duration>(EventStream<T>, D) -> Window<T, D>
+            (Ty::EventStream(_), "window") => Some(FuncDecl {
+                name: "window".to_string(),
+                generics: vec![
+                    Generic {
+                        constraint: Ty::Constr(TypeConstraint::Unconstrained),
+                    },
+                    Generic {
+                        constraint: Ty::Constr(TypeConstraint::Duration),
+                    },
+                ],
+                parameters: vec![Ty::EventStream(Box::new(Ty::Param(0, "T".to_string())))],
+                return_type: Ty::Window(
+                    Box::new(Ty::Param(0, "T".to_string())),
+                    Box::new(Ty::Param(1, "D".to_string())),
+                ),
+            }),
+            // default<T>(Option<T>, T) -> T
+            (Ty::Option(_), "default") => Some(FuncDecl {
+                name: "default".to_string(),
+                generics: vec![Generic {
+                    constraint: Ty::Constr(TypeConstraint::Unconstrained),
+                }],
+                parameters: vec![
+                    Ty::Option(Box::new(Ty::Param(0, "T".to_string()))),
+                    Ty::Param(0, "T".to_string()),
+                ],
+                return_type: Ty::Param(0, "T".to_string()),
             }),
             _ => unimplemented!("{} for {}", name, ty),
         }

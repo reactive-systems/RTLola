@@ -20,11 +20,14 @@ pub enum Ty {
     EventStream(Box<Ty>), // todo: probably need info if parametric
     TimedStream(Box<Ty>), // todo: probably need frequency as well
     Duration(DurationTy),
+    Window(Box<Ty>, Box<Ty>),
     /// an optional value type, e.g., accessing a stream with offset -1
     Option(Box<Ty>),
     /// Used during type inference
     Infer(InferVar),
     Constr(TypeConstraint),
+    /// A reference to a generic parameter in a function declaration, e.g. `T` in `a<T>(x:T) -> T`
+    Param(u8, String),
     Error,
 }
 
@@ -148,6 +151,18 @@ impl Ty {
             d,
         })
     }
+
+    pub(crate) fn replace_params(&self, infer_vars: &[InferVar]) -> Ty {
+        match self {
+            &Ty::Param(id, _) => Ty::Infer(infer_vars[id as usize]),
+            Ty::EventStream(t) => Ty::EventStream(Box::new(t.replace_params(infer_vars))),
+            Ty::Option(t) => Ty::Option(Box::new(t.replace_params(infer_vars))),
+            Ty::Infer(_) => self.clone(),
+            Ty::Constr(_) => self.clone(),
+            _ if self.is_primitive() => self.clone(),
+            _ => unimplemented!("replace_param for {}", self),
+        }
+    }
 }
 
 impl std::fmt::Display for Ty {
@@ -168,6 +183,7 @@ impl std::fmt::Display for Ty {
             Ty::EventStream(ty) => write!(f, "EventStream<{}>", ty),
             Ty::TimedStream(_) => unimplemented!(),
             Ty::Duration(d) => write!(f, "{}", d),
+            Ty::Window(t, d) => write!(f, "Window<{}, {}>", t, d),
             Ty::Option(ty) => write!(f, "Option<{}>", ty),
             Ty::Tuple(inner) => {
                 let joined: Vec<String> = inner.iter().map(|e| format!("{}", e)).collect();
@@ -175,6 +191,7 @@ impl std::fmt::Display for Ty {
             }
             Ty::Infer(id) => write!(f, "?{}", id),
             Ty::Constr(constr) => write!(f, "{{{}}}", constr),
+            Ty::Param(id, name) => write!(f, "{}", name),
             Ty::Error => write!(f, "Error"),
         }
     }
@@ -247,7 +264,7 @@ impl std::fmt::Display for TypeConstraint {
             Equatable => write!(f, "equatable type"),
             Comparable => write!(f, "comparable type"),
             Duration => write!(f, "duration"),
-            _ => unimplemented!(),
+            Unconstrained => write!(f, "unconstrained type"),
         }
     }
 }

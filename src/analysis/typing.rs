@@ -14,7 +14,7 @@ use crate::ast::{
 };
 use crate::reporting::Handler;
 use crate::reporting::LabeledSpan;
-use crate::stdlib::{FuncDecl, MethodLookup, Parameter};
+use crate::stdlib::{FuncDecl, MethodLookup};
 use crate::ty::{Ty, TypeConstraint};
 use ast_node::NodeId;
 use ast_node::Span;
@@ -618,8 +618,12 @@ impl<'a> TypeAnalysis<'a> {
             .iter()
             .map(|gen| {
                 let var = self.unifier.new_var();
+                match &gen.constraint {
+                    Ty::Constr(_) => {}
+                    _ => unreachable!("currently, only constraints are allowed for generic types"),
+                }
                 self.unifier
-                    .add_constraint(var, gen.constraint)
+                    .unify_var_ty(var, gen.constraint.clone())
                     .expect("cannot fail as var is freshly created");
                 var
             })
@@ -633,36 +637,18 @@ impl<'a> TypeAnalysis<'a> {
 
         for (type_param, parameter) in fun_decl.parameters.iter().zip(params) {
             let param_var = self.var_lookup[&parameter._id];
-            match type_param {
-                Parameter::Generic(num) => {
-                    // ?generic = ?type_var
-                    self.unifier
-                        .unify_var_var(generics[*num as usize], param_var)
-                        .map_err(|err| self.handle_error(err, parameter._span))?;
-                }
-                Parameter::Type(ty) => {
-                    // ?param_var = `ty`
-                    self.unifier
-                        .unify_var_ty(param_var, ty.clone())
-                        .map_err(|err| self.handle_error(err, parameter._span))?;
-                }
-            }
+            let ty = type_param.replace_params(&generics);
+            // ?param_var = `ty`
+            self.unifier
+                .unify_var_ty(param_var, ty)
+                .map_err(|err| self.handle_error(err, parameter._span))?;
         }
         // return type
-        match fun_decl.return_type {
-            Parameter::Generic(num) => {
-                // ?generic = ?var
-                self.unifier
-                    .unify_var_var(generics[num as usize], var)
-                    .map_err(|err| self.handle_error(err, span))?;
-            }
-            Parameter::Type(ref ty) => {
-                // ?param_var = `ty`
-                self.unifier
-                    .unify_var_ty(var, ty.clone())
-                    .map_err(|err| self.handle_error(err, span))?;
-            }
-        }
+        let ty = fun_decl.return_type.replace_params(&generics);
+        // ?param_var = `ty`
+        self.unifier
+            .unify_var_ty(var, ty)
+            .map_err(|err| self.handle_error(err, span))?;
         Ok(())
     }
 
@@ -941,7 +927,8 @@ impl Unifier {
             Ty::Option(ty) => Ty::Option(Box::new(self.normalize_ty(*ty))),
             _ if ty.is_primitive() => ty,
             Ty::Constr(_) => ty,
-            _ => unreachable!(),
+            Ty::Param(_, _) => ty,
+            _ => unreachable!("cannot normalize {}", ty),
         }
     }
 }
@@ -1107,15 +1094,14 @@ mod tests {
 
     #[test]
     fn method_call_with_type_param() {
-        // provides type argument for index
+        // count has value EventStream<Int8> instead of default value EventStream<Int32>
         let spec = "output count := count.offset<Int8>(-1).default(0) + 1\n";
         assert_eq!(0, num_type_errors(spec));
     }
 
     #[test]
     fn method_call_with_type_param_faulty() {
-        // provides type argument for index
-        let spec = "output count := count.offset<UInt8>(-1).default(0) + 1\n";
+        let spec = "output count := count.offset<Float32>(-1).default(0) + 1\n";
         assert_eq!(1, num_type_errors(spec));
     }
 
