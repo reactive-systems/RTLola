@@ -1,6 +1,8 @@
+use crate::evaluator::io_handler::{OutputHandler, OutputKind};
 use crate::util;
 use lola_parser::{LolaIR, OutputStream, Stream, StreamReference};
 use std::cmp::Ordering;
+use std::rc::Rc;
 use std::time::{Duration, SystemTime};
 
 const NANOS_PER_SEC: u128 = 1_000_000_000;
@@ -42,19 +44,20 @@ pub struct TimeDrivenManager {
     deadlines: Vec<Deadline>,
     hyper_period: Duration,
     start_time: Option<SystemTime>,
+    handler: Rc<OutputHandler>,
 }
 
 impl TimeDrivenManager {
     /// Creates a new TimeDrivenManager managing time-driven output streams.
-    pub fn new(ir: &LolaIR) -> TimeDrivenManager {
-
+    pub fn new(ir: &LolaIR, handler: Rc<OutputHandler>) -> TimeDrivenManager {
         if ir.time_outputs.is_empty() {
             return TimeDrivenManager {
                 last_state: None,
-                deadlines: Vec![Deadline { pause: Duration::from_secs(0), due: Vec::new() }],
+                deadlines: vec![Deadline { pause: Duration::from_secs(0), due: Vec::new() }],
                 hyper_period: Duration::from_secs(100000), // Actual value does not matter.
                 start_time: None,
-            }
+                handler,
+            };
         }
 
         fn extr_dur(s: &OutputStream) -> Duration {
@@ -94,7 +97,7 @@ impl TimeDrivenManager {
 
         // TODO: Sort by evaluation order!
 
-        TimeDrivenManager { last_state: None, deadlines, hyper_period, start_time: None }
+        TimeDrivenManager { last_state: None, deadlines, hyper_period, start_time: None, handler }
     }
 
     pub fn start(&mut self, time: Option<SystemTime>) {
@@ -112,10 +115,16 @@ impl TimeDrivenManager {
         let current_state = self.current_state(time);
         if let Some(last_state) = self.last_state {
             match self.compare_states(last_state, current_state) {
-                StateCompare::TimeTravel => unimplemented!(), // TODO: Actual bug in the implementation.
-                StateCompare::Skipped { .. } => unimplemented!(), // TODO: Emit warning.
-                StateCompare::Equal => {}                     // TODO: Bug, but nothing game-breaking.
-                StateCompare::Next => {}                      // Nice! Do nothing.
+                StateCompare::TimeTravel => panic!("Bug: Traveled back in time!"),
+                StateCompare::Skipped { cycles, deadlines } => {
+                    self.skipped_deadline(cycles, deadlines);
+                    // Carry on.
+                }
+                StateCompare::Equal => {
+                    self.query_too_soon();
+                    // Carry on.
+                }
+                StateCompare::Next => {} // Nice! Do nothing.
             }
         }
 
@@ -132,14 +141,41 @@ impl TimeDrivenManager {
         let state = self.current_state(time);
         if let Some(old_state) = self.last_state {
             match self.compare_states(old_state, state) {
-                StateCompare::Next => {}                          // Not a special case; skip.
-                StateCompare::TimeTravel => unimplemented!(),     // Emit warning.
-                StateCompare::Equal => return None,               // Nothing to do at all.
-                StateCompare::Skipped { .. } => unimplemented!(), // Emit warning.
+                StateCompare::Next => {} // Perfect, skip!
+                StateCompare::TimeTravel => panic!("Bug: Traveled back in time!"),
+                StateCompare::Equal => {
+                    self.query_too_soon();
+                    return None;
+                }
+                StateCompare::Skipped { cycles, deadlines } => self.skipped_deadline(cycles, deadlines),
             }
         }
         self.last_state = Some(state);
         Some(&self.deadlines[state.deadline].due)
+    }
+
+    fn skipped_deadline(&self, cycles: u64, deadlines: u64) {
+        if cfg!(debug_assertion) {
+            // Only panic in non-release config.
+            panic!("Missed {} cycles and {} deadlines.", cycles, deadlines);
+        } else {
+            // Otherwise, inform the output handler and carry on.
+            self.handler.emit(OutputKind::RuntimeWarning, || {
+                format!("Warning: Pressure exceeds capacity! missed {} cycles and {} deadlines", cycles, deadlines)
+            })
+        }
+    }
+
+    fn query_too_soon(&self) {
+        if cfg!(debug_assertion) {
+            // Only panic in non-release config.
+            panic!("Called `TimeDrivenManager::wait_for` too early; no deadline has passed.");
+        } else {
+            // Otherwise, inform the output handler and carry on.
+            self.handler.emit(OutputKind::Debug, || {
+                String::from("Warning: Called `TimeDrivenManager::wait_for` twice for the same deadline.")
+            })
+        }
     }
 
     fn time_since_last_deadline(&self, time: SystemTime) -> Duration {
@@ -276,8 +312,9 @@ impl TimeDrivenManager {
 }
 
 mod tests {
-    use crate::evaluator::time_driven_manager::*;
+    use crate::evaluator::{io_handler::OutputHandler, time_driven_manager::*};
     use lola_parser::LolaIR;
+    use std::rc::Rc;
     use std::time::{Duration, SystemTime};
 
     fn to_ir(spec: &str) -> LolaIR {
@@ -328,6 +365,7 @@ mod tests {
     }
     #[test]
     fn test_compare_states() {
+        let handler = Rc::new(OutputHandler::default());
         fn dl(s: u64, n: u32) -> Deadline {
             Deadline { pause: Duration::new(s, n), due: Vec::new() }
         }
@@ -336,7 +374,7 @@ mod tests {
         }
         // 1s, 0.1s, 2.3s, 1.6s
         let deadlines = vec![dl(1, 0), dl(0, 100_000_000), dl(2, 300_000_000), dl(1, 600_000_000)];
-        let tdm = TimeDrivenManager { last_state: None, deadlines, hyper_period: dur(1, 0), start_time: None };
+        let tdm = TimeDrivenManager { last_state: None, deadlines, hyper_period: dur(1, 0), start_time: None, handler };
         fn state(cy: u128, dl: usize) -> TDMState {
             let time = SystemTime::now();
             TDMState { cycle: cy.into(), deadline: dl, time }

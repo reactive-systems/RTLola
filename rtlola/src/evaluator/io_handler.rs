@@ -38,6 +38,12 @@ impl OutputHandler {
     }
 }
 
+impl Default for OutputHandler {
+    fn default() -> OutputHandler {
+        OutputHandler { verbosity: Verbosity::WarningsOnly }
+    }
+}
+
 #[allow(dead_code)]
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
 pub enum OutputKind {

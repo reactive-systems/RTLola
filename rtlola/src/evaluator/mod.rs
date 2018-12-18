@@ -7,10 +7,11 @@ use crate::evaluator::{
     config::*, event_driven_manager::EventDrivenManager, io_handler::*, time_driven_manager::TimeDrivenManager,
 };
 use lola_parser::LolaIR;
+use std::rc::Rc;
 
 pub struct Evaluator {
     /// Handles all kind of output behavior according to config.
-    output_handler: OutputHandler,
+    output_handler: Rc<OutputHandler>,
     /// Handles input events.
     input_handler: InputHandler,
 
@@ -32,10 +33,10 @@ impl lola_parser::LolaBackend for Evaluator {
 impl Evaluator {
     /// Create a new `Evaluator` for RTLola specifications. Respects settings passed in `config`.
     pub fn new(ir: LolaIR, config: EvalConfig) -> Evaluator {
-        let output_handler = OutputHandler::new(&config);
+        let output_handler = Rc::new(OutputHandler::new(&config));
         let input_handler = InputHandler::new(&config);
-        let time_manager = TimeDrivenManager::new(&ir);
-        let event_manager = EventDrivenManager::new(&ir);
+        let time_manager = TimeDrivenManager::new(&ir, Rc::clone(&output_handler));
+        let event_manager = EventDrivenManager::new(&ir, Rc::clone(&output_handler));
 
         Evaluator { output_handler, input_handler, time_manager, event_manager, spec: ir }
     }
@@ -45,5 +46,4 @@ impl Evaluator {
     pub fn start(&mut self) {
         unimplemented!()
     }
-
 }
