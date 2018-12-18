@@ -8,10 +8,12 @@ type EvalOrder = Vec<Vec<ComputeStep>>;
 
 struct EvaluationOrder {
     aligned: EvalOrder,
-    event_based: EvalOrder,
-    time_based: EvalOrder,
+    event_driven: EvalOrder,
+    time_driven: EvalOrder,
 }
 
+// TODO: Replace StorageRequirement with crate::analysis::dependency::StorageRequirement or similar.
+// TODO: Same for ComputeStep, MemoryTable, Eval[uation]Order.
 #[derive(Debug, Copy, Clone)]
 pub(crate) enum StorageRequirement {
     Finite(usize),
@@ -31,6 +33,7 @@ struct Lowering<'a> {
     tt: TypeTable,
     eval_order: EvaluationOrder,
     mt: MemoryTable,
+    ir: LolaIR,
 }
 
 impl<'a> Lowering<'a> {
@@ -40,19 +43,30 @@ impl<'a> Lowering<'a> {
         eval_order: EvaluationOrder,
         mt: MemoryTable,
     ) -> Lowering {
+        let ir = LolaIR {
+            inputs: Vec::new(),
+            outputs: Vec::new(),
+            time_driven: Vec::new(),
+            event_driven: Vec::new(),
+            parametrized: Vec::new(),
+            sliding_windows: Vec::new(),
+            triggers: Vec::new(),
+            feature_flags: Vec::new(),
+        };
         Lowering {
             dt,
             tt,
             eval_order,
             mt,
+            ir,
         }
     }
 
-    pub(crate) fn lower(self, ast: &LolaSpec) -> LolaIR {
+    pub(crate) fn lower(mut self, ast: &LolaSpec) -> LolaIR {
         self.lower_ast(ast)
     }
 
-    fn lower_ast(&self, ast: &LolaSpec) -> LolaIR {
+    fn lower_ast(&mut self, ast: &LolaSpec) -> LolaIR {
         unimplemented!()
     }
 }
