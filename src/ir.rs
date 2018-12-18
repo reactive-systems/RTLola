@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct LolaIR {
     /// All input streams.
     pub inputs: Vec<InputStream>,
@@ -21,7 +21,7 @@ pub struct LolaIR {
 }
 
 /// Represents a primitive type, i.e. a type that is not composed of other types.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PrimitiveType {
     Int(u8),
     UInt(u8),
@@ -32,7 +32,7 @@ pub enum PrimitiveType {
 
 /// Represents a type that is either primitive or a tuple.
 /// Allows for computing the required memory to store one value of this type.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Type {
     Primitive(PrimitiveType),
     Tuple(Vec<PrimitiveType>),
@@ -44,8 +44,22 @@ pub enum MemorizationBound {
     Bounded(u16),
 }
 
+impl PartialOrd for MemorizationBound {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        use std::cmp::Ordering;
+        match (self, other) {
+            (MemorizationBound::Unbounded, MemorizationBound::Unbounded) => None,
+            (MemorizationBound::Bounded(_), MemorizationBound::Unbounded) => Some(Ordering::Less),
+            (MemorizationBound::Unbounded, MemorizationBound::Bounded(_)) => {
+                Some(Ordering::Greater)
+            }
+            (MemorizationBound::Bounded(b1), MemorizationBound::Bounded(b2)) => Some(b1.cmp(&b2)),
+        }
+    }
+}
+
 /// Represents an input stream of a Lola specification.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct InputStream {
     pub name: String,
     pub ty: Type,
@@ -55,7 +69,7 @@ pub struct InputStream {
 }
 
 /// Represents an output stream in a Lola specification.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct OutputStream {
     pub name: String,
     pub ty: Type,
@@ -65,18 +79,18 @@ pub struct OutputStream {
     pub reference: StreamReference,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct TimeDrivenStream {
     pub reference: StreamReference,
     pub extend_rate: Duration,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct EventDrivenStream {
     pub reference: StreamReference,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct ParametrizedStream {
     pub reference: StreamReference,
     pub params: Vec<Parameter>,
@@ -85,21 +99,21 @@ pub struct ParametrizedStream {
     pub terminate: StreamReference,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Trigger {
     pub message: Option<String>,
     pub reference: StreamReference,
 }
 
 /// Represents a parameter, i.e. a name and a type.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Parameter {
     pub name: String,
     pub ty: Type,
 }
 
 /// An expression in the IR is a list of executable statements
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Expression {
     /// A list of statements where the last statement represents the result of the expression
     pub stmts: Vec<Statement>,
@@ -110,7 +124,7 @@ pub struct Expression {
 pub type Temporary = u32;
 
 /// A statement is of the form `target = op <arguments>`
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Statement {
     /// the name of the temporary
     pub target: Temporary,
@@ -119,7 +133,7 @@ pub struct Statement {
 }
 
 /// the operations (instruction set) of the IR
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Op {
     /// Loading a constant
     LoadConstant(Constant),
@@ -146,7 +160,7 @@ pub enum Op {
 }
 
 /// Represents a constant value of a certain kind.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Constant {
     Str(String),
     Bool(bool),
@@ -156,14 +170,14 @@ pub enum Constant {
 
 /// Represents a single instance of a stream. The stream template is accessible by the reference,
 /// the specific instance by the arguments.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct StreamInstance {
     pub reference: StreamReference,
     pub arguments: Vec<Box<Temporary>>,
 }
 
 /// Offset used in the lookup expression
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum Offset {
     /// A positive discrete offset, e.g., `4`, or `42`
     FutureDiscreteOffset(u128),
@@ -175,7 +189,7 @@ pub enum Offset {
     PastRealTimeOffset(Duration),
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum WindowOperation {
     Sum,
     Product,
@@ -184,7 +198,7 @@ pub enum WindowOperation {
     Integral,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ArithLogOp {
     /// The `!` operator for logical inversion
     Not,
@@ -232,7 +246,7 @@ pub enum ArithLogOp {
     Gt,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum FunctionKind {
     NthRoot,
     Projection,
@@ -248,7 +262,7 @@ pub enum FunctionKind {
 }
 
 /// Represents an instance of a sliding window.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct SlidingWindow {
     pub target: StreamReference,
     pub duration: Duration,
@@ -257,7 +271,7 @@ pub struct SlidingWindow {
 
 /// Each flag represents a certain feature of Lola not necessarily available in all version of the
 /// language or for all functions of the front-end.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FeatureFlag {
     DiscreteFutureOffset,
     RealTimeOffset,
@@ -270,7 +284,7 @@ pub enum FeatureFlag {
 /////// Referencing Structures ///////
 
 /// Allows for referencing a window instance.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct WindowReference {
     pub ix: usize,
 }
@@ -347,7 +361,10 @@ impl Stream for InputStream {
 
 impl<'a> LolaIR {
     pub fn output_refs(&'a self) -> Vec<StreamReference> {
-        self.outputs.iter().map(|s| (s as &Stream).as_stream_ref()).collect()
+        self.outputs
+            .iter()
+            .map(|s| (s as &Stream).as_stream_ref())
+            .collect()
     }
 
     pub fn get_in(&'a self, reference: StreamReference) -> &InputStream {
