@@ -472,7 +472,7 @@ pub enum BinOp {
     Gt,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum UnOp {
     /// The `!` operator for logical inversion
     Not,

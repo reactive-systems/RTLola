@@ -1,5 +1,4 @@
 use super::super::ast::*;
-use crate::analysis::AnalysisError;
 use crate::reporting::Handler;
 use crate::reporting::LabeledSpan;
 use ast_node::{AstNode, NodeId, Span};

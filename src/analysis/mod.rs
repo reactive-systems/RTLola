@@ -5,6 +5,7 @@
 //! * `id_assignment` assigns unique ids to all nodes of the AST
 //! * `type_checker` checks whether components of the AST have a valid type
 
+mod graph_based_analysis;
 mod id_assignment;
 mod lola_version;
 pub(crate) mod naming;
@@ -14,6 +15,7 @@ use self::lola_version::LolaVersionAnalysis;
 use self::naming::NamingAnalysis;
 use self::typing::TypeAnalysis;
 use super::ast::LolaSpec;
+use crate::analysis::graph_based_analysis::dependency_graph::analyse_dependencies;
 use crate::parse::SourceMapper;
 use crate::reporting::Handler;
 
@@ -43,5 +45,12 @@ pub(crate) fn analyze(spec: &mut LolaSpec, mapper: SourceMapper) -> bool {
         print!("error");
         unimplemented!();
     }
+    let dependency_analysis = analyse_dependencies(
+        spec,
+        &version_analyzer.result,
+        &naming_analyzer.result,
+        &handler,
+    );
+
     unimplemented!();
 }
