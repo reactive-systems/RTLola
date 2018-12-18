@@ -467,50 +467,7 @@ impl Type {
     }
 }
 
-////////// AST -> IntermediateRepresentation //////////
-
-use crate::analysis::naming::DeclarationTable;
-use crate::ast;
-use std::collections::HashSet;
-
-// Placeholder for the actual type table
-pub(crate) struct TypeTable {}
-
-impl LolaIR {
-    pub(crate) fn new(spec: ast::LolaSpec, decl: &DeclarationTable, tt: &TypeTable) -> LolaIR {
-        let inputs: Vec<InputStream> = spec
-            .inputs
-            .iter()
-            .map(|i| InputStream::from(i, decl, tt))
-            .collect();
-        let outputs: Vec<OutputStream> = spec
-            .outputs
-            .iter()
-            .map(|o| OutputStream::from(o, decl, tt))
-            .collect();
-        let trigger: Vec<OutputStream> = spec
-            .trigger
-            .iter()
-            .map(|t| OutputStream::from_trigger(t, decl, tt))
-            .collect();
-        unimplemented!()
-    }
-}
-
-impl InputStream {
-    fn from(input: &ast::Input, decl: &DeclarationTable, tt: &TypeTable) -> InputStream {
-        unimplemented!()
-    }
-}
-
 impl OutputStream {
-    fn from(output: &ast::Output, dt: &DeclarationTable, tt: &TypeTable) -> OutputStream {
-        unimplemented!()
-    }
-
-    fn from_trigger(trigger: &ast::Trigger, dt: &DeclarationTable, tt: &TypeTable) -> OutputStream {
-        unimplemented!()
-    }
     fn get_dependencies(&self) -> Vec<StreamReference> {
         let mut vec: Vec<StreamReference> = self
             .expr
@@ -518,7 +475,7 @@ impl OutputStream {
             .iter()
             .flat_map(|stm| stm.get_dependencies())
             .collect();
-        let set: HashSet<StreamReference> = vec.drain(..).collect();
+        let set: std::collections::HashSet<StreamReference> = vec.drain(..).collect();
         vec.extend(set.into_iter());
         vec
     }
@@ -556,5 +513,6 @@ mod dependencies_test {
             args: Vec::new(),
         };
         let res = stm.get_dependencies();
+        assert!(res.is_empty());
     }
 }
