@@ -134,7 +134,6 @@ pub enum ExtendRate {
 
 impl Into<Duration> for &ExtendRate {
     fn into(self) -> Duration {
-        use crate::ast::{ExtendRate, FreqUnit, LitKind, TimeUnit};
         let (expr, factor) = match &self {
             ExtendRate::Duration(expr, unit) => {
                 (

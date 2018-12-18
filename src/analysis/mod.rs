@@ -37,7 +37,11 @@ pub(crate) fn analyze(spec: &mut LolaSpec, mapper: SourceMapper) -> bool {
         return false;
     }
 
-    let mut version_analyzer = LolaVersionAnalysis::new();
+    let mut version_analyzer = LolaVersionAnalysis::new(&handler);
     let version_result = version_analyzer.analyse(spec);
+    if version_result.is_none() {
+        print!("error");
+        unimplemented!();
+    }
     unimplemented!();
 }

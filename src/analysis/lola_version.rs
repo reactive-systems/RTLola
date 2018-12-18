@@ -1,27 +1,29 @@
 use super::super::ast::*;
 use crate::analysis::AnalysisError;
-use ast_node;
-use ast_node::{AstNode, NodeId};
+use crate::reporting::Handler;
+use crate::reporting::LabeledSpan;
+use ast_node::{AstNode, NodeId, Span};
 use std::collections::HashMap;
 
 pub(crate) type LolaVersionTable = HashMap<NodeId, LanguageSpec>;
+type WhyNot = (Span, String);
 
 struct VersionTracker {
-    pub can_be_classic: bool,
-    pub can_be_lola2: bool,
+    pub cannot_be_classic: Option<WhyNot>,
+    pub cannot_be_lola2: Option<WhyNot>,
 }
 
 impl VersionTracker {
     fn new() -> Self {
         VersionTracker {
-            can_be_classic: true,
-            can_be_lola2: true,
+            cannot_be_classic: None,
+            cannot_be_lola2: None,
         }
     }
-    fn from_stream(is_not_parameterized: bool) -> Self {
+    fn from_stream(is_not_parameterized: Option<WhyNot>) -> Self {
         VersionTracker {
-            can_be_classic: is_not_parameterized,
-            can_be_lola2: true,
+            cannot_be_classic: is_not_parameterized,
+            cannot_be_lola2: None,
         }
     }
 }
@@ -42,10 +44,14 @@ fn analyse_expression(
             Offset::DiscreteOffset(expr) => {
                 analyse_expression(version_tracker, &*expr, false);
             }
-            Offset::RealTimeOffset(expr, _) => {
-                analyse_expression(version_tracker, &*expr, false);
-                version_tracker.can_be_lola2 = false;
-                version_tracker.can_be_classic = false;
+            Offset::RealTimeOffset(offset, _) => {
+                analyse_expression(version_tracker, &*offset, false);
+                version_tracker.cannot_be_lola2 =
+                    Some((*expr.span(), String::from("Real time offset – no Lola2")));
+                version_tracker.cannot_be_classic = Some((
+                    *expr.span(),
+                    String::from("Real time offset – no ClassicLola"),
+                ));
             }
         },
         ExpressionKind::Binary(_, left, right) => {
@@ -84,14 +90,16 @@ fn analyse_expression(
     }
 }
 
-pub(crate) struct LolaVersionAnalysis {
+pub(crate) struct LolaVersionAnalysis<'a> {
     pub result: LolaVersionTable,
+    handler: &'a Handler,
 }
 
-impl<'a> LolaVersionAnalysis {
-    pub(crate) fn new() -> Self {
+impl<'a> LolaVersionAnalysis<'a> {
+    pub(crate) fn new(handler: &'a Handler) -> Self {
         LolaVersionAnalysis {
             result: HashMap::new(),
+            handler,
         }
     }
 
@@ -104,16 +112,21 @@ impl<'a> LolaVersionAnalysis {
     }
 
     fn analyse_output(&mut self, output: &'a Output) {
-        let mut version_tracker = VersionTracker::from_stream(output.params.is_empty());
+        let is_not_parameterized = if output.params.is_empty() {
+            None
+        } else {
+            Some((output.name.span, String::from("Parameterized stream")))
+        };
+        let mut version_tracker = VersionTracker::from_stream(is_not_parameterized);
         analyse_expression(&mut version_tracker, &output.expression, false);
 
         // TODO check parameters for InvocationType
 
-        if version_tracker.can_be_classic {
+        if version_tracker.cannot_be_classic.is_none() {
             self.result.insert(*output.id(), LanguageSpec::Classic);
             return;
         }
-        if version_tracker.can_be_lola2 {
+        if version_tracker.cannot_be_lola2.is_none() {
             self.result.insert(*output.id(), LanguageSpec::Lola2);
             return;
         }
@@ -124,18 +137,19 @@ impl<'a> LolaVersionAnalysis {
         let mut version_tracker = VersionTracker::new();
         analyse_expression(&mut version_tracker, &trigger.expression, true);
 
-        if version_tracker.can_be_classic {
+        if version_tracker.cannot_be_classic.is_none() {
             self.result.insert(*trigger.id(), LanguageSpec::Classic);
             return;
         }
-        if version_tracker.can_be_lola2 {
+        if version_tracker.cannot_be_lola2.is_none() {
             self.result.insert(*trigger.id(), LanguageSpec::Lola2);
             return;
         }
         self.result.insert(*trigger.id(), LanguageSpec::RTLola);
     }
 
-    pub(crate) fn analyse(&mut self, spec: &'a LolaSpec) -> LanguageSpec {
+    pub(crate) fn analyse(&mut self, spec: &'a LolaSpec) -> Option<LanguageSpec> {
+        let number_of_previous_errors = self.handler.emitted_errors();
         // analyse each stream/trigger to find out their minimal Lola version
         for input in &spec.inputs {
             self.analyse_input(&input);
@@ -147,10 +161,14 @@ impl<'a> LolaVersionAnalysis {
             self.analyse_trigger(&trigger);
         }
 
+        if number_of_previous_errors != self.handler.emitted_errors() {
+            return None;
+        }
+
         // each stream/trigger can be attributed to some (minimal) Lola version but the different versions might be incompatible.
         // Therefore iterate again over all streams and triggers and record reasons against the various versions.
-        let mut reason_against_classic_lola: Option<String> = None;
-        let mut reason_against_lola2: Option<String> = None;
+        let mut reason_against_classic_lola: Option<WhyNot> = None;
+        let mut reason_against_lola2: Option<WhyNot> = None;
 
         self.rule_out_versions_based_on_inputs(&spec, &mut reason_against_classic_lola);
 
@@ -167,46 +185,50 @@ impl<'a> LolaVersionAnalysis {
 
         // Try to use the minimal Lola version or give an error containing the reasons why none of the versions is possible.
         if reason_against_classic_lola.is_none() {
-            return LanguageSpec::Classic;
+            return Some(LanguageSpec::Classic);
         }
         if reason_against_lola2.is_none() {
-            return LanguageSpec::Lola2;
+            return Some(LanguageSpec::Lola2);
         }
-        LanguageSpec::RTLola
+        Some(LanguageSpec::RTLola)
     }
 
     fn rule_out_versions_based_on_triggers(
         &mut self,
         spec: &LolaSpec,
-        reason_against_classic_lola: &mut Option<String>,
-        reason_against_lola2: &mut Option<String>,
+        reason_against_classic_lola: &mut Option<WhyNot>,
+        reason_against_lola2: &mut Option<WhyNot>,
     ) {
         for trigger in &spec.trigger {
-            let name = match trigger.name {
-                None => "an unnamed trigger",
-                Some(ref trigger_name) => trigger_name.name.as_str(),
+            let span = match trigger.name {
+                None => *trigger.span(),
+                Some(ref trigger_name) => trigger_name.span,
             };
             match &self.result[trigger.id()] {
                 LanguageSpec::Classic => {}
                 LanguageSpec::Lola2 => {
                     if reason_against_classic_lola.is_none() {
-                        *reason_against_classic_lola = Some(format!(
-                            "Classic Lola is not possible due to {} being a Lola2 trigger.",
-                            name
+                        *reason_against_classic_lola = Some((
+                            span,
+                            format!(
+                                "Classic Lola is not possible due to this being a Lola2 trigger."
+                            ),
                         ))
                     }
                 }
                 LanguageSpec::RTLola => {
                     if reason_against_classic_lola.is_none() {
-                        *reason_against_classic_lola = Some(format!(
-                            "Classic Lola is not possible due to {} being a RTLola trigger.",
-                            name
+                        *reason_against_classic_lola = Some((
+                            span,
+                            format!(
+                                "Classic Lola is not possible due to this being a RTLola trigger."
+                            ),
                         ))
                     }
                     if reason_against_lola2.is_none() {
-                        *reason_against_lola2 = Some(format!(
-                            "Lola2 is not possible due to {} being a RTLola stream.",
-                            name
+                        *reason_against_lola2 = Some((
+                            span,
+                            format!("Lola2 is not possible due to this being a RTLola trigger."),
                         ))
                     }
                 }
@@ -217,31 +239,41 @@ impl<'a> LolaVersionAnalysis {
     fn rule_out_versions_based_on_outputs(
         &mut self,
         spec: &LolaSpec,
-        reason_against_classic_lola: &mut Option<String>,
-        reason_against_lola2: &mut Option<String>,
+        reason_against_classic_lola: &mut Option<WhyNot>,
+        reason_against_lola2: &mut Option<WhyNot>,
     ) {
         for output in &spec.outputs {
+            let span = output.name.span;
             match &self.result[output.id()] {
                 LanguageSpec::Classic => {}
                 LanguageSpec::Lola2 => {
                     if reason_against_classic_lola.is_none() {
-                        *reason_against_classic_lola = Some(format!(
-                            "Classic Lola is not possible due to {} being a Lola2 stream.",
-                            output.name.name
-                        ));
+                        *reason_against_classic_lola = Some((
+                            span,
+                            format!(
+                                "Classic Lola is not possible due to {} being a Lola2 stream.",
+                                output.name.name
+                            ),
+                        ))
                     }
                 }
                 LanguageSpec::RTLola => {
                     if reason_against_classic_lola.is_none() {
-                        *reason_against_classic_lola = Some(format!(
-                            "Classic Lola is not possible due to {} being a RTLola stream.",
-                            output.name.name
+                        *reason_against_classic_lola = Some((
+                            span,
+                            format!(
+                                "Classic Lola is not possible due to {} being a RTLola stream.",
+                                output.name.name
+                            ),
                         ))
                     }
                     if reason_against_lola2.is_none() {
-                        *reason_against_lola2 = Some(format!(
-                            "Lola2 is not possible due to {} being a RTLola stream.",
-                            output.name.name
+                        *reason_against_lola2 = Some((
+                            span,
+                            format!(
+                                "Lola2 is not possible due to {} being a RTLola stream.",
+                                output.name.name
+                            ),
                         ))
                     }
                 }
@@ -252,17 +284,15 @@ impl<'a> LolaVersionAnalysis {
     fn rule_out_versions_based_on_inputs(
         &mut self,
         spec: &LolaSpec,
-        reason_against_classic_lola: &mut Option<String>,
+        reason_against_classic_lola: &mut Option<WhyNot>,
     ) {
         for input in &spec.inputs {
             match &self.result[input.id()] {
                 LanguageSpec::Classic => {}
                 LanguageSpec::Lola2 => {
                     if reason_against_classic_lola.is_none() {
-                        *reason_against_classic_lola = Some(format!(
-                            "Classic Lola is not possible due to {} being parameterized.",
-                            input.name.name
-                        ))
+                        *reason_against_classic_lola =
+                            Some((input.name.span, String::from("Parameterized input stream")));
                     }
                 }
                 _ => unreachable!(),
@@ -276,65 +306,59 @@ mod tests {
     use super::*;
     use crate::analysis::id_assignment;
     use crate::parse::parse;
+    use crate::parse::SourceMapper;
+    use std::path::PathBuf;
+
+    /// Parses the content, runs naming analysis, and check expected number of errors and version
+    fn check_version(
+        content: &str,
+        expected_errors: usize,
+        expected_version: Option<LanguageSpec>,
+    ) {
+        let mut ast = parse(content).unwrap_or_else(|e| panic!("{}", e));
+        id_assignment::assign_ids(&mut ast);
+        let handler = Handler::new(SourceMapper::new(PathBuf::new(), content));
+        let mut version_analyzer = LolaVersionAnalysis::new(&handler);
+        let version = version_analyzer.analyse(&ast);
+        assert_eq!(expected_errors, handler.emitted_errors());
+        assert_eq!(expected_version, version);
+    }
 
     // TODO: implement test cases
     #[test]
-    fn parameterized_output_stream_causes_lola2() -> Result<(), String> {
-        let spec = "output test<ab: Int8, c: Int8>: Int8 := 3";
-        let throw = |e| panic!("{}", e);
-        let mut ast = parse(spec).unwrap_or_else(throw);
-        id_assignment::assign_ids(&mut ast);
-        let mut version_analyzer = LolaVersionAnalysis::new();
-        let version = version_analyzer.analyse(&ast);
-        assert_eq!(version, LanguageSpec::Lola2);
-        Ok(())
+    fn parameterized_output_stream_causes_lola2() {
+        check_version(
+            "output test<ab: Int8, c: Int8>: Int8 := 3",
+            0,
+            Some(LanguageSpec::Lola2),
+        )
     }
 
     #[test]
-    fn time_offset_causes_rtlola() -> Result<(), String> {
-        let spec = "output test: Int8 := stream[3s]";
-        let throw = |e| panic!("{}", e);
-        let mut ast = parse(spec).unwrap_or_else(throw);
-        id_assignment::assign_ids(&mut ast);
-        let mut version_analyzer = LolaVersionAnalysis::new();
-        let version = version_analyzer.analyse(&ast);
-        assert_eq!(version, LanguageSpec::RTLola);
-        Ok(())
+    fn time_offset_causes_rtlola() {
+        check_version(
+            "output test: Int8 := stream[3s]",
+            0,
+            Some(LanguageSpec::RTLola),
+        )
     }
 
     #[test]
-    fn simple_trigger_causes_lola() -> Result<(), String> {
-        let spec = "trigger test := false";
-        let throw = |e| panic!("{}", e);
-        let mut ast = parse(spec).unwrap_or_else(throw);
-        id_assignment::assign_ids(&mut ast);
-        let mut version_analyzer = LolaVersionAnalysis::new();
-        let version = version_analyzer.analyse(&ast);
-        assert_eq!(version, LanguageSpec::Classic);
-        Ok(())
+    fn simple_trigger_causes_lola() {
+        check_version("trigger test := false", 0, Some(LanguageSpec::Classic))
     }
 
     #[test]
-    fn time_offset_in_trigger_causes_rtlola() -> Result<(), String> {
-        let spec = "trigger test := stream[3s]";
-        let throw = |e| panic!("{}", e);
-        let mut ast = parse(spec).unwrap_or_else(throw);
-        id_assignment::assign_ids(&mut ast);
-        let mut version_analyzer = LolaVersionAnalysis::new();
-        let version = version_analyzer.analyse(&ast);
-        assert_eq!(version, LanguageSpec::RTLola);
-        Ok(())
+    fn time_offset_in_trigger_causes_rtlola() {
+        check_version("trigger test := stream[3s]", 0, Some(LanguageSpec::RTLola))
     }
 
     #[test]
-    fn parameterized_input_stream_causes_lola2() -> Result<(), String> {
-        let spec = "input test<ab: Int8, c: Int8> : Int8";
-        let throw = |e| panic!("{}", e);
-        let mut ast = parse(spec).unwrap_or_else(throw);
-        id_assignment::assign_ids(&mut ast);
-        let mut version_analyzer = LolaVersionAnalysis::new();
-        let version = version_analyzer.analyse(&ast);
-        assert_eq!(version, LanguageSpec::Lola2);
-        Ok(())
+    fn parameterized_input_stream_causes_lola2() {
+        check_version(
+            "input test<ab: Int8, c: Int8> : Int8",
+            0,
+            Some(LanguageSpec::Lola2),
+        )
     }
 }
