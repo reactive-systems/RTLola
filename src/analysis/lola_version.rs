@@ -305,13 +305,22 @@ mod tests {
     use crate::analysis::id_assignment;
     use crate::parse::parse;
     use crate::parse::SourceMapper;
+    use crate::util::get_node_id_from_spec;
     use std::path::PathBuf;
+
+    #[derive(Debug, Clone, Copy)]
+    enum StreamIndex {
+        Out(usize),
+        In(usize),
+        Trig(usize),
+    }
 
     /// Parses the content, runs naming analysis, and check expected number of errors and version
     fn check_version(
         content: &str,
         expected_errors: usize,
         expected_version: Option<LanguageSpec>,
+        expected_versions: Vec<(StreamIndex, LanguageSpec)>,
     ) {
         let mut ast = parse(content).unwrap_or_else(|e| panic!("{}", e));
         id_assignment::assign_ids(&mut ast);
@@ -320,6 +329,21 @@ mod tests {
         let version = version_analyzer.analyse(&ast);
         assert_eq!(expected_errors, handler.emitted_errors());
         assert_eq!(expected_version, version);
+        for (index, version) in expected_versions {
+            let node_id = match index {
+                StreamIndex::In(i) => ast.inputs[i]._id,
+                StreamIndex::Out(i) => ast.outputs[i]._id,
+                StreamIndex::Trig(i) => ast.trigger[i]._id,
+            };
+            let actual_version = version_analyzer
+                .result
+                .get(&node_id)
+                .unwrap_or_else(|| panic!("There is no version for this NodeId in the result",));
+            assert_eq!(
+                version, *actual_version,
+                "The expected version and the actual version do not match."
+            );
+        }
     }
 
     // TODO: implement test cases
@@ -329,6 +353,7 @@ mod tests {
             "output test<ab: Int8, c: Int8>: Int8 := 3",
             0,
             Some(LanguageSpec::Lola2),
+            vec![(StreamIndex::Out(0), LanguageSpec::Lola2)],
         )
     }
 
@@ -338,17 +363,29 @@ mod tests {
             "output test: Int8 := stream[3s]",
             0,
             Some(LanguageSpec::RTLola),
+            vec![(StreamIndex::Out(0), LanguageSpec::RTLola)],
         )
     }
 
     #[test]
     fn simple_trigger_causes_lola() {
-        check_version("trigger test := false", 0, Some(LanguageSpec::Classic))
+        check_version(
+            "trigger test := false",
+            0,
+            Some(LanguageSpec::Classic),
+            vec![(StreamIndex::Trig(0), LanguageSpec::Classic)],
+        )
     }
+
 
     #[test]
     fn time_offset_in_trigger_causes_rtlola() {
-        check_version("trigger test := stream[3s]", 0, Some(LanguageSpec::RTLola))
+        check_version(
+            "trigger test := stream[3s]",
+            0,
+            Some(LanguageSpec::RTLola),
+            vec![(StreamIndex::Trig(0), LanguageSpec::RTLola)],
+        )
     }
 
     #[test]
@@ -357,6 +394,7 @@ mod tests {
             "input test<ab: Int8, c: Int8> : Int8",
             0,
             Some(LanguageSpec::Lola2),
+            vec![(StreamIndex::In(0), LanguageSpec::Lola2)],
         )
     }
 }

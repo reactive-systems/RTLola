@@ -48,10 +48,23 @@ pub(crate) enum StreamDependency {
     InvokeByName(Span),
 }
 
-#[derive(Debug, Copy, Clone)]
+/// For every stream we need to store
+/// - the last k+1 values if there is an access with discrete offset -k
+/// - everything if its auxiliary streams depend on the future
+///
+/// We also have do differentiate between
+/// - streams that do not (transitively) depend on the future and can therefore directly be computed
+/// - streams that (transitively) depend on the future and therefore positions may not already be evaluated while in the buffer
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub(crate) enum StorageRequirement {
     Finite(u16),
     FutureRef(u16),
+    Unbounded,
+}
+
+#[derive(Debug, Copy, Clone)]
+pub(crate) enum TrackingRequirement {
+    Finite(u16),
     Unbounded,
 }
 

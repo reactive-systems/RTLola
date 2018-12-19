@@ -837,7 +837,6 @@ impl<'a> DependencyAnalyser<'a> {
             if let Some(ref mut builder) = builder {
                 builder.add_span_with_label(span, label.as_str(), false);
             } else {
-                // TODO this should be a WARNING
                 let mut diagnostic_builder = self.handler.build_diagnostic(
                     "There is a positive weight cycle. This is a problem for monitoring.",
                     Level::Warning,

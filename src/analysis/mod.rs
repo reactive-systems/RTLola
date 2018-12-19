@@ -18,7 +18,8 @@ use super::ast::LolaSpec;
 use crate::analysis::graph_based_analysis::dependency_graph::analyse_dependencies;
 use crate::analysis::graph_based_analysis::evaluation_order::determine_evaluation_order;
 use crate::analysis::graph_based_analysis::future_dependency::future_dependent_stream;
-use crate::analysis::graph_based_analysis::space_requirements::determine_space_requirements;
+use crate::analysis::graph_based_analysis::space_requirements::determine_buffer_size;
+use crate::analysis::graph_based_analysis::space_requirements::determine_tracking_size;
 use crate::parse::SourceMapper;
 use crate::reporting::Handler;
 
@@ -55,15 +56,23 @@ pub(crate) fn analyze(spec: &mut LolaSpec, mapper: SourceMapper) -> bool {
         &handler,
     );
 
+    if handler.contains_error() {
+        handler.error("aborting due to previous error");
+        return false;
+    }
+
     let evaluation_order_result = determine_evaluation_order(dependency_analysis.dependency_graph);
 
     let future_dependent_stream =
         future_dependent_stream(&evaluation_order_result.pruned_dependency_graph);
 
-    let _space_requirements = determine_space_requirements(
+    let _space_requirements = determine_buffer_size(
         &evaluation_order_result.pruned_dependency_graph,
         &future_dependent_stream,
     );
+
+    let _tracking_requirements =
+        determine_tracking_size(&evaluation_order_result.pruned_dependency_graph);
 
     unimplemented!();
 }
