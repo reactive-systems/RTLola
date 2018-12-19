@@ -49,8 +49,8 @@ pub(crate) enum StreamDependency {
 
 #[derive(Debug, Copy, Clone)]
 pub(crate) enum StorageRequirement {
-    Finite(usize),
-    FutureRef(usize),
+    Finite(u16),
+    FutureRef(u16),
 }
 
 pub(crate) type DependencyGraph = Graph<StreamNode, StreamDependency, Directed>;

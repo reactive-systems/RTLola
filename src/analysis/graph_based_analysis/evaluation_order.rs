@@ -17,9 +17,9 @@ use ast_node::NodeId;
 use std::collections::HashMap;
 
 pub(crate) struct EvaluationOrderResult {
-    pruned_dependency_graph: DependencyGraph,
-    event_based_streams_order: Vec<Vec<ComputeStep>>,
-    periodic_streams_order: Vec<Vec<ComputeStep>>,
+    pub pruned_dependency_graph: DependencyGraph,
+    pub event_based_streams_order: Vec<Vec<ComputeStep>>,
+    pub periodic_streams_order: Vec<Vec<ComputeStep>>,
 }
 
 pub(crate) fn determine_evaluation_order(
@@ -174,7 +174,7 @@ fn build_compute_graph(mut dependency_graph: DependencyGraph) -> ComputationGrap
                         // no need to add dependency for positive edges
                     }
                     Offset::Time(offset, _unit) => {
-                        if *offset == 0.0_f64 {
+                        if offset.abs() < 0.0001_f64 {
                             computation_graph.add_edge(
                                 mapping[&source_id].evaluate,
                                 mapping[&target_id].evaluate,
