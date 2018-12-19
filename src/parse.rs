@@ -217,9 +217,9 @@ fn parse_parameter_list(spec: &mut LolaSpec, param_list: Pairs<'_, Rule>) -> Vec
         let name = parse_ident(&decl.next().expect("mismatch between grammar and AST"));
         let ty = if let Some(type_pair) = decl.next() {
             assert_eq!(Rule::Type, type_pair.as_rule());
-            Some(parse_type(spec, type_pair))
+            parse_type(spec, type_pair)
         } else {
-            None
+            Type::new_inferred()
         };
         params.push(Parameter {
             name,

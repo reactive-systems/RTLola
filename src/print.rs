@@ -98,7 +98,10 @@ impl Display for TemplateSpec {
 
 impl Display for Parameter {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        write!(f, "{}{}", self.name, format_type(&self.ty))
+        match self.ty.kind {
+            TypeKind::Inferred => write!(f, "{}", self.name),
+            _ => write!(f, "{}: {}", self.name, self.ty),
+        }
     }
 }
 

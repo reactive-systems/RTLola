@@ -71,8 +71,8 @@ impl MethodLookup {
 
     pub(crate) fn get(&self, ty: &Ty, name: &str) -> Option<FuncDecl> {
         match (ty, name) {
-            // offset<T,I:Integer>(EventStream<T>, I) -> Option<T>
-            (Ty::EventStream(_), "offset") => Some(FuncDecl {
+            // offset<T,I:Integer>(EventStream<T, ()>, I) -> Option<T>
+            (Ty::EventStream(_, params), "offset") if params.is_empty() => Some(FuncDecl {
                 name: "offset".to_string(),
                 generics: vec![
                     Generic {
@@ -83,13 +83,13 @@ impl MethodLookup {
                     },
                 ],
                 parameters: vec![
-                    Ty::EventStream(Box::new(Ty::Param(0, "T".to_string()))),
+                    Ty::EventStream(Box::new(Ty::Param(0, "T".to_string())), Vec::new()),
                     Ty::Param(1, "I".to_string()),
                 ],
                 return_type: Ty::Option(Box::new(Ty::Param(0, "T".to_string()))),
             }),
-            // window<D: Duration, T>(EventStream<T>, D) -> Window<T, D>
-            (Ty::EventStream(_), "window") => Some(FuncDecl {
+            // window<D: Duration, T>(EventStream<T, ()>, D) -> Window<T, D>
+            (Ty::EventStream(_, params), "window") if params.is_empty() => Some(FuncDecl {
                 name: "window".to_string(),
                 generics: vec![
                     Generic {
@@ -99,7 +99,10 @@ impl MethodLookup {
                         constraint: Ty::Constr(TypeConstraint::Unconstrained),
                     },
                 ],
-                parameters: vec![Ty::EventStream(Box::new(Ty::Param(1, "T".to_string())))],
+                parameters: vec![Ty::EventStream(
+                    Box::new(Ty::Param(1, "T".to_string())),
+                    Vec::new(),
+                )],
                 return_type: Ty::Window(
                     Box::new(Ty::Param(1, "T".to_string())),
                     Box::new(Ty::Param(0, "D".to_string())),

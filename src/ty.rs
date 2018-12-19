@@ -17,7 +17,7 @@ pub enum Ty {
     //Adt(AdtDef),
     String,
     Tuple(Vec<Ty>),
-    EventStream(Box<Ty>), // todo: probably need info if parametric
+    EventStream(Box<Ty>, Vec<Ty>),
     TimedStream(Box<Ty>), // todo: probably need frequency as well
     Duration(DurationTy),
     Window(Box<Ty>, Box<Ty>),
@@ -123,7 +123,7 @@ impl Ty {
         match self {
             Error => true,
             Tuple(args) => args.iter().fold(false, |val, el| val || el.is_error()),
-            EventStream(ty) => ty.is_error(),
+            EventStream(ty, params) => ty.is_error() || params.iter().any(|e| e.is_error()),
             TimedStream(ty) => ty.is_error(),
             Option(ty) => ty.is_error(),
             _ => false,
@@ -155,7 +155,13 @@ impl Ty {
     pub(crate) fn replace_params(&self, infer_vars: &[InferVar]) -> Ty {
         match self {
             &Ty::Param(id, _) => Ty::Infer(infer_vars[id as usize]),
-            Ty::EventStream(t) => Ty::EventStream(Box::new(t.replace_params(infer_vars))),
+            Ty::EventStream(t, params) => Ty::EventStream(
+                Box::new(t.replace_params(infer_vars)),
+                params
+                    .iter()
+                    .map(|e| e.replace_params(infer_vars))
+                    .collect(),
+            ),
             Ty::Option(t) => Ty::Option(Box::new(t.replace_params(infer_vars))),
             Ty::Window(t, d) => Ty::Window(
                 Box::new(t.replace_params(infer_vars)),
@@ -184,7 +190,14 @@ impl std::fmt::Display for Ty {
             Ty::Float(F32) => write!(f, "Float32"),
             Ty::Float(F64) => write!(f, "Float64"),
             Ty::String => write!(f, "String"),
-            Ty::EventStream(ty) => write!(f, "EventStream<{}>", ty),
+            Ty::EventStream(ty, params) => {
+                if params.len() == 0 {
+                    write!(f, "EventStream<{}>", ty)
+                } else {
+                    let joined: Vec<String> = params.iter().map(|e| format!("{}", e)).collect();
+                    write!(f, "EventStream<{}, ({})>", ty, joined.join(", "))
+                }
+            }
             Ty::TimedStream(_) => unimplemented!(),
             Ty::Duration(d) => write!(f, "{}", d),
             Ty::Window(t, d) => write!(f, "Window<{}, {}>", t, d),

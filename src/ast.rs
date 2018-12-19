@@ -94,7 +94,7 @@ pub struct Output {
 #[derive(AstNode, Debug)]
 pub struct Parameter {
     pub name: Ident,
-    pub ty: Option<Type>,
+    pub ty: Type,
     pub(crate) _id: NodeId,
     pub(crate) _span: Span,
 }

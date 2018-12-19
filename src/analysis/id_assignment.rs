@@ -109,9 +109,7 @@ where
     E: FnMut() -> NodeId,
 {
     param.set_id(next_id());
-    if let Some(ref mut t) = param.ty {
-        assign_ids_type(t, next_id);
-    }
+    assign_ids_type(&mut param.ty, next_id);
 }
 
 fn assign_ids_literal<E>(lit: &mut Literal, next_id: &mut E)

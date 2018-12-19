@@ -121,8 +121,16 @@ impl<'a> TypeAnalysis<'a> {
         self.infer_type(&input.ty)?;
         let ty_var = self.var_lookup[&input.ty._id];
 
+        assert!(
+            input.params.is_empty(),
+            "parametric inputs are not implemented"
+        );
+
         self.unifier
-            .unify_var_ty(var, Ty::EventStream(Box::new(Ty::Infer(ty_var))))
+            .unify_var_ty(
+                var,
+                Ty::EventStream(Box::new(Ty::Infer(ty_var)), Vec::new()),
+            )
             .map_err(|err| self.handle_error(err, input.name.span))
     }
 
@@ -134,9 +142,23 @@ impl<'a> TypeAnalysis<'a> {
         self.infer_type(&output.ty)?;
         let ty_var = self.var_lookup[&output.ty._id];
 
+        let mut param_types = Vec::new();
+        for param in &output.params {
+            self.infer_type(&param.ty)?;
+            let param_ty_var = self.var_lookup[&param.ty._id];
+            let param_var = self.new_var(param._id);
+            self.unifier
+                .unify_var_var(param_var, param_ty_var)
+                .expect("cannot fail as `param_var` is fresh");
+            param_types.push(Ty::Infer(param_var));
+        }
+
         // ?var = EventStream<?ty_var>
         self.unifier
-            .unify_var_ty(var, Ty::EventStream(Box::new(Ty::Infer(ty_var))))
+            .unify_var_ty(
+                var,
+                Ty::EventStream(Box::new(Ty::Infer(ty_var)), param_types),
+            )
             .map_err(|err| self.handle_error(err, output.name.span))
     }
 
@@ -177,6 +199,68 @@ impl<'a> TypeAnalysis<'a> {
     fn infer_output_expression(&mut self, output: &'a Output) -> Result<(), ()> {
         trace!("infer type for {}", output);
         let ty_var = self.var_lookup[&output.ty._id];
+
+        // check template specification
+        if let Some(template_spec) = &output.template_spec {
+            if let Some(invoke) = &template_spec.inv {
+                self.infer_expression(&invoke.target)?;
+                let inv_var = self.var_lookup[&invoke.target._id];
+                if output.params.len() == 1 {
+                    // ?param_var = ?inv_bar
+                    let param_var = self.var_lookup[&output.params[0]._id];
+                    self.unifier
+                        .unify_var_var(param_var, inv_var)
+                        .map_err(|err| self.handle_error(err, invoke.target._span))?;
+                } else {
+                    let target_ty = Ty::Tuple(
+                        output
+                            .params
+                            .iter()
+                            .map(|p| {
+                                let param_var = self.var_lookup[&p._id];
+                                Ty::Infer(param_var)
+                            })
+                            .collect(),
+                    );
+                    self.unifier
+                        .unify_var_ty(inv_var, target_ty)
+                        .map_err(|err| self.handle_error(err, invoke.target._span))?;
+                }
+
+                // check that condition is boolean
+                if let Some(cond) = &invoke.condition {
+                    self.infer_expression(cond)?;
+
+                    // ?cond_var = Bool
+                    let cond_var = self.var_lookup[&cond._id];
+                    self.unifier
+                        .unify_var_ty(cond_var, Ty::Bool)
+                        .map_err(|err| self.handle_error(err, cond._span))?;
+                }
+            }
+            if let Some(extend) = &template_spec.ext {
+                // check that condition is boolean
+                if let Some(cond) = &extend.target {
+                    self.infer_expression(cond)?;
+
+                    // ?cond_var = Bool
+                    let cond_var = self.var_lookup[&cond._id];
+                    self.unifier
+                        .unify_var_ty(cond_var, Ty::Bool)
+                        .map_err(|err| self.handle_error(err, cond._span))?;
+                }
+            }
+            if let Some(terminate) = &template_spec.ter {
+                // check that condition is boolean
+                self.infer_expression(&terminate.target)?;
+
+                // ?cond_var = Bool
+                let cond_var = self.var_lookup[&terminate.target._id];
+                self.unifier
+                    .unify_var_ty(cond_var, Ty::Bool)
+                    .map_err(|err| self.handle_error(err, terminate.target._span))?;
+            }
+        }
 
         // generate constraint for expression
         self.infer_expression(&output.expression)?;
@@ -391,7 +475,10 @@ impl<'a> TypeAnalysis<'a> {
                     _ => unreachable!(),
                 };
                 self.unifier
-                    .unify_var_ty(stream_var, Ty::EventStream(Box::new(Ty::Infer(inner_var))))
+                    .unify_var_ty(
+                        stream_var,
+                        Ty::EventStream(Box::new(Ty::Infer(inner_var)), Vec::new()),
+                    )
                     .map_err(|err| {
                         self.handle_error(err, stream._span);
                     })?;
@@ -759,7 +846,10 @@ impl Unifier {
         trace!("check occurrence {} {}", var, ty);
         match ty {
             Ty::Infer(t) => self.table.unioned(var, *t),
-            Ty::EventStream(ty) => self.check_occurrence(var, &ty),
+            Ty::EventStream(ty, params) => {
+                self.check_occurrence(var, &ty)
+                    || params.iter().any(|el| self.check_occurrence(var, el))
+            }
             Ty::TimedStream(_) => unimplemented!(),
             Ty::Tuple(t) => t.iter().any(|e| self.check_occurrence(var, e)),
             _ => false,
@@ -792,7 +882,13 @@ impl Unifier {
             (&Ty::Constr(constr), other) => other.satisfies(constr),
             (other, &Ty::Constr(constr)) => other.satisfies(constr),
             (Ty::Option(l), Ty::Option(r)) => self.types_equal_rec(l, r),
-            (Ty::EventStream(l), Ty::EventStream(r)) => self.types_equal_rec(l, r),
+            (Ty::EventStream(l, param_l), Ty::EventStream(r, param_r)) => {
+                self.types_equal_rec(l, r)
+                    && param_l
+                        .iter()
+                        .zip(param_r)
+                        .all(|(el_l, el_r)| self.types_equal_rec(el_l, el_r))
+            }
             (Ty::Tuple(l), Ty::Tuple(r)) => {
                 if l.len() != r.len() {
                     return false;
@@ -815,7 +911,7 @@ impl Unifier {
         // types_equal_rec has side effects, thus, create snapshot before
         let snapshot = self.table.snapshot();
         let res = match right {
-            Ty::EventStream(ty) => self.types_equal_rec(left, ty),
+            Ty::EventStream(ty, params) if params.is_empty() => self.types_equal_rec(left, ty),
             _ => false,
         };
         if !res {
@@ -846,12 +942,19 @@ impl Unifier {
                     Ty::Error
                 }
             }
-            Known(Ty::EventStream(ty)) => {
+            Known(Ty::EventStream(ty, params)) => {
                 let inner = match *ty {
                     Ty::Infer(other) => self.get_final_type(other),
                     ref t => t.clone(),
                 };
-                Ty::EventStream(Box::new(inner))
+                let params = params
+                    .into_iter()
+                    .map(|param| match param {
+                        Ty::Infer(other) => self.get_final_type(other),
+                        t => t,
+                    })
+                    .collect();
+                Ty::EventStream(Box::new(inner), params)
             }
             Known(t) => t.clone(),
         }
@@ -874,7 +977,10 @@ impl Unifier {
                 Some(other_ty) => self.normalize_ty(other_ty),
             },
             Ty::Tuple(t) => Ty::Tuple(t.into_iter().map(|el| self.normalize_ty(el)).collect()),
-            Ty::EventStream(ty) => Ty::EventStream(Box::new(self.normalize_ty(*ty))),
+            Ty::EventStream(ty, params) => Ty::EventStream(
+                Box::new(self.normalize_ty(*ty)),
+                params.into_iter().map(|e| self.normalize_ty(e)).collect(),
+            ),
             Ty::Option(ty) => Ty::Option(Box::new(self.normalize_ty(*ty))),
             Ty::Window(ty, d) => Ty::Window(
                 Box::new(self.normalize_ty(*ty)),
@@ -955,7 +1061,16 @@ impl Ty {
                 }
             }
             (Ty::Option(l), Ty::Option(r)) => Ok(Ty::Option(Box::new(l.unify(r)?))),
-            (Ty::EventStream(l), Ty::EventStream(r)) => Ok(Ty::EventStream(Box::new(l.unify(r)?))),
+            (Ty::EventStream(l, param_l), Ty::EventStream(r, param_r)) => {
+                if param_l.len() != param_r.len() {
+                    return Err(InferError::TypeMismatch(self.clone(), other.clone()));
+                }
+                let mut param = Vec::new();
+                for (el_l, el_r) in param_l.iter().zip(param_r) {
+                    param.push(el_l.unify(el_r)?);
+                }
+                Ok(Ty::EventStream(Box::new(l.unify(r)?), param))
+            }
             (Ty::Tuple(l), Ty::Tuple(r)) => {
                 if l.len() != r.len() {
                     return Err(InferError::TypeMismatch(self.clone(), other.clone()));
@@ -1218,7 +1333,13 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
+    fn test_invoke_type_two_params() {
+        let spec =
+            "input in: Int8\n output a<p1: Int8, p2: Int8>: Int8 { invoke (in[0], in[0]) } := 3";
+        assert_eq!(0, num_type_errors(spec));
+    }
+
+    #[test]
     fn test_invoke_type_faulty() {
         let spec = "input in: Bool\n output a<p1: Int8>: Int8 { invoke in } := 3";
         assert_eq!(1, num_type_errors(spec));
@@ -1231,7 +1352,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn test_extend_type_faulty() {
         let spec = "input in: Int8\n output a: Int8 { extend in } := 3";
         assert_eq!(1, num_type_errors(spec));
@@ -1244,7 +1364,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn test_terminate_type_faulty() {
         let spec = "input in: Int8\n output a: Int8 { terminate in } := 3";
         assert_eq!(1, num_type_errors(spec));

@@ -170,9 +170,7 @@ impl<'a> NamingAnalysis<'a> {
         }
 
         // check the type
-        if let Some(ty) = &param.ty {
-            self.check_type(ty);
-        }
+        self.check_type(&param.ty);
     }
 
     /// Entry method, checks that every identifier in the given spec is bound.
