@@ -728,6 +728,7 @@ impl<'a> TypeChecker<'a> {
         }
     }
 
+<<<<<<< HEAD
     fn extract_extend_rate(&self, rate: &crate::ast::ExtendRate) -> std::time::Duration {
         use crate::ast::{ExtendRate, FreqUnit, LitKind, TimeUnit};
         let (expr, factor) = match rate {
@@ -790,4 +791,6 @@ impl<'a> TypeChecker<'a> {
             _ => unimplemented!(),
         }
     }
+=======
+>>>>>>> Implement extraction of Literal from Expression.
 }

@@ -891,6 +891,13 @@ impl<'a> TypeAnalysis<'a> {
             ValueTy::Error
         }
     }
+
+    pub(crate) fn get_stream_type(&mut self, id: NodeId) -> Option<StreamTy> {
+        match self.stream_vars.get(&id) {
+            Some(&var) => self.stream_unifier.get_normalized_type(var),
+            None => None,
+        }
+    }
 }
 
 /// Main data structure for the type unfication.

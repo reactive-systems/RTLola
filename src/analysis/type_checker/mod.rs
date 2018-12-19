@@ -11,6 +11,7 @@ use ast_node::NodeId;
 
 use crate::analysis::type_checker::candidates::TimingInfo;
 use std::collections::HashMap;
+use crate::ast::Type;
 
 #[derive(Debug)]
 pub(crate) struct ExtendedType(Type, TimingInfo);

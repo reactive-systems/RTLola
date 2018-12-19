@@ -69,7 +69,7 @@ use self::FloatTy::*;
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Hash)]
 pub struct Freq {
     repr: String,
-    d: Duration,
+    pub(crate) d: Duration,
 }
 
 impl std::fmt::Display for Freq {

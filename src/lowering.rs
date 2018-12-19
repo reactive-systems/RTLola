@@ -5,9 +5,9 @@ use crate::ast;
 use crate::ast::LolaSpec;
 use crate::ir;
 use crate::ir::{LolaIR, MemorizationBound, StreamReference, TimeDrivenStream};
+use crate::ty::TimingInfo;
 use ast_node::{AstNode, NodeId};
 use std::collections::HashMap;
-use std::time::Duration;
 type MemoryTable = HashMap<NodeId, StorageRequirement>;
 type EvalOrder = Vec<Vec<ComputeStep>>;
 
@@ -128,72 +128,23 @@ impl<'a> Lowering<'a> {
         unimplemented!()
     }
 
-    fn lower_extend_rate(&self, rate: &ast::ExtendRate) -> Duration {
-        let (expr, factor) = match rate {
-            ast::ExtendRate::Duration(expr, unit) => {
-                (
-                    expr,
-                    match unit {
-                        ast::TimeUnit::NanoSecond => 1u64,
-                        ast::TimeUnit::MicroSecond => 10u64.pow(3),
-                        ast::TimeUnit::MilliSecond => 10u64.pow(6),
-                        ast::TimeUnit::Second => 10u64.pow(9),
-                        ast::TimeUnit::Minute => 10u64.pow(9) * 60,
-                        ast::TimeUnit::Hour => 10u64.pow(9) * 60 * 60,
-                        ast::TimeUnit::Day => 10u64.pow(9) * 60 * 60 * 24,
-                        ast::TimeUnit::Week => 10u64.pow(9) * 60 * 24 * 24 * 7,
-                        ast::TimeUnit::Year => 10u64.pow(9) * 60 * 24 * 24 * 7 * 365, // fits in u57
-                    },
-                )
-            }
-            ast::ExtendRate::Frequency(expr, unit) => {
-                (
-                    expr,
-                    match unit {
-                        ast::FreqUnit::MicroHertz => 10u64.pow(15), // fits in u50,
-                        ast::FreqUnit::MilliHertz => 10u64.pow(12),
-                        ast::FreqUnit::Hertz => 10u64.pow(9),
-                        ast::FreqUnit::KiloHertz => 10u64.pow(6),
-                        ast::FreqUnit::MegaHertz => 10u64.pow(3),
-                        ast::FreqUnit::GigaHertz => 1u64,
-                    },
-                )
-            }
-        };
-        match Self::resolve_constant_expression(expr.as_ref()) {
-            ast::LitKind::Int(i) => {
-                // TODO: Improve: Robust against overflows.
-                let value = i as u128 * factor as u128; // Multiplication might fail.
-                let secs = (value / 10u128.pow(9)) as u64; // Cast might fail.
-                let nanos = (value % 10u128.pow(9)) as u32; // Perfectly safe cast to u32.
-                Duration::new(secs, nanos)
-            }
-            ast::LitKind::Float(f) => {
-                // TODO: Improve: Robust against overflows and inaccuracies.
-                let value = f * factor as f64;
-                let secs = (value / 1_000_000_000f64) as u64;
-                let nanos = (value % 1_000_000_000f64) as u32;
-                Duration::new(secs, nanos)
-            }
-            ast::LitKind::Str(_) | ast::LitKind::RawStr(_) | ast::LitKind::Bool(_) => panic!(), // TODO: Decide how to handle such situations.
-        }
-    }
-
     fn check_time_driven(
-        &self,
+        &mut self,
         output: &ast::Output,
         reference: StreamReference,
     ) -> Option<TimeDrivenStream> {
-        output
-            .template_spec
-            .as_ref()
-            .and_then(|s| s.ext.as_ref())
-            .and_then(|es| es.freq.as_ref())
-            .map(|r| self.lower_extend_rate(&r))
-            .map(|dur| TimeDrivenStream {
+        match self
+            .tt
+            .get_stream_type(output._id)
+            .expect("type information has to be present")
+            .timing
+        {
+            TimingInfo::RealTime(f) => Some(TimeDrivenStream {
                 reference,
-                extend_rate: dur,
-            })
+                extend_rate: f.d,
+            }),
+            _ => None,
+        }
     }
 
     fn resolve_constant_expression(expr: &ast::Expression) -> ast::LitKind {
