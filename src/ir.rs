@@ -127,9 +127,9 @@ pub struct EventDrivenStream {
 pub struct ParametrizedStream {
     pub reference: StreamReference,
     pub params: Vec<Parameter>,
-    pub invoke: StreamReference,
-    pub extend: StreamReference,
-    pub terminate: StreamReference,
+    pub invoke: Option<StreamReference>,
+    pub extend: Option<StreamReference>,
+    pub terminate: Option<StreamReference>,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]

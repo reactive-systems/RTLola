@@ -92,7 +92,7 @@ pub struct Output {
     pub(crate) _span: Span,
 }
 
-#[derive(AstNode, Debug)]
+#[derive(AstNode, Debug, Clone)]
 pub struct Parameter {
     pub name: Ident,
     pub ty: Type,
@@ -224,7 +224,7 @@ pub struct TypeDeclField {
     pub(crate) _span: Span,
 }
 
-#[derive(AstNode, Debug)]
+#[derive(AstNode, Debug, Clone)]
 pub struct StreamInstance {
     pub stream_identifier: Ident,
     pub arguments: Vec<Box<Expression>>,
@@ -232,7 +232,7 @@ pub struct StreamInstance {
     pub(crate) _span: Span,
 }
 
-#[derive(AstNode, Debug)]
+#[derive(AstNode, Debug, Clone)]
 pub struct Parenthesis {
     pub(crate) _id: NodeId,
     pub(crate) _span: Span,
@@ -247,7 +247,7 @@ impl Parenthesis {
     }
 }
 
-#[derive(AstNode, Debug)]
+#[derive(AstNode, Debug, Clone)]
 pub struct Type {
     pub kind: TypeKind,
     pub(crate) _id: NodeId,
@@ -279,7 +279,7 @@ impl Type {
         }
     }
 
-    pub(crate) fn new_duration(val: u32, unit: TimeUnit, span: Span) -> Type {
+    pub fn new_duration(val: u32, unit: TimeUnit, span: Span) -> Type {
         Type {
             _id: NodeId::DUMMY,
             kind: TypeKind::Duration(val, unit),
@@ -288,7 +288,7 @@ impl Type {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum TypeKind {
     /// A simple type, e.g., Int
     Simple(String),
@@ -305,7 +305,7 @@ pub enum TypeKind {
 /// An expression
 ///
 /// inspired by https://doc.rust-lang.org/nightly/nightly-rustc/src/syntax/ast.rs.html
-#[derive(AstNode, Debug)]
+#[derive(AstNode, Debug, Clone)]
 pub struct Expression {
     pub(crate) kind: ExpressionKind,
     pub(crate) _id: NodeId,
@@ -322,7 +322,7 @@ impl Expression {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ExpressionKind {
     /// A literal, e.g., `1`, `"foo"`
     Lit(Literal),
@@ -481,7 +481,7 @@ pub enum UnOp {
 }
 
 /// Offset used in the lookup expression
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Offset {
     /// A discrete offset, e.g., `0`, `-4`, or `42`
     DiscreteOffset(Box<Expression>),

@@ -2,9 +2,9 @@ use crate::analysis::naming::DeclarationTable;
 use crate::analysis::typing::TypeAnalysis;
 // Only import the unambiguous Nodes, use `ast::`/`ir::` prefix for disambiguation.
 use crate::ast;
-use crate::ast::LolaSpec;
+use crate::ast::{ExpressionKind, LolaSpec};
 use crate::ir;
-use crate::ir::{LolaIR, MemorizationBound, StreamReference, TimeDrivenStream};
+use crate::ir::{LolaIR, MemorizationBound, ParametrizedStream, StreamReference, TimeDrivenStream};
 use crate::ty::TimingInfo;
 use ast_node::{AstNode, NodeId};
 use std::collections::HashMap;
@@ -108,8 +108,117 @@ impl<'a> Lowering<'a> {
             self.ir.time_driven.push(td_ref)
         }
 
-        // TODO: Check params and windows.
-        unimplemented!()
+        if let Some(param_ref) = self.check_parametrized(&ast_output, reference) {
+            self.ir.parametrized.push(param_ref);
+        }
+
+        let windows: Vec<ir::SlidingWindow> = self
+            .find_windows(&ast_output.expression)
+            .iter()
+            .map(|e| self.lower_window(&e, reference))
+            .collect();
+        self.ir.sliding_windows.extend(windows);
+    }
+
+    fn find_windows(&self, expr: &'a ast::Expression) -> Vec<&'a ast::Expression> {
+        match &expr.kind {
+            ExpressionKind::Lit(_) => Vec::new(),
+            ExpressionKind::Ident(_) => Vec::new(),
+            ExpressionKind::Default(expr, dft) => self
+                .find_windows(expr)
+                .into_iter()
+                .chain(self.find_windows(dft))
+                .collect(),
+            ExpressionKind::Lookup(inst, _, op) => inst
+                .arguments
+                .iter()
+                .flat_map(|a| self.find_windows(a))
+                .chain(op.map(|_| expr).into_iter())
+                .collect(),
+            ExpressionKind::Binary(_, lhs, rhs) => self
+                .find_windows(lhs)
+                .into_iter()
+                .chain(self.find_windows(rhs).into_iter())
+                .collect(),
+            ExpressionKind::Unary(_, operand) => self.find_windows(operand),
+            ExpressionKind::Ite(cond, cons, alt) => self
+                .find_windows(cond)
+                .into_iter()
+                .chain(self.find_windows(cons).into_iter())
+                .chain(self.find_windows(alt).into_iter())
+                .collect(),
+            ExpressionKind::ParenthesizedExpression(_, expr, _) => self.find_windows(expr),
+            ExpressionKind::MissingExpression() => panic!(), // TODO: Eradicate in preceding step.
+            ExpressionKind::Tuple(exprs) => {
+                exprs.iter().flat_map(|a| self.find_windows(a)).collect()
+            }
+            ExpressionKind::Function(_, _, args) => {
+                args.iter().flat_map(|a| self.find_windows(a)).collect()
+            }
+            ExpressionKind::Field(expr, _) => self.find_windows(expr),
+            ExpressionKind::Method(_, _, _, _) => unimplemented!(),
+        }
+    }
+
+    fn lower_window(
+        &self,
+        expr: &ast::Expression,
+        reference: StreamReference,
+    ) -> ir::SlidingWindow {
+        if let ExpressionKind::Lookup(inst, offset, op) = &expr.kind {
+            let duration = match offset {
+                ast::Offset::DiscreteOffset(_) => panic!(), // TODO: Eradicate in preceding step.
+                ast::Offset::RealTimeOffset(expr, unit) => unimplemented!(),
+            };
+            ir::SlidingWindow {
+                target: reference,
+                duration,
+                op: self.lower_window_op(op.unwrap()),
+            }
+        } else {
+            unreachable!()
+        }
+    }
+
+    fn lower_window_op(&self, op: ast::WindowOperation) -> ir::WindowOperation {
+        match op {
+            ast::WindowOperation::Average => ir::WindowOperation::Average,
+            ast::WindowOperation::Count => ir::WindowOperation::Count,
+            ast::WindowOperation::Integral => ir::WindowOperation::Integral,
+            ast::WindowOperation::Product => ir::WindowOperation::Product,
+            ast::WindowOperation::Sum => ir::WindowOperation::Sum,
+        }
+    }
+
+    fn check_parametrized(
+        &mut self,
+        ast_output: &ast::Output,
+        reference: StreamReference,
+    ) -> Option<ParametrizedStream> {
+        if let Some(temp_spec) = ast_output.template_spec.as_ref() {
+            // TODO: Finalize and implement parametrization.
+            Some(ParametrizedStream {
+                reference,
+                params: ast_output
+                    .params
+                    .iter()
+                    .map(|p| self.lower_param(p))
+                    .collect(),
+                invoke: None,
+                extend: None,
+                terminate: None,
+            })
+        } else {
+            assert!(ast_output.params.is_empty());
+            None
+        }
+    }
+
+    fn lower_param(&mut self, param: &ast::Parameter) -> ir::Parameter {
+        ir::Parameter {
+            name: param.name.name.clone(),
+            ty: self.lower_type(param._id),
+        }
     }
 
     fn lower_storage_req(&self, req: StorageRequirement) -> MemorizationBound {
@@ -145,10 +254,6 @@ impl<'a> Lowering<'a> {
             }),
             _ => None,
         }
-    }
-
-    fn resolve_constant_expression(expr: &ast::Expression) -> ast::LitKind {
-        unimplemented!()
     }
 
     fn order_to_table(eo: EvaluationOrder) -> EvalTable {

@@ -779,7 +779,7 @@ fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>, span: Span)
     )
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Ident {
     pub name: String,
     pub span: Span,

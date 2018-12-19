@@ -4,7 +4,6 @@ use crate::ast::LolaSpec;
 pub(crate) mod candidates;
 mod checker;
 
-use super::common::Type;
 use super::type_checker::checker::*;
 use crate::reporting::Handler;
 use ast_node::NodeId;
