@@ -18,6 +18,7 @@ use super::ast::LolaSpec;
 use crate::analysis::graph_based_analysis::dependency_graph::analyse_dependencies;
 use crate::analysis::graph_based_analysis::evaluation_order::determine_evaluation_order;
 use crate::analysis::graph_based_analysis::future_dependency::future_dependent_stream;
+use crate::analysis::graph_based_analysis::space_requirements::determine_space_requirements;
 use crate::parse::SourceMapper;
 use crate::reporting::Handler;
 
@@ -56,8 +57,13 @@ pub(crate) fn analyze(spec: &mut LolaSpec, mapper: SourceMapper) -> bool {
 
     let evaluation_order_result = determine_evaluation_order(dependency_analysis.dependency_graph);
 
-    let _future_dependent_stream =
+    let future_dependent_stream =
         future_dependent_stream(&evaluation_order_result.pruned_dependency_graph);
+
+    let _space_requirements = determine_space_requirements(
+        &evaluation_order_result.pruned_dependency_graph,
+        &future_dependent_stream,
+    );
 
     unimplemented!();
 }

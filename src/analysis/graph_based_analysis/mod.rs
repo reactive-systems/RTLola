@@ -1,6 +1,7 @@
 pub mod dependency_graph;
 pub mod evaluation_order;
 pub mod future_dependency;
+pub mod space_requirements;
 
 use crate::ast::TimeUnit;
 use ast_node::NodeId;
@@ -33,7 +34,7 @@ pub(crate) enum Offset {
     Time(f64, TimeUnit),
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub(crate) enum Location {
     Invoke,
     Extend,
@@ -51,6 +52,7 @@ pub(crate) enum StreamDependency {
 pub(crate) enum StorageRequirement {
     Finite(u16),
     FutureRef(u16),
+    Unbounded,
 }
 
 pub(crate) type DependencyGraph = Graph<StreamNode, StreamDependency, Directed>;
