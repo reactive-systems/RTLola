@@ -426,10 +426,7 @@ impl<'a> TypeAnalysis<'a> {
             // discrete offset
             Lookup(stream, Offset::DiscreteOffset(off_expr), None) => {
                 // recursion
-                self.infer_expression(off_expr, None)?;
-                let off_var = self.var_lookup[&off_expr._id];
-
-                let stream_var = self.new_var(stream._id);
+                self.infer_expression(off_expr, Some(Ty::Constr(TypeConstraint::Integer)))?;
 
                 let negative_offset = match &off_expr.kind {
                     ExpressionKind::Lit(l) => match l.kind {
@@ -439,30 +436,30 @@ impl<'a> TypeAnalysis<'a> {
                     _ => unreachable!("offset expressions have to be literal"),
                 };
 
+                let inner_var = self.unifier.new_var();
+
+                let mut params = Vec::new();
+                for arg in &stream.arguments {
+                    self.infer_expression(arg, None)?;
+                    params.push(Ty::Infer(self.var_lookup[&arg._id]));
+                }
+                let target = Ty::EventStream(Box::new(Ty::Infer(inner_var)), params);
+
                 // constraints
                 // off_expr = {integer}
                 // stream = EventStream<?1>
                 // if negative_offset { expr = Option<?1> } else { expr = ?1 }
-                self.unifier
-                    .add_constraint(off_var, TypeConstraint::Integer)
-                    .map_err(|err| {
-                        self.handle_error(err, off_expr._span);
-                    })?;
+
                 // need to derive "inner" type `?1`
                 let decl = self.declarations[&stream._id];
-                let inner_var: InferVar = match decl {
-                    Declaration::In(input) => self.var_lookup[&input.ty._id],
-                    Declaration::Out(output) => self.var_lookup[&output.ty._id],
+                let decl_var: InferVar = match decl {
+                    Declaration::In(input) => self.var_lookup[&input._id],
+                    Declaration::Out(output) => self.var_lookup[&output._id],
                     _ => unreachable!(),
                 };
-                self.unifier
-                    .unify_var_ty(
-                        stream_var,
-                        Ty::EventStream(Box::new(Ty::Infer(inner_var)), Vec::new()),
-                    )
-                    .map_err(|err| {
-                        self.handle_error(err, stream._span);
-                    })?;
+                self.unifier.unify_var_ty(decl_var, target).map_err(|err| {
+                    self.handle_error(err, stream._span);
+                })?;
                 if negative_offset {
                     self.unifier
                         .unify_var_ty(var, Ty::Option(Box::new(Ty::Infer(inner_var))))
