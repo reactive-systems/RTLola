@@ -203,7 +203,7 @@ impl<'a> TypeAnalysis<'a> {
         // check template specification
         if let Some(template_spec) = &output.template_spec {
             if let Some(invoke) = &template_spec.inv {
-                self.infer_expression(&invoke.target)?;
+                self.infer_expression(&invoke.target, None)?;
                 let inv_var = self.var_lookup[&invoke.target._id];
                 if output.params.len() == 1 {
                     // ?param_var = ?inv_bar
@@ -229,47 +229,23 @@ impl<'a> TypeAnalysis<'a> {
 
                 // check that condition is boolean
                 if let Some(cond) = &invoke.condition {
-                    self.infer_expression(cond)?;
-
-                    // ?cond_var = Bool
-                    let cond_var = self.var_lookup[&cond._id];
-                    self.unifier
-                        .unify_var_ty(cond_var, Ty::Bool)
-                        .map_err(|err| self.handle_error(err, cond._span))?;
+                    self.infer_expression(cond, Some(Ty::Bool))?;
                 }
             }
             if let Some(extend) = &template_spec.ext {
                 // check that condition is boolean
                 if let Some(cond) = &extend.target {
-                    self.infer_expression(cond)?;
-
-                    // ?cond_var = Bool
-                    let cond_var = self.var_lookup[&cond._id];
-                    self.unifier
-                        .unify_var_ty(cond_var, Ty::Bool)
-                        .map_err(|err| self.handle_error(err, cond._span))?;
+                    self.infer_expression(cond, Some(Ty::Bool))?;
                 }
             }
             if let Some(terminate) = &template_spec.ter {
                 // check that condition is boolean
-                self.infer_expression(&terminate.target)?;
-
-                // ?cond_var = Bool
-                let cond_var = self.var_lookup[&terminate.target._id];
-                self.unifier
-                    .unify_var_ty(cond_var, Ty::Bool)
-                    .map_err(|err| self.handle_error(err, terminate.target._span))?;
+                self.infer_expression(&terminate.target, Some(Ty::Bool))?;
             }
         }
 
         // generate constraint for expression
-        self.infer_expression(&output.expression)?;
-
-        // match stream type with expression type
-        // ?ty_var = ?expr_var
-        self.unifier
-            .unify_var_var(ty_var, self.var_lookup[&output.expression._id])
-            .map_err(|err| self.handle_error(err, output.expression._span))
+        self.infer_expression(&output.expression, Some(Ty::Infer(ty_var)))
     }
 
     fn get_constraint_for_literal(&self, lit: &Literal) -> ConstraintOrType {
@@ -286,8 +262,13 @@ impl<'a> TypeAnalysis<'a> {
         }
     }
 
-    fn infer_expression(&mut self, expr: &'a Expression) -> Result<(), ()> {
+    fn infer_expression(&mut self, expr: &'a Expression, target: Option<Ty>) -> Result<(), ()> {
         let var = self.new_var(expr._id);
+        if let Some(target_ty) = target {
+            self.unifier
+                .unify_var_ty(var, target_ty)
+                .expect("unification cannot fail as `var` is fresh");
+        }
 
         use crate::ast::ExpressionKind::*;
         match &expr.kind {
@@ -332,9 +313,9 @@ impl<'a> TypeAnalysis<'a> {
             }
             Ite(cond, left, right) => {
                 // recursion
-                self.infer_expression(cond)?;
-                self.infer_expression(left)?;
-                self.infer_expression(right)?;
+                self.infer_expression(cond, Some(Ty::Bool))?;
+                self.infer_expression(left, None)?;
+                self.infer_expression(right, None)?;
 
                 // constraints
                 // - cond = bool
@@ -359,7 +340,7 @@ impl<'a> TypeAnalysis<'a> {
             }
             Unary(op, appl) => {
                 // recursion
-                self.infer_expression(appl)?;
+                self.infer_expression(appl, None)?;
 
                 let appl_var = self.var_lookup[&appl._id];
                 use self::UnOp::*;
@@ -381,8 +362,8 @@ impl<'a> TypeAnalysis<'a> {
             }
             Binary(op, left, right) => {
                 // recursion
-                self.infer_expression(left)?;
-                self.infer_expression(right)?;
+                self.infer_expression(left, None)?;
+                self.infer_expression(right, None)?;
 
                 let left_var = self.var_lookup[&left._id];
                 let right_var = self.var_lookup[&right._id];
@@ -445,7 +426,7 @@ impl<'a> TypeAnalysis<'a> {
             // discrete offset
             Lookup(stream, Offset::DiscreteOffset(off_expr), None) => {
                 // recursion
-                self.infer_expression(off_expr)?;
+                self.infer_expression(off_expr, None)?;
                 let off_var = self.var_lookup[&off_expr._id];
 
                 let stream_var = self.new_var(stream._id);
@@ -496,8 +477,8 @@ impl<'a> TypeAnalysis<'a> {
             }
             Default(left, right) => {
                 // recursion
-                self.infer_expression(left)?;
-                self.infer_expression(right)?;
+                self.infer_expression(left, None)?;
+                self.infer_expression(right, None)?;
 
                 let left_var = self.var_lookup[&left._id];
                 let right_var = self.var_lookup[&right._id];
@@ -528,7 +509,7 @@ impl<'a> TypeAnalysis<'a> {
 
                 // recursion
                 for param in params {
-                    self.infer_expression(param)?;
+                    self.infer_expression(param, None)?;
                 }
 
                 let params: Vec<&Expression> = params.iter().map(|e| e.as_ref()).collect();
@@ -543,7 +524,7 @@ impl<'a> TypeAnalysis<'a> {
             }
             Method(base, name, types, params) => {
                 // recursion
-                self.infer_expression(base)?;
+                self.infer_expression(base, None)?;
 
                 if let Some(infered) = self.unifier.get_type(self.var_lookup[&base._id]) {
                     debug!("{} {}", base, infered);
@@ -556,7 +537,7 @@ impl<'a> TypeAnalysis<'a> {
 
                         // recursion
                         for param in params {
-                            self.infer_expression(param)?;
+                            self.infer_expression(param, None)?;
                         }
 
                         let mut parameters = vec![base.as_ref()];
@@ -579,7 +560,7 @@ impl<'a> TypeAnalysis<'a> {
             Tuple(expressions) => {
                 // recursion
                 for element in expressions {
-                    self.infer_expression(element)?;
+                    self.infer_expression(element, None)?;
                 }
                 // ?var = Tuple(?expr1, ?expr2, ..)
                 self.unifier
@@ -599,7 +580,7 @@ impl<'a> TypeAnalysis<'a> {
             }
             Field(base, ident) => {
                 // recursion
-                self.infer_expression(base)?;
+                self.infer_expression(base, None)?;
 
                 if let Some(infered) = self.unifier.get_type(self.var_lookup[&base._id]) {
                     debug!("{} {}", base, infered);
