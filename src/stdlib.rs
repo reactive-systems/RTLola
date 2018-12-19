@@ -137,6 +137,26 @@ impl MethodLookup {
                 )],
                 return_type: Ty::Param(0, "T".to_string()),
             }),
+            // avg<T:Numeric, D: Duration, F: FloatingPoint>(Window<T,D>) -> Option<F>
+            (Ty::Window(_, _), "avg") => Some(FuncDecl {
+                name: "avg".to_string(),
+                generics: vec![
+                    Generic {
+                        constraint: Ty::Constr(TypeConstraint::Numeric),
+                    },
+                    Generic {
+                        constraint: Ty::Constr(TypeConstraint::Duration),
+                    },
+                    Generic {
+                        constraint: Ty::Constr(TypeConstraint::FloatingPoint),
+                    },
+                ],
+                parameters: vec![Ty::Window(
+                    Box::new(Ty::Param(0, "T".to_string())),
+                    Box::new(Ty::Param(1, "D".to_string())),
+                )],
+                return_type: Ty::Option(Box::new(Ty::Param(2, "F".to_string()))),
+            }),
             _ => unimplemented!("{} for {}", name, ty),
         }
     }

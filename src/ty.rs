@@ -31,7 +31,7 @@ pub enum Ty {
     Error,
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Hash)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Hash)]
 pub enum IntTy {
     I8,
     I16,
@@ -40,7 +40,7 @@ pub enum IntTy {
 }
 use self::IntTy::*;
 
-#[derive(Debug, PartialEq, Eq, Clone, Hash)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Hash)]
 pub enum UIntTy {
     U8,
     U16,
@@ -49,7 +49,7 @@ pub enum UIntTy {
 }
 use self::UIntTy::*;
 
-#[derive(Debug, PartialEq, Eq, Clone, Hash)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Hash)]
 pub enum FloatTy {
     F32,
     F64,
@@ -144,7 +144,11 @@ impl Ty {
             TimeUnit::MicroSecond => Duration::from_micros(val.into()),
             TimeUnit::MilliSecond => Duration::from_millis(val.into()),
             TimeUnit::Second => Duration::from_secs(val.into()),
-            _ => unimplemented!(),
+            TimeUnit::Minute => Duration::from_secs(u64::from(val) * 60),
+            TimeUnit::Hour => Duration::from_secs(u64::from(val) * 60 * 60),
+            TimeUnit::Day => Duration::from_secs(u64::from(val) * 60 * 60 * 24),
+            TimeUnit::Week => Duration::from_secs(u64::from(val) * 60 * 60 * 24 * 7),
+            TimeUnit::Year => Duration::from_secs(u64::from(val) * 60 * 60 * 24 * 365),
         };
         Ty::Duration(DurationTy {
             repr: format!("{}{}", val, unit),
