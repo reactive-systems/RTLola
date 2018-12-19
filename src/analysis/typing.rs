@@ -92,21 +92,14 @@ impl<'a> TypeAnalysis<'a> {
         trace!("infer type for {}", constant);
         let var = self.new_var(constant._id);
 
-        // generate constraint in case a type is annotated
-        if let Some(type_name) = constant.ty.as_ref() {
-            assert!(!self.var_lookup.contains_key(&type_name._id));
-
-            if let Some(ty) = self.declarations.get(&type_name._id) {
-                match ty {
-                    Declaration::Type(ty) => {
-                        self.unifier
-                            .unify_ty_ty(Ty::Infer(var), (*ty).clone())
-                            .map_err(|err| self.handle_error(err, type_name._span))?;
-                    }
-                    _ => unreachable!(),
-                }
-            }
+        if let Some(ast_ty) = &constant.ty {
+            self.infer_type(&ast_ty)?;
+            let ty_var = self.var_lookup[&ast_ty._id];
+            self.unifier
+                .unify_var_var(var, ty_var)
+                .expect("cannot fail as `var` is a fresh var");
         }
+
         // generate constraint from literal
         match self.get_constraint_for_literal(&constant.literal) {
             ConstraintOrType::Type(ty) => self
@@ -124,32 +117,10 @@ impl<'a> TypeAnalysis<'a> {
     fn infer_input(&mut self, input: &'a Input) -> Result<(), ()> {
         trace!("infer type for {}", input);
         let var = self.new_var(input._id);
-        let ty_var = self.new_var(input.ty._id);
 
-        match &input.ty.kind {
-            TypeKind::Simple(_) => {
-                let ty = self.declarations[&input.ty._id];
-                match ty {
-                    Declaration::Type(ty) => {
-                        // constraints:
-                        // - ?ty_var = `ty`
-                        // - ?var = EventStream<?ty_var>
-                        self.unifier
-                            .unify_var_ty(ty_var, (*ty).clone())
-                            .map_err(|err| self.handle_error(err, input.ty._span))?;
-                    }
-                    _ => unreachable!(),
-                }
-            }
-            TypeKind::Tuple(tuple) => {
-                let ty = self.get_tuple_type(tuple);
-                // ?ty_var = `ty`
-                self.unifier
-                    .unify_var_ty(ty_var, ty)
-                    .map_err(|err| self.handle_error(err, input.ty._span))?;
-            }
-            _ => unreachable!(),
-        }
+        self.infer_type(&input.ty)?;
+        let ty_var = self.var_lookup[&input.ty._id];
+
         self.unifier
             .unify_var_ty(var, Ty::EventStream(Box::new(Ty::Infer(ty_var))))
             .map_err(|err| self.handle_error(err, input.name.span))
@@ -160,31 +131,8 @@ impl<'a> TypeAnalysis<'a> {
         let var = self.new_var(output._id);
 
         // generate constraint in case a type is annotated
-        let ty_var = self.new_var(output.ty._id);
-        match &output.ty.kind {
-            TypeKind::Inferred => {}
-            TypeKind::Simple(_) => {
-                let ty = self.declarations[&output.ty._id];
-                match ty {
-                    // ?ty_var = `ty`
-                    Declaration::Type(ty) => {
-                        self.unifier
-                            .unify_var_ty(ty_var, (*ty).clone())
-                            .map_err(|err| self.handle_error(err, output.ty._span))?;
-                    }
-                    _ => unreachable!(),
-                }
-            }
-            TypeKind::Tuple(tuple) => {
-                let ty = self.get_tuple_type(tuple);
-                // ?ty_var = `ty`
-                self.unifier
-                    .unify_var_ty(ty_var, ty)
-                    .map_err(|err| self.handle_error(err, output.ty._span))?;
-            }
-            TypeKind::Duration(_, _) => unreachable!(),
-            TypeKind::Malformed(_) => unreachable!(),
-        }
+        self.infer_type(&output.ty)?;
+        let ty_var = self.var_lookup[&output.ty._id];
 
         // ?var = EventStream<?ty_var>
         self.unifier
