@@ -17,9 +17,11 @@ pub enum Ty {
     //Adt(AdtDef),
     String,
     Tuple(Vec<Ty>),
+    /// An event stream with optional parameterization
     EventStream(Box<Ty>, Vec<Ty>),
     TimedStream(Box<Ty>), // todo: probably need frequency as well
     Duration(DurationTy),
+    /// Representation of a sliding window
     Window(Box<Ty>, Box<Ty>),
     /// an optional value type, e.g., accessing a stream with offset -1
     Option(Box<Ty>),

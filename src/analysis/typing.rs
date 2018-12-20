@@ -282,9 +282,9 @@ impl<'a> TypeAnalysis<'a> {
 
     fn infer_expression(&mut self, expr: &'a Expression, target: Option<Ty>) -> Result<(), ()> {
         let var = self.new_var(expr._id);
-        if let Some(target_ty) = target {
+        if let Some(target_ty) = &target {
             self.unifier
-                .unify_var_ty(var, target_ty)
+                .unify_var_ty(var, target_ty.clone())
                 .expect("unification cannot fail as `var` is fresh");
         }
 
@@ -330,36 +330,15 @@ impl<'a> TypeAnalysis<'a> {
                 }
             }
             Ite(cond, left, right) => {
-                // recursion
-                self.infer_expression(cond, Some(Ty::Bool))?;
-                self.infer_expression(left, None)?;
-                self.infer_expression(right, None)?;
-
                 // constraints
-                // - cond = bool
-                // - left = right
-                // - expr = left
-                let cond_var = self.var_lookup[&cond._id];
-                let left_var = self.var_lookup[&left._id];
-                let right_var = self.var_lookup[&right._id];
-                self.unifier
-                    .unify_var_ty(cond_var, Ty::Bool)
-                    .map_err(|err| {
-                        self.handle_error(err, cond._span);
-                    })?;
-                self.unifier
-                    .unify_var_var(left_var, right_var)
-                    .map_err(|err| {
-                        self.handle_error(err, right._span);
-                    })?;
-                self.unifier.unify_var_var(var, left_var).map_err(|err| {
-                    self.handle_error(err, expr._span);
-                })?;
+                // - ?cond = bool
+                // - ?left = ?expr
+                // - ?right = ?expr
+                self.infer_expression(cond, Some(Ty::Bool))?;
+                self.infer_expression(left, Some(Ty::Infer(var)))?;
+                self.infer_expression(right, Some(Ty::Infer(var)))?;
             }
             Unary(op, appl) => {
-                // recursion
-                self.infer_expression(appl, None)?;
-
                 self.infer_function_application(
                     var,
                     expr._span,
@@ -369,10 +348,6 @@ impl<'a> TypeAnalysis<'a> {
                 )?;
             }
             Binary(op, left, right) => {
-                // recursion
-                self.infer_expression(left, None)?;
-                self.infer_expression(right, None)?;
-
                 self.infer_function_application(
                     var,
                     expr._span,
@@ -431,22 +406,11 @@ impl<'a> TypeAnalysis<'a> {
                 }
             }
             Default(left, right) => {
-                // recursion
-                self.infer_expression(left, None)?;
-                self.infer_expression(right, None)?;
-
-                let left_var = self.var_lookup[&left._id];
-                let right_var = self.var_lookup[&right._id];
-
                 // constraints
                 // left = Option<expr>
-                // expr = right
-                self.unifier
-                    .unify_var_ty(left_var, Ty::Option(Box::new(Ty::Infer(var))))
-                    .map_err(|err| self.handle_error(err, left._span))?;
-                self.unifier
-                    .unify_var_var(var, right_var)
-                    .map_err(|err| self.handle_error(err, expr._span))?;
+                // right = expr
+                self.infer_expression(left, Some(Ty::Option(Box::new(Ty::Infer(var)))))?;
+                self.infer_expression(right, Some(Ty::Infer(var)))?;
             }
             Function(_, types, params) => {
                 let decl = self.declarations[&expr._id];
@@ -460,11 +424,6 @@ impl<'a> TypeAnalysis<'a> {
 
                 for ty in types {
                     self.infer_type(ty)?;
-                }
-
-                // recursion
-                for param in params {
-                    self.infer_expression(param, None)?;
                 }
 
                 let params: Vec<&Expression> = params.iter().map(|e| e.as_ref()).collect();
@@ -488,11 +447,6 @@ impl<'a> TypeAnalysis<'a> {
 
                         for ty in types {
                             self.infer_type(ty)?;
-                        }
-
-                        // recursion
-                        for param in params {
-                            self.infer_expression(param, None)?;
                         }
 
                         let mut parameters = vec![base.as_ref()];
@@ -567,6 +521,7 @@ impl<'a> TypeAnalysis<'a> {
                     }
                 }
             }
+            ParenthesizedExpression(_, expr, _) => self.infer_expression(expr, target)?,
             t => unimplemented!("expression `{:?}`", t),
         }
         Ok(())
@@ -607,12 +562,17 @@ impl<'a> TypeAnalysis<'a> {
         }
 
         for (type_param, parameter) in fun_decl.parameters.iter().zip(params) {
-            let param_var = self.var_lookup[&parameter._id];
             let ty = type_param.replace_params(&generics);
-            // ?param_var = `ty`
-            self.unifier
-                .unify_var_ty(param_var, ty)
-                .map_err(|err| self.handle_error(err, parameter._span))?;
+            if let Some(&param_var) = self.var_lookup.get(&parameter._id) {
+                // for method calls, we have to infer type for first argument
+                // ?param_var = `ty`
+                self.unifier
+                    .unify_var_ty(param_var, ty)
+                    .map_err(|err| self.handle_error(err, parameter._span))?;
+            } else {
+                // otherwise, we have to check it now
+                self.infer_expression(parameter, Some(ty))?;
+            }
         }
         // return type
         let ty = fun_decl.return_type.replace_params(&generics);
@@ -1251,6 +1211,12 @@ mod tests {
     }
 
     #[test]
+    fn test_parenthized_expr() {
+        let spec = "input s: String\noutput o: Bool := (s[-1] ? \"\") == \"a\"";
+        assert_eq!(0, num_type_errors(spec));
+    }
+
+    #[test]
     fn test_underspecified_type() {
         let spec = "output o := 2";
         assert_eq!(0, num_type_errors(spec));
@@ -1272,6 +1238,13 @@ mod tests {
     fn test_trigonometric_faulty_2() {
         let spec = "import math\noutput o: Float64 := cos(true)";
         assert_eq!(1, num_type_errors(spec));
+    }
+
+    #[test]
+    fn test_regex() {
+        let spec =
+            "import regex\ninput s: String\noutput o: Bool := matches_regex(s[0], r\"(a+b)\")";
+        assert_eq!(0, num_type_errors(spec));
     }
 
     #[test]

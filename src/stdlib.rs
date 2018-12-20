@@ -115,12 +115,24 @@ lazy_static! {
         parameters: vec![Ty::Param(0, "T".to_string())],
         return_type: Ty::Param(0, "T".to_string()),
     };
+
+    // fn matches_regexp(String, String) -> Bool
+    static ref MATCHES_REGEX: FuncDecl = FuncDecl {
+        name: "matches_regex".to_string(),
+        generics: vec![],
+        parameters: vec![Ty::String, Ty::String],
+        return_type: Ty::Bool,
+    };
 }
 
 pub(crate) fn import_math_module<'a>(scope: &mut ScopedDecl<'a>) {
     scope.add_decl_for(&SQRT.name, Declaration::Func(&SQRT));
     scope.add_decl_for(&COS.name, Declaration::Func(&COS));
     scope.add_decl_for(&SIN.name, Declaration::Func(&SIN));
+}
+
+pub(crate) fn import_regex_module<'a>(scope: &mut ScopedDecl<'a>) {
+    scope.add_decl_for(&MATCHES_REGEX.name, Declaration::Func(&MATCHES_REGEX))
 }
 
 pub(crate) struct MethodLookup {}

@@ -178,6 +178,7 @@ impl<'a> NamingAnalysis<'a> {
         for import in &spec.imports {
             match import.name.name.as_str() {
                 "math" => stdlib::import_math_module(&mut self.declarations),
+                "regex" => stdlib::import_regex_module(&mut self.declarations),
                 n => self.handler.error_with_span(
                     &format!("unresolved import `{}`", n),
                     LabeledSpan::new(import.name.span, &format!("no `{}` in the root", n), true),
