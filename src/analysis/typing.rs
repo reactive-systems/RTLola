@@ -114,7 +114,7 @@ impl<'a> TypeAnalysis<'a> {
                 .map_err(|err| self.handle_error(err, constant.literal._span))?,
             ConstraintOrType::Constraint(constr) => self
                 .unifier
-                .add_constraint(var, constr)
+                .unify_var_ty(var, Ty::Constr(constr))
                 .map_err(|err| self.handle_error(err, constant.literal._span))?,
         };
         Ok(())
@@ -292,7 +292,7 @@ impl<'a> TypeAnalysis<'a> {
                         .map_err(|err| self.handle_error(err, expr._span))?,
                     ConstraintOrType::Constraint(constr) => {
                         self.unifier
-                            .add_constraint(var, constr)
+                            .unify_var_ty(var, Ty::Constr(constr))
                             .map_err(|err| self.handle_error(err, expr._span))?;
                     }
                 };
@@ -697,7 +697,11 @@ enum ConstraintOrType {
     Constraint(TypeConstraint),
 }
 
-/// We have two types of constraints, equality constraints and subtype constraints
+/// Main data structure for the type unfication.
+/// Implemented using a union-find data structure where the keys (`InferVar`)
+/// represent type variables. Those keys have associated values (`InferVarVal`)
+/// that represent whether the type variable is unbounded (`InferVarVal::Unkown`)
+/// or bounded (`InferVarVal::Know(ty)` where `ty` has type `Ty`).
 struct Unifier {
     /// union-find data structure representing the current state of the unification
     table: InPlaceUnificationTable<InferVar>,
@@ -714,6 +718,10 @@ impl Unifier {
         self.table.new_key(InferVarVal::Unknown)
     }
 
+    /// Unifies two variables.
+    /// Cannot fail if one of them is unbounded.
+    /// If both are bounded, we try to unify their types (recursively over the `Ty` type).
+    /// If this fails as well, we try to coerce them, i.e., transform one type into the other.
     fn unify_var_var(&mut self, left: InferVar, right: InferVar) -> InferResult {
         debug!("unify var var {} {}", left, right);
         if let (InferVarVal::Known(ty_l), InferVarVal::Known(ty_r)) =
@@ -731,6 +739,10 @@ impl Unifier {
         self.table.unify_var_var(left, right)
     }
 
+    /// Unifies a variable with a type.
+    /// Cannot fail if the variable is unbounded.
+    /// Prevents infinite recursion by checking if `var` appears in `ty`.
+    /// Uses the same strategy to merge types as `unify_var_var` (in case `var` is bounded).
     fn unify_var_ty(&mut self, var: InferVar, ty: Ty) -> InferResult {
         debug!("unify var ty {} {}", var, ty);
         if let Ty::Infer(other) = ty {
@@ -771,6 +783,7 @@ impl Unifier {
     }
 
     /// Checks recursively if types are equal. Tries to unify type parameters if possible.
+    /// Note: If you change this function, you have to change `Ty::unify` as well.
     fn types_equal_rec(&mut self, left: &Ty, right: &Ty) -> bool {
         debug!("comp {} {}", left, right);
         match (left, right) {
@@ -830,6 +843,14 @@ impl Unifier {
                 Ty::Int(upper) => lower <= upper,
                 _ => false,
             },
+            Ty::UInt(lower) => match left {
+                Ty::UInt(upper) => lower <= upper,
+                _ => false,
+            },
+            Ty::Float(lower) => match left {
+                Ty::Float(upper) => lower <= upper,
+                _ => false,
+            },
             _ => false,
         };
         if !res {
@@ -840,13 +861,9 @@ impl Unifier {
         res
     }
 
-    fn add_constraint(&mut self, var: InferVar, constr: TypeConstraint) -> InferResult {
-        debug!("add constraint {} {}", var, constr);
-        self.table
-            .unify_var_value(var, InferVarVal::Known(Ty::Constr(constr)))
-    }
-
-    /// Returns type where every inference variable is substituted
+    /// Returns type where every inference variable is substituted.
+    /// If a constraint remains, it gets replaced by the default value (e.g., `Int32` for `SignedInteger`).
+    /// If an infer variable remains, it is replaced by `Ty::Error`.
     fn get_final_type(&mut self, var: InferVar) -> Ty {
         use self::InferVarVal::*;
         match self.table.probe_value(var) {
@@ -878,7 +895,7 @@ impl Unifier {
         }
     }
 
-    /// returns current value of inference variable
+    /// Returns current value of inference variable if it exists, `None` otherwise.
     fn get_type(&mut self, var: InferVar) -> Option<Ty> {
         if let InferVarVal::Known(ty) = self.table.probe_value(var) {
             Some(ty)
@@ -888,6 +905,7 @@ impl Unifier {
     }
 
     /// Tries to remove variables used for inference by their values.
+    /// Useful for example in error messages.
     fn normalize_ty(&mut self, ty: Ty) -> Ty {
         match ty {
             Ty::Infer(var) => match self.get_type(var) {
@@ -936,6 +954,7 @@ pub enum InferVarVal {
     Unknown,
 }
 
+/// Implements how the types are merged during unification
 impl UnifyValue for InferVarVal {
     type Error = InferError;
 
@@ -952,6 +971,8 @@ impl UnifyValue for InferVarVal {
 }
 
 impl Ty {
+    /// Merges two types.
+    /// `types_equal_rec` has to be called before.
     fn unify(&self, other: &Ty) -> Result<Ty, InferError> {
         match (self, other) {
             (&Ty::Infer(_), &Ty::Infer(_)) => Ok(self.clone()),
@@ -1127,8 +1148,13 @@ mod tests {
 
     #[test]
     fn simple_valid_coersion() {
-        let spec = "constant c: Int8 := 1\noutput o: Int32 := c";
-        assert_eq!(0, num_type_errors(spec));
+        for spec in &[
+            "constant c: Int8 := 1\noutput o: Int32 := c",
+            "constant c: UInt16 := 1\noutput o: UInt64 := c",
+            "constant c: Float32 := 1.0\noutput o: Float64 := c",
+        ] {
+            assert_eq!(0, num_type_errors(spec));
+        }
     }
 
     #[test]
