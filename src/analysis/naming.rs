@@ -129,7 +129,7 @@ impl<'a> NamingAnalysis<'a> {
             TypeKind::Tuple(ref elements) => elements.iter().for_each(|ty| {
                 self.check_type(ty);
             }),
-            TypeKind::Duration(val, unit) => {}
+            TypeKind::Duration(_, _) => {}
             TypeKind::Inferred => {}
         }
     }

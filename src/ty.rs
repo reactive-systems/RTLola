@@ -122,7 +122,7 @@ impl Ty {
         use self::Ty::*;
         match self {
             Error => true,
-            Tuple(args) => args.iter().fold(false, |val, el| val || el.is_error()),
+            Tuple(args) => args.iter().any(|el| el.is_error()),
             EventStream(ty, params) => ty.is_error() || params.iter().any(|e| e.is_error()),
             TimedStream(ty) => ty.is_error(),
             Option(ty) => ty.is_error(),
@@ -195,7 +195,7 @@ impl std::fmt::Display for Ty {
             Ty::Float(F64) => write!(f, "Float64"),
             Ty::String => write!(f, "String"),
             Ty::EventStream(ty, params) => {
-                if params.len() == 0 {
+                if params.is_empty() {
                     write!(f, "EventStream<{}>", ty)
                 } else {
                     let joined: Vec<String> = params.iter().map(|e| format!("{}", e)).collect();
@@ -212,7 +212,7 @@ impl std::fmt::Display for Ty {
             }
             Ty::Infer(id) => write!(f, "?{}", id),
             Ty::Constr(constr) => write!(f, "{{{}}}", constr),
-            Ty::Param(id, name) => write!(f, "{}", name),
+            Ty::Param(_, name) => write!(f, "{}", name),
             Ty::Error => write!(f, "Error"),
         }
     }
@@ -237,7 +237,7 @@ pub enum TypeConstraint {
 }
 
 impl TypeConstraint {
-    pub(crate) fn has_default(&self) -> Option<Ty> {
+    pub(crate) fn has_default(self) -> Option<Ty> {
         use self::TypeConstraint::*;
         match self {
             Integer | SignedInteger | Numeric => Some(Ty::Int(I32)),
@@ -247,23 +247,23 @@ impl TypeConstraint {
         }
     }
 
-    pub(crate) fn conjunction(&self, other: TypeConstraint) -> Option<TypeConstraint> {
+    pub(crate) fn conjunction(self, other: TypeConstraint) -> Option<TypeConstraint> {
         use self::TypeConstraint::*;
-        if *self > other {
-            return other.conjunction(*self);
+        if self > other {
+            return other.conjunction(self);
         }
-        if *self == other {
-            return Some(*self);
+        if self == other {
+            return Some(self);
         }
-        assert!(*self < other);
+        assert!(self < other);
         match other {
-            Unconstrained => Some(*self),
-            Comparable => Some(*self),
-            Equatable => Some(*self),
-            Numeric => Some(*self),
+            Unconstrained => Some(self),
+            Comparable => Some(self),
+            Equatable => Some(self),
+            Numeric => Some(self),
             Integer => match self {
                 FloatingPoint => None,
-                _ => Some(*self),
+                _ => Some(self),
             },
             FloatingPoint => None,
             SignedInteger => None,

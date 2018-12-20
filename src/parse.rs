@@ -79,7 +79,7 @@ pub(crate) fn parse(content: &str) -> Result<LolaSpec, pest::error::Error<Rule>>
     Ok(spec)
 }
 
-fn parse_import(spec: &mut LolaSpec, pair: Pair<Rule>) -> Import {
+fn parse_import(_spec: &mut LolaSpec, pair: Pair<Rule>) -> Import {
     assert_eq!(pair.as_rule(), Rule::ImportStmt);
     let span = pair.as_span().into();
     let mut pairs = pair.into_inner();
@@ -87,7 +87,7 @@ fn parse_import(spec: &mut LolaSpec, pair: Pair<Rule>) -> Import {
     Import {
         name,
         id: NodeId::DUMMY,
-        span: span,
+        span,
     }
 }
 

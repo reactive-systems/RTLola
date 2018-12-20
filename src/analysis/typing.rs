@@ -9,8 +9,7 @@
 use super::naming::{Declaration, DeclarationTable};
 use crate::ast::LolaSpec;
 use crate::ast::{
-    BinOp, Constant, Expression, ExpressionKind, Input, LitKind, Literal, Offset, Output, Type,
-    TypeKind, UnOp,
+    Constant, Expression, ExpressionKind, Input, LitKind, Literal, Offset, Output, Type, TypeKind,
 };
 use crate::reporting::Handler;
 use crate::reporting::LabeledSpan;
@@ -648,11 +647,10 @@ impl<'a> TypeAnalysis<'a> {
         }
     }
 
-    fn handle_error(&mut self, err: InferError, span: Span) {
+    fn handle_error(&mut self, mut err: InferError, span: Span) {
+        err.normalize_types(&mut self.unifier);
         match err {
             InferError::TypeMismatch(ty_l, ty_r) => {
-                let ty_l = self.unifier.normalize_ty(ty_l);
-                let ty_r = self.unifier.normalize_ty(ty_r);
                 self.handler.error_with_span(
                     &format!("Type mismatch between `{}` and `{}`", ty_l, ty_r),
                     LabeledSpan::new(
@@ -704,32 +702,19 @@ impl Unifier {
         self.table.new_key(InferVarVal::Unknown)
     }
 
-    fn unify_ty_ty(&mut self, left: Ty, right: Ty) -> InferResult {
-        debug!("unify ty ty {} {}", left, right);
-        assert!(left != right);
-
-        match (left, right) {
-            (Ty::Infer(l), Ty::Infer(r)) => self.table.unify_var_var(l, r),
-            (Ty::Infer(n), ty) => self.unify_var_ty(n, ty),
-            (ty, Ty::Infer(n)) => self.unify_var_ty(n, ty),
-            (_, _) => unreachable!(),
-        }
-    }
-
     fn unify_var_var(&mut self, left: InferVar, right: InferVar) -> InferResult {
         debug!("unify var var {} {}", left, right);
-        match (self.table.probe_value(left), self.table.probe_value(right)) {
-            (InferVarVal::Known(ty_l), InferVarVal::Known(ty_r)) => {
-                // if both variables have values, we try to unify them recursively
-                if self.types_equal_rec(&ty_l, &ty_r) {
-                    // proceed with unification
-                } else if self.types_coerce(&ty_l, &ty_r) {
-                    return Ok(());
-                } else {
-                    return Err(InferError::TypeMismatch(ty_l, ty_r));
-                }
+        if let (InferVarVal::Known(ty_l), InferVarVal::Known(ty_r)) =
+            (self.table.probe_value(left), self.table.probe_value(right))
+        {
+            // if both variables have values, we try to unify them recursively
+            if self.types_equal_rec(&ty_l, &ty_r) {
+                // proceed with unification
+            } else if self.types_coerce(&ty_l, &ty_r) {
+                return Ok(());
+            } else {
+                return Err(InferError::TypeMismatch(ty_l, ty_r));
             }
-            _ => {}
         }
         self.table.unify_var_var(left, right)
     }
@@ -739,9 +724,8 @@ impl Unifier {
         if let Ty::Infer(other) = ty {
             return self.unify_var_var(var, other);
         }
-        match &ty {
-            Ty::Infer(_) => unreachable!(),
-            _ => {}
+        if let Ty::Infer(_) = &ty {
+            panic!("internal error: entered unreachable code")
         }
         if self.check_occurrence(var, &ty) {
             return Err(InferError::CyclicDependency(var, ty));
@@ -1038,12 +1022,9 @@ pub enum InferError {
 
 impl InferError {
     fn normalize_types(&mut self, unifier: &mut Unifier) {
-        match self {
-            InferError::TypeMismatch(ref mut expected, ref mut found) => {
-                std::mem::replace(expected, unifier.normalize_ty(expected.clone()));
-                std::mem::replace(found, unifier.normalize_ty(found.clone()));
-            }
-            _ => {}
+        if let InferError::TypeMismatch(ref mut expected, ref mut found) = self {
+            std::mem::replace(expected, unifier.normalize_ty(expected.clone()));
+            std::mem::replace(found, unifier.normalize_ty(found.clone()));
         }
     }
 }
