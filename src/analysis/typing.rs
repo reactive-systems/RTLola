@@ -623,10 +623,10 @@ impl<'a> TypeAnalysis<'a> {
         Ok(())
     }
 
-    fn get_tuple_type(&mut self, tuple: &[Box<Type>]) -> Ty {
+    fn get_tuple_type(&mut self, tuple: &[Type]) -> Ty {
         let mut inner = Vec::new();
         for t in tuple {
-            match t.kind {
+            match &t.kind {
                 TypeKind::Simple(_) => {
                     let ty = self.declarations[&t._id];
                     match ty {
@@ -634,7 +634,7 @@ impl<'a> TypeAnalysis<'a> {
                         _ => unreachable!(),
                     }
                 }
-                TypeKind::Tuple(_) => unimplemented!(),
+                TypeKind::Tuple(types) => inner.push(self.get_tuple_type(&types)),
                 _ => unreachable!(),
             }
         }
@@ -1404,6 +1404,19 @@ mod tests {
     #[test]
     fn test_input_offset() {
         let spec = "input a: UInt8\n output b: UInt8 := a[3]";
+        assert_eq!(0, num_type_errors(spec));
+    }
+
+    #[test]
+    fn test_tuple_of_tuples() {
+        let spec = "input in: (Int8, (UInt8, Bool))\noutput out: Int16 := in[0].0";
+        assert_eq!(0, num_type_errors(spec));
+    }
+
+    #[test]
+    #[ignore] // needs changes in the parser, currently `1.1` is parsed as a float literal
+    fn test_tuple_of_tuples2() {
+        let spec = "input in: (Int8, (UInt8, Bool))\noutput out: Bool := in[0].1.1";
         assert_eq!(0, num_type_errors(spec));
     }
 

@@ -203,7 +203,7 @@ impl Type {
         }
     }
 
-    pub fn new_tuple(tuple: Vec<Box<Type>>, span: Span) -> Type {
+    pub fn new_tuple(tuple: Vec<Type>, span: Span) -> Type {
         Type {
             _id: NodeId::DUMMY,
             kind: TypeKind::Tuple(tuple),
@@ -233,7 +233,7 @@ pub enum TypeKind {
     /// A simple type, e.g., Int
     Simple(String),
     /// A tuple type, e.g., (Int32, Float32)
-    Tuple(Vec<Box<Type>>),
+    Tuple(Vec<Type>),
     /// A duration, e.g., `22s`
     Duration(u32, TimeUnit),
     /// Should be inferred, i.e., is not annotated

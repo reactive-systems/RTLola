@@ -456,7 +456,7 @@ fn parse_type(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> Type {
             Rule::Ident => {
                 return Type::new_simple(pair.as_str().to_string(), pair.as_span().into());
             }
-            Rule::Type => tuple.push(Box::new(parse_type(spec, pair))),
+            Rule::Type => tuple.push(parse_type(spec, pair)),
             Rule::Duration => {
                 let span = pair.as_span().into();
                 let mut inner = pair.into_inner();
@@ -760,7 +760,7 @@ fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>, span: Span)
                                     Ident::new(format!("{}", i), l._span)
                                 }
                                 _ => {
-                                    panic!("expected unsigned integer");
+                                    panic!("expected unsigned integer, found {}", l);
                                 }
                             };
                             return Expression::new(ExpressionKind::Field(Box::new(lhs), ident), span);
