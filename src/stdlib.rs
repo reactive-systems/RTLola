@@ -1,5 +1,6 @@
 //! This module contains the Lola standard library.
 
+use crate::ast::{BinOp, UnOp};
 use crate::ty::{Ty, TypeConstraint};
 
 #[derive(Debug)]
@@ -22,6 +23,66 @@ pub struct FuncDecl {
     pub generics: Vec<Generic>,
     pub parameters: Vec<Ty>,
     pub return_type: Ty,
+}
+
+impl BinOp {
+    pub(crate) fn get_func_decl(self) -> FuncDecl {
+        use self::BinOp::*;
+        match self {
+            Add | Sub | Mul | Div | Rem | Pow => FuncDecl {
+                name: format!("{}", self),
+                generics: vec![Generic {
+                    constraint: Ty::Constr(TypeConstraint::Numeric),
+                }],
+                parameters: vec![Ty::Param(0, "T".to_string()), Ty::Param(0, "T".to_string())],
+                return_type: Ty::Param(0, "T".to_string()),
+            },
+            And | Or => FuncDecl {
+                name: format!("{}", self),
+                generics: vec![],
+                parameters: vec![Ty::Bool, Ty::Bool],
+                return_type: Ty::Bool,
+            },
+            Eq | Ne => FuncDecl {
+                name: format!("{}", self),
+                generics: vec![Generic {
+                    constraint: Ty::Constr(TypeConstraint::Equatable),
+                }],
+                parameters: vec![Ty::Param(0, "T".to_string()), Ty::Param(0, "T".to_string())],
+                return_type: Ty::Bool,
+            },
+            Lt | Le | Ge | Gt => FuncDecl {
+                name: format!("{}", self),
+                generics: vec![Generic {
+                    constraint: Ty::Constr(TypeConstraint::Comparable),
+                }],
+                parameters: vec![Ty::Param(0, "T".to_string()), Ty::Param(0, "T".to_string())],
+                return_type: Ty::Bool,
+            },
+        }
+    }
+}
+
+impl UnOp {
+    pub(crate) fn get_func_decl(self) -> FuncDecl {
+        use self::UnOp::*;
+        match self {
+            Not => FuncDecl {
+                name: format!("{}", self),
+                generics: vec![],
+                parameters: vec![Ty::Bool],
+                return_type: Ty::Bool,
+            },
+            Neg => FuncDecl {
+                name: format!("{}", self),
+                generics: vec![Generic {
+                    constraint: Ty::Constr(TypeConstraint::Numeric),
+                }],
+                parameters: vec![Ty::Param(0, "T".to_string())],
+                return_type: Ty::Param(0, "T".to_string()),
+            },
+        }
+    }
 }
 
 use crate::analysis::naming::{Declaration, ScopedDecl};

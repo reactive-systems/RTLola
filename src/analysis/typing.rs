@@ -342,86 +342,26 @@ impl<'a> TypeAnalysis<'a> {
                 // recursion
                 self.infer_expression(appl, None)?;
 
-                let appl_var = self.var_lookup[&appl._id];
-                use self::UnOp::*;
-                match op {
-                    Not => {
-                        // ?appl_var = Bool
-                        // ?var = Bool
-                        self.unifier
-                            .unify_var_ty(appl_var, Ty::Bool)
-                            .map_err(|err| {
-                                self.handle_error(err, appl._span);
-                            })?;
-                        self.unifier.unify_var_ty(var, Ty::Bool).map_err(|err| {
-                            self.handle_error(err, expr._span);
-                        })?;
-                    }
-                    _ => unimplemented!("unary operator {}", op),
-                }
+                self.infer_function_application(
+                    var,
+                    expr._span,
+                    &op.get_func_decl(),
+                    &[],
+                    &[appl],
+                )?;
             }
             Binary(op, left, right) => {
                 // recursion
                 self.infer_expression(left, None)?;
                 self.infer_expression(right, None)?;
 
-                let left_var = self.var_lookup[&left._id];
-                let right_var = self.var_lookup[&right._id];
-                use self::BinOp::*;
-                match op {
-                    Eq => {
-                        // ?new_var :< Equatable
-                        // ?new_var = ?left_var
-                        // ?new_var = ?right_var
-                        // ?var = ?Bool
-                        let new_var = self.unifier.new_var();
-                        self.unifier
-                            .add_constraint(new_var, TypeConstraint::Equatable)
-                            .expect("adding constraint cannot fail, new_var is a fresh variable");
-
-                        self.unifier
-                            .unify_var_var(new_var, left_var)
-                            .map_err(|err| {
-                                self.handle_error(err, left._span);
-                            })?;
-                        self.unifier
-                            .unify_var_var(new_var, right_var)
-                            .map_err(|err| {
-                                self.handle_error(err, right._span);
-                            })?;
-                        self.unifier.unify_var_ty(var, Ty::Bool).map_err(|err| {
-                            self.handle_error(err, expr._span);
-                        })?;
-                    }
-                    Add => {
-                        // ?new_var :< Numeric
-                        // ?new_var = ?left_var
-                        // ?new_var = ?right_var
-                        // ?new_var = ?var
-                        let new_var = self.unifier.new_var();
-                        self.unifier
-                            .add_constraint(new_var, TypeConstraint::Numeric)
-                            .expect("adding constraint cannot fail, new_var is a fresh variable");
-
-                        self.unifier
-                            .unify_var_var(new_var, left_var)
-                            .map_err(|err| {
-                                self.handle_error(err, left._span);
-                            })?;
-                        self.unifier
-                            .unify_var_var(new_var, right_var)
-                            .map_err(|err| {
-                                self.handle_error(err, right._span);
-                            })?;
-                        self.unifier.unify_var_var(new_var, var).map_err(|err| {
-                            self.handle_error(err, expr._span);
-                        })?;
-                    }
-                    _ => {
-                        println!("{}", op);
-                        unimplemented!()
-                    }
-                }
+                self.infer_function_application(
+                    var,
+                    expr._span,
+                    &op.get_func_decl(),
+                    &[],
+                    &[left, right],
+                )?;
             }
             // discrete offset
             Lookup(stream, Offset::DiscreteOffset(off_expr), None) => {
@@ -1250,7 +1190,7 @@ mod tests {
 
     #[test]
     fn underspecified_ite_type() {
-        let spec = "output o := if false then 1.3 else -2.0";
+        let spec = "output o := if !false then 1.3 else -2.0";
         assert_eq!(0, num_type_errors(spec));
     }
 
