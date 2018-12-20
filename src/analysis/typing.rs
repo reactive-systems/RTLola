@@ -657,6 +657,14 @@ impl<'a> TypeAnalysis<'a> {
             }
         }
     }
+
+    pub(crate) fn get_type(&mut self, id: NodeId) -> Ty {
+        if let Some(&var) = self.var_lookup.get(&id) {
+            self.unifier.get_final_type(var)
+        } else {
+            Ty::Error
+        }
+    }
 }
 
 enum ConstraintOrType {
@@ -1037,6 +1045,7 @@ mod tests {
     use crate::analysis::naming::*;
     use crate::parse::*;
     use crate::reporting::Handler;
+    use crate::ty::{FloatTy, IntTy, UIntTy};
     use std::path::PathBuf;
 
     fn num_type_errors(spec: &str) -> usize {
@@ -1058,6 +1067,31 @@ mod tests {
         handler.emitted_errors()
     }
 
+    /// Returns the type of the last output of the given spec
+    fn get_type(spec: &str) -> Ty {
+        let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
+
+        let mut spec = match parse(spec) {
+            Err(e) => panic!("Spec {} cannot be parsed: {}.", spec, e),
+            Ok(s) => s,
+        };
+        assign_ids(&mut spec);
+        let mut na = NamingAnalysis::new(&handler);
+        na.check(&spec);
+        assert!(
+            !handler.contains_error(),
+            "Spec produces errors in naming analysis."
+        );
+        let mut type_analysis = TypeAnalysis::new(&handler, &na.result);
+        type_analysis.check(&spec);
+        type_analysis.get_type(
+            spec.outputs
+                .last()
+                .expect("spec needs at least one output")
+                ._id,
+        )
+    }
+
     #[test]
     fn simple_input() {
         let spec = "input i: Int8";
@@ -1068,12 +1102,20 @@ mod tests {
     fn parametric_input() {
         let spec = "input i<a: Int8, b: Bool>: Int8\noutput o := i(1,false)[0] ? 42";
         assert_eq!(0, num_type_errors(spec));
+        assert_eq!(
+            get_type(spec),
+            Ty::EventStream(Ty::Int(IntTy::I8).into(), vec![])
+        );
     }
 
     #[test]
     fn method_call() {
         let spec = "output count := count.offset(-1).default(0) + 1\n";
         assert_eq!(0, num_type_errors(spec));
+        assert_eq!(
+            get_type(spec),
+            Ty::EventStream(Ty::Int(IntTy::I32).into(), vec![])
+        );
     }
 
     #[test]
@@ -1081,6 +1123,10 @@ mod tests {
         // count has value EventStream<Int8> instead of default value EventStream<Int32>
         let spec = "output count := count.offset<Int8>(-1).default(0) + 1\n";
         assert_eq!(0, num_type_errors(spec));
+        assert_eq!(
+            get_type(spec),
+            Ty::EventStream(Ty::Int(IntTy::I8).into(), vec![])
+        );
     }
 
     #[test]
@@ -1140,6 +1186,10 @@ mod tests {
     fn simple_output() {
         let spec = "output o: Int8 := 3";
         assert_eq!(0, num_type_errors(spec));
+        assert_eq!(
+            get_type(spec),
+            Ty::EventStream(Ty::Int(IntTy::I8).into(), vec![])
+        );
     }
 
     #[test]
@@ -1158,12 +1208,17 @@ mod tests {
     fn simple_binary() {
         let spec = "output o: Int8 := 3 + 5";
         assert_eq!(0, num_type_errors(spec));
+        assert_eq!(
+            get_type(spec),
+            Ty::EventStream(Ty::Int(IntTy::I8).into(), vec![])
+        );
     }
 
     #[test]
     fn simple_unary() {
         let spec = "output o: Bool := !false";
         assert_eq!(0, num_type_errors(spec));
+        assert_eq!(get_type(spec), Ty::EventStream(Ty::Bool.into(), vec![]));
     }
 
     #[test]
@@ -1184,18 +1239,30 @@ mod tests {
     fn simple_ite() {
         let spec = "output o: Int8 := if false then 1 else 2";
         assert_eq!(0, num_type_errors(spec));
+        assert_eq!(
+            get_type(spec),
+            Ty::EventStream(Ty::Int(IntTy::I8).into(), vec![])
+        );
     }
 
     #[test]
     fn simple_ite_compare() {
         let spec = "output e := if 1 == 0 then 0 else -1";
         assert_eq!(0, num_type_errors(spec));
+        assert_eq!(
+            get_type(spec),
+            Ty::EventStream(Ty::Int(IntTy::I32).into(), vec![])
+        );
     }
 
     #[test]
     fn underspecified_ite_type() {
         let spec = "output o := if !false then 1.3 else -2.0";
         assert_eq!(0, num_type_errors(spec));
+        assert_eq!(
+            get_type(spec),
+            Ty::EventStream(Ty::Float(FloatTy::F32).into(), vec![])
+        );
     }
 
     #[test]
@@ -1214,18 +1281,27 @@ mod tests {
     fn test_parenthized_expr() {
         let spec = "input s: String\noutput o: Bool := (s[-1] ? \"\") == \"a\"";
         assert_eq!(0, num_type_errors(spec));
+        assert_eq!(get_type(spec), Ty::EventStream(Ty::Bool.into(), vec![]));
     }
 
     #[test]
     fn test_underspecified_type() {
         let spec = "output o := 2";
         assert_eq!(0, num_type_errors(spec));
+        assert_eq!(
+            get_type(spec),
+            Ty::EventStream(Ty::Int(IntTy::I32).into(), vec![])
+        );
     }
 
     #[test]
     fn test_trigonometric() {
         let spec = "import math\noutput o: Float32 := sin(2.0)";
         assert_eq!(0, num_type_errors(spec));
+        assert_eq!(
+            get_type(spec),
+            Ty::EventStream(Ty::Float(FloatTy::F32).into(), vec![])
+        );
     }
 
     #[test]
@@ -1245,12 +1321,17 @@ mod tests {
         let spec =
             "import regex\ninput s: String\noutput o: Bool := matches_regex(s[0], r\"(a+b)\")";
         assert_eq!(0, num_type_errors(spec));
+        assert_eq!(get_type(spec), Ty::EventStream(Ty::Bool.into(), vec![]));
     }
 
     #[test]
     fn test_input_lookup() {
         let spec = "input a: UInt8\n output b: UInt8 := a";
         assert_eq!(0, num_type_errors(spec));
+        assert_eq!(
+            get_type(spec),
+            Ty::EventStream(Ty::UInt(UIntTy::U8).into(), vec![])
+        );
     }
 
     #[test]
@@ -1263,6 +1344,10 @@ mod tests {
     fn test_stream_lookup() {
         let spec = "output a: UInt8 := 3\n output b: UInt8 := a[0]";
         assert_eq!(0, num_type_errors(spec));
+        assert_eq!(
+            get_type(spec),
+            Ty::EventStream(Ty::UInt(UIntTy::U8).into(), vec![])
+        );
     }
 
     #[test]
@@ -1275,6 +1360,10 @@ mod tests {
     fn test_stream_lookup_dft() {
         let spec = "output a: UInt8 := 3\n output b: UInt8 := a[-1] ? 3";
         assert_eq!(0, num_type_errors(spec));
+        assert_eq!(
+            get_type(spec),
+            Ty::EventStream(Ty::UInt(UIntTy::U8).into(), vec![])
+        );
     }
 
     #[test]
@@ -1287,6 +1376,10 @@ mod tests {
     fn test_invoke_type() {
         let spec = "input in: Int8\n output a<p1: Int8>: Int8 { invoke in } := 3";
         assert_eq!(0, num_type_errors(spec));
+        assert_eq!(
+            get_type(spec),
+            Ty::EventStream(Ty::Int(IntTy::I8).into(), vec![Ty::Int(IntTy::I8)])
+        );
     }
 
     #[test]
@@ -1294,6 +1387,13 @@ mod tests {
         let spec =
             "input in: Int8\n output a<p1: Int8, p2: Int8>: Int8 { invoke (in[0], in[0]) } := 3";
         assert_eq!(0, num_type_errors(spec));
+        assert_eq!(
+            get_type(spec),
+            Ty::EventStream(
+                Ty::Int(IntTy::I8).into(),
+                vec![Ty::Int(IntTy::I8), Ty::Int(IntTy::I8)]
+            )
+        );
     }
 
     #[test]
@@ -1306,6 +1406,10 @@ mod tests {
     fn test_extend_type() {
         let spec = "input in: Bool\n output a: Int8 { extend in } := 3";
         assert_eq!(0, num_type_errors(spec));
+        assert_eq!(
+            get_type(spec),
+            Ty::EventStream(Ty::Int(IntTy::I8).into(), vec![])
+        );
     }
 
     #[test]
@@ -1318,6 +1422,10 @@ mod tests {
     fn test_terminate_type() {
         let spec = "input in: Bool\n output a: Int8 { terminate in } := 3";
         assert_eq!(0, num_type_errors(spec));
+        assert_eq!(
+            get_type(spec),
+            Ty::EventStream(Ty::Int(IntTy::I8).into(), vec![])
+        );
     }
 
     #[test]
@@ -1330,6 +1438,10 @@ mod tests {
     fn test_param_spec() {
         let spec = "input in: Int8\n output a<p1: Int8>: Int8 { invoke in } := 3\n output b: Int8 := a(3)[-2] ? 1";
         assert_eq!(0, num_type_errors(spec));
+        assert_eq!(
+            get_type(spec),
+            Ty::EventStream(Ty::Int(IntTy::I8).into(), vec![])
+        );
     }
 
     #[test]
@@ -1348,6 +1460,10 @@ mod tests {
     fn test_tuple() {
         let spec = "output out: (Int8, Bool) := (14, false)";
         assert_eq!(0, num_type_errors(spec));
+        assert_eq!(
+            get_type(spec),
+            Ty::EventStream(Ty::Tuple(vec![Ty::Int(IntTy::I8), Ty::Bool]).into(), vec![])
+        );
     }
 
     #[test]
@@ -1360,6 +1476,7 @@ mod tests {
     fn test_tuple_access() {
         let spec = "input in: (Int8, Bool)\noutput out: Bool := in[0].1";
         assert_eq!(0, num_type_errors(spec));
+        assert_eq!(get_type(spec), Ty::EventStream(Ty::Bool.into(), vec![]));
     }
 
     #[test]
@@ -1378,12 +1495,20 @@ mod tests {
     fn test_input_offset() {
         let spec = "input a: UInt8\n output b: UInt8 := a[3]";
         assert_eq!(0, num_type_errors(spec));
+        assert_eq!(
+            get_type(spec),
+            Ty::EventStream(Ty::UInt(UIntTy::U8).into(), vec![])
+        );
     }
 
     #[test]
     fn test_tuple_of_tuples() {
         let spec = "input in: (Int8, (UInt8, Bool))\noutput out: Int16 := in[0].0";
         assert_eq!(0, num_type_errors(spec));
+        assert_eq!(
+            get_type(spec),
+            Ty::EventStream(Ty::Int(IntTy::I16).into(), vec![])
+        );
     }
 
     #[test]
@@ -1391,6 +1516,7 @@ mod tests {
     fn test_tuple_of_tuples2() {
         let spec = "input in: (Int8, (UInt8, Bool))\noutput out: Bool := in[0].1.1";
         assert_eq!(0, num_type_errors(spec));
+        assert_eq!(get_type(spec), Ty::EventStream(Ty::Bool.into(), vec![]));
     }
 
     #[test]
@@ -1406,7 +1532,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
+    #[ignore] // type system for timed streams is currently not implemented
     fn test_window_untimed() {
         let spec = "input in: Int8\n output out: Int16 := in.window<3s>().sum()";
         assert_eq!(1, num_type_errors(spec));
