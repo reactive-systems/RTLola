@@ -1512,7 +1512,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore] // needs changes in the parser, currently `1.1` is parsed as a float literal
     fn test_tuple_of_tuples2() {
         let spec = "input in: (Int8, (UInt8, Bool))\noutput out: Bool := in[0].1.1";
         assert_eq!(0, num_type_errors(spec));

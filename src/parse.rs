@@ -731,6 +731,10 @@ fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>, span: Span)
                     build_expression_ast(spec, pair.into_inner(), span.into())
                 }
                 Rule::FunctionExpr => build_function_expression(spec, pair, span.into()),
+                Rule::IntegerLiteral => {
+                    let span = span.into();
+                    Expression::new(ExpressionKind::Lit(Literal::new_int(pair.as_str().parse().unwrap(), span)), span)
+                }
                 _ => panic!("Unexpected rule when parsing expression ast: {:?}", pair.as_rule()),
             }
         },
