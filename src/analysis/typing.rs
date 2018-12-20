@@ -9,7 +9,8 @@
 use super::naming::{Declaration, DeclarationTable};
 use crate::ast::LolaSpec;
 use crate::ast::{
-    Constant, Expression, ExpressionKind, Input, LitKind, Literal, Offset, Output, Type, TypeKind,
+    Constant, Expression, ExpressionKind, Input, LitKind, Literal, Offset, Output, Trigger, Type,
+    TypeKind,
 };
 use crate::reporting::Handler;
 use crate::reporting::LabeledSpan;
@@ -76,6 +77,12 @@ impl<'a> TypeAnalysis<'a> {
         for output in &spec.outputs {
             self.infer_output_expression(output).unwrap_or_else(|_| {
                 debug!("type inference failed for {}", output);
+            });
+        }
+
+        for trigger in &spec.trigger {
+            self.infer_trigger_expression(trigger).unwrap_or_else(|_| {
+                debug!("type inference failed for {}", trigger);
             });
         }
     }
@@ -245,6 +252,11 @@ impl<'a> TypeAnalysis<'a> {
 
         // generate constraint for expression
         self.infer_expression(&output.expression, Some(Ty::Infer(ty_var)))
+    }
+
+    fn infer_trigger_expression(&mut self, trigger: &'a Trigger) -> Result<(), ()> {
+        trace!("infer type for {}", trigger);
+        self.infer_expression(&trigger.expression, Some(Ty::Bool))
     }
 
     fn get_constraint_for_literal(&self, lit: &Literal) -> ConstraintOrType {
@@ -1129,6 +1141,18 @@ mod tests {
     fn simple_output() {
         let spec = "output o: Int8 := 3";
         assert_eq!(0, num_type_errors(spec));
+    }
+
+    #[test]
+    fn simple_tigger() {
+        let spec = "trigger never := false";
+        assert_eq!(0, num_type_errors(spec));
+    }
+
+    #[test]
+    fn faulty_tigger() {
+        let spec = "trigger failed := 1";
+        assert_eq!(1, num_type_errors(spec));
     }
 
     #[test]
