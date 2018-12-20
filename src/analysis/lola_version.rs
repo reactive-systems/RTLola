@@ -292,7 +292,7 @@ mod tests {
 
     #[test]
     fn time_offset_causes_rtlola() -> Result<(), String> {
-        let spec = "output test: Int8 := stream[3 s]";
+        let spec = "output test: Int8 := stream[3s]";
         let throw = |e| panic!("{}", e);
         let mut ast = parse(spec).unwrap_or_else(throw);
         id_assignment::assign_ids(&mut ast);
@@ -316,7 +316,7 @@ mod tests {
 
     #[test]
     fn time_offset_in_trigger_causes_rtlola() -> Result<(), String> {
-        let spec = "trigger test := stream[3 s]";
+        let spec = "trigger test := stream[3s]";
         let throw = |e| panic!("{}", e);
         let mut ast = parse(spec).unwrap_or_else(throw);
         id_assignment::assign_ids(&mut ast);

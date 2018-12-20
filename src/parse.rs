@@ -594,14 +594,22 @@ fn parse_lookup_expression(spec: &mut LolaSpec, pair: Pair<'_, Rule>, span: Span
                 .next()
                 .expect("Duration needs a time span.");
             let time_interval_span = time_interval.as_span().into();
-            let time_interval =
-                build_expression_ast(spec, time_interval.into_inner(), time_interval_span);
+            let val = time_interval
+                .as_str()
+                .parse()
+                .expect("number literal can be parsed into integer");
             let unit_string = duration_children
                 .next()
                 .expect("Duration needs a time unit.")
                 .as_str();
             let unit = parse_duration_unit(unit_string);
-            let offset = Offset::RealTimeOffset(Box::new(time_interval), unit);
+            let offset = Offset::RealTimeOffset(
+                Box::new(Expression::new(
+                    ExpressionKind::Lit(Literal::new_int(val, time_interval_span)),
+                    time_interval_span,
+                )),
+                unit,
+            );
             // Now check whether it is a window or not.
             let aggregation = match children.next().map(|x| x.as_rule()) {
                 Some(Rule::Sum) => Some(WindowOperation::Sum),
