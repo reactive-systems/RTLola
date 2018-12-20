@@ -127,15 +127,22 @@ impl<'a> TypeAnalysis<'a> {
         self.infer_type(&input.ty)?;
         let ty_var = self.var_lookup[&input.ty._id];
 
-        assert!(
-            input.params.is_empty(),
-            "parametric inputs are not implemented"
-        );
+        let mut param_types = Vec::new();
+        for param in &input.params {
+            self.infer_type(&param.ty)?;
+            let param_ty_var = self.var_lookup[&param.ty._id];
+            let param_var = self.new_var(param._id);
+            self.unifier
+                .unify_var_var(param_var, param_ty_var)
+                .expect("cannot fail as `param_var` is fresh");
+            param_types.push(Ty::Infer(param_var));
+        }
 
+        // ?var = EventStream<?ty_var, <?param_vars>>
         self.unifier
             .unify_var_ty(
                 var,
-                Ty::EventStream(Box::new(Ty::Infer(ty_var)), Vec::new()),
+                Ty::EventStream(Box::new(Ty::Infer(ty_var)), param_types),
             )
             .map_err(|err| self.handle_error(err, input.name.span))
     }
@@ -159,7 +166,7 @@ impl<'a> TypeAnalysis<'a> {
             param_types.push(Ty::Infer(param_var));
         }
 
-        // ?var = EventStream<?ty_var>
+        // ?var = EventStream<?ty_var, <?param_vars>>
         self.unifier
             .unify_var_ty(
                 var,
@@ -399,7 +406,7 @@ impl<'a> TypeAnalysis<'a> {
                 // constraints
                 // off_expr = {integer}
                 // stream = EventStream<?1>
-                // if negative_offset { expr = Option<?1> } else { expr = ?1 }
+                // if negative_offset || parametric { expr = Option<?1> } else { expr = ?1 }
 
                 // need to derive "inner" type `?1`
                 let decl = self.declarations[&stream._id];
@@ -411,7 +418,7 @@ impl<'a> TypeAnalysis<'a> {
                 self.unifier.unify_var_ty(decl_var, target).map_err(|err| {
                     self.handle_error(err, stream._span);
                 })?;
-                if negative_offset {
+                if negative_offset || !stream.arguments.is_empty() {
                     self.unifier
                         .unify_var_ty(var, Ty::Option(Box::new(Ty::Infer(inner_var))))
                         .map_err(|err| {
@@ -1094,6 +1101,12 @@ mod tests {
     #[test]
     fn simple_input() {
         let spec = "input i: Int8";
+        assert_eq!(0, num_type_errors(spec));
+    }
+
+    #[test]
+    fn parametric_input() {
+        let spec = "input i<a: Int8, b: Bool>: Int8\noutput o := i(1,false)[0] ? 42";
         assert_eq!(0, num_type_errors(spec));
     }
 
