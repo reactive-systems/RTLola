@@ -21,6 +21,7 @@ lazy_static! {
         use self::Rule::*;
 
         PrecClimber::new(vec![
+            Operator::new(Default, Left),
             Operator::new(Or, Left),
             Operator::new(And, Left),
             Operator::new(Equal, Left) | Operator::new(NotEqual, Left),
@@ -691,16 +692,6 @@ fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>, span: Span)
                         ),
                         span.into())
                 },
-                Rule::DefaultExpr => {
-                    let mut children = pair.into_inner();
-                    let lookup = children.next().unwrap();
-                    let lookup_span = lookup.as_span().into();
-                    let default = children.next().unwrap();
-                    let default_span = default.as_span().into();
-                    let lookup = parse_lookup_expression(spec, lookup, lookup_span);
-                    let default = build_expression_ast(spec, default.into_inner(), default_span);
-                    Expression::new(ExpressionKind::Default(Box::new(lookup), Box::new(default)), span.into())
-                },
                 Rule::LookupExpr => parse_lookup_expression(spec, pair, span.into()),
                 Rule::UnaryExpr => { // First child is the operator, second the operand.
                     let mut children = pair.into_inner();
@@ -774,7 +765,10 @@ fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>, span: Span)
                         }
                         _ => panic!("tuple accesses require a number"),
                     }
-                }
+                },
+                Rule::Default => {
+                    return Expression::new(ExpressionKind::Default(Box::new(lhs), Box::new(rhs)), span)
+                },
                 _ => unreachable!(),
             };
             Expression::new(
