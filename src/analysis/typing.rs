@@ -373,7 +373,7 @@ impl<'a> TypeAnalysis<'a> {
                         // ?new_var :< Equatable
                         // ?new_var = ?left_var
                         // ?new_var = ?right_var
-                        // ?new_var = ?var
+                        // ?var = ?Bool
                         let new_var = self.unifier.new_var();
                         self.unifier
                             .add_constraint(new_var, TypeConstraint::Equatable)
@@ -389,7 +389,7 @@ impl<'a> TypeAnalysis<'a> {
                             .map_err(|err| {
                                 self.handle_error(err, right._span);
                             })?;
-                        self.unifier.unify_var_var(new_var, var).map_err(|err| {
+                        self.unifier.unify_var_ty(var, Ty::Bool).map_err(|err| {
                             self.handle_error(err, expr._span);
                         })?;
                     }
@@ -1239,6 +1239,12 @@ mod tests {
     #[test]
     fn simple_ite() {
         let spec = "output o: Int8 := if false then 1 else 2";
+        assert_eq!(0, num_type_errors(spec));
+    }
+
+    #[test]
+    fn simple_ite_compare() {
+        let spec = "output e := if 1 == 0 then 0 else -1";
         assert_eq!(0, num_type_errors(spec));
     }
 
