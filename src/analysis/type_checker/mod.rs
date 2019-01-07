@@ -8,9 +8,9 @@ use super::type_checker::checker::*;
 use crate::reporting::Handler;
 use ast_node::NodeId;
 
+use crate::analysis::common::Type;
 use crate::analysis::type_checker::candidates::TimingInfo;
 use std::collections::HashMap;
-use crate::ast::Type;
 
 #[derive(Debug)]
 pub(crate) struct ExtendedType(Type, TimingInfo);
