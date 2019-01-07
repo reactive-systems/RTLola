@@ -1109,6 +1109,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]  // currently disabled, see `MethodLookup` in stdlib.rs
     fn method_call() {
         let spec = "output count := count.offset(-1).default(0) + 1\n";
         assert_eq!(0, num_type_errors(spec));
@@ -1119,6 +1120,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]  // currently disabled, see `MethodLookup` in stdlib.rs
     fn method_call_with_type_param() {
         // count has value EventStream<Int8> instead of default value EventStream<Int32>
         let spec = "output count := count.offset<Int8>(-1).default(0) + 1\n";
@@ -1130,6 +1132,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]  // currently disabled, see `MethodLookup` in stdlib.rs
     fn method_call_with_type_param_faulty() {
         let spec = "output count := count.offset<Float32>(-1).default(0) + 1\n";
         assert_eq!(1, num_type_errors(spec));
@@ -1519,34 +1522,38 @@ mod tests {
     }
 
     #[test]
+    #[ignore] // type system for timed streams is currently not implemented
     fn test_window_widening() {
-        let spec = "input in: Int8\n output out: Int64 {extend @5Hz}:= in.window<3s>().sum()";
+        let spec = "input in: Int8\n output out: Int64 {extend @5Hz}:= in[3s, Σ] ? 0";
         assert_eq!(0, num_type_errors(spec));
     }
 
     #[test]
+    #[ignore] // type system for timed streams is currently not implemented
     fn test_window() {
-        let spec = "input in: Int8\n output out: Int8 {extend @5Hz} := in.window<3s>().sum()";
+        let spec = "input in: Int8\n output out: Int8 {extend @5Hz} := in[3s, Σ] ? 0";
         assert_eq!(0, num_type_errors(spec));
     }
 
     #[test]
     #[ignore] // type system for timed streams is currently not implemented
     fn test_window_untimed() {
-        let spec = "input in: Int8\n output out: Int16 := in.window<3s>().sum()";
+        let spec = "input in: Int8\n output out: Int16 := in[3s, Σ] ? 5";
         assert_eq!(1, num_type_errors(spec));
     }
 
     #[test]
+    #[ignore] // type system for timed streams is currently not implemented
     fn test_window_faulty() {
-        let spec = "input in: Int8\n output out: Bool {extend @5Hz} := in.window<3s>().sum()";
+        let spec = "input in: Int8\n output out: Bool {extend @5Hz} := in[3s, Σ] ? 5";
         assert_eq!(1, num_type_errors(spec));
     }
 
     #[test]
+    #[ignore] // type system for timed streams is currently not implemented
     fn test_involved() {
         let spec =
-            "input velo: Float32\n output avg: Float64 {extend @5Hz} := velo.window<1h>().avg().default(10000.0)";
+            "input velo: Float32\n output avg: Float64 {extend @5Hz} := velo[1h, avg] ? 10000.0";
         assert_eq!(0, num_type_errors(spec));
     }
 

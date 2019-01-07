@@ -142,7 +142,10 @@ impl MethodLookup {
         MethodLookup {}
     }
 
+    #[allow(unreachable_code)]
+    #[allow(unused_variables)]
     pub(crate) fn get(&self, ty: &Ty, name: &str) -> Option<FuncDecl> {
+        return None;
         match (ty, name) {
             // offset<T,I:Integer>(EventStream<T, ()>, I) -> Option<T>
             (Ty::EventStream(_, params), "offset") if params.is_empty() => Some(FuncDecl {
