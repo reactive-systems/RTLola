@@ -1,7 +1,11 @@
 use super::super::common::BuiltinType;
 use super::super::common::Type as OType;
+use super::ExtendedType;
 use crate::ast::*;
 use std::fmt::{Display, Formatter, Result};
+use std::time::Duration;
+
+const NANOS_PER_SEC: u128 = 1_000_000_000;
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct NumConfig {
@@ -39,7 +43,7 @@ impl NumConfig {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum TimingInfo {
     EventBased,
-    TimeBased,
+    TimeBased(Duration),
     Unknown,
 }
 
@@ -66,9 +70,9 @@ impl Display for TimingInfo {
             f,
             "{}",
             match self {
-                TimingInfo::Unknown => "⊤",
-                TimingInfo::EventBased => "Event",
-                TimingInfo::TimeBased => "Time",
+                TimingInfo::Unknown => String::from("⊤"),
+                TimingInfo::EventBased => String::from("Event"),
+                TimingInfo::TimeBased(dur) => format!("Time@{:?}", dur),
             }
         )
     }
@@ -115,8 +119,13 @@ impl Candidates {
         self.replace_ti(TimingInfo::EventBased)
     }
 
-    pub(crate) fn as_time_driven(&self) -> Candidates {
-        self.replace_ti(TimingInfo::TimeBased)
+    pub(crate) fn as_time_driven(&self, dur: Option<Duration>) -> Candidates {
+        // TODO: Doesn't make too much sense. Make `dur` non-optional.
+        if let Some(dur) = dur {
+            self.replace_ti(TimingInfo::TimeBased(dur))
+        } else {
+            self.replace_ti(TimingInfo::Unknown)
+        }
     }
 
     pub(crate) fn top() -> Candidates {
@@ -356,21 +365,21 @@ impl<'a> From<&'a BuiltinType> for Candidates {
 }
 
 // TODO: Discuss.
-impl<'a> From<&'a Candidates> for OType {
+impl<'a> From<&'a Candidates> for ExtendedType {
     fn from(cand: &'a Candidates) -> Self {
         match cand {
             Candidates::Any(_) => unreachable!(), // Explicit type annotations should make this case impossible.
-            Candidates::Concrete(t, _) => OType::BuiltIn(*t),
-            Candidates::Numeric(cfg, _) => {
+            Candidates::Concrete(t, ti) => ExtendedType(OType::BuiltIn(*t), *ti),
+            Candidates::Numeric(cfg, ti) => {
                 if cfg.def_float {
                     let width = if cfg.width >= 32 { cfg.width } else { 32 };
-                    OType::BuiltIn(BuiltinType::Float(width))
+                    ExtendedType(OType::BuiltIn(BuiltinType::Float(width)), *ti)
                 } else if cfg.def_signed {
                     let width = if cfg.width >= 32 { cfg.width } else { 32 };
-                    OType::BuiltIn(BuiltinType::Int(width))
+                    ExtendedType(OType::BuiltIn(BuiltinType::Int(width)), *ti)
                 } else {
                     let width = if cfg.width >= 32 { cfg.width } else { 32 };
-                    OType::BuiltIn(BuiltinType::UInt(width))
+                    ExtendedType(OType::BuiltIn(BuiltinType::UInt(width)), *ti)
                 }
             }
             Candidates::Tuple(v) => {
@@ -379,17 +388,71 @@ impl<'a> From<&'a Candidates> for OType {
                     Candidates::Tuple(_) => false,
                     _ => true,
                 }));
-                let transformed: Vec<BuiltinType> = v
+                let (types, tis): (Vec<BuiltinType>, Vec<TimingInfo>) = v
                     .iter()
                     .map(|t| t.into())
-                    .map(|ot| match ot {
-                        OType::BuiltIn(t) => t,
+                    .map(|ext_ty: ExtendedType| match ext_ty.0 {
+                        OType::BuiltIn(t) => (t, ext_ty.1),
                         OType::Tuple(_v) => unreachable!(),
                     })
-                    .collect();
-                OType::Tuple(transformed)
+                    .unzip();
+                if tis.iter().all(|ti| match ti {
+                    TimingInfo::Unknown | TimingInfo::EventBased => true,
+                    TimingInfo::TimeBased(_) => false,
+                }) {
+                    ExtendedType(OType::Tuple(types), TimingInfo::EventBased)
+                } else if tis.iter().all(|ti| match ti {
+                    TimingInfo::Unknown => true,
+                    TimingInfo::TimeBased(_) | TimingInfo::EventBased => false,
+                }) {
+                    ExtendedType(OType::Tuple(types), TimingInfo::Unknown)
+                } else {
+                    // All Unknown or EventBased
+                    let durs: Vec<Duration> = tis
+                        .iter()
+                        .flat_map(|ti| match ti {
+                            TimingInfo::EventBased => unreachable!(), // Error in type checker
+                            TimingInfo::Unknown => None,
+                            TimingInfo::TimeBased(dur) => Some(*dur),
+                        })
+                        .collect();
+                    let rate = unify_extend_rates(&durs);
+                    ExtendedType(OType::Tuple(types), TimingInfo::TimeBased(rate))
+                }
             }
             Candidates::None => unreachable!(),
         }
     }
+}
+
+fn unify_extend_rates(rates: &[Duration]) -> Duration {
+    assert!(!rates.is_empty());
+    let rates: Vec<u128> = rates.iter().map(|r| dur_as_nanos(*r)).collect();
+    let gcd = gcd(&rates);
+    dur_from_nanos(gcd)
+}
+
+fn dur_from_nanos(dur: u128) -> Duration {
+    // TODO: Introduce sanity checks for `dur` s.t. cast is safe.
+    let secs = (dur / NANOS_PER_SEC) as u64; // safe cast for realistic values of `dur`.
+    let nanos = (dur % NANOS_PER_SEC) as u32; // safe case
+    Duration::new(secs, nanos)
+}
+
+fn dur_as_nanos(dur: Duration) -> u128 {
+    dur.as_secs() as u128 * NANOS_PER_SEC as u128 + dur.subsec_nanos() as u128
+}
+
+fn gcd(v: &[u128]) -> u128 {
+    fn _gcd(mut a: u128, mut b: u128) -> u128 {
+        // Courtesy of Wikipedia.
+        while b != 0 {
+            let temp = b;
+            b = a % b;
+            a = temp;
+        }
+        a
+    }
+    assert!(!v.is_empty());
+    v.iter().fold(v[0], |a, b| _gcd(a, *b))
 }
