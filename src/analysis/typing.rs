@@ -1109,7 +1109,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore]  // currently disabled, see `MethodLookup` in stdlib.rs
+    #[ignore] // currently disabled, see `MethodLookup` in stdlib.rs
     fn method_call() {
         let spec = "output count := count.offset(-1).default(0) + 1\n";
         assert_eq!(0, num_type_errors(spec));
@@ -1120,7 +1120,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore]  // currently disabled, see `MethodLookup` in stdlib.rs
+    #[ignore] // currently disabled, see `MethodLookup` in stdlib.rs
     fn method_call_with_type_param() {
         // count has value EventStream<Int8> instead of default value EventStream<Int32>
         let spec = "output count := count.offset<Int8>(-1).default(0) + 1\n";
@@ -1132,7 +1132,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore]  // currently disabled, see `MethodLookup` in stdlib.rs
+    #[ignore] // currently disabled, see `MethodLookup` in stdlib.rs
     fn method_call_with_type_param_faulty() {
         let spec = "output count := count.offset<Float32>(-1).default(0) + 1\n";
         assert_eq!(1, num_type_errors(spec));
