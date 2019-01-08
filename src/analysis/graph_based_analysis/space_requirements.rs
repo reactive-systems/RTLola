@@ -16,10 +16,12 @@ use std::cmp::max;
 use std::collections::HashMap;
 use std::collections::HashSet;
 
+pub(crate) type SpaceRequirements = HashMap<NodeId, StorageRequirement>;
+
 pub(crate) fn determine_buffer_size(
     dependency_graph: &DependencyGraph,
     future_dependent_streams: &HashSet<NodeId>,
-) -> HashMap<NodeId, StorageRequirement> {
+) -> SpaceRequirements {
     let mut store_all_inputs = false;
     let mut storage_requirements: HashMap<NodeId, StorageRequirement> = HashMap::new();
     for node_index in dependency_graph.node_indices() {
@@ -75,10 +77,12 @@ pub(crate) fn determine_buffer_size(
     storage_requirements
 }
 
+pub(crate) type TrackingRequirements = HashMap<NodeId, Vec<(NodeId, TrackingRequirement)>>;
+
 pub(crate) fn determine_tracking_size(
     dependency_graph: &DependencyGraph,
     // TODO add typing
-) -> HashMap<NodeId, Vec<(NodeId, TrackingRequirement)>> {
+) -> TrackingRequirements {
     let mut tracking: HashMap<NodeId, Vec<(NodeId, TrackingRequirement)>> = HashMap::new();
     for node_index in dependency_graph.node_indices() {
         let id = get_ast_id(*dependency_graph.node_weight(node_index).unwrap());

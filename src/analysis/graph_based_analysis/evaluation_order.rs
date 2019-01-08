@@ -16,10 +16,12 @@ use crate::analysis::graph_based_analysis::StreamNode::Trigger;
 use ast_node::NodeId;
 use std::collections::HashMap;
 
+pub(crate) type EvalOrder = Vec<Vec<ComputeStep>>;
+
 pub(crate) struct EvaluationOrderResult {
     pub pruned_dependency_graph: DependencyGraph,
-    pub event_based_streams_order: Vec<Vec<ComputeStep>>,
-    pub periodic_streams_order: Vec<Vec<ComputeStep>>,
+    pub event_based_streams_order: EvalOrder,
+    pub periodic_streams_order: EvalOrder,
 }
 
 pub(crate) fn determine_evaluation_order(
