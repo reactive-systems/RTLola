@@ -13,7 +13,7 @@ use crate::analysis::type_checker::candidates::TimingInfo;
 use std::collections::HashMap;
 
 #[derive(Debug)]
-pub(crate) struct ExtendedType(Type, TimingInfo);
+pub(crate) struct ExtendedType(pub(crate) Type, pub(crate) TimingInfo);
 pub(crate) type TypeTable = HashMap<NodeId, ExtendedType>;
 
 #[derive(Debug)]

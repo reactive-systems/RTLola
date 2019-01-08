@@ -57,6 +57,14 @@ pub enum MemorizationBound {
     Bounded(u16),
 }
 
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum Tracking {
+    /// Need to store every single value of a stream
+    All(StreamReference),
+    /// Need to store `num` values of `trackee`, evicting/add a value every `rate` time units.
+    Bounded{ trackee: StreamReference, num: u128, rate: Duration }
+}
+
 impl PartialOrd for MemorizationBound {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         use std::cmp::Ordering;
@@ -76,9 +84,11 @@ impl PartialOrd for MemorizationBound {
 pub struct InputStream {
     pub name: String,
     pub ty: Type,
-    _values_to_memorize: MemorizationBound,
-    _eval_layer: u32,
-    reference: StreamReference,
+    pub dependent_streams: Vec<Tracking>,
+    pub dependent_windows: Vec<WindowReference>,
+    pub(crate) layer: u32,
+    pub(crate) memory_bound: MemorizationBound,
+    pub reference: StreamReference,
 }
 
 /// Represents an output stream in a Lola specification.
@@ -87,29 +97,11 @@ pub struct OutputStream {
     pub name: String,
     pub ty: Type,
     pub expr: Expression,
-    _values_to_memorize: MemorizationBound,
-    _eval_layer: u32,
+    pub dependent_streams: Vec<Tracking>,
+    pub dependent_windows: Vec<WindowReference>,
+    pub(crate) memory_bound: MemorizationBound,
+    pub(crate) layer: u32,
     pub reference: StreamReference,
-}
-
-impl OutputStream {
-    pub(crate) fn new(
-        name: String,
-        ty: Type,
-        expr: Expression,
-        mem_bound: MemorizationBound,
-        layer: u32,
-        reference: StreamReference,
-    ) -> OutputStream {
-        OutputStream {
-            name,
-            ty,
-            expr,
-            _values_to_memorize: mem_bound,
-            _eval_layer: layer,
-            reference,
-        }
-    }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -150,11 +142,12 @@ pub struct Parameter {
 pub struct Expression {
     /// A list of statements where the last statement represents the result of the expression
     pub stmts: Vec<Statement>,
-    /// A list of temporary values, use in the statements
+    /// A list of temporary values, used in the statements
     pub temporaries: Vec<Type>,
 }
 
-pub type Temporary = u32;
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+pub struct Temporary(pub u32);
 
 /// A statement is of the form `target = op <arguments>`
 #[derive(Debug, PartialEq, Clone)]
@@ -169,27 +162,39 @@ pub struct Statement {
 #[derive(Debug, PartialEq, Clone)]
 pub enum Op {
     /// Loading a constant
+    /// 1st argument -> Constant.
     LoadConstant(Constant),
     /// Applying arithmetic or logic operation
-    ArithLog(ArithLogOp, Type),
+    /// Unary: 1st argument -> operand
+    /// Binary: 1st argument -> lhs, 2nd argument -> rhs
+    /// n-ary: kth argument -> kth operand
+    ArithLog(ArithLogOp),
     /// Accessing another stream
+    /// 1st argument -> default
+    /// StreamInstance contains further arguments.
     StreamLookup {
         instance: StreamInstance,
         offset: Offset,
-        default: Temporary,
+    },
+    /// Accessing another stream synchronously
+    /// No arguments; StreamInstance contains further arguments.
+    SyncStreamLookup {
+        instance: StreamInstance,
     },
     /// A window expression over a duration
     WindowLookup(WindowReference),
     /// An if-then-else expression
+    /// One argument: The register with the condition.
     Ite {
-        condition: Temporary,
-        lhs: Vec<Statement>,
-        rhs: Vec<Statement>,
+        consequence: Vec<Statement>,
+        alternative: Vec<Statement>,
     },
     /// A tuple expression
-    Tuple(Vec<Temporary>),
+    /// Arguments: values of the tuple.
+    Tuple,
     /// A function call
-    Function(FunctionKind, Vec<Temporary>),
+    /// Arguments in statement in proper order.
+    Function(FunctionKind),
 }
 
 /// Represents a constant value of a certain kind.
@@ -206,7 +211,7 @@ pub enum Constant {
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct StreamInstance {
     pub reference: StreamReference,
-    pub arguments: Vec<Box<Temporary>>,
+    pub arguments: Vec<Temporary>,
 }
 
 /// Offset used in the lookup expression
@@ -281,8 +286,8 @@ pub enum ArithLogOp {
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum FunctionKind {
-    NthRoot,
-    Projection,
+    NthRoot(u32),
+    Projection(u32),
     Sin,
     Cos,
     Tan,
@@ -300,6 +305,7 @@ pub struct SlidingWindow {
     pub target: StreamReference,
     pub duration: Duration,
     pub op: WindowOperation,
+    pub reference: WindowReference,
 }
 
 /// Each flag represents a certain feature of Lola not necessarily available in all version of the
@@ -364,13 +370,13 @@ impl MemorizationBound {
 
 impl Stream for OutputStream {
     fn eval_layer(&self) -> u32 {
-        self._eval_layer
+        self.layer
     }
     fn is_input(&self) -> bool {
         false
     }
     fn values_to_memorize(&self) -> MemorizationBound {
-        self._values_to_memorize
+        self.memory_bound
     }
     fn as_stream_ref(&self) -> StreamReference {
         self.reference
@@ -379,13 +385,13 @@ impl Stream for OutputStream {
 
 impl Stream for InputStream {
     fn eval_layer(&self) -> u32 {
-        self._eval_layer
+        self.layer
     }
     fn is_input(&self) -> bool {
         true
     }
     fn values_to_memorize(&self) -> MemorizationBound {
-        self._values_to_memorize
+        self.memory_bound
     }
     fn as_stream_ref(&self) -> StreamReference {
         self.reference
@@ -400,12 +406,30 @@ impl LolaIR {
             .collect()
     }
 
+    pub(crate) fn get_in_mut(&mut self, reference: StreamReference) -> &mut InputStream {
+        match reference {
+            StreamReference::InRef(ix) => &mut self.inputs[ix],
+            StreamReference::OutRef(_) => {
+                panic!("Called `LolaIR::get_out` with a `StreamReference::OutRef`.")
+            }
+        }
+    }
+
     pub fn get_in(&self, reference: StreamReference) -> &InputStream {
         match reference {
             StreamReference::InRef(ix) => &self.inputs[ix],
             StreamReference::OutRef(_) => {
                 panic!("Called `LolaIR::get_out` with a `StreamReference::OutRef`.")
             }
+        }
+    }
+
+    pub(crate) fn get_out_mut(&mut self, reference: StreamReference) -> &mut OutputStream {
+        match reference {
+            StreamReference::InRef(_) => {
+                panic!("Called `LolaIR::get_out` with a `StreamReference::InRef`.")
+            }
+            StreamReference::OutRef(ix) => &mut self.outputs[ix],
         }
     }
 
@@ -513,15 +537,16 @@ impl OutputStream {
 impl Statement {
     fn get_dependencies(&self) -> Vec<StreamReference> {
         match &self.op {
-            Op::LoadConstant(_) | Op::ArithLog(_, _) | Op::Tuple(_) | Op::Function(_, _) => {
+            Op::LoadConstant(_) | Op::ArithLog(_) | Op::Tuple | Op::Function(_) => {
                 Vec::new()
             }
             Op::StreamLookup { instance, .. } => vec![instance.reference],
-            Op::Ite { lhs, rhs, .. } => {
+            Op::SyncStreamLookup { instance } => vec![instance.reference],
+            Op::Ite { consequence, alternative } => {
                 let mut lhs: Vec<StreamReference> =
-                    lhs.iter().flat_map(|stm| stm.get_dependencies()).collect();
+                    consequence.iter().flat_map(|stm| stm.get_dependencies()).collect();
                 let mut rhs: Vec<StreamReference> =
-                    rhs.iter().flat_map(|stm| stm.get_dependencies()).collect();
+                    alternative.iter().flat_map(|stm| stm.get_dependencies()).collect();
                 lhs.append(&mut rhs);
                 lhs
             }
@@ -537,7 +562,7 @@ mod dependencies_test {
     #[test]
     fn constant_test() {
         let stm = Statement {
-            target: 1,
+            target: Temporary(1),
             op: Op::LoadConstant(Constant::Bool(true)),
             args: Vec::new(),
         };
