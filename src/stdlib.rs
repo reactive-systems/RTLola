@@ -34,30 +34,42 @@ impl BinOp {
                 generics: vec![Generic {
                     constraint: Ty::Constr(TypeConstraint::Numeric),
                 }],
-                parameters: vec![Ty::Param(0, "T".to_string()), Ty::Param(0, "T".to_string())],
-                return_type: Ty::Param(0, "T".to_string()),
+                parameters: vec![
+                    Ty::EventStream(Ty::Param(0, "T".to_string()).into(), vec![]),
+                    Ty::EventStream(Ty::Param(0, "T".to_string()).into(), vec![]),
+                ],
+                return_type: Ty::EventStream(Ty::Param(0, "T".to_string()).into(), vec![]),
             },
             And | Or => FuncDecl {
                 name: format!("{}", self),
                 generics: vec![],
-                parameters: vec![Ty::Bool, Ty::Bool],
-                return_type: Ty::Bool,
+                parameters: vec![
+                    Ty::EventStream(Ty::Bool.into(), vec![]),
+                    Ty::EventStream(Ty::Bool.into(), vec![]),
+                ],
+                return_type: Ty::EventStream(Ty::Bool.into(), vec![]),
             },
             Eq | Ne => FuncDecl {
                 name: format!("{}", self),
                 generics: vec![Generic {
                     constraint: Ty::Constr(TypeConstraint::Equatable),
                 }],
-                parameters: vec![Ty::Param(0, "T".to_string()), Ty::Param(0, "T".to_string())],
-                return_type: Ty::Bool,
+                parameters: vec![
+                    Ty::EventStream(Ty::Param(0, "T".to_string()).into(), vec![]),
+                    Ty::EventStream(Ty::Param(0, "T".to_string()).into(), vec![]),
+                ],
+                return_type: Ty::EventStream(Ty::Bool.into(), vec![]),
             },
             Lt | Le | Ge | Gt => FuncDecl {
                 name: format!("{}", self),
                 generics: vec![Generic {
                     constraint: Ty::Constr(TypeConstraint::Comparable),
                 }],
-                parameters: vec![Ty::Param(0, "T".to_string()), Ty::Param(0, "T".to_string())],
-                return_type: Ty::Bool,
+                parameters: vec![
+                    Ty::EventStream(Ty::Param(0, "T".to_string()).into(), vec![]),
+                    Ty::EventStream(Ty::Param(0, "T".to_string()).into(), vec![]),
+                ],
+                return_type: Ty::EventStream(Ty::Bool.into(), vec![]),
             },
         }
     }
@@ -70,16 +82,19 @@ impl UnOp {
             Not => FuncDecl {
                 name: format!("{}", self),
                 generics: vec![],
-                parameters: vec![Ty::Bool],
-                return_type: Ty::Bool,
+                parameters: vec![Ty::EventStream(Ty::Bool.into(), vec![])],
+                return_type: Ty::EventStream(Ty::Bool.into(), vec![]),
             },
             Neg => FuncDecl {
                 name: format!("{}", self),
                 generics: vec![Generic {
                     constraint: Ty::Constr(TypeConstraint::Numeric),
                 }],
-                parameters: vec![Ty::Param(0, "T".to_string())],
-                return_type: Ty::Param(0, "T".to_string()),
+                parameters: vec![Ty::EventStream(
+                    Ty::Param(0, "T".to_string()).into(),
+                    vec![],
+                )],
+                return_type: Ty::EventStream(Ty::Param(0, "T".to_string()).into(), vec![]),
             },
         }
     }
@@ -94,8 +109,14 @@ lazy_static! {
         generics: vec![Generic {
             constraint: Ty::Constr(TypeConstraint::FloatingPoint),
         }],
-        parameters: vec![Ty::Param(0, "T".to_string())],
-        return_type: Ty::Param(0, "T".to_string()),
+        parameters: vec![Ty::EventStream(
+            Ty::Param(0, "T".to_string()).into(),
+            vec![],
+        )],
+        return_type: Ty::EventStream(
+            Ty::Param(0, "T".to_string()).into(),
+            vec![],
+        ),
     };
     // fn cos<T: FloatingPoint>(T) -> T
     static ref COS: FuncDecl = FuncDecl {
@@ -103,8 +124,14 @@ lazy_static! {
         generics: vec![Generic {
             constraint: Ty::Constr(TypeConstraint::FloatingPoint),
         }],
-        parameters: vec![Ty::Param(0, "T".to_string())],
-        return_type: Ty::Param(0, "T".to_string()),
+        parameters: vec![Ty::EventStream(
+            Ty::Param(0, "T".to_string()).into(),
+            vec![],
+        )],
+        return_type: Ty::EventStream(
+            Ty::Param(0, "T".to_string()).into(),
+            vec![],
+        ),
     };
     // fn sin<T: FloatingPoint>(T) -> T
     static ref SIN: FuncDecl = FuncDecl {
@@ -112,16 +139,22 @@ lazy_static! {
         generics: vec![Generic {
             constraint: Ty::Constr(TypeConstraint::FloatingPoint),
         }],
-        parameters: vec![Ty::Param(0, "T".to_string())],
-        return_type: Ty::Param(0, "T".to_string()),
+        parameters: vec![Ty::EventStream(
+            Ty::Param(0, "T".to_string()).into(),
+            vec![],
+        )],
+        return_type: Ty::EventStream(
+            Ty::Param(0, "T".to_string()).into(),
+            vec![],
+        ),
     };
 
     // fn matches_regexp(String, String) -> Bool
     static ref MATCHES_REGEX: FuncDecl = FuncDecl {
         name: "matches_regex".to_string(),
         generics: vec![],
-        parameters: vec![Ty::String, Ty::String],
-        return_type: Ty::Bool,
+        parameters: vec![Ty::EventStream(Ty::String.into(), vec![]), Ty::EventStream(Ty::String.into(), vec![])],
+        return_type: Ty::EventStream(Ty::Bool.into(), vec![]),
     };
 }
 
