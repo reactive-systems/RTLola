@@ -239,7 +239,7 @@ impl<'a> TypeAnalysis<'a> {
                             .collect(),
                     );
                     self.unifier
-                        .unify_var_ty(inv_var, target_ty)
+                        .unify_var_ty(inv_var, Ty::EventStream(target_ty.into(), vec![]))
                         .map_err(|err| self.handle_error(err, invoke.target._span))?;
                 }
 
@@ -761,7 +761,8 @@ impl Unifier {
         }
         if let InferVarVal::Known(val) = self.table.probe_value(var) {
             if self.types_equal_rec(&val, &ty) {
-                self.table.unify_var_value(var, InferVarVal::Known(ty))
+                //self.table.unify_var_value(var, InferVarVal::Known(ty))
+                return Ok(());
             } else if self.types_coerce(&val, &ty) {
                 return Ok(());
             } else {
@@ -790,7 +791,7 @@ impl Unifier {
     /// Checks recursively if types are equal. Tries to unify type parameters if possible.
     /// Note: If you change this function, you have to change `Ty::unify` as well.
     fn types_equal_rec(&mut self, left: &Ty, right: &Ty) -> bool {
-        debug!("comp {} {}", left, right);
+        trace!("comp {} {}", left, right);
         match (left, right) {
             (&Ty::Infer(l), &Ty::Infer(r)) => {
                 if self.table.unioned(l, r) {
