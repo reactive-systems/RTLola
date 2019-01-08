@@ -107,16 +107,15 @@ impl<'a> TypeAnalysis<'a> {
         }
 
         // generate constraint from literal
-        match self.get_constraint_for_literal(&constant.literal) {
-            ConstraintOrType::Type(ty) => self
-                .unifier
-                .unify_var_ty(var, Ty::EventStream(ty.into(), vec![]))
-                .map_err(|err| self.handle_error(err, constant.literal._span))?,
-            ConstraintOrType::Constraint(constr) => self
-                .unifier
-                .unify_var_ty(var, Ty::EventStream(Ty::Constr(constr).into(), vec![]))
-                .map_err(|err| self.handle_error(err, constant.literal._span))?,
-        };
+        self.unifier
+            .unify_var_ty(
+                var,
+                Ty::EventStream(
+                    self.get_constraint_for_literal(&constant.literal).into(),
+                    vec![],
+                ),
+            )
+            .map_err(|err| self.handle_error(err, constant.literal._span))?;
         Ok(())
     }
 
@@ -272,17 +271,17 @@ impl<'a> TypeAnalysis<'a> {
         self.infer_expression(&trigger.expression, Some(Ty::Bool))
     }
 
-    fn get_constraint_for_literal(&self, lit: &Literal) -> ConstraintOrType {
+    fn get_constraint_for_literal(&self, lit: &Literal) -> Ty {
         use crate::ast::LitKind::*;
         match lit.kind {
-            Str(_) | RawStr(_) => ConstraintOrType::Type(Ty::String),
-            Bool(_) => ConstraintOrType::Type(Ty::Bool),
-            Int(i) => ConstraintOrType::Constraint(if i < 0 {
+            Str(_) | RawStr(_) => Ty::String,
+            Bool(_) => Ty::Bool,
+            Int(i) => Ty::Constr(if i < 0 {
                 TypeConstraint::SignedInteger
             } else {
                 TypeConstraint::Integer
             }),
-            Float(_) => ConstraintOrType::Constraint(TypeConstraint::FloatingPoint),
+            Float(_) => Ty::Constr(TypeConstraint::FloatingPoint),
         }
     }
 
@@ -298,17 +297,12 @@ impl<'a> TypeAnalysis<'a> {
         match &expr.kind {
             Lit(l) => {
                 // generate constraint from literal
-                match self.get_constraint_for_literal(&l) {
-                    ConstraintOrType::Type(ty) => self
-                        .unifier
-                        .unify_var_ty(var, Ty::EventStream(ty.into(), vec![]))
-                        .map_err(|err| self.handle_error(err, expr._span))?,
-                    ConstraintOrType::Constraint(constr) => {
-                        self.unifier
-                            .unify_var_ty(var, Ty::EventStream(Ty::Constr(constr).into(), vec![]))
-                            .map_err(|err| self.handle_error(err, expr._span))?;
-                    }
-                };
+                self.unifier
+                    .unify_var_ty(
+                        var,
+                        Ty::EventStream(self.get_constraint_for_literal(&l).into(), vec![]),
+                    )
+                    .map_err(|err| self.handle_error(err, expr._span))?;
             }
             Ident(_) => {
                 let decl = self.declarations[&expr._id];
@@ -695,11 +689,6 @@ impl<'a> TypeAnalysis<'a> {
             Ty::Error
         }
     }
-}
-
-enum ConstraintOrType {
-    Type(Ty),
-    Constraint(TypeConstraint),
 }
 
 /// Main data structure for the type unfication.
