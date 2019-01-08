@@ -13,7 +13,7 @@ cargo:test:
   image: rust:latest
   script:
     - rustc --version && cargo --version      # Print version info for debugging
-    - cargo test --all --verbose
+    - cargo test --all --all-features --verbose
 
 # Use cargo to check the source code formatting
 cargo:check-format:
@@ -42,5 +42,5 @@ cargo:test-nightly:
   image: rustlang/rust:nightly
   script:
     - rustc --version && cargo --version      # Print version info for debugging
-    - cargo test --all --verbose
+    - cargo test --all --all-features --verbose
   allow_failure: true
