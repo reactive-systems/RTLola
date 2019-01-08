@@ -396,8 +396,8 @@ impl<'a> TypeAnalysis<'a> {
                 // need to derive "inner" type `?1`
                 let decl = self.declarations[&stream._id];
                 let decl_var: InferVar = match decl {
-                    Declaration::In(input) => self.var_lookup[&input.ty._id],
-                    Declaration::Out(output) => self.var_lookup[&output.ty._id],
+                    Declaration::In(input) => self.var_lookup[&input._id],
+                    Declaration::Out(output) => self.var_lookup[&output._id],
                     //Declaration::Const(constant) => self.var_lookup[&constant.ty._id],
                     _ => unreachable!(),
                 };
@@ -979,6 +979,7 @@ impl Ty {
     /// Merges two types.
     /// `types_equal_rec` has to be called before.
     fn unify(&self, other: &Ty) -> Result<Ty, InferError> {
+        trace!("unify {} {}", self, other);
         match (self, other) {
             (&Ty::Infer(_), &Ty::Infer(_)) => Ok(self.clone()),
             (&Ty::Infer(_), _) => Ok(other.clone()),
