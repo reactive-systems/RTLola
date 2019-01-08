@@ -17,8 +17,10 @@ pub enum Ty {
     //Adt(AdtDef),
     String,
     Tuple(Vec<Ty>),
-    /// An event stream with optional parameterization
-    EventStream(Box<Ty>, Vec<Ty>),
+    /// An event stream of the given type
+    EventStream(Box<Ty>),
+    /// A parameterized stream
+    Parameterized(Box<Ty>, Vec<Ty>),
     TimedStream(Box<Ty>), // todo: probably need frequency as well
     Duration(DurationTy),
     /// Representation of a sliding window
@@ -125,7 +127,8 @@ impl Ty {
         match self {
             Error => true,
             Tuple(args) => args.iter().any(|el| el.is_error()),
-            EventStream(ty, params) => ty.is_error() || params.iter().any(|e| e.is_error()),
+            EventStream(ty) => ty.is_error(),
+            Parameterized(ty, params) => ty.is_error() || params.iter().any(|e| e.is_error()),
             TimedStream(ty) => ty.is_error(),
             Option(ty) => ty.is_error(),
             _ => false,
@@ -161,7 +164,8 @@ impl Ty {
     pub(crate) fn replace_params(&self, infer_vars: &[InferVar]) -> Ty {
         match self {
             &Ty::Param(id, _) => Ty::Infer(infer_vars[id as usize]),
-            Ty::EventStream(t, params) => Ty::EventStream(
+            Ty::EventStream(t) => Ty::EventStream(Box::new(t.replace_params(infer_vars))),
+            Ty::Parameterized(t, params) => Ty::Parameterized(
                 Box::new(t.replace_params(infer_vars)),
                 params
                     .iter()
@@ -196,13 +200,10 @@ impl std::fmt::Display for Ty {
             Ty::Float(F32) => write!(f, "Float32"),
             Ty::Float(F64) => write!(f, "Float64"),
             Ty::String => write!(f, "String"),
-            Ty::EventStream(ty, params) => {
-                if params.is_empty() {
-                    write!(f, "EventStream<{}>", ty)
-                } else {
-                    let joined: Vec<String> = params.iter().map(|e| format!("{}", e)).collect();
-                    write!(f, "EventStream<{}, ({})>", ty, joined.join(", "))
-                }
+            Ty::EventStream(ty) => write!(f, "EventStream<{}>", ty),
+            Ty::Parameterized(ty, params) => {
+                let joined: Vec<String> = params.iter().map(|e| format!("{}", e)).collect();
+                write!(f, "Paramaterized<{}, ({})>", ty, joined.join(", "))
             }
             Ty::TimedStream(_) => unimplemented!(),
             Ty::Duration(d) => write!(f, "{}", d),

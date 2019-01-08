@@ -35,19 +35,19 @@ impl BinOp {
                     constraint: Ty::Constr(TypeConstraint::Numeric),
                 }],
                 parameters: vec![
-                    Ty::EventStream(Ty::Param(0, "T".to_string()).into(), vec![]),
-                    Ty::EventStream(Ty::Param(0, "T".to_string()).into(), vec![]),
+                    Ty::EventStream(Ty::Param(0, "T".to_string()).into()),
+                    Ty::EventStream(Ty::Param(0, "T".to_string()).into()),
                 ],
-                return_type: Ty::EventStream(Ty::Param(0, "T".to_string()).into(), vec![]),
+                return_type: Ty::EventStream(Ty::Param(0, "T".to_string()).into()),
             },
             And | Or => FuncDecl {
                 name: format!("{}", self),
                 generics: vec![],
                 parameters: vec![
-                    Ty::EventStream(Ty::Bool.into(), vec![]),
-                    Ty::EventStream(Ty::Bool.into(), vec![]),
+                    Ty::EventStream(Ty::Bool.into()),
+                    Ty::EventStream(Ty::Bool.into()),
                 ],
-                return_type: Ty::EventStream(Ty::Bool.into(), vec![]),
+                return_type: Ty::EventStream(Ty::Bool.into()),
             },
             Eq | Ne => FuncDecl {
                 name: format!("{}", self),
@@ -55,10 +55,10 @@ impl BinOp {
                     constraint: Ty::Constr(TypeConstraint::Equatable),
                 }],
                 parameters: vec![
-                    Ty::EventStream(Ty::Param(0, "T".to_string()).into(), vec![]),
-                    Ty::EventStream(Ty::Param(0, "T".to_string()).into(), vec![]),
+                    Ty::EventStream(Ty::Param(0, "T".to_string()).into()),
+                    Ty::EventStream(Ty::Param(0, "T".to_string()).into()),
                 ],
-                return_type: Ty::EventStream(Ty::Bool.into(), vec![]),
+                return_type: Ty::EventStream(Ty::Bool.into()),
             },
             Lt | Le | Ge | Gt => FuncDecl {
                 name: format!("{}", self),
@@ -66,10 +66,10 @@ impl BinOp {
                     constraint: Ty::Constr(TypeConstraint::Comparable),
                 }],
                 parameters: vec![
-                    Ty::EventStream(Ty::Param(0, "T".to_string()).into(), vec![]),
-                    Ty::EventStream(Ty::Param(0, "T".to_string()).into(), vec![]),
+                    Ty::EventStream(Ty::Param(0, "T".to_string()).into()),
+                    Ty::EventStream(Ty::Param(0, "T".to_string()).into()),
                 ],
-                return_type: Ty::EventStream(Ty::Bool.into(), vec![]),
+                return_type: Ty::EventStream(Ty::Bool.into()),
             },
         }
     }
@@ -82,19 +82,16 @@ impl UnOp {
             Not => FuncDecl {
                 name: format!("{}", self),
                 generics: vec![],
-                parameters: vec![Ty::EventStream(Ty::Bool.into(), vec![])],
-                return_type: Ty::EventStream(Ty::Bool.into(), vec![]),
+                parameters: vec![Ty::EventStream(Ty::Bool.into())],
+                return_type: Ty::EventStream(Ty::Bool.into()),
             },
             Neg => FuncDecl {
                 name: format!("{}", self),
                 generics: vec![Generic {
                     constraint: Ty::Constr(TypeConstraint::Numeric),
                 }],
-                parameters: vec![Ty::EventStream(
-                    Ty::Param(0, "T".to_string()).into(),
-                    vec![],
-                )],
-                return_type: Ty::EventStream(Ty::Param(0, "T".to_string()).into(), vec![]),
+                parameters: vec![Ty::EventStream(Ty::Param(0, "T".to_string()).into())],
+                return_type: Ty::EventStream(Ty::Param(0, "T".to_string()).into()),
             },
         }
     }
@@ -110,12 +107,10 @@ lazy_static! {
             constraint: Ty::Constr(TypeConstraint::FloatingPoint),
         }],
         parameters: vec![Ty::EventStream(
-            Ty::Param(0, "T".to_string()).into(),
-            vec![],
+            Ty::Param(0, "T".to_string()).into()
         )],
         return_type: Ty::EventStream(
-            Ty::Param(0, "T".to_string()).into(),
-            vec![],
+            Ty::Param(0, "T".to_string()).into()
         ),
     };
     // fn cos<T: FloatingPoint>(T) -> T
@@ -125,12 +120,10 @@ lazy_static! {
             constraint: Ty::Constr(TypeConstraint::FloatingPoint),
         }],
         parameters: vec![Ty::EventStream(
-            Ty::Param(0, "T".to_string()).into(),
-            vec![],
+            Ty::Param(0, "T".to_string()).into()
         )],
         return_type: Ty::EventStream(
-            Ty::Param(0, "T".to_string()).into(),
-            vec![],
+            Ty::Param(0, "T".to_string()).into()
         ),
     };
     // fn sin<T: FloatingPoint>(T) -> T
@@ -140,12 +133,10 @@ lazy_static! {
             constraint: Ty::Constr(TypeConstraint::FloatingPoint),
         }],
         parameters: vec![Ty::EventStream(
-            Ty::Param(0, "T".to_string()).into(),
-            vec![],
+            Ty::Param(0, "T".to_string()).into()
         )],
         return_type: Ty::EventStream(
-            Ty::Param(0, "T".to_string()).into(),
-            vec![],
+            Ty::Param(0, "T".to_string()).into()
         ),
     };
 
@@ -153,8 +144,8 @@ lazy_static! {
     static ref MATCHES_REGEX: FuncDecl = FuncDecl {
         name: "matches_regex".to_string(),
         generics: vec![],
-        parameters: vec![Ty::EventStream(Ty::String.into(), vec![]), Ty::EventStream(Ty::String.into(), vec![])],
-        return_type: Ty::EventStream(Ty::Bool.into(), vec![]),
+        parameters: vec![Ty::EventStream(Ty::String.into()), Ty::EventStream(Ty::String.into())],
+        return_type: Ty::EventStream(Ty::Bool.into()),
     };
 }
 
@@ -184,10 +175,10 @@ impl MethodLookup {
         }
 
         match ty {
-            Ty::EventStream(inner, params) => {
-                match (inner.as_ref(), params, name) {
+            Ty::EventStream(inner) => {
+                match (inner.as_ref(), name) {
                     // offset<T,I:Integer>(EventStream<T, ()>, I) -> EventStream<Option<T>>
-                    (_, params, "offset") if params.is_empty() => Some(FuncDecl {
+                    (_, "offset") => Some(FuncDecl {
                         name: "offset".to_string(),
                         generics: vec![
                             Generic {
@@ -198,16 +189,15 @@ impl MethodLookup {
                             },
                         ],
                         parameters: vec![
-                            Ty::EventStream(Box::new(Ty::Param(0, "T".to_string())), Vec::new()),
+                            Ty::EventStream(Box::new(Ty::Param(0, "T".to_string()))),
                             Ty::Param(1, "I".to_string()),
                         ],
                         return_type: Ty::EventStream(
                             Ty::Option(Box::new(Ty::Param(0, "T".to_string()))).into(),
-                            vec![],
                         ),
                     }),
                     // default<T>(EventStream<Option<T>>, EventStream<T>) -> EventStream<T>
-                    (Ty::Option(_), params, "default") if params.is_empty() => Some(FuncDecl {
+                    (Ty::Option(_), "default") => Some(FuncDecl {
                         name: "default".to_string(),
                         generics: vec![Generic {
                             constraint: Ty::Constr(TypeConstraint::Unconstrained),
@@ -215,11 +205,10 @@ impl MethodLookup {
                         parameters: vec![
                             Ty::EventStream(
                                 Ty::Option(Box::new(Ty::Param(0, "T".to_string()))).into(),
-                                vec![],
                             ),
-                            Ty::EventStream(Ty::Param(0, "T".to_string()).into(), vec![]),
+                            Ty::EventStream(Ty::Param(0, "T".to_string()).into()),
                         ],
-                        return_type: Ty::EventStream(Ty::Param(0, "T".to_string()).into(), vec![]),
+                        return_type: Ty::EventStream(Ty::Param(0, "T".to_string()).into()),
                     }),
                     _ => None,
                 }
