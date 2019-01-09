@@ -9,16 +9,16 @@ use crate::reporting::Handler;
 use ast_node::NodeId;
 
 use crate::analysis::common::Type;
-use crate::analysis::type_checker::candidates::TimingInfo;
+pub(crate) use crate::analysis::type_checker::candidates::TimingInfo;
 use std::collections::HashMap;
 
 #[derive(Debug)]
-pub(crate) struct ExtendedType(pub(crate) Type, pub(crate) TimingInfo);
+pub(crate) struct ExtendedType(pub Type, pub TimingInfo);
 pub(crate) type TypeTable = HashMap<NodeId, ExtendedType>;
 
 #[derive(Debug)]
 pub(crate) struct TypeCheckResult {
-    type_table: TypeTable,
+    pub type_table: TypeTable,
 }
 
 pub(crate) fn type_check<'a>(

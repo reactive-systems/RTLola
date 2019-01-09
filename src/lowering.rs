@@ -213,6 +213,7 @@ impl<'a> Lowering<'a> {
                     rate,
                 }
             }
+            TrackingRequirement::Future => unimplemented!(),
         }
     }
 

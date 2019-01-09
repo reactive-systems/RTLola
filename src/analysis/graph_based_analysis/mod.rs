@@ -3,11 +3,11 @@ pub mod evaluation_order;
 pub mod future_dependency;
 pub mod space_requirements;
 
-use crate::ast::TimeUnit;
 use ast_node::NodeId;
 use ast_node::Span;
 use petgraph::Directed;
 use petgraph::Graph;
+use std::time::Duration;
 
 #[derive(Debug, Copy, Clone)]
 pub(crate) enum StreamNode {
@@ -29,9 +29,15 @@ pub(crate) enum ComputeStep {
 }
 
 #[derive(Debug, Copy, Clone)]
+pub(crate) enum TimeOffset {
+    UpToNow(Duration),
+    Future(Duration),
+}
+
+#[derive(Debug, Copy, Clone)]
 pub(crate) enum Offset {
     Discrete(i32),
-    Time(f64, TimeUnit),
+    Time(TimeOffset),
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -65,6 +71,8 @@ pub(crate) enum StorageRequirement {
 #[derive(Debug, Copy, Clone)]
 pub(crate) enum TrackingRequirement {
     Finite(u16),
+    // TODO What about accessing a future dependent stream?
+    Future,
     Unbounded,
 }
 

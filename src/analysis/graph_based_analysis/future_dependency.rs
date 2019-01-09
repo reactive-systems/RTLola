@@ -4,6 +4,7 @@ use crate::analysis::graph_based_analysis::NIx;
 use crate::analysis::graph_based_analysis::Offset;
 use crate::analysis::graph_based_analysis::StreamDependency::Access;
 use crate::analysis::graph_based_analysis::StreamNode::*;
+use crate::analysis::graph_based_analysis::TimeOffset;
 use ast_node::NodeId;
 use petgraph::Direction;
 use std::collections::HashSet;
@@ -32,7 +33,10 @@ pub(crate) fn future_dependent_stream(
             .any(|edge| match edge.weight() {
                 Access(_, offset, _) => match offset {
                     Offset::Discrete(offset) => *offset > 0,
-                    Offset::Time(offset, _) => *offset > 0.0,
+                    Offset::Time(duration) => match duration {
+                        TimeOffset::Future(_) => true,
+                        TimeOffset::UpToNow(_) => false,
+                    },
                 },
                 _ => false,
             });
@@ -95,7 +99,7 @@ mod tests {
         let mut naming_analyzer = NamingAnalysis::new(&handler);
         naming_analyzer.check(&spec);
         let mut version_analyzer = LolaVersionAnalysis::new(&handler);
-        let version = version_analyzer.analyse(&spec);
+        let _version = version_analyzer.analyse(&spec);
 
         let dependency_analysis = analyse_dependencies(
             &spec,

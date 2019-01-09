@@ -316,7 +316,7 @@ impl<'a> TypeChecker<'a> {
         self.check_offset(offset, e); // Return value does not matter.
         let target_stream_type = self.check_stream_instance(inst);
         if op.is_none() {
-            return self.register_cand(*e.id(), target_stream_type);
+            return self.register_cand(*e.id(), target_stream_type.clone().remove_ti());
         }
         let op = op.unwrap();
         // For all window operations, the source stream needs to be numeric.
@@ -764,7 +764,7 @@ impl<'a> TypeChecker<'a> {
         match crate::analysis::common::extract_constant_numeric(expr.as_ref(), &self.declarations) {
             Some(LitKind::Int(i)) => {
                 // TODO: Improve: Robust against overflows.
-                let value = *i as u128 * factor as u128; // Multiplication might fail.
+                let value = *i as u128 * u128::from(factor); // Multiplication might fail.
                 let secs = (value / 10u128.pow(9)) as u64; // Cast might fail.
                 let nanos = (value % 10u128.pow(9)) as u32; // Perfectly safe cast to u32.
                 std::time::Duration::new(secs, nanos)

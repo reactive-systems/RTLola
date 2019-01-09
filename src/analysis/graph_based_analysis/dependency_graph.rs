@@ -6,15 +6,18 @@ use crate::analysis::graph_based_analysis::Offset;
 use crate::analysis::graph_based_analysis::StreamDependency;
 use crate::analysis::graph_based_analysis::StreamNode;
 use crate::analysis::graph_based_analysis::StreamNode::*;
+use crate::analysis::graph_based_analysis::TimeOffset;
 use crate::analysis::lola_version::LolaVersionTable;
 use crate::analysis::naming::Declaration;
 use crate::analysis::naming::DeclarationTable;
 use crate::ast::ExpressionKind;
+use crate::ast::ExtendRate;
 use crate::ast::LanguageSpec;
 use crate::ast::LitKind;
 use crate::ast::LolaSpec;
 use crate::ast::Output;
 use crate::ast::TemplateSpec;
+use crate::ast::TimeUnit;
 use crate::ast::UnOp;
 use crate::reporting::DiagnosticBuilder;
 use crate::reporting::Handler;
@@ -360,8 +363,8 @@ impl<'a> DependencyAnalyser<'a> {
                 Offset::Discrete(offset)
             }
             crate::ast::Offset::RealTimeOffset(expr, unit) => {
-                let offset = self.evaluate_float(expr, naming_table);
-                Offset::Time(offset, *unit)
+                let rate = ExtendRate::Duration(expr.clone(), *unit);
+                Offset::Time(TimeOffset::Future((&rate).into()))
             }
         }
     }

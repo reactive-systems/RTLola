@@ -89,6 +89,18 @@ pub(crate) enum Candidates {
 }
 
 impl Candidates {
+    pub(crate) fn remove_ti(self) -> Candidates {
+        match self {
+            Candidates::Numeric(cfg, _ti) => Candidates::Numeric(cfg, TimingInfo::Unknown),
+            Candidates::Concrete(t, _ti) => Candidates::Concrete(t, TimingInfo::Unknown),
+            Candidates::Tuple(v) => {
+                Candidates::Tuple(v.iter().map(|e| e.clone().remove_ti()).collect())
+            }
+            Candidates::Any(_ti) => Candidates::Any(TimingInfo::Unknown),
+            Candidates::None => Candidates::None,
+        }
+    }
+
     pub(crate) fn timing_info(&self) -> Option<TimingInfo> {
         match self {
             Candidates::Numeric(_, ti) => Some(*ti),
@@ -425,22 +437,22 @@ impl<'a> From<&'a Candidates> for ExtendedType {
     }
 }
 
-fn unify_extend_rates(rates: &[Duration]) -> Duration {
+pub(crate) fn unify_extend_rates(rates: &[Duration]) -> Duration {
     assert!(!rates.is_empty());
     let rates: Vec<u128> = rates.iter().map(|r| dur_as_nanos(*r)).collect();
     let gcd = gcd(&rates);
     dur_from_nanos(gcd)
 }
 
-fn dur_from_nanos(dur: u128) -> Duration {
+pub(crate) fn dur_from_nanos(dur: u128) -> Duration {
     // TODO: Introduce sanity checks for `dur` s.t. cast is safe.
     let secs = (dur / NANOS_PER_SEC) as u64; // safe cast for realistic values of `dur`.
     let nanos = (dur % NANOS_PER_SEC) as u32; // safe case
     Duration::new(secs, nanos)
 }
 
-fn dur_as_nanos(dur: Duration) -> u128 {
-    dur.as_secs() as u128 * NANOS_PER_SEC as u128 + dur.subsec_nanos() as u128
+pub(crate) fn dur_as_nanos(dur: Duration) -> u128 {
+    u128::from(dur.as_secs()) * NANOS_PER_SEC as u128 + u128::from(dur.subsec_nanos())
 }
 
 fn gcd(v: &[u128]) -> u128 {

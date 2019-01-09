@@ -32,7 +32,7 @@ impl LolaSpec {
 }
 
 /// Versions and Extensions of the Lola language
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum LanguageSpec {
     /// The original Lola specification language,
     /// see ``LOLA: Runtime Monitoring of Synchronous Systems'' (https://ieeexplore.ieee.org/document/1443364)

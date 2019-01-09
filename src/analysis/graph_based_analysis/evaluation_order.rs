@@ -13,6 +13,7 @@ use crate::analysis::graph_based_analysis::StreamNode::ParameterizedOutput;
 use crate::analysis::graph_based_analysis::StreamNode::RTOutput;
 use crate::analysis::graph_based_analysis::StreamNode::RTTrigger;
 use crate::analysis::graph_based_analysis::StreamNode::Trigger;
+use crate::analysis::graph_based_analysis::TimeOffset;
 use ast_node::NodeId;
 use std::collections::HashMap;
 
@@ -175,8 +176,8 @@ fn build_compute_graph(mut dependency_graph: DependencyGraph) -> ComputationGrap
                         }
                         // no need to add dependency for positive edges
                     }
-                    Offset::Time(offset, _unit) => {
-                        if offset.abs() < 0.0001_f64 {
+                    Offset::Time(offset) => {
+                        if let TimeOffset::UpToNow(_) = offset {
                             computation_graph.add_edge(
                                 mapping[&source_id].evaluate,
                                 mapping[&target_id].evaluate,

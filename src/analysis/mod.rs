@@ -71,8 +71,11 @@ pub(crate) fn analyze(spec: &mut LolaSpec, mapper: SourceMapper) -> bool {
         &future_dependent_stream,
     );
 
-    let _tracking_requirements =
-        determine_tracking_size(&evaluation_order_result.pruned_dependency_graph);
+    let _tracking_requirements = determine_tracking_size(
+        &evaluation_order_result.pruned_dependency_graph,
+        &mut type_analysis,
+        &future_dependent_stream,
+    );
 
     unimplemented!();
 }
