@@ -14,6 +14,7 @@ pub enum TypeDecl {
     //Alias(String, Ty),
 //NewType(String, Ty),
 //Struct(String, Vec<(String, Ty)>),
+//Enum(String, Vec<(String, Ty)>),
 }
 
 /// A (possibly generic) function declaration

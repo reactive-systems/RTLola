@@ -319,10 +319,7 @@ impl<'a> TypeAnalysis<'a> {
             Lit(l) => {
                 // generate constraint from literal
                 self.unifier
-                    .unify_var_ty(
-                        var,
-                        Ty::EventStream(self.get_constraint_for_literal(&l).into()),
-                    )
+                    .unify_var_ty(var, self.get_constraint_for_literal(&l))
                     .map_err(|err| self.handle_error(err, expr._span))?;
             }
             Ident(_) => {
@@ -396,10 +393,11 @@ impl<'a> TypeAnalysis<'a> {
                 for arg in &stream.arguments {
                     self.infer_expression(arg, None)?;
                     let inner = match self.unifier.get_type(self.var_lookup[&arg._id]) {
-                        Some(Ty::EventStream(inner)) => inner,
-                        _ => unreachable!(),
+                        Some(Ty::EventStream(inner)) => *inner,
+                        Some(ty) => ty,
+                        None => unreachable!(),
                     };
-                    params.push(*inner);
+                    params.push(inner);
                 }
                 let target = if !params.is_empty() {
                     Ty::Parameterized(
@@ -522,10 +520,11 @@ impl<'a> TypeAnalysis<'a> {
                 for element in expressions {
                     self.infer_expression(element, None)?;
                     let inner = match self.unifier.get_type(self.var_lookup[&element._id]) {
-                        Some(Ty::EventStream(inner)) => inner,
-                        _ => unreachable!(),
+                        Some(Ty::EventStream(inner)) => *inner,
+                        Some(ty) => ty,
+                        None => unreachable!(),
                     };
-                    tuples.push(*inner);
+                    tuples.push(inner);
                 }
                 // ?var = Tuple(?expr1, ?expr2, ..)
                 self.unifier
@@ -858,8 +857,20 @@ impl Unifier {
         debug!("coerce {} {}", left, right);
         // types_equal_rec has side effects, thus, create snapshot before
         let snapshot = self.table.snapshot();
-        let res = match right {
-            Ty::EventStream(ty) => self.types_equal_rec(left, ty),
+
+        // Ty -> EventStream<Ty> is always possible
+        if let Ty::EventStream(ty) = left {
+            if self.types_equal_rec(ty, right) {
+                self.table.commit(snapshot);
+                return true;
+            } else {
+                self.table.rollback_to(snapshot);
+                return false;
+            }
+        }
+
+        // bit-width increase is also allowed
+        match right {
             Ty::Int(lower) => match left {
                 Ty::Int(upper) => lower <= upper,
                 _ => false,
@@ -873,13 +884,7 @@ impl Unifier {
                 _ => false,
             },
             _ => false,
-        };
-        if !res {
-            self.table.rollback_to(snapshot);
-        } else {
-            self.table.commit(snapshot);
         }
-        res
     }
 
     /// Returns type where every inference variable is substituted.
