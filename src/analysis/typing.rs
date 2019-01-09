@@ -15,12 +15,13 @@ use crate::ast::{
 use crate::reporting::Handler;
 use crate::reporting::LabeledSpan;
 use crate::stdlib::{FuncDecl, MethodLookup};
-use crate::ty::{Ty, TypeConstraint};
+use crate::ty::{Freq, Ty, TypeConstraint};
 use ast_node::NodeId;
 use ast_node::Span;
 use ena::unify::{EqUnifyValue, InPlaceUnificationTable, UnificationTable, UnifyKey, UnifyValue};
 use log::{debug, trace};
 use std::collections::HashMap;
+use std::time::Duration;
 
 pub(crate) struct TypeAnalysis<'a> {
     handler: &'a Handler,
@@ -161,6 +162,7 @@ impl<'a> TypeAnalysis<'a> {
         self.infer_type(&output.ty)?;
         let ty_var = self.var_lookup[&output.ty._id];
 
+        // collect parameters
         let mut param_types = Vec::new();
         for param in &output.params {
             self.infer_type(&param.ty)?;
@@ -172,21 +174,33 @@ impl<'a> TypeAnalysis<'a> {
             param_types.push(Ty::Infer(param_var));
         }
 
+        // check if stream has timing infos
+        let mut frequence = None;
+        if let Some(template_spec) = &output.template_spec {
+            if let Some(extend) = &template_spec.ext {
+                if let Some(freq) = &extend.freq {
+                    let d: Duration = freq.into();
+                    frequence = Some(Freq::new(&format!("{}", freq), d));
+                }
+            }
+        }
+
+        // determine whether stream is timed or event based
+        let stream_type: Ty = if let Some(f) = frequence {
+            Ty::TimedStream(Ty::Infer(ty_var).into(), f)
+        } else {
+            Ty::EventStream(Ty::Infer(ty_var).into())
+        };
+
         if param_types.is_empty() {
-            // ?var = EventStream<?ty_var>
+            // ?var = Stream
             self.unifier
-                .unify_var_ty(var, Ty::EventStream(Box::new(Ty::Infer(ty_var))))
+                .unify_var_ty(var, stream_type)
                 .map_err(|err| self.handle_error(err, output.name.span))
         } else {
-            // ?var = Parametzerized(EventStream<?ty_var>, param_types>
+            // ?var = Parametzerized(Stream)
             self.unifier
-                .unify_var_ty(
-                    var,
-                    Ty::Parameterized(
-                        Ty::EventStream(Box::new(Ty::Infer(ty_var))).into(),
-                        param_types,
-                    ),
-                )
+                .unify_var_ty(var, Ty::Parameterized(stream_type.into(), param_types))
                 .map_err(|err| self.handle_error(err, output.name.span))
         }
     }
@@ -795,7 +809,7 @@ impl Unifier {
                 self.check_occurrence(var, &ty)
                     || params.iter().any(|el| self.check_occurrence(var, el))
             }
-            Ty::TimedStream(_) => unimplemented!(),
+            Ty::TimedStream(_, _) => unimplemented!(),
             Ty::Tuple(t) => t.iter().any(|e| self.check_occurrence(var, e)),
             _ => false,
         }
@@ -844,9 +858,9 @@ impl Unifier {
                     .zip(r)
                     .all(|(e_l, e_r)| self.types_equal_rec(e_l, e_r))
             }
-            (Ty::TimedStream(_), Ty::TimedStream(_)) => unimplemented!(),
+            (Ty::TimedStream(_, _), Ty::TimedStream(_, _)) => unimplemented!(),
             (Ty::Window(ty_l, d_l), Ty::Window(ty_r, d_r)) => {
-                self.types_equal_rec(ty_l, ty_r) && self.types_equal_rec(d_l, d_r)
+                self.types_equal_rec(ty_l, ty_r) && d_l == d_r
             }
             (l, r) => l == r,
         }
@@ -911,10 +925,7 @@ impl Unifier {
                 params.into_iter().map(|e| self.replace_constr(e)).collect(),
             ),
             Ty::Option(ty) => Ty::Option(Box::new(self.replace_constr(*ty))),
-            Ty::Window(ty, d) => Ty::Window(
-                Box::new(self.replace_constr(*ty)),
-                Box::new(self.replace_constr(*d)),
-            ),
+            Ty::Window(ty, d) => Ty::Window(Box::new(self.replace_constr(*ty)), d),
             _ if ty.is_primitive() => ty,
             Ty::Constr(c) => match c.has_default() {
                 Some(d) => d,
@@ -950,10 +961,7 @@ impl Unifier {
                 params.into_iter().map(|e| self.normalize_ty(e)).collect(),
             ),
             Ty::Option(ty) => Ty::Option(Box::new(self.normalize_ty(*ty))),
-            Ty::Window(ty, d) => Ty::Window(
-                Box::new(self.normalize_ty(*ty)),
-                Box::new(self.normalize_ty(*d)),
-            ),
+            Ty::Window(ty, d) => Ty::Window(Box::new(self.normalize_ty(*ty)), d),
             _ if ty.is_primitive() => ty,
             Ty::Constr(_) => ty,
             Ty::Param(_, _) => ty,
@@ -1054,11 +1062,8 @@ impl Ty {
                 }
                 Ok(Ty::Tuple(inner))
             }
-            (Ty::TimedStream(_), Ty::TimedStream(_)) => unimplemented!(),
-            (Ty::Window(ty_l, d_l), Ty::Window(ty_r, d_r)) => Ok(Ty::Window(
-                Box::new(ty_l.unify(ty_r)?),
-                Box::new(d_l.unify(d_r)?),
-            )),
+            (Ty::TimedStream(_, _), Ty::TimedStream(_, _)) => unimplemented!(),
+            (Ty::Window(_, _), Ty::Window(_, _)) => unimplemented!(),
             (l, r) => {
                 if l == r {
                     Ok(self.clone())
@@ -1535,35 +1540,30 @@ mod tests {
     }
 
     #[test]
-    #[ignore] // type system for timed streams is currently not implemented
     fn test_window_widening() {
         let spec = "input in: Int8\n output out: Int64 {extend @5Hz}:= in[3s, Σ] ? 0";
         assert_eq!(0, num_type_errors(spec));
     }
 
     #[test]
-    #[ignore] // type system for timed streams is currently not implemented
     fn test_window() {
         let spec = "input in: Int8\n output out: Int8 {extend @5Hz} := in[3s, Σ] ? 0";
         assert_eq!(0, num_type_errors(spec));
     }
 
     #[test]
-    #[ignore] // type system for timed streams is currently not implemented
     fn test_window_untimed() {
         let spec = "input in: Int8\n output out: Int16 := in[3s, Σ] ? 5";
         assert_eq!(1, num_type_errors(spec));
     }
 
     #[test]
-    #[ignore] // type system for timed streams is currently not implemented
     fn test_window_faulty() {
         let spec = "input in: Int8\n output out: Bool {extend @5Hz} := in[3s, Σ] ? 5";
         assert_eq!(1, num_type_errors(spec));
     }
 
     #[test]
-    #[ignore] // type system for timed streams is currently not implemented
     fn test_involved() {
         let spec =
             "input velo: Float32\n output avg: Float64 {extend @5Hz} := velo[1h, avg] ? 10000.0";

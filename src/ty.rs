@@ -21,10 +21,10 @@ pub enum Ty {
     EventStream(Box<Ty>),
     /// A parameterized stream
     Parameterized(Box<Ty>, Vec<Ty>),
-    TimedStream(Box<Ty>), // todo: probably need frequency as well
+    TimedStream(Box<Ty>, Freq),
     Duration(DurationTy),
     /// Representation of a sliding window
-    Window(Box<Ty>, Box<Ty>),
+    Window(Box<Ty>, Duration),
     /// an optional value type, e.g., accessing a stream with offset -1
     Option(Box<Ty>),
     /// Used during type inference
@@ -69,6 +69,27 @@ pub struct DurationTy {
 impl std::fmt::Display for DurationTy {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "{}", self.repr)
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Hash)]
+pub struct Freq {
+    repr: String,
+    d: Duration,
+}
+
+impl std::fmt::Display for Freq {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}", self.repr)
+    }
+}
+
+impl Freq {
+    pub fn new(repr: &str, d: Duration) -> Self {
+        Freq {
+            repr: repr.to_string(),
+            d,
+        }
     }
 }
 
@@ -129,7 +150,7 @@ impl Ty {
             Tuple(args) => args.iter().any(|el| el.is_error()),
             EventStream(ty) => ty.is_error(),
             Parameterized(ty, params) => ty.is_error() || params.iter().any(|e| e.is_error()),
-            TimedStream(ty) => ty.is_error(),
+            TimedStream(ty, _) => ty.is_error(),
             Option(ty) => ty.is_error(),
             _ => false,
         }
@@ -173,10 +194,7 @@ impl Ty {
                     .collect(),
             ),
             Ty::Option(t) => Ty::Option(Box::new(t.replace_params(infer_vars))),
-            Ty::Window(t, d) => Ty::Window(
-                Box::new(t.replace_params(infer_vars)),
-                Box::new(d.replace_params(infer_vars)),
-            ),
+            Ty::Window(t, d) => Ty::Window(Box::new(t.replace_params(infer_vars)), *d),
             Ty::Infer(_) => self.clone(),
             Ty::Constr(_) => self.clone(),
             _ if self.is_primitive() => self.clone(),
@@ -205,9 +223,9 @@ impl std::fmt::Display for Ty {
                 let joined: Vec<String> = params.iter().map(|e| format!("{}", e)).collect();
                 write!(f, "Paramaterized<{}, ({})>", ty, joined.join(", "))
             }
-            Ty::TimedStream(_) => unimplemented!(),
+            Ty::TimedStream(_, _) => unimplemented!(),
             Ty::Duration(d) => write!(f, "{}", d),
-            Ty::Window(t, d) => write!(f, "Window<{}, {}>", t, d),
+            Ty::Window(t, d) => write!(f, "Window<{}, {:?}>", t, d),
             Ty::Option(ty) => write!(f, "Option<{}>", ty),
             Ty::Tuple(inner) => {
                 let joined: Vec<String> = inner.iter().map(|e| format!("{}", e)).collect();

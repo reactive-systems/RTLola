@@ -3,6 +3,7 @@
 use super::parse::Ident;
 use ast_node::NodeId;
 use ast_node::Span;
+use std::time::Duration;
 
 /// The root Lola specification
 #[derive(Debug, Default)]
@@ -129,6 +130,66 @@ pub struct ExtendSpec {
 pub enum ExtendRate {
     Frequency(Box<Expression>, FreqUnit),
     Duration(Box<Expression>, TimeUnit),
+}
+
+impl Into<Duration> for &ExtendRate {
+    fn into(self) -> Duration {
+        use crate::ast::{ExtendRate, FreqUnit, LitKind, TimeUnit};
+        let (expr, factor) = match &self {
+            ExtendRate::Duration(expr, unit) => {
+                (
+                    expr,
+                    match unit {
+                        TimeUnit::NanoSecond => 1u64,
+                        TimeUnit::MicroSecond => 10u64.pow(3),
+                        TimeUnit::MilliSecond => 10u64.pow(6),
+                        TimeUnit::Second => 10u64.pow(9),
+                        TimeUnit::Minute => 10u64.pow(9) * 60,
+                        TimeUnit::Hour => 10u64.pow(9) * 60 * 60,
+                        TimeUnit::Day => 10u64.pow(9) * 60 * 60 * 24,
+                        TimeUnit::Week => 10u64.pow(9) * 60 * 24 * 24 * 7,
+                        TimeUnit::Year => 10u64.pow(9) * 60 * 24 * 24 * 7 * 365, // fits in u57
+                    },
+                )
+            }
+            ExtendRate::Frequency(expr, unit) => {
+                (
+                    expr,
+                    match unit {
+                        FreqUnit::MicroHertz => 10u64.pow(15), // fits in u50,
+                        FreqUnit::MilliHertz => 10u64.pow(12),
+                        FreqUnit::Hertz => 10u64.pow(9),
+                        FreqUnit::KiloHertz => 10u64.pow(6),
+                        FreqUnit::MegaHertz => 10u64.pow(3),
+                        FreqUnit::GigaHertz => 1u64,
+                    },
+                )
+            }
+        };
+        match &expr.kind {
+            ExpressionKind::Lit(l) => {
+                match l.kind {
+                    LitKind::Int(i) => {
+                        // TODO: Improve: Robust against overflows.
+                        let value = i as u128 * factor as u128; // Multiplication might fail.
+                        let secs = (value / 10u128.pow(9)) as u64; // Cast might fail.
+                        let nanos = (value % 10u128.pow(9)) as u32; // Perfectly safe cast to u32.
+                        Duration::new(secs, nanos)
+                    }
+                    LitKind::Float(f) => {
+                        // TODO: Improve: Robust against overflows and inaccuracies.
+                        let value = f * factor as f64;
+                        let secs = (value / 1_000_000_000f64) as u64;
+                        let nanos = (value % 1_000_000_000f64) as u32;
+                        Duration::new(secs, nanos)
+                    }
+                    _ => panic!(),
+                }
+            }
+
+            _ => panic!(),
+        }
+    }
 }
 
 #[derive(AstNode, Debug)]
