@@ -823,8 +823,14 @@ impl Unifier {
             (self.table.probe_value(left), self.table.probe_value(right))
         {
             // if both variables have values, we try to unify them recursively
-            if self.types_equal_rec(&ty_l, &ty_r) {
+            if let Some(ty) = self.types_equal_rec(&ty_l, &ty_r) {
                 // proceed with unification
+                self.table
+                    .unify_var_value(left, InferVarVal::Concretize(ty.clone()))
+                    .expect("overwrite cannot fail");
+                self.table
+                    .unify_var_value(right, InferVarVal::Concretize(ty))
+                    .expect("overwrite cannot fail");
             } else if self.types_coerce(&ty_l, &ty_r) {
                 return Ok(());
             } else {
@@ -850,9 +856,8 @@ impl Unifier {
             return Err(InferError::CyclicDependency(var, ty));
         }
         if let InferVarVal::Known(val) = self.table.probe_value(var) {
-            if self.types_equal_rec(&val, &ty) {
-                //self.table.unify_var_value(var, InferVarVal::Known(ty))
-                return Ok(());
+            if let Some(ty) = self.types_equal_rec(&val, &ty) {
+                self.table.unify_var_value(var, InferVarVal::Concretize(ty))
             } else if self.types_coerce(&val, &ty) {
                 return Ok(());
             } else {
@@ -880,53 +885,111 @@ impl Unifier {
     }
 
     /// Checks recursively if types are equal. Tries to unify type parameters if possible.
-    /// Note: If you change this function, you have to change `Ty::unify` as well.
-    fn types_equal_rec(&mut self, left: &Ty, right: &Ty) -> bool {
+    /// Returns the unified, i.e., more conrete type if possible.
+    fn types_equal_rec(&mut self, left: &Ty, right: &Ty) -> Option<Ty> {
         trace!("comp {} {}", left, right);
         match (left, right) {
             (&Ty::Infer(l), &Ty::Infer(r)) => {
                 if self.table.unioned(l, r) {
-                    true
+                    Some(Ty::Infer(l))
                 } else {
                     // try to unify values
-                    self.unify_var_var(l, r).is_ok()
+                    if self.unify_var_var(l, r).is_ok() {
+                        Some(Ty::Infer(l))
+                    } else {
+                        None
+                    }
                 }
             }
             (&Ty::Infer(var), ty) => {
                 // try to unify
-                self.unify_var_ty(var, ty.clone()).is_ok()
+                if self.unify_var_ty(var, ty.clone()).is_ok() {
+                    Some(Ty::Infer(var))
+                } else {
+                    None
+                }
             }
             (ty, &Ty::Infer(var)) => {
                 // try to unify
-                self.unify_var_ty(var, ty.clone()).is_ok()
+                if self.unify_var_ty(var, ty.clone()).is_ok() {
+                    Some(Ty::Infer(var))
+                } else {
+                    None
+                }
             }
-            (Ty::Constr(constr_l), Ty::Constr(constr_r)) => {
-                constr_l.conjunction(constr_r).is_some()
+            (Ty::Constr(constr_l), Ty::Constr(constr_r)) => constr_l
+                .conjunction(constr_r)
+                .map(|c| Ty::Constr(c.clone())),
+            (Ty::Constr(constr), other) => {
+                if other.satisfies(constr) {
+                    Some(other.clone())
+                } else {
+                    None
+                }
             }
-            (Ty::Constr(constr), other) => other.satisfies(constr),
-            (other, Ty::Constr(constr)) => other.satisfies(constr),
-            (Ty::Option(l), Ty::Option(r)) => self.types_equal_rec(l, r),
-            (Ty::EventStream(l), Ty::EventStream(r)) => self.types_equal_rec(l, r),
+            (other, Ty::Constr(constr)) => {
+                if other.satisfies(constr) {
+                    Some(other.clone())
+                } else {
+                    None
+                }
+            }
+            (Ty::Option(l), Ty::Option(r)) => {
+                self.types_equal_rec(l, r).map(|ty| Ty::Option(ty.into()))
+            }
+            (Ty::EventStream(l), Ty::EventStream(r)) => self
+                .types_equal_rec(l, r)
+                .map(|ty| Ty::EventStream(ty.into())),
             (Ty::Parameterized(l, param_l), Ty::Parameterized(r, param_r)) => {
+                if param_l.len() != param_r.len() {
+                    return None;
+                }
+                let params: Vec<Ty> = param_l
+                    .iter()
+                    .zip(param_r)
+                    .flat_map(|(l, r)| self.types_equal_rec(l, r))
+                    .collect();
+                if params.len() != param_l.len() {
+                    return None;
+                }
                 self.types_equal_rec(l, r)
-                    && param_l
-                        .iter()
-                        .zip(param_r)
-                        .all(|(el_l, el_r)| self.types_equal_rec(el_l, el_r))
+                    .map(|ty| Ty::Parameterized(ty.into(), params))
             }
             (Ty::Tuple(l), Ty::Tuple(r)) => {
                 if l.len() != r.len() {
-                    return false;
+                    return None;
                 }
-                l.iter()
+                let params: Vec<Ty> = l
+                    .iter()
                     .zip(r)
-                    .all(|(e_l, e_r)| self.types_equal_rec(e_l, e_r))
+                    .flat_map(|(l, r)| self.types_equal_rec(l, r))
+                    .collect();
+                if params.len() != l.len() {
+                    return None;
+                }
+                Some(Ty::Tuple(params))
             }
-            (Ty::TimedStream(_, _), Ty::TimedStream(_, _)) => unimplemented!(),
+            (Ty::TimedStream(ty_l, d_l), Ty::TimedStream(ty_r, d_r)) => {
+                if d_l != d_r {
+                    return None;
+                }
+                self.types_equal_rec(ty_l, ty_r)
+                    .map(|ty| Ty::TimedStream(ty.into(), d_l.clone()))
+            }
             (Ty::Window(ty_l, d_l), Ty::Window(ty_r, d_r)) => {
-                self.types_equal_rec(ty_l, ty_r) && d_l == d_r
+                if d_l != d_r {
+                    return None;
+                }
+                self.types_equal_rec(ty_l, ty_r)
+                    .map(|ty| Ty::Window(ty.into(), *d_l))
             }
-            (l, r) => l == r,
+            (l, r) => {
+                if l == r {
+                    Some(l.clone())
+                } else {
+                    None
+                }
+            }
         }
     }
 
@@ -938,7 +1001,7 @@ impl Unifier {
 
         // Ty -> EventStream<Ty> is always possible
         if let Ty::EventStream(ty) = left {
-            if self.types_equal_rec(ty, right) {
+            if self.types_equal_rec(ty, right).is_some() {
                 self.table.commit(snapshot);
                 return true;
             } else {
@@ -952,7 +1015,7 @@ impl Unifier {
         if let Ty::TimedStream(ty_l, _) = left {
             match right {
                 Ty::Window(ty_r, _) => {
-                    if self.types_equal_rec(ty_l, ty_r) {
+                    if self.types_equal_rec(ty_l, ty_r).is_some() {
                         self.table.commit(snapshot);
                         return true;
                     } else {
@@ -961,7 +1024,7 @@ impl Unifier {
                     }
                 }
                 ty_r => {
-                    if self.types_equal_rec(ty_l, ty_r) {
+                    if self.types_equal_rec(ty_l, ty_r).is_some() {
                         self.table.commit(snapshot);
                         return true;
                     } else {
@@ -1081,6 +1144,8 @@ impl UnifyKey for InferVar {
 pub enum InferVarVal {
     Known(Ty),
     Unknown,
+    /// Used to overwrite known values
+    Concretize(Ty),
 }
 
 /// Implements how the types are merged during unification
@@ -1091,78 +1156,15 @@ impl UnifyValue for InferVarVal {
     fn unify_values(left: &Self, right: &Self) -> Result<Self, InferError> {
         use self::InferVarVal::*;
         match (left, right) {
-            (Known(ty_l), Known(ty_r)) => Ok(Known(ty_l.unify(ty_r)?)),
             (Known(_), Unknown) => Ok(left.clone()),
             (Unknown, Known(_)) => Ok(right.clone()),
             (Unknown, Unknown) => Ok(Unknown),
-        }
-    }
-}
-
-impl Ty {
-    /// Merges two types.
-    /// `types_equal_rec` has to be called before.
-    fn unify(&self, other: &Ty) -> Result<Ty, InferError> {
-        trace!("unify {} {}", self, other);
-        match (self, other) {
-            (&Ty::Infer(_), &Ty::Infer(_)) => Ok(self.clone()),
-            (&Ty::Infer(_), _) => Ok(other.clone()),
-            (_, &Ty::Infer(_)) => Ok(self.clone()),
-            (Ty::Constr(constr_l), Ty::Constr(constr_r)) => {
-                if let Some(combined) = constr_l.conjunction(constr_r) {
-                    Ok(Ty::Constr(combined.clone()))
-                } else {
-                    Err(InferError::ConflictingConstraint(
-                        constr_l.clone(),
-                        constr_r.clone(),
-                    ))
-                }
+            (Known(_), Concretize(ty)) => Ok(Known(ty.clone())),
+            (Known(l), Known(r)) => {
+                assert!(l == r);
+                Ok(left.clone())
             }
-            (Ty::Constr(constr), other) => {
-                if other.satisfies(constr) {
-                    Ok(other.clone())
-                } else {
-                    Err(InferError::TypeMismatch(self.clone(), other.clone()))
-                }
-            }
-            (other, Ty::Constr(constr)) => {
-                if other.satisfies(constr) {
-                    Ok(other.clone())
-                } else {
-                    Err(InferError::TypeMismatch(self.clone(), other.clone()))
-                }
-            }
-            (Ty::Option(l), Ty::Option(r)) => Ok(Ty::Option(Box::new(l.unify(r)?))),
-            (Ty::EventStream(l), Ty::EventStream(r)) => Ok(Ty::EventStream(Box::new(l.unify(r)?))),
-            (Ty::Parameterized(l, param_l), Ty::Parameterized(r, param_r)) => {
-                if param_l.len() != param_r.len() {
-                    return Err(InferError::TypeMismatch(self.clone(), other.clone()));
-                }
-                let mut param = Vec::new();
-                for (el_l, el_r) in param_l.iter().zip(param_r) {
-                    param.push(el_l.unify(el_r)?);
-                }
-                Ok(Ty::Parameterized(Box::new(l.unify(r)?), param))
-            }
-            (Ty::Tuple(l), Ty::Tuple(r)) => {
-                if l.len() != r.len() {
-                    return Err(InferError::TypeMismatch(self.clone(), other.clone()));
-                }
-                let mut inner = Vec::new();
-                for (e_l, e_r) in l.iter().zip(r) {
-                    inner.push(e_l.unify(e_r)?);
-                }
-                Ok(Ty::Tuple(inner))
-            }
-            (Ty::TimedStream(_, _), Ty::TimedStream(_, _)) => unimplemented!(),
-            (Ty::Window(_, _), Ty::Window(_, _)) => unimplemented!(),
-            (l, r) => {
-                if l == r {
-                    Ok(self.clone())
-                } else {
-                    Err(InferError::TypeMismatch(self.clone(), other.clone()))
-                }
-            }
+            _ => unreachable!("unify values {:?} {:?}", left, right),
         }
     }
 }

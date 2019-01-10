@@ -3,7 +3,6 @@
 //! It is inspired by https://doc.rust-lang.org/nightly/nightly-rustc/rustc/ty/index.html
 
 use crate::analysis::typing::InferVar;
-use crate::ast::TimeUnit;
 use std::time::Duration;
 
 /// Representation of types
