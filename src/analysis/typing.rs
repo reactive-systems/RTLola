@@ -459,6 +459,52 @@ impl<'a> TypeAnalysis<'a> {
                         })?;
                 }
             }
+            // real-time window
+            Lookup(stream, Offset::RealTimeOffset(off_expr, unit), Some(aggregation)) => {
+                assert!(
+                    stream.arguments.is_empty(),
+                    "parameterized timed streams currently not implemented"
+                );
+                let inner_var = self.unifier.new_var();
+                // `stream` is either timed or untimed
+                let target = Ty::Constr(TypeConstraint::Stream(Ty::Infer(inner_var).into()));
+
+                // need to derive "inner" type `?1`
+                let decl = self.declarations[&stream._id];
+                let decl_var: InferVar = match decl {
+                    Declaration::In(input) => self.var_lookup[&input._id],
+                    Declaration::Out(output) => self.var_lookup[&output._id],
+                    //Declaration::Const(constant) => self.var_lookup[&constant.ty._id],
+                    _ => unreachable!(),
+                };
+                match self
+                    .unifier
+                    .get_type(decl_var)
+                    .expect("streams have types at this point")
+                {
+                    Ty::EventStream(inner) => {
+                        self.unifier
+                            .unify_var_ty(
+                                var,
+                                Ty::Window(Ty::Option(inner).into(), Duration::from_secs(1)),
+                            )
+                            .map_err(|err| {
+                                self.handle_error(err, expr._span);
+                            })?;
+                    }
+                    Ty::TimedStream(inner, _) => {
+                        self.unifier
+                            .unify_var_ty(
+                                var,
+                                Ty::Window(Ty::Option(inner).into(), Duration::from_secs(1)),
+                            )
+                            .map_err(|err| {
+                                self.handle_error(err, expr._span);
+                            })?;
+                    }
+                    _ => unreachable!(),
+                }
+            }
             Default(left, right) => {
                 match self.unifier.get_type(var) {
                     Some(Ty::EventStream(inner)) => {
@@ -908,6 +954,31 @@ impl Unifier {
             }
         }
 
+        // Window<ty> -> TimedStream<ty>
+        // ty -> TimedStream<ty>
+        if let Ty::TimedStream(ty_l, _) = left {
+            match right {
+                Ty::Window(ty_r, _) => {
+                    if self.types_equal_rec(ty_l, ty_r) {
+                        self.table.commit(snapshot);
+                        return true;
+                    } else {
+                        self.table.rollback_to(snapshot);
+                        return false;
+                    }
+                }
+                ty_r => {
+                    if self.types_equal_rec(ty_l, ty_r) {
+                        self.table.commit(snapshot);
+                        return true;
+                    } else {
+                        self.table.rollback_to(snapshot);
+                        return false;
+                    }
+                }
+            }
+        }
+
         // bit-width increase is also allowed
         match right {
             Ty::Int(lower) => match left {
@@ -950,6 +1021,7 @@ impl Unifier {
                 params.into_iter().map(|e| self.replace_constr(e)).collect(),
             ),
             Ty::Option(ty) => Ty::Option(Box::new(self.replace_constr(*ty))),
+            Ty::TimedStream(ty, freq) => Ty::TimedStream(self.replace_constr(*ty).into(), freq),
             Ty::Window(ty, d) => Ty::Window(Box::new(self.replace_constr(*ty)), d),
             _ if ty.is_primitive() => ty,
             Ty::Constr(c) => match c.has_default() {
