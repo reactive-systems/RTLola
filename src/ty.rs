@@ -71,11 +71,26 @@ impl std::fmt::Display for Freq {
 }
 
 impl Freq {
-    pub fn new(repr: &str, d: Duration) -> Self {
+    pub(crate) fn new(repr: &str, d: Duration) -> Self {
         Freq {
             repr: repr.to_string(),
             d,
         }
+    }
+
+    const NANOS_PER_SEC: u32 = 1_000_000_000;
+
+    pub(crate) fn is_multiple_of(&self, other: &Freq) -> bool {
+        if self.d < other.d {
+            return false;
+        }
+        // TODO: replace by self.as_nanos() when stabilized
+        let left_nanos =
+            self.d.as_secs() as u128 * Freq::NANOS_PER_SEC as u128 + self.d.subsec_nanos() as u128;
+        let right_nanos = other.d.as_secs() as u128 * Freq::NANOS_PER_SEC as u128
+            + other.d.subsec_nanos() as u128;
+        assert!(left_nanos >= right_nanos);
+        left_nanos % right_nanos == 0
     }
 }
 

@@ -1011,11 +1011,25 @@ impl Unifier {
         }
 
         // Window<ty> -> TimedStream<ty>
+        // TimedStream<ty, freq_l> -> TimedStream<ty, freq_r> if freq_r is multiple of freq_l
         // ty -> TimedStream<ty>
-        if let Ty::TimedStream(ty_l, _) = left {
+        if let Ty::TimedStream(ty_l, freq_l) = left {
             match right {
                 Ty::Window(ty_r, _) => {
                     if self.types_equal_rec(ty_l, ty_r).is_some() {
+                        self.table.commit(snapshot);
+                        return true;
+                    } else {
+                        self.table.rollback_to(snapshot);
+                        return false;
+                    }
+                }
+                Ty::TimedStream(ty_r, freq_r) => {
+                    if self.types_equal_rec(ty_l, ty_r).is_none() {
+                        self.table.rollback_to(snapshot);
+                        return false;
+                    }
+                    if freq_r.is_multiple_of(freq_l) {
                         self.table.commit(snapshot);
                         return true;
                     } else {
@@ -1654,6 +1668,24 @@ mod tests {
     #[test]
     fn test_window_faulty() {
         let spec = "input in: Int8\n output out: Bool {extend @5Hz} := in[3s, Σ] ? 5";
+        assert_eq!(1, num_type_errors(spec));
+    }
+
+    #[test]
+    fn test_timed() {
+        let spec = "output o1: Bool {extend @10Hz}:= false\noutput o2: Bool {extend @10Hz}:= o1";
+        assert_eq!(0, num_type_errors(spec));
+    }
+
+    #[test]
+    fn test_timed_faster() {
+        let spec = "output o1: Bool {extend @20Hz}:= false\noutput o2: Bool {extend @10Hz}:= o1";
+        assert_eq!(0, num_type_errors(spec));
+    }
+
+    #[test]
+    fn test_timed_incompatible() {
+        let spec = "output o1: Bool {extend @3Hz}:= false\noutput o2: Bool {extend @10Hz}:= o1";
         assert_eq!(1, num_type_errors(spec));
     }
 
