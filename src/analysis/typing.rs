@@ -297,6 +297,9 @@ impl<'a> TypeAnalysis<'a> {
             Ty::EventStream(_) => {
                 self.infer_expression(&output.expression, Some(Ty::Infer(out_var)))
             }
+            Ty::TimedStream(_, _) => {
+                self.infer_expression(&output.expression, Some(Ty::Infer(out_var)))
+            }
             _ => unreachable!(),
         }
     }
@@ -321,6 +324,7 @@ impl<'a> TypeAnalysis<'a> {
     }
 
     fn infer_expression(&mut self, expr: &'a Expression, target: Option<Ty>) -> Result<(), ()> {
+        trace!("infer expression {}", expr);
         let var = self.new_var(expr._id);
         if let Some(target_ty) = &target {
             self.unifier
@@ -456,23 +460,44 @@ impl<'a> TypeAnalysis<'a> {
                 }
             }
             Default(left, right) => {
-                // constraints
-                // expr = EventStream<new_var>
-                // left = EventStream<Option<new_var>>
-                // right = EventStream<new_var>
-                let new_var = self.unifier.new_var();
-                self.unifier
-                    .unify_var_ty(var, Ty::EventStream(Ty::Infer(new_var).into()))
-                    .map_err(|err| {
-                        self.handle_error(err, expr._span);
-                    })?;
-                self.infer_expression(
-                    left,
-                    Some(Ty::EventStream(
-                        Ty::Option(Box::new(Ty::Infer(new_var))).into(),
-                    )),
-                )?;
-                self.infer_expression(right, Some(Ty::EventStream(Ty::Infer(new_var).into())))?;
+                match self.unifier.get_type(var) {
+                    Some(Ty::EventStream(inner)) => {
+                        self.infer_expression(
+                            left,
+                            Some(Ty::EventStream(Ty::Option(inner.clone()).into())),
+                        )?;
+                        self.infer_expression(right, Some(Ty::EventStream(inner)))?;
+                    }
+                    Some(Ty::TimedStream(inner, freq)) => {
+                        self.infer_expression(
+                            left,
+                            Some(Ty::TimedStream(
+                                Ty::Option(inner.clone()).into(),
+                                freq.clone(),
+                            )),
+                        )?;
+                        self.infer_expression(right, Some(Ty::TimedStream(inner, freq)))?;
+                    }
+                    _ => {
+                        // default to EventStreams, i.e., when no info about target stream is known
+                        let new_var = self.unifier.new_var();
+                        self.unifier
+                            .unify_var_ty(var, Ty::EventStream(Ty::Infer(new_var).into()))
+                            .map_err(|err| {
+                                self.handle_error(err, expr._span);
+                            })?;
+                        self.infer_expression(
+                            left,
+                            Some(Ty::EventStream(
+                                Ty::Option(Box::new(Ty::Infer(new_var))).into(),
+                            )),
+                        )?;
+                        self.infer_expression(
+                            right,
+                            Some(Ty::EventStream(Ty::Infer(new_var).into())),
+                        )?;
+                    }
+                }
             }
             Function(_, types, params) => {
                 let decl = self.declarations[&expr._id];
@@ -809,7 +834,7 @@ impl Unifier {
                 self.check_occurrence(var, &ty)
                     || params.iter().any(|el| self.check_occurrence(var, el))
             }
-            Ty::TimedStream(_, _) => unimplemented!(),
+            Ty::TimedStream(ty, _) => self.check_occurrence(var, &ty),
             Ty::Tuple(t) => t.iter().any(|e| self.check_occurrence(var, e)),
             _ => false,
         }
@@ -836,11 +861,11 @@ impl Unifier {
                 // try to unify
                 self.unify_var_ty(var, ty.clone()).is_ok()
             }
-            (Ty::Constr(constr_l), &Ty::Constr(constr_r)) => {
+            (Ty::Constr(constr_l), Ty::Constr(constr_r)) => {
                 constr_l.conjunction(constr_r).is_some()
             }
-            (&Ty::Constr(constr), other) => other.satisfies(constr),
-            (other, &Ty::Constr(constr)) => other.satisfies(constr),
+            (Ty::Constr(constr), other) => other.satisfies(constr),
+            (other, Ty::Constr(constr)) => other.satisfies(constr),
             (Ty::Option(l), Ty::Option(r)) => self.types_equal_rec(l, r),
             (Ty::EventStream(l), Ty::EventStream(r)) => self.types_equal_rec(l, r),
             (Ty::Parameterized(l, param_l), Ty::Parameterized(r, param_r)) => {
@@ -956,6 +981,7 @@ impl Unifier {
             },
             Ty::Tuple(t) => Ty::Tuple(t.into_iter().map(|el| self.normalize_ty(el)).collect()),
             Ty::EventStream(ty) => Ty::EventStream(Box::new(self.normalize_ty(*ty))),
+            Ty::TimedStream(ty, freq) => Ty::TimedStream(self.normalize_ty(*ty).into(), freq),
             Ty::Parameterized(ty, params) => Ty::Parameterized(
                 Box::new(self.normalize_ty(*ty)),
                 params.into_iter().map(|e| self.normalize_ty(e)).collect(),
@@ -971,7 +997,7 @@ impl Unifier {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Hash, Copy, Clone)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Copy, Clone)]
 pub struct InferVar(u32);
 
 // used in UnifcationTable
@@ -1019,21 +1045,24 @@ impl Ty {
             (&Ty::Infer(_), &Ty::Infer(_)) => Ok(self.clone()),
             (&Ty::Infer(_), _) => Ok(other.clone()),
             (_, &Ty::Infer(_)) => Ok(self.clone()),
-            (&Ty::Constr(constr_l), &Ty::Constr(constr_r)) => {
+            (Ty::Constr(constr_l), Ty::Constr(constr_r)) => {
                 if let Some(combined) = constr_l.conjunction(constr_r) {
-                    Ok(Ty::Constr(combined))
+                    Ok(Ty::Constr(combined.clone()))
                 } else {
-                    Err(InferError::ConflictingConstraint(constr_l, constr_r))
+                    Err(InferError::ConflictingConstraint(
+                        constr_l.clone(),
+                        constr_r.clone(),
+                    ))
                 }
             }
-            (&Ty::Constr(constr), other) => {
+            (Ty::Constr(constr), other) => {
                 if other.satisfies(constr) {
                     Ok(other.clone())
                 } else {
                     Err(InferError::TypeMismatch(self.clone(), other.clone()))
                 }
             }
-            (other, &Ty::Constr(constr)) => {
+            (other, Ty::Constr(constr)) => {
                 if other.satisfies(constr) {
                     Ok(other.clone())
                 } else {

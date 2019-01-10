@@ -7,7 +7,7 @@ use crate::ast::TimeUnit;
 use std::time::Duration;
 
 /// Representation of types
-#[derive(Debug, PartialEq, Eq, Clone, Hash)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Clone, Hash)]
 pub enum Ty {
     Bool,
     Int(IntTy),
@@ -60,7 +60,7 @@ pub enum FloatTy {
 }
 use self::FloatTy::*;
 
-#[derive(Debug, PartialEq, Eq, Clone, Hash)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Clone, Hash)]
 pub struct DurationTy {
     repr: String,
     d: Duration,
@@ -115,19 +115,19 @@ impl Ty {
         PRIMITIVE_TYPES.iter()
     }
 
-    pub(crate) fn satisfies(&self, constraint: TypeConstraint) -> bool {
+    pub(crate) fn satisfies(&self, constraint: &TypeConstraint) -> bool {
         use self::Ty::*;
         use self::TypeConstraint::*;
         match constraint {
             Unconstrained => true,
             Comparable => self.is_primitive(),
             Equatable => self.is_primitive(),
-            Numeric => self.satisfies(Integer) || self.satisfies(FloatingPoint),
+            Numeric => self.satisfies(&Integer) || self.satisfies(&FloatingPoint),
             FloatingPoint => match self {
                 Float(_) => true,
                 _ => false,
             },
-            Integer => self.satisfies(SignedInteger) || self.satisfies(UnsignedInteger),
+            Integer => self.satisfies(&SignedInteger) || self.satisfies(&UnsignedInteger),
             SignedInteger => match self {
                 Int(_) => true,
                 _ => false,
@@ -138,6 +138,11 @@ impl Ty {
             },
             TypeConstraint::Duration => match self {
                 Ty::Duration(_) => true,
+                _ => false,
+            },
+            TypeConstraint::Stream(ty_l) => match self {
+                Ty::EventStream(ty) => ty == ty_l,
+                Ty::TimedStream(ty, _) => ty == ty_l,
                 _ => false,
             },
         }
@@ -223,7 +228,7 @@ impl std::fmt::Display for Ty {
                 let joined: Vec<String> = params.iter().map(|e| format!("{}", e)).collect();
                 write!(f, "Paramaterized<{}, ({})>", ty, joined.join(", "))
             }
-            Ty::TimedStream(_, _) => unimplemented!(),
+            Ty::TimedStream(ty, freq) => write!(f, "TimedStream<{}, {}>", ty, freq),
             Ty::Duration(d) => write!(f, "{}", d),
             Ty::Window(t, d) => write!(f, "Window<{}, {:?}>", t, d),
             Ty::Option(ty) => write!(f, "Option<{}>", ty),
@@ -239,7 +244,7 @@ impl std::fmt::Display for Ty {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd)]
 pub enum TypeConstraint {
     SignedInteger,
     UnsignedInteger,
@@ -254,6 +259,8 @@ pub enum TypeConstraint {
     Comparable,
     /// Types that represents durations, e.g., `1s`
     Duration,
+    /// A stream of given type
+    Stream(Box<Ty>),
     Unconstrained,
 }
 
@@ -268,7 +275,10 @@ impl TypeConstraint {
         }
     }
 
-    pub(crate) fn conjunction(self, other: TypeConstraint) -> Option<TypeConstraint> {
+    pub(crate) fn conjunction<'a>(
+        &'a self,
+        other: &'a TypeConstraint,
+    ) -> Option<&'a TypeConstraint> {
         use self::TypeConstraint::*;
         if self > other {
             return other.conjunction(self);
@@ -290,6 +300,7 @@ impl TypeConstraint {
             SignedInteger => None,
             UnsignedInteger => None,
             Duration => None,
+            Stream(_) => None,
         }
     }
 }
@@ -306,6 +317,7 @@ impl std::fmt::Display for TypeConstraint {
             Equatable => write!(f, "equatable type"),
             Comparable => write!(f, "comparable type"),
             Duration => write!(f, "duration"),
+            Stream(ty) => write!(f, "Stream<{}>", ty),
             Unconstrained => write!(f, "unconstrained type"),
         }
     }
