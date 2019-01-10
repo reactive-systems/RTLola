@@ -228,13 +228,6 @@ impl<'a> TypeAnalysis<'a> {
                     .unify_var_ty(ty_var, ty)
                     .map_err(|err| self.handle_error(err, ast_ty._span))
             }
-            &TypeKind::Duration(val, unit) => {
-                let ty = Ty::new_duration(val, unit);
-                // ?ty_var = `ty`
-                self.unifier
-                    .unify_var_ty(ty_var, ty)
-                    .map_err(|err| self.handle_error(err, ast_ty._span))
-            }
             _ => unreachable!(),
         }
     }
@@ -1029,7 +1022,6 @@ impl Unifier {
                 None => Ty::Error,
             },
             Ty::Param(_, _) => ty,
-            Ty::Duration(_) => ty,
             _ => unreachable!("cannot replace_constr for {}", ty),
         }
     }
@@ -1063,7 +1055,6 @@ impl Unifier {
             _ if ty.is_primitive() => ty,
             Ty::Constr(_) => ty,
             Ty::Param(_, _) => ty,
-            Ty::Duration(_) => ty,
             _ => unreachable!("cannot normalize {}", ty),
         }
     }

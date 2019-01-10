@@ -22,7 +22,6 @@ pub enum Ty {
     /// A parameterized stream
     Parameterized(Box<Ty>, Vec<Ty>),
     TimedStream(Box<Ty>, Freq),
-    Duration(DurationTy),
     /// Representation of a sliding window
     Window(Box<Ty>, Duration),
     /// an optional value type, e.g., accessing a stream with offset -1
@@ -59,18 +58,6 @@ pub enum FloatTy {
     F64,
 }
 use self::FloatTy::*;
-
-#[derive(Debug, PartialEq, Eq, PartialOrd, Clone, Hash)]
-pub struct DurationTy {
-    repr: String,
-    d: Duration,
-}
-
-impl std::fmt::Display for DurationTy {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}", self.repr)
-    }
-}
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Hash)]
 pub struct Freq {
@@ -136,10 +123,6 @@ impl Ty {
                 UInt(_) => true,
                 _ => false,
             },
-            TypeConstraint::Duration => match self {
-                Ty::Duration(_) => true,
-                _ => false,
-            },
             TypeConstraint::Stream(ty_l) => match self {
                 Ty::EventStream(ty) => ty == ty_l,
                 Ty::TimedStream(ty, _) => ty == ty_l,
@@ -167,24 +150,6 @@ impl Ty {
             Bool | Int(_) | UInt(_) | Float(_) | String => true,
             _ => false,
         }
-    }
-
-    pub(crate) fn new_duration(val: u32, unit: TimeUnit) -> Ty {
-        let d = match unit {
-            TimeUnit::NanoSecond => Duration::from_nanos(val.into()),
-            TimeUnit::MicroSecond => Duration::from_micros(val.into()),
-            TimeUnit::MilliSecond => Duration::from_millis(val.into()),
-            TimeUnit::Second => Duration::from_secs(val.into()),
-            TimeUnit::Minute => Duration::from_secs(u64::from(val) * 60),
-            TimeUnit::Hour => Duration::from_secs(u64::from(val) * 60 * 60),
-            TimeUnit::Day => Duration::from_secs(u64::from(val) * 60 * 60 * 24),
-            TimeUnit::Week => Duration::from_secs(u64::from(val) * 60 * 60 * 24 * 7),
-            TimeUnit::Year => Duration::from_secs(u64::from(val) * 60 * 60 * 24 * 365),
-        };
-        Ty::Duration(DurationTy {
-            repr: format!("{}{}", val, unit),
-            d,
-        })
     }
 
     pub(crate) fn replace_params(&self, infer_vars: &[InferVar]) -> Ty {
@@ -229,7 +194,6 @@ impl std::fmt::Display for Ty {
                 write!(f, "Paramaterized<{}, ({})>", ty, joined.join(", "))
             }
             Ty::TimedStream(ty, freq) => write!(f, "TimedStream<{}, {}>", ty, freq),
-            Ty::Duration(d) => write!(f, "{}", d),
             Ty::Window(t, d) => write!(f, "Window<{}, {:?}>", t, d),
             Ty::Option(ty) => write!(f, "Option<{}>", ty),
             Ty::Tuple(inner) => {
@@ -257,8 +221,6 @@ pub enum TypeConstraint {
     Equatable,
     /// Types that can be ordered, i.e., implement `<`, `>`,
     Comparable,
-    /// Types that represents durations, e.g., `1s`
-    Duration,
     /// A stream of given type
     Stream(Box<Ty>),
     Unconstrained,
@@ -299,7 +261,6 @@ impl TypeConstraint {
             FloatingPoint => None,
             SignedInteger => None,
             UnsignedInteger => None,
-            Duration => None,
             Stream(_) => None,
         }
     }
@@ -316,7 +277,6 @@ impl std::fmt::Display for TypeConstraint {
             Numeric => write!(f, "numeric type"),
             Equatable => write!(f, "equatable type"),
             Comparable => write!(f, "comparable type"),
-            Duration => write!(f, "duration"),
             Stream(ty) => write!(f, "Stream<{}>", ty),
             Unconstrained => write!(f, "unconstrained type"),
         }
