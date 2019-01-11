@@ -348,15 +348,41 @@ impl<'a> TypeAnalysis<'a> {
                     }
                     Declaration::In(input) => {
                         let in_var = self.var_lookup[&input._id];
-                        self.unifier
-                            .unify_var_var(var, in_var)
-                            .map_err(|err| self.handle_error(err, expr._span))?;
+
+                        if let Ty::EventStream(inner, _) = self
+                            .unifier
+                            .get_type(in_var)
+                            .expect("either TimedStream/EventStream")
+                        {
+                            // add input to dependencies
+                            // overwrite depdencency set of variable as we are only interested in direct dependencies
+                            self.unifier
+                                .unify_var_ty(var, Ty::EventStream(inner, vec![input._id]))
+                                .map_err(|err| self.handle_error(err, expr._span))?;
+                        } else {
+                            self.unifier
+                                .unify_var_var(var, in_var)
+                                .map_err(|err| self.handle_error(err, expr._span))?;
+                        }
                     }
                     Declaration::Out(output) => {
                         let out_var = self.var_lookup[&output._id];
-                        self.unifier
-                            .unify_var_var(var, out_var)
-                            .map_err(|err| self.handle_error(err, expr._span))?;
+
+                        if let Ty::EventStream(inner, _) = self
+                            .unifier
+                            .get_type(out_var)
+                            .expect("either TimedStream/EventStream")
+                        {
+                            // add output to dependencies
+                            // overwrite depdencency set of variable as we are only interested in direct dependencies
+                            self.unifier
+                                .unify_var_ty(var, Ty::EventStream(inner, vec![output._id]))
+                                .map_err(|err| self.handle_error(err, expr._span))?;
+                        } else {
+                            self.unifier
+                                .unify_var_var(var, out_var)
+                                .map_err(|err| self.handle_error(err, expr._span))?;
+                        }
                     }
                     _ => unreachable!(),
                 }
@@ -429,12 +455,12 @@ impl<'a> TypeAnalysis<'a> {
 
                 // need to derive "inner" type `?1`
                 let decl = self.declarations[&stream._id];
-                let decl_var: InferVar = match decl {
-                    Declaration::In(input) => self.var_lookup[&input._id],
-                    Declaration::Out(output) => self.var_lookup[&output._id],
-                    //Declaration::Const(constant) => self.var_lookup[&constant.ty._id],
+                let decl_id: NodeId = match decl {
+                    Declaration::In(input) => input._id,
+                    Declaration::Out(output) => output._id,
                     _ => unreachable!(),
                 };
+                let decl_var: InferVar = self.var_lookup[&decl_id];
                 self.unifier.unify_var_ty(decl_var, target).map_err(|err| {
                     self.handle_error(err, stream._span);
                 })?;
@@ -442,14 +468,20 @@ impl<'a> TypeAnalysis<'a> {
                     self.unifier
                         .unify_var_ty(
                             var,
-                            Ty::EventStream(Ty::Option(Ty::Infer(inner_var).into()).into(), vec![]),
+                            Ty::EventStream(
+                                Ty::Option(Ty::Infer(inner_var).into()).into(),
+                                vec![decl_id],
+                            ),
                         )
                         .map_err(|err| {
                             self.handle_error(err, expr._span);
                         })?;
                 } else {
                     self.unifier
-                        .unify_var_ty(var, Ty::EventStream(Ty::Infer(inner_var).into(), vec![]))
+                        .unify_var_ty(
+                            var,
+                            Ty::EventStream(Ty::Infer(inner_var).into(), vec![decl_id]),
+                        )
                         .map_err(|err| {
                             self.handle_error(err, expr._span);
                         })?;
@@ -1497,7 +1529,7 @@ mod tests {
         assert_eq!(0, num_type_errors(spec));
         assert_eq!(
             get_type(spec),
-            Ty::EventStream(Ty::UInt(UIntTy::U8).into(), vec![])
+            Ty::EventStream(Ty::UInt(UIntTy::U8).into(), vec![NodeId::from_u32(0)])
         );
     }
 
@@ -1513,7 +1545,7 @@ mod tests {
         assert_eq!(0, num_type_errors(spec));
         assert_eq!(
             get_type(spec),
-            Ty::EventStream(Ty::UInt(UIntTy::U8).into(), vec![])
+            Ty::EventStream(Ty::UInt(UIntTy::U8).into(), vec![NodeId::from_u32(0)])
         );
     }
 
@@ -1666,7 +1698,7 @@ mod tests {
         assert_eq!(0, num_type_errors(spec));
         assert_eq!(
             get_type(spec),
-            Ty::EventStream(Ty::UInt(UIntTy::U8).into(), vec![])
+            Ty::EventStream(Ty::UInt(UIntTy::U8).into(), vec![NodeId::from_u32(0)])
         );
     }
 
