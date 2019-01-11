@@ -3,6 +3,7 @@
 //! It is inspired by https://doc.rust-lang.org/nightly/nightly-rustc/rustc/ty/index.html
 
 use crate::analysis::typing::InferVar;
+use ast_node::NodeId;
 use std::time::Duration;
 
 /// Representation of types
@@ -17,7 +18,7 @@ pub enum Ty {
     String,
     Tuple(Vec<Ty>),
     /// An event stream of the given type
-    EventStream(Box<Ty>),
+    EventStream(Box<Ty>, Vec<NodeId>),
     /// A parameterized stream
     Parameterized(Box<Ty>, Vec<Ty>),
     TimedStream(Box<Ty>, Freq),
@@ -138,7 +139,7 @@ impl Ty {
                 _ => false,
             },
             TypeConstraint::Stream(ty_l) => match self {
-                Ty::EventStream(ty) => ty == ty_l,
+                Ty::EventStream(ty, _) => ty == ty_l,
                 Ty::TimedStream(ty, _) => ty == ty_l,
                 _ => false,
             },
@@ -150,7 +151,7 @@ impl Ty {
         match self {
             Error => true,
             Tuple(args) => args.iter().any(|el| el.is_error()),
-            EventStream(ty) => ty.is_error(),
+            EventStream(ty, _) => ty.is_error(),
             Parameterized(ty, params) => ty.is_error() || params.iter().any(|e| e.is_error()),
             TimedStream(ty, _) => ty.is_error(),
             Option(ty) => ty.is_error(),
@@ -169,7 +170,9 @@ impl Ty {
     pub(crate) fn replace_params(&self, infer_vars: &[InferVar]) -> Ty {
         match self {
             &Ty::Param(id, _) => Ty::Infer(infer_vars[id as usize]),
-            Ty::EventStream(t) => Ty::EventStream(Box::new(t.replace_params(infer_vars))),
+            Ty::EventStream(t, deps) => {
+                Ty::EventStream(t.replace_params(infer_vars).into(), deps.clone())
+            }
             Ty::Parameterized(t, params) => Ty::Parameterized(
                 Box::new(t.replace_params(infer_vars)),
                 params
@@ -202,7 +205,14 @@ impl std::fmt::Display for Ty {
             Ty::Float(F32) => write!(f, "Float32"),
             Ty::Float(F64) => write!(f, "Float64"),
             Ty::String => write!(f, "String"),
-            Ty::EventStream(ty) => write!(f, "EventStream<{}>", ty),
+            Ty::EventStream(ty, deps) => {
+                if deps.is_empty() {
+                    write!(f, "EventStream<{}>", ty)
+                } else {
+                    let joined: Vec<String> = deps.iter().map(|e| format!("{}", e)).collect();
+                    write!(f, "EventStream<{}, {}>", ty, joined.join(", "))
+                }
+            }
             Ty::Parameterized(ty, params) => {
                 let joined: Vec<String> = params.iter().map(|e| format!("{}", e)).collect();
                 write!(f, "Paramaterized<{}, ({})>", ty, joined.join(", "))
