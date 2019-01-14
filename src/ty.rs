@@ -34,6 +34,51 @@ pub enum Ty {
     Error,
 }
 
+/// Representation of types, consisting of two orthogonal information.
+/// * The `stream` type, storing information about timing of a stream (event-based, real-time).
+/// * The `value` type, storing information about the stored values (`Bool`, `UInt8`, etc.)
+#[derive(Debug, PartialEq, Eq, PartialOrd, Clone, Hash)]
+struct NewTy {
+    stream: StreamTy,
+    value: ValueTy,
+}
+
+#[derive(Debug, PartialEq, Eq, PartialOrd, Clone, Hash)]
+struct StreamTy {
+    parameters: Vec<ValueTy>,
+    timing: TimingInfo,
+}
+
+#[derive(Debug, PartialEq, Eq, PartialOrd, Clone, Hash)]
+enum TimingInfo {
+    /// An event stream with the given dependencies
+    Event(Vec<NodeId>),
+    // A real-time stream with given frequency
+    RealTime(Freq),
+    /// Used during type inference
+    Infer(InferVar),
+}
+
+#[derive(Debug, PartialEq, Eq, PartialOrd, Clone, Hash)]
+enum ValueTy {
+    Bool,
+    Int(IntTy),
+    UInt(UIntTy),
+    Float(FloatTy),
+    // an abstract data type, e.g., structs, enums, etc.
+    //Adt(AdtDef),
+    String,
+    Tuple(Vec<ValueTy>),
+    /// an optional value type, e.g., resulting from accessing a stream with offset -1
+    Option(Box<ValueTy>),
+    /// Used during type inference
+    Infer(InferVar),
+    Constr(TypeConstraint),
+    /// A reference to a generic parameter in a function declaration, e.g. `T` in `a<T>(x:T) -> T`
+    Param(u8, String),
+    Error,
+}
+
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Hash)]
 pub enum IntTy {
     I8,
