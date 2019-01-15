@@ -9,8 +9,8 @@
 use super::naming::{Declaration, DeclarationTable};
 use crate::ast::LolaSpec;
 use crate::ast::{
-    Constant, Expression, ExpressionKind, Input, LitKind, Literal, Offset, Output, Trigger, Type,
-    TypeKind,
+    Constant, Expression, ExpressionKind, Input, LitKind, Literal, Offset, Output, StreamInstance,
+    Trigger, Type, TypeKind, WindowOperation,
 };
 use crate::reporting::Handler;
 use crate::reporting::LabeledSpan;
@@ -460,135 +460,8 @@ impl<'a> TypeAnalysis<'a> {
                     &[left, right],
                 )?;
             }
-            // discrete offset
-            Lookup(stream, Offset::DiscreteOffset(off_expr), None) => {
-                // recursion
-                self.infer_expression(
-                    off_expr,
-                    Some(ValueTy::Constr(TypeConstraint::Integer)),
-                    StreamVarOrTy::Ty(StreamTy::new(TimingInfo::Event)),
-                )?;
-
-                let negative_offset = match &off_expr.kind {
-                    ExpressionKind::Lit(l) => match l.kind {
-                        LitKind::Int(i) => i < 0,
-                        _ => unreachable!("offset expressions have to be integers"),
-                    },
-                    _ => unreachable!("offset expressions have to be literal"),
-                };
-
-                // need to derive "inner" type
-                let decl = self.declarations[&stream._id];
-                let decl_id: NodeId = match decl {
-                    Declaration::In(input) => input._id,
-                    Declaration::Out(output) => output._id,
-                    _ => unreachable!(),
-                };
-                let decl_stream_var: StreamVar = self.stream_vars[&decl_id];
-                let decl_stream_type = self.stream_unifier.get_type(decl_stream_var).unwrap();
-
-                assert!(
-                    decl_stream_type.parameters.len() == stream.arguments.len(),
-                    "TODO: transform into error message"
-                );
-
-                let mut params = Vec::with_capacity(stream.arguments.len());
-                for (arg_expr, target) in stream.arguments.iter().zip(decl_stream_type.parameters) {
-                    self.infer_expression(
-                        arg_expr,
-                        Some(target.clone()),
-                        StreamVarOrTy::Ty(StreamTy::new(TimingInfo::Event)),
-                    )?;
-                    params.push(target);
-                }
-                let target = if !params.is_empty() {
-                    StreamTy::new_parametric(params, TimingInfo::Event)
-                } else {
-                    StreamTy::new(TimingInfo::Event)
-                };
-
-                // stream type
-
-                // ?decl_stream_var = target
-                self.stream_unifier
-                    .unify_var_ty(decl_stream_var, target)
-                    .map_err(|err| {
-                        self.handle_error(err, stream._span);
-                    })?;
-                // ?stream_var = Non-parametric Event
-                self.stream_unifier
-                    .unify_var_ty(stream_var, StreamTy::new(TimingInfo::Event))
-                    .map_err(|err| {
-                        self.handle_error(err, stream._span);
-                    })?;
-
-                // value type
-                // constraints
-                // off_expr = {integer}
-                // stream = ?inner
-                // if negative_offset || parametric { expr = Option<?inner> } else { expr = ?inner }
-                let decl_var: ValueVar = self.value_vars[&decl_id];
-                if negative_offset || !stream.arguments.is_empty() {
-                    self.unifier
-                        .unify_var_ty(var, ValueTy::Option(ValueTy::Infer(decl_var).into()))
-                        .map_err(|err| {
-                            self.handle_error(err, expr._span);
-                        })?;
-                } else {
-                    self.unifier.unify_var_var(var, decl_var).map_err(|err| {
-                        self.handle_error(err, expr._span);
-                    })?;
-                }
-            }
-            // real-time window
-            Lookup(stream, Offset::RealTimeOffset(off_expr, unit), Some(aggregation)) => {
-                assert!(
-                    stream.arguments.is_empty(),
-                    "parameterized timed streams currently not implemented"
-                );
-
-                // need to derive "inner" type
-                let decl = self.declarations[&stream._id];
-                let decl_id: NodeId = match decl {
-                    Declaration::In(input) => input._id,
-                    Declaration::Out(output) => output._id,
-                    _ => unreachable!(),
-                };
-
-                // stream type
-                let decl_var: StreamVar = self.stream_vars[&decl_id];
-                assert!(!self
-                    .stream_unifier
-                    .get_type(decl_var)
-                    .unwrap()
-                    .is_parametric());
-                match self
-                    .stream_unifier
-                    .get_type(stream_var)
-                    .expect("type has to be known at this point")
-                    .timing
-                {
-                    TimingInfo::RealTime(_) => {}
-                    _ => {
-                        self.handler.error_with_span(
-                            &format!("Sliding windows are only allowed in real-time streams"),
-                            LabeledSpan::new(
-                                expr._span,
-                                &format!("unexpected sliding window"),
-                                true,
-                            ),
-                        );
-                        return Err(());
-                    }
-                }
-
-                // value type
-                let decl_var: ValueVar = self.value_vars[&decl_id];
-                self.unifier
-                    .unify_var_ty(var, ValueTy::Option(ValueTy::Infer(decl_var).into()))
-                    .map_err(|err| {
-                        self.handle_error(err, expr._span);
-                    })?;
+            Lookup(stream, offset, aggregation) => {
+                self.infer_lookup_expr(var, stream_var, expr._span, stream, offset, aggregation)?
             }
             Default(left, right) => {
                 self.infer_expression(
@@ -718,6 +591,144 @@ impl<'a> TypeAnalysis<'a> {
             t => unimplemented!("expression `{:?}`", t),
         }
         Ok(())
+    }
+
+    fn infer_lookup_expr(
+        &mut self,
+        var: ValueVar,
+        stream_var: StreamVar,
+        span: Span,
+        stream: &'a StreamInstance,
+        offset: &'a Offset,
+        window_op: &Option<WindowOperation>,
+    ) -> Result<(), ()> {
+        match offset {
+            Offset::DiscreteOffset(off_expr) => {
+                // recursion
+                self.infer_expression(
+                    off_expr,
+                    Some(ValueTy::Constr(TypeConstraint::Integer)),
+                    StreamVarOrTy::Ty(StreamTy::new(TimingInfo::Event)),
+                )?;
+
+                let negative_offset = match &off_expr.kind {
+                    ExpressionKind::Lit(l) => match l.kind {
+                        LitKind::Int(i) => i < 0,
+                        _ => unreachable!("offset expressions have to be integers"),
+                    },
+                    _ => unreachable!("offset expressions have to be literal"),
+                };
+
+                // need to derive "inner" type
+                let decl = self.declarations[&stream._id];
+                let decl_id: NodeId = match decl {
+                    Declaration::In(input) => input._id,
+                    Declaration::Out(output) => output._id,
+                    _ => unreachable!(),
+                };
+                let decl_stream_var: StreamVar = self.stream_vars[&decl_id];
+                let decl_stream_type = self.stream_unifier.get_type(decl_stream_var).unwrap();
+
+                assert!(
+                    decl_stream_type.parameters.len() == stream.arguments.len(),
+                    "TODO: transform into error message"
+                );
+
+                let mut params = Vec::with_capacity(stream.arguments.len());
+                for (arg_expr, target) in stream.arguments.iter().zip(decl_stream_type.parameters) {
+                    self.infer_expression(
+                        arg_expr,
+                        Some(target.clone()),
+                        StreamVarOrTy::Ty(StreamTy::new(TimingInfo::Event)),
+                    )?;
+                    params.push(target);
+                }
+                let target = if !params.is_empty() {
+                    StreamTy::new_parametric(params, TimingInfo::Event)
+                } else {
+                    StreamTy::new(TimingInfo::Event)
+                };
+
+                // stream type
+
+                // ?decl_stream_var = target
+                self.stream_unifier
+                    .unify_var_ty(decl_stream_var, target)
+                    .map_err(|err| {
+                        self.handle_error(err, stream._span);
+                    })?;
+                // ?stream_var = Non-parametric Event
+                self.stream_unifier
+                    .unify_var_ty(stream_var, StreamTy::new(TimingInfo::Event))
+                    .map_err(|err| {
+                        self.handle_error(err, stream._span);
+                    })?;
+
+                // value type
+                // constraints
+                // off_expr = {integer}
+                // stream = ?inner
+                // if negative_offset || parametric { expr = Option<?inner> } else { expr = ?inner }
+                let decl_var: ValueVar = self.value_vars[&decl_id];
+                if negative_offset || !stream.arguments.is_empty() {
+                    self.unifier
+                        .unify_var_ty(var, ValueTy::Option(ValueTy::Infer(decl_var).into()))
+                        .map_err(|err| {
+                            self.handle_error(err, span);
+                        })
+                } else {
+                    self.unifier.unify_var_var(var, decl_var).map_err(|err| {
+                        self.handle_error(err, span);
+                    })
+                }
+            }
+            Offset::RealTimeOffset(off_expr, unit) => {
+                assert!(
+                    stream.arguments.is_empty(),
+                    "parameterized timed streams currently not implemented"
+                );
+                assert!(window_op.is_some(), "real-time offsets are not implemented");
+
+                // need to derive "inner" type
+                let decl = self.declarations[&stream._id];
+                let decl_id: NodeId = match decl {
+                    Declaration::In(input) => input._id,
+                    Declaration::Out(output) => output._id,
+                    _ => unreachable!(),
+                };
+
+                // stream type
+                let decl_var: StreamVar = self.stream_vars[&decl_id];
+                assert!(!self
+                    .stream_unifier
+                    .get_type(decl_var)
+                    .unwrap()
+                    .is_parametric());
+                match self
+                    .stream_unifier
+                    .get_type(stream_var)
+                    .expect("type has to be known at this point")
+                    .timing
+                {
+                    TimingInfo::RealTime(_) => {}
+                    _ => {
+                        self.handler.error_with_span(
+                            &format!("Sliding windows are only allowed in real-time streams"),
+                            LabeledSpan::new(span, &format!("unexpected sliding window"), true),
+                        );
+                        return Err(());
+                    }
+                }
+
+                // value type
+                let decl_var: ValueVar = self.value_vars[&decl_id];
+                self.unifier
+                    .unify_var_ty(var, ValueTy::Option(ValueTy::Infer(decl_var).into()))
+                    .map_err(|err| {
+                        self.handle_error(err, span);
+                    })
+            }
+        }
     }
 
     fn infer_function_application(
