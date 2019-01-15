@@ -15,7 +15,7 @@ use crate::ast::{
 use crate::reporting::Handler;
 use crate::reporting::LabeledSpan;
 use crate::stdlib::{FuncDecl, MethodLookup};
-use crate::ty::{Freq, Ty, TypeConstraint};
+use crate::ty::{Freq, StreamTy, TimingInfo, TypeConstraint, ValueTy};
 use ast_node::NodeId;
 use ast_node::Span;
 use ena::unify::{EqUnifyValue, InPlaceUnificationTable, UnificationTable, UnifyKey, UnifyValue};
@@ -27,9 +27,11 @@ pub(crate) struct TypeAnalysis<'a> {
     handler: &'a Handler,
     declarations: &'a DeclarationTable<'a>,
     method_lookup: MethodLookup,
-    unifier: Unifier,
+    unifier: ValueUnifier<ValueTy>,
+    stream_unifier: ValueUnifier<StreamTy>,
     /// maps `NodeId`'s to the variables used in `unifier`
-    var_lookup: HashMap<NodeId, InferVar>,
+    value_vars: HashMap<NodeId, ValueVar>,
+    stream_vars: HashMap<NodeId, StreamVar>,
 }
 
 impl<'a> TypeAnalysis<'a> {
@@ -41,8 +43,10 @@ impl<'a> TypeAnalysis<'a> {
             handler,
             declarations,
             method_lookup: MethodLookup::new(),
-            unifier: Unifier::new(),
-            var_lookup: HashMap::new(),
+            unifier: ValueUnifier::new(),
+            stream_unifier: ValueUnifier::new(),
+            value_vars: HashMap::new(),
+            stream_vars: HashMap::new(),
         }
     }
 
@@ -88,20 +92,27 @@ impl<'a> TypeAnalysis<'a> {
         }
     }
 
-    fn new_var(&mut self, node: NodeId) -> InferVar {
-        assert!(!self.var_lookup.contains_key(&node));
+    fn new_value_var(&mut self, node: NodeId) -> ValueVar {
+        assert!(!self.value_vars.contains_key(&node));
         let var = self.unifier.new_var();
-        self.var_lookup.insert(node, var);
+        self.value_vars.insert(node, var);
+        var
+    }
+
+    fn new_stream_var(&mut self, node: NodeId) -> StreamVar {
+        assert!(!self.stream_vars.contains_key(&node));
+        let var = self.stream_unifier.new_var();
+        self.stream_vars.insert(node, var);
         var
     }
 
     fn infer_constant(&mut self, constant: &'a Constant) -> Result<(), ()> {
         trace!("infer type for {}", constant);
-        let var = self.new_var(constant._id);
+        let var = self.new_value_var(constant._id);
 
         if let Some(ast_ty) = &constant.ty {
             self.infer_type(&ast_ty)?;
-            let ty_var = self.var_lookup[&ast_ty._id];
+            let ty_var = self.value_vars[&ast_ty._id];
             self.unifier
                 .unify_var_var(var, ty_var)
                 .expect("cannot fail as `var` is a fresh var");
@@ -116,36 +127,41 @@ impl<'a> TypeAnalysis<'a> {
 
     fn infer_input(&mut self, input: &'a Input) -> Result<(), ()> {
         trace!("infer type for {}", input);
-        let var = self.new_var(input._id);
+
+        // value type
+        let var = self.new_value_var(input._id);
 
         self.infer_type(&input.ty)?;
-        let ty_var = self.var_lookup[&input.ty._id];
+        let ty_var = self.value_vars[&input.ty._id];
 
+        self.unifier
+            .unify_var_var(var, ty_var)
+            .map_err(|err| self.handle_error(err, input.name.span))?;
+
+        // stream type
+        let stream_var = self.new_stream_var(input._id);
+
+        // determine parameters
         let mut param_types = Vec::new();
         for param in &input.params {
             self.infer_type(&param.ty)?;
-            let param_ty_var = self.var_lookup[&param.ty._id];
-            let param_var = self.new_var(param._id);
+            let param_ty_var = self.value_vars[&param.ty._id];
+            let param_var = self.new_value_var(param._id);
             self.unifier
                 .unify_var_var(param_var, param_ty_var)
                 .expect("cannot fail as `param_var` is fresh");
-            param_types.push(Ty::Infer(param_var));
+            param_types.push(ValueTy::Infer(param_var));
         }
 
         if param_types.is_empty() {
-            // ?var = EventStream<?ty_var>
-            self.unifier
-                .unify_var_ty(var, Ty::EventStream(Ty::Infer(ty_var).into(), vec![]))
+            self.stream_unifier
+                .unify_var_ty(stream_var, StreamTy::new(TimingInfo::Event))
                 .map_err(|err| self.handle_error(err, input.name.span))
         } else {
-            // ?var = Parametzerized(EventStream<?ty_var>, param_types>
-            self.unifier
+            self.stream_unifier
                 .unify_var_ty(
-                    var,
-                    Ty::Parameterized(
-                        Ty::EventStream(Ty::Infer(ty_var).into(), vec![]).into(),
-                        param_types,
-                    ),
+                    stream_var,
+                    StreamTy::new_parametric(param_types, TimingInfo::Event),
                 )
                 .map_err(|err| self.handle_error(err, input.name.span))
         }
@@ -153,22 +169,31 @@ impl<'a> TypeAnalysis<'a> {
 
     fn infer_output(&mut self, output: &'a Output) -> Result<(), ()> {
         trace!("infer type for {}", output);
-        let var = self.new_var(output._id);
+
+        // value type
+        let var = self.new_value_var(output._id);
 
         // generate constraint in case a type is annotated
         self.infer_type(&output.ty)?;
-        let ty_var = self.var_lookup[&output.ty._id];
+        let ty_var = self.value_vars[&output.ty._id];
+
+        self.unifier
+            .unify_var_var(var, ty_var)
+            .map_err(|err| self.handle_error(err, output.name.span))?;
+
+        // stream type
+        let stream_var = self.new_stream_var(output._id);
 
         // collect parameters
         let mut param_types = Vec::new();
         for param in &output.params {
             self.infer_type(&param.ty)?;
-            let param_ty_var = self.var_lookup[&param.ty._id];
-            let param_var = self.new_var(param._id);
+            let param_ty_var = self.value_vars[&param.ty._id];
+            let param_var = self.new_value_var(param._id);
             self.unifier
                 .unify_var_var(param_var, param_ty_var)
                 .expect("cannot fail as `param_var` is fresh");
-            param_types.push(Ty::Infer(param_var));
+            param_types.push(ValueTy::Infer(param_var));
         }
 
         // check if stream has timing infos
@@ -183,28 +208,26 @@ impl<'a> TypeAnalysis<'a> {
         }
 
         // determine whether stream is timed or event based
-        let stream_type: Ty = if let Some(f) = frequence {
-            Ty::TimedStream(Ty::Infer(ty_var).into(), f)
+        let timing: TimingInfo = if let Some(f) = frequence {
+            TimingInfo::RealTime(f)
         } else {
-            Ty::EventStream(Ty::Infer(ty_var).into(), vec![])
+            TimingInfo::Event
         };
 
         if param_types.is_empty() {
-            // ?var = Stream
-            self.unifier
-                .unify_var_ty(var, stream_type)
+            self.stream_unifier
+                .unify_var_ty(stream_var, StreamTy::new(timing))
                 .map_err(|err| self.handle_error(err, output.name.span))
         } else {
-            // ?var = Parametzerized(Stream)
-            self.unifier
-                .unify_var_ty(var, Ty::Parameterized(stream_type.into(), param_types))
+            self.stream_unifier
+                .unify_var_ty(stream_var, StreamTy::new_parametric(param_types, timing))
                 .map_err(|err| self.handle_error(err, output.name.span))
         }
     }
 
     fn infer_type(&mut self, ast_ty: &'a Type) -> Result<(), ()> {
         trace!("infer type for {}", ast_ty);
-        let ty_var = self.new_var(ast_ty._id);
+        let ty_var = self.new_value_var(ast_ty._id);
         match &ast_ty.kind {
             TypeKind::Inferred => Ok(()),
             TypeKind::Simple(_) => {
@@ -231,101 +254,126 @@ impl<'a> TypeAnalysis<'a> {
 
     fn infer_output_expression(&mut self, output: &'a Output) -> Result<(), ()> {
         trace!("infer type for {}", output);
-        let out_var = self.var_lookup[&output._id];
+        let out_var = self.value_vars[&output._id];
 
         // check template specification
         if let Some(template_spec) = &output.template_spec {
             if let Some(invoke) = &template_spec.inv {
-                self.infer_expression(&invoke.target, None)?;
-                let inv_var = self.var_lookup[&invoke.target._id];
+                self.infer_expression(
+                    &invoke.target,
+                    None,
+                    StreamVarOrTy::Ty(StreamTy::new(TimingInfo::Event)),
+                )?;
+                let inv_var = self.value_vars[&invoke.target._id];
                 if output.params.len() == 1 {
                     // ?param_var = ?inv_bar
-                    let param_var = self.var_lookup[&output.params[0]._id];
+                    let param_var = self.value_vars[&output.params[0]._id];
                     self.unifier
-                        .unify_var_ty(
-                            inv_var,
-                            Ty::EventStream(Ty::Infer(param_var).into(), vec![]),
-                        )
+                        .unify_var_ty(inv_var, ValueTy::Infer(param_var))
                         .map_err(|err| self.handle_error(err, invoke.target._span))?;
                 } else {
-                    let target_ty = Ty::Tuple(
+                    let target_ty = ValueTy::Tuple(
                         output
                             .params
                             .iter()
                             .map(|p| {
-                                let param_var = self.var_lookup[&p._id];
-                                Ty::Infer(param_var)
+                                let param_var = self.value_vars[&p._id];
+                                ValueTy::Infer(param_var)
                             })
                             .collect(),
                     );
                     self.unifier
-                        .unify_var_ty(inv_var, Ty::EventStream(target_ty.into(), vec![]))
+                        .unify_var_ty(inv_var, target_ty)
                         .map_err(|err| self.handle_error(err, invoke.target._span))?;
                 }
 
                 // check that condition is boolean
                 if let Some(cond) = &invoke.condition {
-                    self.infer_expression(cond, Some(Ty::EventStream(Ty::Bool.into(), vec![])))?;
+                    self.infer_expression(
+                        cond,
+                        Some(ValueTy::Bool),
+                        StreamVarOrTy::Ty(StreamTy::new(TimingInfo::Event)),
+                    )?;
                 }
             }
             if let Some(extend) = &template_spec.ext {
                 // check that condition is boolean
                 if let Some(cond) = &extend.target {
-                    self.infer_expression(cond, Some(Ty::EventStream(Ty::Bool.into(), vec![])))?;
+                    self.infer_expression(
+                        cond,
+                        Some(ValueTy::Bool),
+                        StreamVarOrTy::Ty(StreamTy::new(TimingInfo::Event)),
+                    )?;
                 }
             }
             if let Some(terminate) = &template_spec.ter {
                 // check that condition is boolean
                 self.infer_expression(
                     &terminate.target,
-                    Some(Ty::EventStream(Ty::Bool.into(), vec![])),
+                    Some(ValueTy::Bool),
+                    StreamVarOrTy::Ty(StreamTy::new(TimingInfo::Event)),
                 )?;
             }
         }
 
+        let out_stream_var = self.stream_vars[&output._id];
+
         // generate constraint for expression
-        match self
-            .unifier
-            .get_type(out_var)
-            .expect("type of output declaration should be known")
-        {
-            Ty::Parameterized(ty, _) => self.infer_expression(&output.expression, Some(*ty)),
-            Ty::EventStream(_, _) => {
-                self.infer_expression(&output.expression, Some(Ty::Infer(out_var)))
-            }
-            Ty::TimedStream(_, _) => {
-                self.infer_expression(&output.expression, Some(Ty::Infer(out_var)))
-            }
-            _ => unreachable!(),
-        }
+        self.infer_expression(
+            &output.expression,
+            Some(ValueTy::Infer(out_var)),
+            StreamVarOrTy::Var(out_stream_var),
+        )
     }
 
     fn infer_trigger_expression(&mut self, trigger: &'a Trigger) -> Result<(), ()> {
         trace!("infer type for {}", trigger);
-        self.infer_expression(&trigger.expression, Some(Ty::Bool))
+        self.infer_expression(
+            &trigger.expression,
+            Some(ValueTy::Bool),
+            StreamVarOrTy::Ty(StreamTy::new(TimingInfo::Event)),
+        )
     }
 
-    fn get_constraint_for_literal(&self, lit: &Literal) -> Ty {
+    fn get_constraint_for_literal(&self, lit: &Literal) -> ValueTy {
         use crate::ast::LitKind::*;
         match lit.kind {
-            Str(_) | RawStr(_) => Ty::String,
-            Bool(_) => Ty::Bool,
-            Int(i) => Ty::Constr(if i < 0 {
+            Str(_) | RawStr(_) => ValueTy::String,
+            Bool(_) => ValueTy::Bool,
+            Int(i) => ValueTy::Constr(if i < 0 {
                 TypeConstraint::SignedInteger
             } else {
                 TypeConstraint::Integer
             }),
-            Float(_) => Ty::Constr(TypeConstraint::FloatingPoint),
+            Float(_) => ValueTy::Constr(TypeConstraint::FloatingPoint),
         }
     }
 
-    fn infer_expression(&mut self, expr: &'a Expression, target: Option<Ty>) -> Result<(), ()> {
+    fn infer_expression(
+        &mut self,
+        expr: &'a Expression,
+        target: Option<ValueTy>,
+        stream_ty: StreamVarOrTy,
+    ) -> Result<(), ()> {
         trace!("infer expression {}", expr);
-        let var = self.new_var(expr._id);
+
+        let var = self.new_value_var(expr._id);
         if let Some(target_ty) = &target {
             self.unifier
                 .unify_var_ty(var, target_ty.clone())
                 .expect("unification cannot fail as `var` is fresh");
+        }
+
+        let stream_var = self.new_stream_var(expr._id);
+        match &stream_ty {
+            StreamVarOrTy::Ty(ty) => self
+                .stream_unifier
+                .unify_var_ty(stream_var, ty.clone())
+                .expect("unification cannot fail as `var` is fresh"),
+            &StreamVarOrTy::Var(var) => self
+                .stream_unifier
+                .unify_var_var(stream_var, var)
+                .expect("unification cannot fail as `var` is fresh"),
         }
 
         use crate::ast::ExpressionKind::*;
@@ -341,48 +389,36 @@ impl<'a> TypeAnalysis<'a> {
 
                 match decl {
                     Declaration::Const(constant) => {
-                        let const_var = self.var_lookup[&constant._id];
+                        let const_var = self.value_vars[&constant._id];
                         self.unifier
                             .unify_var_var(var, const_var)
-                            .map_err(|err| self.handle_error(err, expr._span))?;
+                            .map_err(|err| self.handle_error(err, expr._span))?
                     }
                     Declaration::In(input) => {
-                        let in_var = self.var_lookup[&input._id];
+                        // value type
+                        let in_var = self.value_vars[&input._id];
+                        self.unifier
+                            .unify_var_var(var, in_var)
+                            .map_err(|err| self.handle_error(err, expr._span))?;
 
-                        if let Ty::EventStream(inner, _) = self
-                            .unifier
-                            .get_type(in_var)
-                            .expect("either TimedStream/EventStream")
-                        {
-                            // add input to dependencies
-                            // overwrite depdencency set of variable as we are only interested in direct dependencies
-                            self.unifier
-                                .unify_var_ty(var, Ty::EventStream(inner, vec![input._id]))
-                                .map_err(|err| self.handle_error(err, expr._span))?;
-                        } else {
-                            self.unifier
-                                .unify_var_var(var, in_var)
-                                .map_err(|err| self.handle_error(err, expr._span))?;
-                        }
+                        // stream type
+                        let in_var = self.stream_vars[&input._id];
+                        self.stream_unifier
+                            .unify_var_var(stream_var, in_var)
+                            .map_err(|err| self.handle_error(err, expr._span))?;
                     }
                     Declaration::Out(output) => {
-                        let out_var = self.var_lookup[&output._id];
+                        // value type
+                        let out_var = self.value_vars[&output._id];
+                        self.unifier
+                            .unify_var_var(var, out_var)
+                            .map_err(|err| self.handle_error(err, expr._span))?;
 
-                        if let Ty::EventStream(inner, _) = self
-                            .unifier
-                            .get_type(out_var)
-                            .expect("either TimedStream/EventStream")
-                        {
-                            // add output to dependencies
-                            // overwrite depdencency set of variable as we are only interested in direct dependencies
-                            self.unifier
-                                .unify_var_ty(var, Ty::EventStream(inner, vec![output._id]))
-                                .map_err(|err| self.handle_error(err, expr._span))?;
-                        } else {
-                            self.unifier
-                                .unify_var_var(var, out_var)
-                                .map_err(|err| self.handle_error(err, expr._span))?;
-                        }
+                        // stream type
+                        let out_var = self.stream_vars[&output._id];
+                        self.stream_unifier
+                            .unify_var_var(stream_var, out_var)
+                            .map_err(|err| self.handle_error(err, expr._span))?;
                     }
                     _ => unreachable!(),
                 }
@@ -392,13 +428,22 @@ impl<'a> TypeAnalysis<'a> {
                 // - ?cond = EventStream<bool>
                 // - ?left = ?expr
                 // - ?right = ?expr
-                self.infer_expression(cond, Some(Ty::EventStream(Ty::Bool.into(), vec![])))?;
-                self.infer_expression(left, Some(Ty::Infer(var)))?;
-                self.infer_expression(right, Some(Ty::Infer(var)))?;
+                self.infer_expression(cond, Some(ValueTy::Bool), StreamVarOrTy::Var(stream_var))?;
+                self.infer_expression(
+                    left,
+                    Some(ValueTy::Infer(var)),
+                    StreamVarOrTy::Var(stream_var),
+                )?;
+                self.infer_expression(
+                    right,
+                    Some(ValueTy::Infer(var)),
+                    StreamVarOrTy::Var(stream_var),
+                )?;
             }
             Unary(op, appl) => {
                 self.infer_function_application(
                     var,
+                    stream_var,
                     expr._span,
                     &op.get_func_decl(),
                     &[],
@@ -408,6 +453,7 @@ impl<'a> TypeAnalysis<'a> {
             Binary(op, left, right) => {
                 self.infer_function_application(
                     var,
+                    stream_var,
                     expr._span,
                     &op.get_func_decl(),
                     &[],
@@ -417,7 +463,11 @@ impl<'a> TypeAnalysis<'a> {
             // discrete offset
             Lookup(stream, Offset::DiscreteOffset(off_expr), None) => {
                 // recursion
-                self.infer_expression(off_expr, Some(Ty::Constr(TypeConstraint::Integer)))?;
+                self.infer_expression(
+                    off_expr,
+                    Some(ValueTy::Constr(TypeConstraint::Integer)),
+                    StreamVarOrTy::Ty(StreamTy::new(TimingInfo::Event)),
+                )?;
 
                 let negative_offset = match &off_expr.kind {
                     ExpressionKind::Lit(l) => match l.kind {
@@ -427,64 +477,67 @@ impl<'a> TypeAnalysis<'a> {
                     _ => unreachable!("offset expressions have to be literal"),
                 };
 
-                let inner_var = self.unifier.new_var();
-
-                let mut params = Vec::with_capacity(stream.arguments.len());
-                for arg in &stream.arguments {
-                    self.infer_expression(arg, None)?;
-                    let inner = match self.unifier.get_type(self.var_lookup[&arg._id]) {
-                        Some(Ty::EventStream(inner, _)) => *inner,
-                        Some(ty) => ty,
-                        None => unreachable!(),
-                    };
-                    params.push(inner);
-                }
-                let target = if !params.is_empty() {
-                    Ty::Parameterized(
-                        Ty::EventStream(Ty::Infer(inner_var).into(), vec![]).into(),
-                        params,
-                    )
-                } else {
-                    Ty::EventStream(Ty::Infer(inner_var).into(), vec![])
-                };
-
-                // constraints
-                // off_expr = {integer}
-                // stream = EventStream<?1>
-                // if negative_offset || parametric { expr = EventStream<Option<?1>> } else { expr = EventStream<?1> }
-
-                // need to derive "inner" type `?1`
+                // need to derive "inner" type
                 let decl = self.declarations[&stream._id];
                 let decl_id: NodeId = match decl {
                     Declaration::In(input) => input._id,
                     Declaration::Out(output) => output._id,
                     _ => unreachable!(),
                 };
-                let decl_var: InferVar = self.var_lookup[&decl_id];
-                self.unifier.unify_var_ty(decl_var, target).map_err(|err| {
-                    self.handle_error(err, stream._span);
-                })?;
+                let decl_stream_var: StreamVar = self.stream_vars[&decl_id];
+                let decl_stream_type = self.stream_unifier.get_type(decl_stream_var).unwrap();
+
+                assert!(
+                    decl_stream_type.parameters.len() == stream.arguments.len(),
+                    "TODO: transform into error message"
+                );
+
+                let mut params = Vec::with_capacity(stream.arguments.len());
+                for (arg_expr, target) in stream.arguments.iter().zip(decl_stream_type.parameters) {
+                    self.infer_expression(
+                        arg_expr,
+                        Some(target.clone()),
+                        StreamVarOrTy::Ty(StreamTy::new(TimingInfo::Event)),
+                    )?;
+                    params.push(target);
+                }
+                let target = if !params.is_empty() {
+                    StreamTy::new_parametric(params, TimingInfo::Event)
+                } else {
+                    StreamTy::new(TimingInfo::Event)
+                };
+
+                // stream type
+
+                // ?decl_stream_var = target
+                self.stream_unifier
+                    .unify_var_ty(decl_stream_var, target)
+                    .map_err(|err| {
+                        self.handle_error(err, stream._span);
+                    })?;
+                // ?stream_var = Non-parametric Event
+                self.stream_unifier
+                    .unify_var_ty(stream_var, StreamTy::new(TimingInfo::Event))
+                    .map_err(|err| {
+                        self.handle_error(err, stream._span);
+                    })?;
+
+                // value type
+                // constraints
+                // off_expr = {integer}
+                // stream = ?inner
+                // if negative_offset || parametric { expr = Option<?inner> } else { expr = ?inner }
+                let decl_var: ValueVar = self.value_vars[&decl_id];
                 if negative_offset || !stream.arguments.is_empty() {
                     self.unifier
-                        .unify_var_ty(
-                            var,
-                            Ty::EventStream(
-                                Ty::Option(Ty::Infer(inner_var).into()).into(),
-                                vec![decl_id],
-                            ),
-                        )
+                        .unify_var_ty(var, ValueTy::Option(ValueTy::Infer(decl_var).into()))
                         .map_err(|err| {
                             self.handle_error(err, expr._span);
                         })?;
                 } else {
-                    self.unifier
-                        .unify_var_ty(
-                            var,
-                            Ty::EventStream(Ty::Infer(inner_var).into(), vec![decl_id]),
-                        )
-                        .map_err(|err| {
-                            self.handle_error(err, expr._span);
-                        })?;
+                    self.unifier.unify_var_var(var, decl_var).map_err(|err| {
+                        self.handle_error(err, expr._span);
+                    })?;
                 }
             }
             // real-time window
@@ -493,71 +546,62 @@ impl<'a> TypeAnalysis<'a> {
                     stream.arguments.is_empty(),
                     "parameterized timed streams currently not implemented"
                 );
-                let inner_var = self.unifier.new_var();
-                // `stream` is either timed or untimed
-                let target = Ty::Constr(TypeConstraint::Stream(Ty::Infer(inner_var).into()));
 
-                // need to derive "inner" type `?1`
+                // need to derive "inner" type
                 let decl = self.declarations[&stream._id];
-                let decl_var: InferVar = match decl {
-                    Declaration::In(input) => self.var_lookup[&input._id],
-                    Declaration::Out(output) => self.var_lookup[&output._id],
-                    //Declaration::Const(constant) => self.var_lookup[&constant.ty._id],
+                let decl_id: NodeId = match decl {
+                    Declaration::In(input) => input._id,
+                    Declaration::Out(output) => output._id,
                     _ => unreachable!(),
                 };
-                match self
-                    .unifier
+
+                // stream type
+                let decl_var: StreamVar = self.stream_vars[&decl_id];
+                assert!(!self
+                    .stream_unifier
                     .get_type(decl_var)
-                    .expect("streams have types at this point")
+                    .unwrap()
+                    .is_parametric());
+                match self
+                    .stream_unifier
+                    .get_type(stream_var)
+                    .expect("type has to be known at this point")
+                    .timing
                 {
-                    Ty::EventStream(inner, _) => {
-                        self.unifier
-                            .unify_var_ty(
-                                var,
-                                Ty::Window(Ty::Option(inner).into(), Duration::from_secs(1)),
-                            )
-                            .map_err(|err| {
-                                self.handle_error(err, expr._span);
-                            })?;
+                    TimingInfo::RealTime(_) => {}
+                    _ => {
+                        self.handler.error_with_span(
+                            &format!("Sliding windows are only allowed in real-time streams"),
+                            LabeledSpan::new(
+                                expr._span,
+                                &format!("unexpected sliding window"),
+                                true,
+                            ),
+                        );
+                        return Err(());
                     }
-                    Ty::TimedStream(inner, _) => {
-                        self.unifier
-                            .unify_var_ty(
-                                var,
-                                Ty::Window(Ty::Option(inner).into(), Duration::from_secs(1)),
-                            )
-                            .map_err(|err| {
-                                self.handle_error(err, expr._span);
-                            })?;
-                    }
-                    _ => unreachable!(),
                 }
+
+                // value type
+                let decl_var: ValueVar = self.value_vars[&decl_id];
+                self.unifier
+                    .unify_var_ty(var, ValueTy::Option(ValueTy::Infer(decl_var).into()))
+                    .map_err(|err| {
+                        self.handle_error(err, expr._span);
+                    })?;
             }
-            Default(left, right) => match self.unifier.get_type(var) {
-                Some(Ty::EventStream(inner, deps)) => {
-                    self.infer_expression(
-                        left,
-                        Some(Ty::EventStream(
-                            Ty::Option(inner.clone()).into(),
-                            deps.clone(),
-                        )),
-                    )?;
-                    self.infer_expression(right, Some(Ty::EventStream(inner, deps)))?;
-                }
-                Some(Ty::TimedStream(inner, freq)) => {
-                    self.infer_expression(
-                        left,
-                        Some(Ty::TimedStream(
-                            Ty::Option(inner.clone()).into(),
-                            freq.clone(),
-                        )),
-                    )?;
-                    self.infer_expression(right, Some(Ty::TimedStream(inner, freq)))?;
-                }
-                _ => unreachable!(
-                    "context must be know to differentiate timed and event based streams"
-                ),
-            },
+            Default(left, right) => {
+                self.infer_expression(
+                    left,
+                    Some(ValueTy::Option(ValueTy::Infer(var).into())),
+                    StreamVarOrTy::Var(stream_var),
+                )?;
+                self.infer_expression(
+                    right,
+                    Some(ValueTy::Infer(var)),
+                    StreamVarOrTy::Ty(StreamTy::new(TimingInfo::Event)),
+                )?
+            }
             Function(_, types, params) => {
                 let decl = self.declarations[&expr._id];
                 let fun_decl = match decl {
@@ -576,6 +620,7 @@ impl<'a> TypeAnalysis<'a> {
 
                 self.infer_function_application(
                     var,
+                    stream_var,
                     expr._span,
                     fun_decl,
                     types.as_slice(),
@@ -584,9 +629,9 @@ impl<'a> TypeAnalysis<'a> {
             }
             Method(base, name, types, params) => {
                 // recursion
-                self.infer_expression(base, None)?;
+                self.infer_expression(base, None, StreamVarOrTy::Var(stream_var))?;
 
-                if let Some(infered) = self.unifier.get_type(self.var_lookup[&base._id]) {
+                if let Some(infered) = self.unifier.get_type(self.value_vars[&base._id]) {
                     debug!("{} {}", base, infered);
                     if let Some(fun_decl) = self.method_lookup.get(&infered, name.name.as_str()) {
                         debug!("{:?}", fun_decl);
@@ -600,6 +645,7 @@ impl<'a> TypeAnalysis<'a> {
 
                         self.infer_function_application(
                             var,
+                            stream_var,
                             expr._span,
                             &fun_decl,
                             types.as_slice(),
@@ -614,33 +660,33 @@ impl<'a> TypeAnalysis<'a> {
             }
             Tuple(expressions) => {
                 // recursion
-                let mut tuples: Vec<Ty> = Vec::with_capacity(expressions.len());
+                let mut tuples: Vec<ValueTy> = Vec::with_capacity(expressions.len());
                 for element in expressions {
-                    self.infer_expression(element, None)?;
-                    let inner = match self.unifier.get_type(self.var_lookup[&element._id]) {
-                        Some(Ty::EventStream(inner, _)) => *inner,
-                        Some(ty) => ty,
-                        None => unreachable!(),
-                    };
+                    self.infer_expression(element, None, StreamVarOrTy::Var(stream_var))?;
+                    let inner = self
+                        .unifier
+                        .get_type(self.value_vars[&element._id])
+                        .expect("should have type");
                     tuples.push(inner);
                 }
                 // ?var = Tuple(?expr1, ?expr2, ..)
                 self.unifier
-                    .unify_var_ty(var, Ty::EventStream(Ty::Tuple(tuples).into(), vec![]))
+                    .unify_var_ty(var, ValueTy::Tuple(tuples))
                     .map_err(|err| self.handle_error(err, expr._span))?;
             }
             Field(base, ident) => {
                 // recursion
-                self.infer_expression(base, None)?;
+                self.infer_expression(base, None, StreamVarOrTy::Var(stream_var))?;
 
-                let infered = match self.unifier.get_type(self.var_lookup[&base._id]) {
-                    Some(Ty::EventStream(inner, _)) => self.unifier.normalize_ty(*inner),
-                    _ => unreachable!(),
-                };
+                let ty = self
+                    .unifier
+                    .get_type(self.value_vars[&base._id])
+                    .expect("should have type at this point");
+                let infered = ty.normalize_ty(&mut self.unifier);
 
                 debug!("{} {}", base, infered);
                 match infered {
-                    Ty::Tuple(inner) => {
+                    ValueTy::Tuple(inner) => {
                         let num: usize = ident
                             .name
                             .parse::<usize>()
@@ -654,7 +700,7 @@ impl<'a> TypeAnalysis<'a> {
                         }
                         // ?var = inner[num]
                         self.unifier
-                            .unify_var_ty(var, Ty::EventStream(inner[num].clone().into(), vec![]))
+                            .unify_var_ty(var, inner[num].clone())
                             .map_err(|err| self.handle_error(err, expr._span))?;
                     }
                     _ => {
@@ -666,7 +712,9 @@ impl<'a> TypeAnalysis<'a> {
                     }
                 }
             }
-            ParenthesizedExpression(_, expr, _) => self.infer_expression(expr, target)?,
+            ParenthesizedExpression(_, expr, _) => {
+                self.infer_expression(expr, target, stream_ty)?
+            }
             t => unimplemented!("expression `{:?}`", t),
         }
         Ok(())
@@ -674,7 +722,8 @@ impl<'a> TypeAnalysis<'a> {
 
     fn infer_function_application(
         &mut self,
-        var: InferVar,
+        var: ValueVar,
+        stream_var: StreamVar,
         span: Span,
         fun_decl: &FuncDecl,
         types: &[Type],
@@ -684,13 +733,13 @@ impl<'a> TypeAnalysis<'a> {
         assert_eq!(params.len(), fun_decl.parameters.len());
 
         // build symbolic names for generic arguments
-        let generics: Vec<InferVar> = fun_decl
+        let generics: Vec<ValueVar> = fun_decl
             .generics
             .iter()
             .map(|gen| {
                 let var = self.unifier.new_var();
                 match &gen.constraint {
-                    Ty::Constr(_) => {}
+                    ValueTy::Constr(_) => {}
                     _ => unreachable!("currently, only constraints are allowed for generic types"),
                 }
                 self.unifier
@@ -702,27 +751,13 @@ impl<'a> TypeAnalysis<'a> {
         for (provided_type, &generic) in types.iter().zip(&generics) {
             println!("{} {}", provided_type, generic);
             self.unifier
-                .unify_var_var(generic, self.var_lookup[&provided_type._id])
+                .unify_var_var(generic, self.value_vars[&provided_type._id])
                 .map_err(|err| self.handle_error(err, provided_type._span))?;
         }
 
-        let mut frequency = None;
-        match self.unifier.get_type(var) {
-            Some(Ty::EventStream(_, _)) => {}
-            Some(Ty::TimedStream(_, freq)) => frequency = Some(freq),
-            _ => {
-                unreachable!("context must be know to differentiate timed and event based streams")
-            }
-        }
-
         for (type_param, parameter) in fun_decl.parameters.iter().zip(params) {
-            let mut ty = type_param.replace_params(&generics);
-            if let Some(f) = frequency.as_ref() {
-                ty = Ty::TimedStream(ty.into(), f.clone());
-            } else {
-                ty = Ty::EventStream(ty.into(), vec![]);
-            }
-            if let Some(&param_var) = self.var_lookup.get(&parameter._id) {
+            let ty = type_param.replace_params(&generics);
+            if let Some(&param_var) = self.value_vars.get(&parameter._id) {
                 // for method calls, we have to infer type for first argument
                 // ?param_var = `ty`
                 self.unifier
@@ -730,16 +765,11 @@ impl<'a> TypeAnalysis<'a> {
                     .map_err(|err| self.handle_error(err, parameter._span))?;
             } else {
                 // otherwise, we have to check it now
-                self.infer_expression(parameter, Some(ty))?;
+                self.infer_expression(parameter, Some(ty), StreamVarOrTy::Var(stream_var))?;
             }
         }
         // return type
-        let mut ty = fun_decl.return_type.replace_params(&generics);
-        if let Some(f) = frequency {
-            ty = Ty::TimedStream(ty.into(), f);
-        } else {
-            ty = Ty::EventStream(ty.into(), vec![]);
-        }
+        let ty = fun_decl.return_type.replace_params(&generics);
         // ?param_var = `ty`
         self.unifier
             .unify_var_ty(var, ty)
@@ -747,7 +777,7 @@ impl<'a> TypeAnalysis<'a> {
         Ok(())
     }
 
-    fn get_tuple_type(&mut self, tuple: &[Type]) -> Ty {
+    fn get_tuple_type(&mut self, tuple: &[Type]) -> ValueTy {
         let mut inner = Vec::new();
         for t in tuple {
             match &t.kind {
@@ -762,7 +792,7 @@ impl<'a> TypeAnalysis<'a> {
                 _ => unreachable!(),
             }
         }
-        Ty::Tuple(inner)
+        ValueTy::Tuple(inner)
     }
 
     /// Assigns types as infered
@@ -771,21 +801,27 @@ impl<'a> TypeAnalysis<'a> {
             debug!(
                 "{} has type {}",
                 constant,
-                self.unifier.get_final_type(self.var_lookup[&constant._id])
+                self.unifier
+                    .get_normalized_type(self.value_vars[&constant._id])
+                    .unwrap()
             );
         }
         for input in &spec.inputs {
             debug!(
                 "{} has type {}",
                 input,
-                self.unifier.get_final_type(self.var_lookup[&input._id])
+                self.unifier
+                    .get_normalized_type(self.value_vars[&input._id])
+                    .unwrap()
             );
         }
         for output in &spec.outputs {
             debug!(
                 "{} has type {}",
                 output,
-                self.unifier.get_final_type(self.var_lookup[&output._id])
+                self.unifier
+                    .get_normalized_type(self.value_vars[&output._id])
+                    .unwrap()
             );
         }
     }
@@ -793,7 +829,7 @@ impl<'a> TypeAnalysis<'a> {
     fn handle_error(&mut self, mut err: InferError, span: Span) {
         err.normalize_types(&mut self.unifier);
         match err {
-            InferError::TypeMismatch(ty_l, ty_r) => {
+            InferError::ValueTypeMismatch(ty_l, ty_r) => {
                 self.handler.error_with_span(
                     &format!("Type mismatch between `{}` and `{}`", ty_l, ty_r),
                     LabeledSpan::new(
@@ -813,67 +849,104 @@ impl<'a> TypeAnalysis<'a> {
                     ),
                 );
             }
-            InferError::CyclicDependency(_, _) => {
+            InferError::CyclicDependency => {
                 self.handler.error_with_span(
                     "Cannot infer type",
                     LabeledSpan::new(span, "consider using a type annotation", true),
                 );
             }
+            InferError::StreamTypeMismatch(ty_l, ty_r) => {
+                self.handler.error_with_span(
+                    &format!("Type mismatch between `{}` and `{}`", ty_l, ty_r),
+                    LabeledSpan::new(
+                        span,
+                        &format!("expected `{}`, found `{}`", ty_l, ty_r),
+                        true,
+                    ),
+                );
+            }
+            _ => unreachable!(),
         }
     }
 
-    pub(crate) fn get_type(&mut self, id: NodeId) -> Ty {
-        if let Some(&var) = self.var_lookup.get(&id) {
-            self.unifier.get_final_type(var)
+    pub(crate) fn get_type(&mut self, id: NodeId) -> ValueTy {
+        if let Some(&var) = self.value_vars.get(&id) {
+            if let Some(t) = self.unifier.get_normalized_type(var) {
+                t.replace_constr()
+            } else {
+                ValueTy::Error
+            }
         } else {
-            Ty::Error
+            ValueTy::Error
         }
     }
 }
 
 /// Main data structure for the type unfication.
-/// Implemented using a union-find data structure where the keys (`InferVar`)
-/// represent type variables. Those keys have associated values (`InferVarVal`)
-/// that represent whether the type variable is unbounded (`InferVarVal::Unkown`)
-/// or bounded (`InferVarVal::Know(ty)` where `ty` has type `Ty`).
-struct Unifier {
+/// Implemented using a union-find data structure where the keys (`ValueVar`)
+/// represent type variables. Those keys have associated values (`ValueVarVal`)
+/// that represent whether the type variable is unbounded (`ValueVarVal::Unkown`)
+/// or bounded (`ValueVarVal::Know(ty)` where `ty` has type `Ty`).
+struct ValueUnifier<T: UnifiableTy> {
     /// union-find data structure representing the current state of the unification
-    table: InPlaceUnificationTable<InferVar>,
+    table: InPlaceUnificationTable<T::V>,
 }
 
-impl Unifier {
-    fn new() -> Unifier {
-        Unifier {
+impl<T: UnifiableTy> ValueUnifier<T> {
+    fn new() -> ValueUnifier<T> {
+        ValueUnifier {
             table: UnificationTable::new(),
         }
     }
 
-    fn new_var(&mut self) -> InferVar {
-        self.table.new_key(InferVarVal::Unknown)
+    /// Returns type where every inference variable is substituted.
+    /// If an infer variable remains, it is replaced by `ValueTy::Error`.
+    fn get_normalized_type(&mut self, var: T::V) -> Option<T> {
+        self.get_type(var).map(|t| t.normalize_ty(self))
+    }
+}
+
+pub trait Unifier {
+    type Var: UnifyKey;
+    type Ty;
+
+    fn new_var(&mut self) -> Self::Var;
+    fn get_type(&mut self, var: Self::Var) -> Option<Self::Ty>;
+    fn unify_var_var(&mut self, left: Self::Var, right: Self::Var) -> InferResult;
+    fn unify_var_ty(&mut self, var: Self::Var, ty: Self::Ty) -> InferResult;
+    fn vars_equal(&mut self, l: Self::Var, r: Self::Var) -> bool;
+}
+
+impl<T: UnifiableTy> Unifier for ValueUnifier<T> {
+    type Var = T::V;
+    type Ty = T;
+
+    fn new_var(&mut self) -> Self::Var {
+        self.table.new_key(ValueVarVal::Unknown)
     }
 
     /// Unifies two variables.
     /// Cannot fail if one of them is unbounded.
     /// If both are bounded, we try to unify their types (recursively over the `Ty` type).
     /// If this fails as well, we try to coerce them, i.e., transform one type into the other.
-    fn unify_var_var(&mut self, left: InferVar, right: InferVar) -> InferResult {
+    fn unify_var_var(&mut self, left: Self::Var, right: Self::Var) -> InferResult {
         debug!("unify var var {} {}", left, right);
-        if let (InferVarVal::Known(ty_l), InferVarVal::Known(ty_r)) =
+        if let (ValueVarVal::Known(ty_l), ValueVarVal::Known(ty_r)) =
             (self.table.probe_value(left), self.table.probe_value(right))
         {
             // if both variables have values, we try to unify them recursively
-            if let Some(ty) = self.types_equal_rec(&ty_l, &ty_r) {
+            if let Some(ty) = ty_l.equal_to(self, &ty_r) {
                 // proceed with unification
                 self.table
-                    .unify_var_value(left, InferVarVal::Concretize(ty.clone()))
+                    .unify_var_value(left, ValueVarVal::Concretize(ty.clone()))
                     .expect("overwrite cannot fail");
                 self.table
-                    .unify_var_value(right, InferVarVal::Concretize(ty))
+                    .unify_var_value(right, ValueVarVal::Concretize(ty))
                     .expect("overwrite cannot fail");
-            } else if self.types_coerce(&ty_l, &ty_r) {
+            } else if ty_l.coerces_with(self, &ty_r) {
                 return Ok(());
             } else {
-                return Err(InferError::TypeMismatch(ty_l, ty_r));
+                return Err(ty_l.conflicts_with(ty_r));
             }
         }
         self.table.unify_var_var(left, right)
@@ -883,149 +956,186 @@ impl Unifier {
     /// Cannot fail if the variable is unbounded.
     /// Prevents infinite recursion by checking if `var` appears in `ty`.
     /// Uses the same strategy to merge types as `unify_var_var` (in case `var` is bounded).
-    fn unify_var_ty(&mut self, var: InferVar, ty: Ty) -> InferResult {
+    fn unify_var_ty(&mut self, var: Self::Var, ty: Self::Ty) -> InferResult {
         debug!("unify var ty {} {}", var, ty);
-        if let Ty::Infer(other) = ty {
+        if let Some(other) = ty.is_inferred() {
             return self.unify_var_var(var, other);
         }
-        if let Ty::Infer(_) = &ty {
-            panic!("internal error: entered unreachable code")
+        assert!(
+            ty.is_inferred().is_none(),
+            "internal error: entered unreachable code"
+        );
+        if ty.contains_var(self, var) {
+            return Err(InferError::CyclicDependency);
         }
-        if self.check_occurrence(var, &ty) {
-            return Err(InferError::CyclicDependency(var, ty));
-        }
-        if let InferVarVal::Known(val) = self.table.probe_value(var) {
-            if let Some(ty) = self.types_equal_rec(&val, &ty) {
-                self.table.unify_var_value(var, InferVarVal::Concretize(ty))
-            } else if self.types_coerce(&val, &ty) {
+        if let ValueVarVal::Known(val) = self.table.probe_value(var) {
+            if let Some(ty) = val.equal_to(self, &ty) {
+                self.table.unify_var_value(var, ValueVarVal::Concretize(ty))
+            } else if val.coerces_with(self, &ty) {
                 return Ok(());
             } else {
-                Err(InferError::TypeMismatch(val, ty))
+                Err(val.conflicts_with(ty))
             }
         } else {
-            self.table.unify_var_value(var, InferVarVal::Known(ty))
+            self.table.unify_var_value(var, ValueVarVal::Known(ty))
         }
     }
 
-    /// Checks if `var` occurs in `ty`
-    fn check_occurrence(&mut self, var: InferVar, ty: &Ty) -> bool {
-        trace!("check occurrence {} {}", var, ty);
-        match ty {
-            Ty::Infer(t) => self.table.unioned(var, *t),
-            Ty::EventStream(ty, _) => self.check_occurrence(var, &ty),
-            Ty::Parameterized(ty, params) => {
-                self.check_occurrence(var, &ty)
-                    || params.iter().any(|el| self.check_occurrence(var, el))
+    /// Returns current value of inference variable if it exists, `None` otherwise.
+    fn get_type(&mut self, var: Self::Var) -> Option<Self::Ty> {
+        if let ValueVarVal::Known(ty) = self.table.probe_value(var) {
+            Some(ty)
+        } else {
+            None
+        }
+    }
+
+    fn vars_equal(&mut self, l: Self::Var, r: Self::Var) -> bool {
+        self.table.unioned(l, r)
+    }
+}
+
+pub trait UnifiableTy:
+    std::marker::Sized + std::fmt::Display + Clone + std::cmp::PartialEq + std::fmt::Debug
+{
+    type V: UnifyKey<Value = ValueVarVal<Self>> + std::fmt::Display;
+    fn normalize_ty<U: Unifier<Var = Self::V, Ty = Self>>(&self, unifier: &mut U) -> Self;
+    fn coerces_with<U: Unifier<Var = Self::V, Ty = Self>>(
+        &self,
+        unifier: &mut U,
+        right: &Self,
+    ) -> bool;
+    fn equal_to<U: Unifier<Var = Self::V, Ty = Self>>(
+        &self,
+        unifier: &mut U,
+        right: &Self,
+    ) -> Option<Self>;
+    fn contains_var<U: Unifier<Var = Self::V, Ty = Self>>(
+        &self,
+        unifier: &mut U,
+        var: Self::V,
+    ) -> bool;
+    fn is_inferred(&self) -> Option<Self::V>;
+    fn conflicts_with(self, other: Self) -> InferError;
+}
+
+impl UnifiableTy for ValueTy {
+    type V = ValueVar;
+
+    /// Removes occurrences of inference variables by the inferred type.
+    fn normalize_ty<U: Unifier<Var = Self::V, Ty = Self>>(&self, unifier: &mut U) -> ValueTy {
+        match self {
+            ValueTy::Infer(var) => match unifier.get_type(*var) {
+                None => self.clone(),
+                Some(other_ty) => other_ty.normalize_ty(unifier),
+            },
+            ValueTy::Tuple(t) => {
+                ValueTy::Tuple(t.into_iter().map(|el| el.normalize_ty(unifier)).collect())
             }
-            Ty::TimedStream(ty, _) => self.check_occurrence(var, &ty),
-            Ty::Tuple(t) => t.iter().any(|e| self.check_occurrence(var, e)),
+            ValueTy::Option(ty) => ValueTy::Option(Box::new(ty.normalize_ty(unifier))),
+            _ if self.is_primitive() => self.clone(),
+            ValueTy::Constr(_) => self.clone(),
+            ValueTy::Param(_, _) => self.clone(),
+            _ => unreachable!("cannot normalize {}", self),
+        }
+    }
+
+    /// Checks recursively if the `right` type can be transformed to match `self`.
+    fn coerces_with<U: Unifier<Var = Self::V, Ty = Self>>(
+        &self,
+        unifier: &mut U,
+        right: &ValueTy,
+    ) -> bool {
+        debug!("coerce {} {}", self, right);
+
+        // bit-width increase is allowed
+        match right {
+            ValueTy::Int(lower) => match self {
+                ValueTy::Int(upper) => lower <= upper,
+                _ => false,
+            },
+            ValueTy::UInt(lower) => match self {
+                ValueTy::UInt(upper) => lower <= upper,
+                _ => false,
+            },
+            ValueTy::Float(lower) => match self {
+                ValueTy::Float(upper) => lower <= upper,
+                _ => false,
+            },
             _ => false,
         }
     }
 
     /// Checks recursively if types are equal. Tries to unify type parameters if possible.
     /// Returns the unified, i.e., more conrete type if possible.
-    fn types_equal_rec(&mut self, left: &Ty, right: &Ty) -> Option<Ty> {
-        trace!("comp {} {}", left, right);
-        match (left, right) {
-            (&Ty::Infer(l), &Ty::Infer(r)) => {
-                if self.table.unioned(l, r) {
-                    Some(Ty::Infer(l))
+    fn equal_to<U: Unifier<Var = Self::V, Ty = Self>>(
+        &self,
+        unifier: &mut U,
+        right: &ValueTy,
+    ) -> Option<ValueTy> {
+        trace!("comp {} {}", self, right);
+        match (self, right) {
+            (&ValueTy::Infer(l), &ValueTy::Infer(r)) => {
+                if unifier.vars_equal(l, r) {
+                    Some(ValueTy::Infer(l))
                 } else {
                     // try to unify values
-                    if self.unify_var_var(l, r).is_ok() {
-                        Some(Ty::Infer(l))
+                    if unifier.unify_var_var(l, r).is_ok() {
+                        Some(ValueTy::Infer(l))
                     } else {
                         None
                     }
                 }
             }
-            (&Ty::Infer(var), ty) => {
+            (&ValueTy::Infer(var), ty) => {
                 // try to unify
-                if self.unify_var_ty(var, ty.clone()).is_ok() {
-                    Some(Ty::Infer(var))
+                if unifier.unify_var_ty(var, ty.clone()).is_ok() {
+                    Some(ValueTy::Infer(var))
                 } else {
                     None
                 }
             }
-            (ty, &Ty::Infer(var)) => {
+            (ty, &ValueTy::Infer(var)) => {
                 // try to unify
-                if self.unify_var_ty(var, ty.clone()).is_ok() {
-                    Some(Ty::Infer(var))
+                if unifier.unify_var_ty(var, ty.clone()).is_ok() {
+                    Some(ValueTy::Infer(var))
                 } else {
                     None
                 }
             }
-            (Ty::Constr(constr_l), Ty::Constr(constr_r)) => constr_l
+            (ValueTy::Constr(constr_l), ValueTy::Constr(constr_r)) => constr_l
                 .conjunction(constr_r)
-                .map(|c| Ty::Constr(c.clone())),
-            (Ty::Constr(constr), other) => {
+                .map(|c| ValueTy::Constr(c.clone())),
+            (ValueTy::Constr(constr), other) => {
                 if other.satisfies(constr) {
                     Some(other.clone())
                 } else {
                     None
                 }
             }
-            (other, Ty::Constr(constr)) => {
+            (other, ValueTy::Constr(constr)) => {
                 if other.satisfies(constr) {
                     Some(other.clone())
                 } else {
                     None
                 }
             }
-            (Ty::Option(l), Ty::Option(r)) => {
-                self.types_equal_rec(l, r).map(|ty| Ty::Option(ty.into()))
+            (ValueTy::Option(l), ValueTy::Option(r)) => {
+                l.equal_to(unifier, r).map(|ty| ValueTy::Option(ty.into()))
             }
-            (Ty::EventStream(l, deps_l), Ty::EventStream(r, deps_r)) => {
-                self.types_equal_rec(l, r).map(|ty| {
-                    let mut union = deps_l.clone();
-                    union.extend(deps_r);
-                    union.dedup();
-                    Ty::EventStream(ty.into(), union)
-                })
-            }
-            (Ty::Parameterized(l, param_l), Ty::Parameterized(r, param_r)) => {
-                if param_l.len() != param_r.len() {
-                    return None;
-                }
-                let params: Vec<Ty> = param_l
-                    .iter()
-                    .zip(param_r)
-                    .flat_map(|(l, r)| self.types_equal_rec(l, r))
-                    .collect();
-                if params.len() != param_l.len() {
-                    return None;
-                }
-                self.types_equal_rec(l, r)
-                    .map(|ty| Ty::Parameterized(ty.into(), params))
-            }
-            (Ty::Tuple(l), Ty::Tuple(r)) => {
+            (ValueTy::Tuple(l), ValueTy::Tuple(r)) => {
                 if l.len() != r.len() {
                     return None;
                 }
-                let params: Vec<Ty> = l
+                let params: Vec<ValueTy> = l
                     .iter()
                     .zip(r)
-                    .flat_map(|(l, r)| self.types_equal_rec(l, r))
+                    .flat_map(|(l, r)| l.equal_to(unifier, r))
                     .collect();
                 if params.len() != l.len() {
                     return None;
                 }
-                Some(Ty::Tuple(params))
-            }
-            (Ty::TimedStream(ty_l, d_l), Ty::TimedStream(ty_r, d_r)) => {
-                if d_l != d_r {
-                    return None;
-                }
-                self.types_equal_rec(ty_l, ty_r)
-                    .map(|ty| Ty::TimedStream(ty.into(), d_l.clone()))
-            }
-            (Ty::Window(ty_l, d_l), Ty::Window(ty_r, d_r)) => {
-                if d_l != d_r {
-                    return None;
-                }
-                self.types_equal_rec(ty_l, ty_r)
-                    .map(|ty| Ty::Window(ty.into(), *d_l))
+                Some(ValueTy::Tuple(params))
             }
             (l, r) => {
                 if l == r {
@@ -1037,169 +1147,112 @@ impl Unifier {
         }
     }
 
-    /// Checks recursively if the `right` type can be transformed to match `left`.
-    fn types_coerce(&mut self, left: &Ty, right: &Ty) -> bool {
-        debug!("coerce {} {}", left, right);
-        // types_equal_rec has side effects, thus, create snapshot before
-        let snapshot = self.table.snapshot();
-
-        // Ty -> EventStream<Ty> is always possible
-        if let Ty::EventStream(ty, _) = left {
-            if self.types_equal_rec(ty, right).is_some() {
-                self.table.commit(snapshot);
-                return true;
-            } else {
-                self.table.rollback_to(snapshot);
-                return false;
-            }
-        }
-
-        // Window<ty> -> TimedStream<ty>
-        // TimedStream<ty, freq_l> -> TimedStream<ty, freq_r> if freq_r is multiple of freq_l
-        // ty -> TimedStream<ty>
-        if let Ty::TimedStream(ty_l, freq_l) = left {
-            match right {
-                Ty::Window(ty_r, _) => {
-                    if self.types_equal_rec(ty_l, ty_r).is_some() {
-                        self.table.commit(snapshot);
-                        return true;
-                    } else {
-                        self.table.rollback_to(snapshot);
-                        return false;
-                    }
-                }
-                Ty::TimedStream(ty_r, freq_r) => {
-                    if self.types_equal_rec(ty_l, ty_r).is_none() {
-                        self.table.rollback_to(snapshot);
-                        return false;
-                    }
-                    if freq_r.is_multiple_of(freq_l) {
-                        self.table.commit(snapshot);
-                        return true;
-                    } else {
-                        self.table.rollback_to(snapshot);
-                        return false;
-                    }
-                }
-                ty_r => {
-                    if self.types_equal_rec(ty_l, ty_r).is_some() {
-                        self.table.commit(snapshot);
-                        return true;
-                    } else {
-                        self.table.rollback_to(snapshot);
-                        return false;
-                    }
-                }
-            }
-        }
-
-        // bit-width increase is also allowed
-        match right {
-            Ty::Int(lower) => match left {
-                Ty::Int(upper) => lower <= upper,
-                _ => false,
-            },
-            Ty::UInt(lower) => match left {
-                Ty::UInt(upper) => lower <= upper,
-                _ => false,
-            },
-            Ty::Float(lower) => match left {
-                Ty::Float(upper) => lower <= upper,
-                _ => false,
-            },
+    /// Checks if `var` occurs in `self`
+    fn contains_var<U: Unifier<Var = Self::V, Ty = Self>>(
+        &self,
+        unifier: &mut U,
+        var: ValueVar,
+    ) -> bool {
+        trace!("check occurrence {} {}", var, self);
+        match self {
+            ValueTy::Infer(t) => unifier.vars_equal(var, *t),
+            ValueTy::Tuple(t) => t.iter().any(|e| e.contains_var(unifier, var)),
+            ValueTy::Option(t) => t.contains_var(unifier, var),
             _ => false,
         }
     }
 
-    /// Returns type where every inference variable is substituted.
-    /// If a constraint remains, it gets replaced by the default value (e.g., `Int32` for `SignedInteger`).
-    /// If an infer variable remains, it is replaced by `Ty::Error`.
-    fn get_final_type(&mut self, var: InferVar) -> Ty {
-        match self.get_type(var) {
-            None => Ty::Error,
-            Some(t) => self.replace_constr(t),
-        }
-    }
-
-    /// Replaces constraints by default values
-    fn replace_constr(&mut self, ty: Ty) -> Ty {
-        match ty {
-            Ty::Infer(var) => match self.get_type(var) {
-                None => ty,
-                Some(other_ty) => self.replace_constr(other_ty),
-            },
-            Ty::Tuple(t) => Ty::Tuple(t.into_iter().map(|el| self.replace_constr(el)).collect()),
-            Ty::EventStream(ty, deps) => Ty::EventStream(self.replace_constr(*ty).into(), deps),
-            Ty::Parameterized(ty, params) => Ty::Parameterized(
-                Box::new(self.replace_constr(*ty)),
-                params.into_iter().map(|e| self.replace_constr(e)).collect(),
-            ),
-            Ty::Option(ty) => Ty::Option(Box::new(self.replace_constr(*ty))),
-            Ty::TimedStream(ty, freq) => Ty::TimedStream(self.replace_constr(*ty).into(), freq),
-            Ty::Window(ty, d) => Ty::Window(Box::new(self.replace_constr(*ty)), d),
-            _ if ty.is_primitive() => ty,
-            Ty::Constr(c) => match c.has_default() {
-                Some(d) => d,
-                None => Ty::Error,
-            },
-            Ty::Param(_, _) => ty,
-            _ => unreachable!("cannot replace_constr for {}", ty),
-        }
-    }
-
-    /// Returns current value of inference variable if it exists, `None` otherwise.
-    fn get_type(&mut self, var: InferVar) -> Option<Ty> {
-        if let InferVarVal::Known(ty) = self.table.probe_value(var) {
-            Some(ty)
+    fn is_inferred(&self) -> Option<ValueVar> {
+        if let &ValueTy::Infer(v) = self {
+            Some(v)
         } else {
             None
         }
     }
 
-    /// Tries to remove variables used for inference by their values.
-    /// Useful for example in error messages.
-    fn normalize_ty(&mut self, ty: Ty) -> Ty {
-        match ty {
-            Ty::Infer(var) => match self.get_type(var) {
-                None => ty,
-                Some(other_ty) => self.normalize_ty(other_ty),
-            },
-            Ty::Tuple(t) => Ty::Tuple(t.into_iter().map(|el| self.normalize_ty(el)).collect()),
-            Ty::EventStream(ty, deps) => Ty::EventStream(self.normalize_ty(*ty).into(), deps),
-            Ty::TimedStream(ty, freq) => Ty::TimedStream(self.normalize_ty(*ty).into(), freq),
-            Ty::Parameterized(ty, params) => Ty::Parameterized(
-                Box::new(self.normalize_ty(*ty)),
-                params.into_iter().map(|e| self.normalize_ty(e)).collect(),
-            ),
-            Ty::Option(ty) => Ty::Option(Box::new(self.normalize_ty(*ty))),
-            Ty::Window(ty, d) => Ty::Window(Box::new(self.normalize_ty(*ty)), d),
-            _ if ty.is_primitive() => ty,
-            Ty::Constr(_) => ty,
-            Ty::Param(_, _) => ty,
-            _ => unreachable!("cannot normalize {}", ty),
-        }
+    fn conflicts_with(self, other: Self) -> InferError {
+        InferError::ValueTypeMismatch(self, other)
     }
 }
 
+/// Representation of key for unification of `ValueTy`
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Copy, Clone)]
-pub struct InferVar(u32);
+pub struct ValueVar(u32);
 
 // used in UnifcationTable
-impl UnifyKey for InferVar {
-    type Value = InferVarVal;
+impl UnifyKey for ValueVar {
+    type Value = ValueVarVal<ValueTy>;
     fn index(&self) -> u32 {
         self.0
     }
-    fn from_index(u: u32) -> InferVar {
-        InferVar(u)
+    fn from_index(u: u32) -> ValueVar {
+        ValueVar(u)
     }
     fn tag() -> &'static str {
-        "InferVar"
+        "ValueVar"
+    }
+}
+
+impl UnifiableTy for StreamTy {
+    type V = StreamVar;
+
+    fn normalize_ty<U: Unifier<Var = Self::V, Ty = Self>>(&self, unifier: &mut U) -> Self {
+        self.clone()
+    }
+
+    fn coerces_with<U: Unifier<Var = Self::V, Ty = Self>>(
+        &self,
+        unifier: &mut U,
+        right: &Self,
+    ) -> bool {
+        debug!("coerce {} {}", self, right);
+
+        if self.is_parametric() || right.is_parametric() {
+            return false;
+        }
+
+        // RealTime<freq_self> -> RealTime<freq_right> if freq_right is multiple of freq_self
+        match (&self.timing, &right.timing) {
+            (TimingInfo::RealTime(target), TimingInfo::RealTime(other)) => {
+                other.is_multiple_of(target)
+            }
+            _ => false,
+        }
+    }
+
+    fn equal_to<U: Unifier<Var = Self::V, Ty = Self>>(
+        &self,
+        unifier: &mut U,
+        right: &Self,
+    ) -> Option<Self> {
+        trace!("comp {} {}", self, right);
+        if self == right {
+            Some(self.clone())
+        } else {
+            None
+        }
+    }
+
+    fn contains_var<U: Unifier<Var = Self::V, Ty = Self>>(
+        &self,
+        unifier: &mut U,
+        var: Self::V,
+    ) -> bool {
+        trace!("check occurrence {} {}", var, self);
+        false
+    }
+
+    fn is_inferred(&self) -> Option<Self::V> {
+        None
+    }
+
+    fn conflicts_with(self, other: Self) -> InferError {
+        InferError::StreamTypeMismatch(self, other)
     }
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
-pub enum InferVarVal {
+pub enum ValueVarVal<Ty: UnifiableTy> {
     Known(Ty),
     Unknown,
     /// Used to overwrite known values
@@ -1207,12 +1260,12 @@ pub enum InferVarVal {
 }
 
 /// Implements how the types are merged during unification
-impl UnifyValue for InferVarVal {
+impl<Ty: UnifiableTy> UnifyValue for ValueVarVal<Ty> {
     type Error = InferError;
 
     /// the idea of the unification is to merge two types and always taking the more concrete value
     fn unify_values(left: &Self, right: &Self) -> Result<Self, InferError> {
-        use self::InferVarVal::*;
+        use self::ValueVarVal::*;
         match (left, right) {
             (Known(_), Unknown) => Ok(left.clone()),
             (Unknown, Known(_)) => Ok(right.clone()),
@@ -1227,28 +1280,60 @@ impl UnifyValue for InferVarVal {
     }
 }
 
-impl EqUnifyValue for Ty {}
+impl EqUnifyValue for ValueTy {}
 
-impl std::fmt::Display for InferVar {
+impl std::fmt::Display for ValueVar {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "{}", self.0)
     }
+}
+
+/// Representation of key for unification of `StreamTy`
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Copy, Clone)]
+pub struct StreamVar(u32);
+
+impl UnifyKey for StreamVar {
+    type Value = ValueVarVal<StreamTy>;
+    fn index(&self) -> u32 {
+        self.0
+    }
+    fn from_index(u: u32) -> Self {
+        StreamVar(u)
+    }
+    fn tag() -> &'static str {
+        "StreamVar"
+    }
+}
+
+impl EqUnifyValue for StreamTy {}
+
+impl std::fmt::Display for StreamVar {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+#[derive(Debug, Clone)]
+enum StreamVarOrTy {
+    Var(StreamVar),
+    Ty(StreamTy),
 }
 
 type InferResult = Result<(), InferError>;
 
 #[derive(Debug)]
 pub enum InferError {
-    TypeMismatch(Ty, Ty),
+    ValueTypeMismatch(ValueTy, ValueTy),
+    StreamTypeMismatch(StreamTy, StreamTy),
     ConflictingConstraint(TypeConstraint, TypeConstraint),
-    CyclicDependency(InferVar, Ty),
+    CyclicDependency,
 }
 
 impl InferError {
-    fn normalize_types(&mut self, unifier: &mut Unifier) {
-        if let InferError::TypeMismatch(ref mut expected, ref mut found) = self {
-            std::mem::replace(expected, unifier.normalize_ty(expected.clone()));
-            std::mem::replace(found, unifier.normalize_ty(found.clone()));
+    fn normalize_types(&mut self, unifier: &mut ValueUnifier<ValueTy>) {
+        if let InferError::ValueTypeMismatch(ref mut expected, ref mut found) = self {
+            std::mem::replace(expected, expected.normalize_ty(unifier));
+            std::mem::replace(found, found.normalize_ty(unifier));
         }
     }
 }
@@ -1284,7 +1369,7 @@ mod tests {
     }
 
     /// Returns the type of the last output of the given spec
-    fn get_type(spec: &str) -> Ty {
+    fn get_type(spec: &str) -> ValueTy {
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
 
         let mut spec = match parse(spec) {
@@ -1318,10 +1403,7 @@ mod tests {
     fn parametric_input() {
         let spec = "input i<a: Int8, b: Bool>: Int8\noutput o := i(1,false)[0] ? 42";
         assert_eq!(0, num_type_errors(spec));
-        assert_eq!(
-            get_type(spec),
-            Ty::EventStream(Ty::Int(IntTy::I8).into(), vec![])
-        );
+        assert_eq!(get_type(spec), ValueTy::Int(IntTy::I8));
     }
 
     #[test]
@@ -1375,10 +1457,7 @@ mod tests {
     fn simple_output() {
         let spec = "output o: Int8 := 3";
         assert_eq!(0, num_type_errors(spec));
-        assert_eq!(
-            get_type(spec),
-            Ty::EventStream(Ty::Int(IntTy::I8).into(), vec![])
-        );
+        assert_eq!(get_type(spec), ValueTy::Int(IntTy::I8));
     }
 
     #[test]
@@ -1397,27 +1476,21 @@ mod tests {
     fn simple_binary() {
         let spec = "output o: Int8 := 3 + 5";
         assert_eq!(0, num_type_errors(spec));
-        assert_eq!(
-            get_type(spec),
-            Ty::EventStream(Ty::Int(IntTy::I8).into(), vec![])
-        );
+        assert_eq!(get_type(spec), ValueTy::Int(IntTy::I8));
     }
 
     #[test]
     fn simple_binary_input() {
         let spec = "input i: Int8\noutput o: Int8 := 3 + i";
         assert_eq!(0, num_type_errors(spec));
-        assert_eq!(
-            get_type(spec),
-            Ty::EventStream(Ty::Int(IntTy::I8).into(), vec![])
-        );
+        assert_eq!(get_type(spec), ValueTy::Int(IntTy::I8));
     }
 
     #[test]
     fn simple_unary() {
         let spec = "output o: Bool := !false";
         assert_eq!(0, num_type_errors(spec));
-        assert_eq!(get_type(spec), Ty::EventStream(Ty::Bool.into(), vec![]));
+        assert_eq!(get_type(spec), ValueTy::Bool);
     }
 
     #[test]
@@ -1438,30 +1511,21 @@ mod tests {
     fn simple_ite() {
         let spec = "output o: Int8 := if false then 1 else 2";
         assert_eq!(0, num_type_errors(spec));
-        assert_eq!(
-            get_type(spec),
-            Ty::EventStream(Ty::Int(IntTy::I8).into(), vec![])
-        );
+        assert_eq!(get_type(spec), ValueTy::Int(IntTy::I8));
     }
 
     #[test]
     fn simple_ite_compare() {
         let spec = "output e := if 1 == 0 then 0 else -1";
         assert_eq!(0, num_type_errors(spec));
-        assert_eq!(
-            get_type(spec),
-            Ty::EventStream(Ty::Int(IntTy::I32).into(), vec![])
-        );
+        assert_eq!(get_type(spec), ValueTy::Int(IntTy::I32));
     }
 
     #[test]
     fn underspecified_ite_type() {
         let spec = "output o := if !false then 1.3 else -2.0";
         assert_eq!(0, num_type_errors(spec));
-        assert_eq!(
-            get_type(spec),
-            Ty::EventStream(Ty::Float(FloatTy::F32).into(), vec![])
-        );
+        assert_eq!(get_type(spec), ValueTy::Float(FloatTy::F32));
     }
 
     #[test]
@@ -1480,27 +1544,21 @@ mod tests {
     fn test_parenthized_expr() {
         let spec = "input s: String\noutput o: Bool := (s[-1] ? \"\") == \"a\"";
         assert_eq!(0, num_type_errors(spec));
-        assert_eq!(get_type(spec), Ty::EventStream(Ty::Bool.into(), vec![]));
+        assert_eq!(get_type(spec), ValueTy::Bool);
     }
 
     #[test]
     fn test_underspecified_type() {
         let spec = "output o := 2";
         assert_eq!(0, num_type_errors(spec));
-        assert_eq!(
-            get_type(spec),
-            Ty::EventStream(Ty::Int(IntTy::I32).into(), vec![])
-        );
+        assert_eq!(get_type(spec), ValueTy::Int(IntTy::I32));
     }
 
     #[test]
     fn test_trigonometric() {
         let spec = "import math\noutput o: Float32 := sin(2.0)";
         assert_eq!(0, num_type_errors(spec));
-        assert_eq!(
-            get_type(spec),
-            Ty::EventStream(Ty::Float(FloatTy::F32).into(), vec![])
-        );
+        assert_eq!(get_type(spec), ValueTy::Float(FloatTy::F32));
     }
 
     #[test]
@@ -1520,17 +1578,14 @@ mod tests {
         let spec =
             "import regex\ninput s: String\noutput o: Bool := matches_regex(s[0], r\"(a+b)\")";
         assert_eq!(0, num_type_errors(spec));
-        assert_eq!(get_type(spec), Ty::EventStream(Ty::Bool.into(), vec![]));
+        assert_eq!(get_type(spec), ValueTy::Bool);
     }
 
     #[test]
     fn test_input_lookup() {
         let spec = "input a: UInt8\n output b: UInt8 := a";
         assert_eq!(0, num_type_errors(spec));
-        assert_eq!(
-            get_type(spec),
-            Ty::EventStream(Ty::UInt(UIntTy::U8).into(), vec![NodeId::from_u32(0)])
-        );
+        assert_eq!(get_type(spec), ValueTy::UInt(UIntTy::U8));
     }
 
     #[test]
@@ -1543,10 +1598,7 @@ mod tests {
     fn test_stream_lookup() {
         let spec = "output a: UInt8 := 3\n output b: UInt8 := a[0]";
         assert_eq!(0, num_type_errors(spec));
-        assert_eq!(
-            get_type(spec),
-            Ty::EventStream(Ty::UInt(UIntTy::U8).into(), vec![NodeId::from_u32(0)])
-        );
+        assert_eq!(get_type(spec), ValueTy::UInt(UIntTy::U8));
     }
 
     #[test]
@@ -1559,10 +1611,7 @@ mod tests {
     fn test_stream_lookup_dft() {
         let spec = "output a: UInt8 := 3\n output b: UInt8 := a[-1] ? 3";
         assert_eq!(0, num_type_errors(spec));
-        assert_eq!(
-            get_type(spec),
-            Ty::EventStream(Ty::UInt(UIntTy::U8).into(), vec![])
-        );
+        assert_eq!(get_type(spec), ValueTy::UInt(UIntTy::U8));
     }
 
     #[test]
@@ -1575,26 +1624,14 @@ mod tests {
     fn test_invoke_type() {
         let spec = "input in: Int8\n output a<p1: Int8>: Int8 { invoke in } := 3";
         assert_eq!(0, num_type_errors(spec));
-        assert_eq!(
-            get_type(spec),
-            Ty::Parameterized(
-                Ty::EventStream(Ty::Int(IntTy::I8).into(), vec![]).into(),
-                vec![Ty::Int(IntTy::I8)]
-            )
-        );
+        assert_eq!(get_type(spec), ValueTy::Int(IntTy::I8));
     }
 
     #[test]
     fn test_invoke_type_two_params() {
         let spec = "input in: Int8\n output a<p1: Int8, p2: Int8>: Int8 { invoke (in, in) } := 3";
         assert_eq!(0, num_type_errors(spec));
-        assert_eq!(
-            get_type(spec),
-            Ty::Parameterized(
-                Ty::EventStream(Ty::Int(IntTy::I8).into(), vec![]).into(),
-                vec![Ty::Int(IntTy::I8), Ty::Int(IntTy::I8)]
-            )
-        );
+        assert_eq!(get_type(spec), ValueTy::Int(IntTy::I8));
     }
 
     #[test]
@@ -1607,10 +1644,7 @@ mod tests {
     fn test_extend_type() {
         let spec = "input in: Bool\n output a: Int8 { extend in } := 3";
         assert_eq!(0, num_type_errors(spec));
-        assert_eq!(
-            get_type(spec),
-            Ty::EventStream(Ty::Int(IntTy::I8).into(), vec![])
-        );
+        assert_eq!(get_type(spec), ValueTy::Int(IntTy::I8));
     }
 
     #[test]
@@ -1623,10 +1657,7 @@ mod tests {
     fn test_terminate_type() {
         let spec = "input in: Bool\n output a: Int8 { terminate in } := 3";
         assert_eq!(0, num_type_errors(spec));
-        assert_eq!(
-            get_type(spec),
-            Ty::EventStream(Ty::Int(IntTy::I8).into(), vec![])
-        );
+        assert_eq!(get_type(spec), ValueTy::Int(IntTy::I8));
     }
 
     #[test]
@@ -1639,10 +1670,7 @@ mod tests {
     fn test_param_spec() {
         let spec = "input in: Int8\n output a<p1: Int8>: Int8 { invoke in } := 3\n output b: Int8 := a(3)[-2] ? 1";
         assert_eq!(0, num_type_errors(spec));
-        assert_eq!(
-            get_type(spec),
-            Ty::EventStream(Ty::Int(IntTy::I8).into(), vec![])
-        );
+        assert_eq!(get_type(spec), ValueTy::Int(IntTy::I8));
     }
 
     #[test]
@@ -1663,7 +1691,7 @@ mod tests {
         assert_eq!(0, num_type_errors(spec));
         assert_eq!(
             get_type(spec),
-            Ty::EventStream(Ty::Tuple(vec![Ty::Int(IntTy::I8), Ty::Bool]).into(), vec![])
+            ValueTy::Tuple(vec![ValueTy::Int(IntTy::I8), ValueTy::Bool])
         );
     }
 
@@ -1677,7 +1705,7 @@ mod tests {
     fn test_tuple_access() {
         let spec = "input in: (Int8, Bool)\noutput out: Bool := in[0].1";
         assert_eq!(0, num_type_errors(spec));
-        assert_eq!(get_type(spec), Ty::EventStream(Ty::Bool.into(), vec![]));
+        assert_eq!(get_type(spec), ValueTy::Bool);
     }
 
     #[test]
@@ -1696,27 +1724,21 @@ mod tests {
     fn test_input_offset() {
         let spec = "input a: UInt8\n output b: UInt8 := a[3]";
         assert_eq!(0, num_type_errors(spec));
-        assert_eq!(
-            get_type(spec),
-            Ty::EventStream(Ty::UInt(UIntTy::U8).into(), vec![NodeId::from_u32(0)])
-        );
+        assert_eq!(get_type(spec), ValueTy::UInt(UIntTy::U8));
     }
 
     #[test]
     fn test_tuple_of_tuples() {
         let spec = "input in: (Int8, (UInt8, Bool))\noutput out: Int16 := in[0].0";
         assert_eq!(0, num_type_errors(spec));
-        assert_eq!(
-            get_type(spec),
-            Ty::EventStream(Ty::Int(IntTy::I16).into(), vec![])
-        );
+        assert_eq!(get_type(spec), ValueTy::Int(IntTy::I16));
     }
 
     #[test]
     fn test_tuple_of_tuples2() {
         let spec = "input in: (Int8, (UInt8, Bool))\noutput out: Bool := in[0].1.1";
         assert_eq!(0, num_type_errors(spec));
-        assert_eq!(get_type(spec), Ty::EventStream(Ty::Bool.into(), vec![]));
+        assert_eq!(get_type(spec), ValueTy::Bool);
     }
 
     #[test]

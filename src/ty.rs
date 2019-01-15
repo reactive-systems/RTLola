@@ -2,65 +2,27 @@
 //!
 //! It is inspired by https://doc.rust-lang.org/nightly/nightly-rustc/rustc/ty/index.html
 
-use crate::analysis::typing::InferVar;
-use ast_node::NodeId;
+use crate::analysis::typing::ValueVar;
 use std::time::Duration;
 
-/// Representation of types
+/// The `stream` type, storing information about timing of a stream (event-based, real-time).
 #[derive(Debug, PartialEq, Eq, PartialOrd, Clone, Hash)]
-pub enum Ty {
-    Bool,
-    Int(IntTy),
-    UInt(UIntTy),
-    Float(FloatTy),
-    // an abstract data type, e.g., structs, enums, etc.
-    //Adt(AdtDef),
-    String,
-    Tuple(Vec<Ty>),
-    /// An event stream of the given type
-    EventStream(Box<Ty>, Vec<NodeId>),
-    /// A parameterized stream
-    Parameterized(Box<Ty>, Vec<Ty>),
-    TimedStream(Box<Ty>, Freq),
-    /// Representation of a sliding window
-    Window(Box<Ty>, Duration),
-    /// an optional value type, e.g., accessing a stream with offset -1
-    Option(Box<Ty>),
-    /// Used during type inference
-    Infer(InferVar),
-    Constr(TypeConstraint),
-    /// A reference to a generic parameter in a function declaration, e.g. `T` in `a<T>(x:T) -> T`
-    Param(u8, String),
-    Error,
-}
-
-/// Representation of types, consisting of two orthogonal information.
-/// * The `stream` type, storing information about timing of a stream (event-based, real-time).
-/// * The `value` type, storing information about the stored values (`Bool`, `UInt8`, etc.)
-#[derive(Debug, PartialEq, Eq, PartialOrd, Clone, Hash)]
-struct NewTy {
-    stream: StreamTy,
-    value: ValueTy,
+pub struct StreamTy {
+    pub parameters: Vec<ValueTy>,
+    pub timing: TimingInfo,
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Clone, Hash)]
-struct StreamTy {
-    parameters: Vec<ValueTy>,
-    timing: TimingInfo,
-}
-
-#[derive(Debug, PartialEq, Eq, PartialOrd, Clone, Hash)]
-enum TimingInfo {
+pub enum TimingInfo {
     /// An event stream with the given dependencies
-    Event(Vec<NodeId>),
+    Event,
     // A real-time stream with given frequency
     RealTime(Freq),
-    /// Used during type inference
-    Infer(InferVar),
 }
 
+/// The `value` type, storing information about the stored values (`Bool`, `UInt8`, etc.)
 #[derive(Debug, PartialEq, Eq, PartialOrd, Clone, Hash)]
-enum ValueTy {
+pub enum ValueTy {
     Bool,
     Int(IntTy),
     UInt(UIntTy),
@@ -72,7 +34,7 @@ enum ValueTy {
     /// an optional value type, e.g., resulting from accessing a stream with offset -1
     Option(Box<ValueTy>),
     /// Used during type inference
-    Infer(InferVar),
+    Infer(ValueVar),
     Constr(TypeConstraint),
     /// A reference to a generic parameter in a function declaration, e.g. `T` in `a<T>(x:T) -> T`
     Param(u8, String),
@@ -116,6 +78,23 @@ impl std::fmt::Display for Freq {
     }
 }
 
+impl StreamTy {
+    pub(crate) fn new(timing: TimingInfo) -> StreamTy {
+        StreamTy {
+            parameters: vec![],
+            timing,
+        }
+    }
+
+    pub(crate) fn new_parametric(parameters: Vec<ValueTy>, timing: TimingInfo) -> StreamTy {
+        StreamTy { parameters, timing }
+    }
+
+    pub(crate) fn is_parametric(&self) -> bool {
+        !self.parameters.is_empty()
+    }
+}
+
 impl Freq {
     pub(crate) fn new(repr: &str, d: Duration) -> Self {
         Freq {
@@ -141,30 +120,30 @@ impl Freq {
 }
 
 lazy_static! {
-    static ref PRIMITIVE_TYPES: Vec<(&'static str, &'static Ty)> = vec![
-        ("Bool", &Ty::Bool),
-        ("Int8", &Ty::Int(I8)),
-        ("Int16", &Ty::Int(I16)),
-        ("Int32", &Ty::Int(I32)),
-        ("Int64", &Ty::Int(I64)),
-        ("UInt8", &Ty::UInt(U8)),
-        ("UInt16", &Ty::UInt(U16)),
-        ("UInt32", &Ty::UInt(U32)),
-        ("UInt64", &Ty::UInt(U64)),
-        ("Float32", &Ty::Float(F32)),
-        ("Float64", &Ty::Float(F64)),
-        ("String", &Ty::String),
+    static ref PRIMITIVE_TYPES: Vec<(&'static str, &'static ValueTy)> = vec![
+        ("Bool", &ValueTy::Bool),
+        ("Int8", &ValueTy::Int(I8)),
+        ("Int16", &ValueTy::Int(I16)),
+        ("Int32", &ValueTy::Int(I32)),
+        ("Int64", &ValueTy::Int(I64)),
+        ("UInt8", &ValueTy::UInt(U8)),
+        ("UInt16", &ValueTy::UInt(U16)),
+        ("UInt32", &ValueTy::UInt(U32)),
+        ("UInt64", &ValueTy::UInt(U64)),
+        ("Float32", &ValueTy::Float(F32)),
+        ("Float64", &ValueTy::Float(F64)),
+        ("String", &ValueTy::String),
     ];
 }
 
-impl Ty {
-    pub(crate) fn primitive_types() -> std::slice::Iter<'static, (&'static str, &'static Ty)> {
+impl ValueTy {
+    pub(crate) fn primitive_types() -> std::slice::Iter<'static, (&'static str, &'static ValueTy)> {
         PRIMITIVE_TYPES.iter()
     }
 
     pub(crate) fn satisfies(&self, constraint: &TypeConstraint) -> bool {
-        use self::Ty::*;
         use self::TypeConstraint::*;
+        use self::ValueTy::*;
         match constraint {
             Unconstrained => true,
             Comparable => self.is_primitive(),
@@ -183,96 +162,103 @@ impl Ty {
                 UInt(_) => true,
                 _ => false,
             },
-            TypeConstraint::Stream(ty_l) => match self {
-                Ty::EventStream(ty, _) => ty == ty_l,
-                Ty::TimedStream(ty, _) => ty == ty_l,
-                _ => false,
-            },
         }
     }
 
     pub(crate) fn is_error(&self) -> bool {
-        use self::Ty::*;
+        use self::ValueTy::*;
         match self {
             Error => true,
             Tuple(args) => args.iter().any(|el| el.is_error()),
-            EventStream(ty, _) => ty.is_error(),
-            Parameterized(ty, params) => ty.is_error() || params.iter().any(|e| e.is_error()),
-            TimedStream(ty, _) => ty.is_error(),
             Option(ty) => ty.is_error(),
             _ => false,
         }
     }
 
     pub(crate) fn is_primitive(&self) -> bool {
-        use self::Ty::*;
+        use self::ValueTy::*;
         match self {
             Bool | Int(_) | UInt(_) | Float(_) | String => true,
             _ => false,
         }
     }
 
-    pub(crate) fn replace_params(&self, infer_vars: &[InferVar]) -> Ty {
+    /// Replaces parameters by the given list
+    pub(crate) fn replace_params(&self, infer_vars: &[ValueVar]) -> ValueTy {
         match self {
-            &Ty::Param(id, _) => Ty::Infer(infer_vars[id as usize]),
-            Ty::EventStream(t, deps) => {
-                Ty::EventStream(t.replace_params(infer_vars).into(), deps.clone())
-            }
-            Ty::Parameterized(t, params) => Ty::Parameterized(
-                Box::new(t.replace_params(infer_vars)),
-                params
-                    .iter()
-                    .map(|e| e.replace_params(infer_vars))
-                    .collect(),
-            ),
-            Ty::Option(t) => Ty::Option(Box::new(t.replace_params(infer_vars))),
-            Ty::Window(t, d) => Ty::Window(Box::new(t.replace_params(infer_vars)), *d),
-            Ty::Infer(_) => self.clone(),
-            Ty::Constr(_) => self.clone(),
+            &ValueTy::Param(id, _) => ValueTy::Infer(infer_vars[id as usize]),
+            ValueTy::Option(t) => ValueTy::Option(t.replace_params(infer_vars).into()),
+            ValueTy::Infer(_) => self.clone(),
+            ValueTy::Constr(_) => self.clone(),
             _ if self.is_primitive() => self.clone(),
-            _ => unimplemented!("replace_param for {}", self),
+            _ => unreachable!("replace_param for {}", self),
+        }
+    }
+
+    /// Replaces constraints by default values
+    pub(crate) fn replace_constr(&self) -> ValueTy {
+        match &self {
+            ValueTy::Tuple(t) => {
+                ValueTy::Tuple(t.into_iter().map(|el| el.replace_constr()).collect())
+            }
+            ValueTy::Option(ty) => ValueTy::Option(ty.replace_constr().into()),
+            ValueTy::Constr(c) => match c.has_default() {
+                Some(d) => d,
+                None => ValueTy::Error,
+            },
+            ValueTy::Param(_, _) => self.clone(),
+            _ if self.is_primitive() => self.clone(),
+            _ => unreachable!("cannot replace_constr for {}", self),
         }
     }
 }
 
-impl std::fmt::Display for Ty {
+impl std::fmt::Display for ValueTy {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            Ty::Bool => write!(f, "Bool"),
-            Ty::Int(I8) => write!(f, "Int8"),
-            Ty::Int(I16) => write!(f, "Int16"),
-            Ty::Int(I32) => write!(f, "Int32"),
-            Ty::Int(I64) => write!(f, "Int64"),
-            Ty::UInt(U8) => write!(f, "UInt8"),
-            Ty::UInt(U16) => write!(f, "UInt16"),
-            Ty::UInt(U32) => write!(f, "UInt32"),
-            Ty::UInt(U64) => write!(f, "UInt64"),
-            Ty::Float(F32) => write!(f, "Float32"),
-            Ty::Float(F64) => write!(f, "Float64"),
-            Ty::String => write!(f, "String"),
-            Ty::EventStream(ty, deps) => {
-                if deps.is_empty() {
-                    write!(f, "EventStream<{}>", ty)
-                } else {
-                    let joined: Vec<String> = deps.iter().map(|e| format!("{}", e)).collect();
-                    write!(f, "EventStream<{}, {}>", ty, joined.join(", "))
-                }
-            }
-            Ty::Parameterized(ty, params) => {
-                let joined: Vec<String> = params.iter().map(|e| format!("{}", e)).collect();
-                write!(f, "Paramaterized<{}, ({})>", ty, joined.join(", "))
-            }
-            Ty::TimedStream(ty, freq) => write!(f, "TimedStream<{}, {}>", ty, freq),
-            Ty::Window(t, d) => write!(f, "Window<{}, {:?}>", t, d),
-            Ty::Option(ty) => write!(f, "Option<{}>", ty),
-            Ty::Tuple(inner) => {
+            ValueTy::Bool => write!(f, "Bool"),
+            ValueTy::Int(I8) => write!(f, "Int8"),
+            ValueTy::Int(I16) => write!(f, "Int16"),
+            ValueTy::Int(I32) => write!(f, "Int32"),
+            ValueTy::Int(I64) => write!(f, "Int64"),
+            ValueTy::UInt(U8) => write!(f, "UInt8"),
+            ValueTy::UInt(U16) => write!(f, "UInt16"),
+            ValueTy::UInt(U32) => write!(f, "UInt32"),
+            ValueTy::UInt(U64) => write!(f, "UInt64"),
+            ValueTy::Float(F32) => write!(f, "Float32"),
+            ValueTy::Float(F64) => write!(f, "Float64"),
+            ValueTy::String => write!(f, "String"),
+            ValueTy::Option(ty) => write!(f, "Option<{}>", ty),
+            ValueTy::Tuple(inner) => {
                 let joined: Vec<String> = inner.iter().map(|e| format!("{}", e)).collect();
                 write!(f, "({})", joined.join(", "))
             }
-            Ty::Infer(id) => write!(f, "?{}", id),
-            Ty::Constr(constr) => write!(f, "{{{}}}", constr),
-            Ty::Param(_, name) => write!(f, "{}", name),
-            Ty::Error => write!(f, "Error"),
+            ValueTy::Infer(id) => write!(f, "?{}", id),
+            ValueTy::Constr(constr) => write!(f, "{{{}}}", constr),
+            ValueTy::Param(_, name) => write!(f, "{}", name),
+            ValueTy::Error => write!(f, "Error"),
+        }
+    }
+}
+
+impl std::fmt::Display for StreamTy {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        if self.is_parametric() {
+            let joined: Vec<String> = self.parameters.iter().map(|e| format!("{}", e)).collect();
+            match &self.timing {
+                TimingInfo::Event => write!(f, "Parametric<({}), EventStream>", joined.join(", ")),
+                TimingInfo::RealTime(freq) => write!(
+                    f,
+                    "Parametric<({}), RealTimeStream<{}>>",
+                    joined.join(", "),
+                    freq
+                ),
+            }
+        } else {
+            match &self.timing {
+                TimingInfo::Event => write!(f, "EventStream"),
+                TimingInfo::RealTime(freq) => write!(f, "RealTimeStream<{}>", freq),
+            }
         }
     }
 }
@@ -290,18 +276,16 @@ pub enum TypeConstraint {
     Equatable,
     /// Types that can be ordered, i.e., implement `<`, `>`,
     Comparable,
-    /// A stream of given type
-    Stream(Box<Ty>),
     Unconstrained,
 }
 
 impl TypeConstraint {
-    pub(crate) fn has_default(self) -> Option<Ty> {
+    pub(crate) fn has_default(&self) -> Option<ValueTy> {
         use self::TypeConstraint::*;
         match self {
-            Integer | SignedInteger | Numeric => Some(Ty::Int(I32)),
-            UnsignedInteger => Some(Ty::UInt(U32)),
-            FloatingPoint => Some(Ty::Float(F32)),
+            Integer | SignedInteger | Numeric => Some(ValueTy::Int(I32)),
+            UnsignedInteger => Some(ValueTy::UInt(U32)),
+            FloatingPoint => Some(ValueTy::Float(F32)),
             _ => None,
         }
     }
@@ -330,7 +314,6 @@ impl TypeConstraint {
             FloatingPoint => None,
             SignedInteger => None,
             UnsignedInteger => None,
-            Stream(_) => None,
         }
     }
 }
@@ -346,7 +329,6 @@ impl std::fmt::Display for TypeConstraint {
             Numeric => write!(f, "numeric type"),
             Equatable => write!(f, "equatable type"),
             Comparable => write!(f, "comparable type"),
-            Stream(ty) => write!(f, "Stream<{}>", ty),
             Unconstrained => write!(f, "unconstrained type"),
         }
     }

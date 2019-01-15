@@ -6,7 +6,7 @@ use crate::parse::Ident;
 use crate::reporting::{Handler, LabeledSpan};
 use crate::stdlib;
 use crate::stdlib::FuncDecl;
-use crate::ty::Ty;
+use crate::ty::ValueTy;
 use ast_node::{AstNode, NodeId, Span};
 use std::collections::HashMap;
 
@@ -54,7 +54,7 @@ impl<'a> NamingAnalysis<'a> {
     pub(crate) fn new(handler: &'a Handler) -> Self {
         let mut scoped_decls = ScopedDecl::new();
 
-        for (name, ty) in Ty::primitive_types() {
+        for (name, ty) in ValueTy::primitive_types() {
             scoped_decls.add_decl_for(name, Declaration::Type(ty));
         }
 
@@ -470,7 +470,7 @@ pub enum Declaration<'a> {
     Const(&'a Constant),
     In(&'a Input),
     Out(&'a Output),
-    Type(&'a Ty),
+    Type(&'a ValueTy),
     Param(&'a Parameter),
     Func(&'a FuncDecl),
 }

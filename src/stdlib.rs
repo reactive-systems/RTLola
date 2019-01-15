@@ -1,11 +1,11 @@
 //! This module contains the Lola standard library.
 
 use crate::ast::{BinOp, UnOp};
-use crate::ty::{Ty, TypeConstraint};
+use crate::ty::{TypeConstraint, ValueTy};
 
 #[derive(Debug)]
 pub struct Generic {
-    pub constraint: Ty,
+    pub constraint: ValueTy,
 }
 
 /// different kinds of type declarations, can be e.g., alias, newtype, struct, enum
@@ -22,8 +22,8 @@ pub enum TypeDecl {
 pub struct FuncDecl {
     pub name: String,
     pub generics: Vec<Generic>,
-    pub parameters: Vec<Ty>,
-    pub return_type: Ty,
+    pub parameters: Vec<ValueTy>,
+    pub return_type: ValueTy,
 }
 
 impl BinOp {
@@ -33,32 +33,41 @@ impl BinOp {
             Add | Sub | Mul | Div | Rem | Pow => FuncDecl {
                 name: format!("{}", self),
                 generics: vec![Generic {
-                    constraint: Ty::Constr(TypeConstraint::Numeric),
+                    constraint: ValueTy::Constr(TypeConstraint::Numeric),
                 }],
-                parameters: vec![Ty::Param(0, "T".to_string()), Ty::Param(0, "T".to_string())],
-                return_type: Ty::Param(0, "T".to_string()),
+                parameters: vec![
+                    ValueTy::Param(0, "T".to_string()),
+                    ValueTy::Param(0, "T".to_string()),
+                ],
+                return_type: ValueTy::Param(0, "T".to_string()),
             },
             And | Or => FuncDecl {
                 name: format!("{}", self),
                 generics: vec![],
-                parameters: vec![Ty::Bool, Ty::Bool],
-                return_type: Ty::Bool,
+                parameters: vec![ValueTy::Bool, ValueTy::Bool],
+                return_type: ValueTy::Bool,
             },
             Eq | Ne => FuncDecl {
                 name: format!("{}", self),
                 generics: vec![Generic {
-                    constraint: Ty::Constr(TypeConstraint::Equatable),
+                    constraint: ValueTy::Constr(TypeConstraint::Equatable),
                 }],
-                parameters: vec![Ty::Param(0, "T".to_string()), Ty::Param(0, "T".to_string())],
-                return_type: Ty::Bool,
+                parameters: vec![
+                    ValueTy::Param(0, "T".to_string()),
+                    ValueTy::Param(0, "T".to_string()),
+                ],
+                return_type: ValueTy::Bool,
             },
             Lt | Le | Ge | Gt => FuncDecl {
                 name: format!("{}", self),
                 generics: vec![Generic {
-                    constraint: Ty::Constr(TypeConstraint::Comparable),
+                    constraint: ValueTy::Constr(TypeConstraint::Comparable),
                 }],
-                parameters: vec![Ty::Param(0, "T".to_string()), Ty::Param(0, "T".to_string())],
-                return_type: Ty::Bool,
+                parameters: vec![
+                    ValueTy::Param(0, "T".to_string()),
+                    ValueTy::Param(0, "T".to_string()),
+                ],
+                return_type: ValueTy::Bool,
             },
         }
     }
@@ -71,16 +80,16 @@ impl UnOp {
             Not => FuncDecl {
                 name: format!("{}", self),
                 generics: vec![],
-                parameters: vec![Ty::Bool],
-                return_type: Ty::Bool,
+                parameters: vec![ValueTy::Bool],
+                return_type: ValueTy::Bool,
             },
             Neg => FuncDecl {
                 name: format!("{}", self),
                 generics: vec![Generic {
-                    constraint: Ty::Constr(TypeConstraint::Numeric),
+                    constraint: ValueTy::Constr(TypeConstraint::Numeric),
                 }],
-                parameters: vec![Ty::Param(0, "T".to_string())],
-                return_type: Ty::Param(0, "T".to_string()),
+                parameters: vec![ValueTy::Param(0, "T".to_string())],
+                return_type: ValueTy::Param(0, "T".to_string()),
             },
         }
     }
@@ -93,36 +102,36 @@ lazy_static! {
     static ref SQRT: FuncDecl = FuncDecl {
         name: "sqrt".to_string(),
         generics: vec![Generic {
-            constraint: Ty::Constr(TypeConstraint::FloatingPoint),
+            constraint: ValueTy::Constr(TypeConstraint::FloatingPoint),
         }],
-        parameters: vec![Ty::Param(0, "T".to_string())],
-        return_type: Ty::Param(0, "T".to_string()),
+        parameters: vec![ValueTy::Param(0, "T".to_string())],
+        return_type: ValueTy::Param(0, "T".to_string()),
     };
     // fn cos<T: FloatingPoint>(T) -> T
     static ref COS: FuncDecl = FuncDecl {
         name: "cos".to_string(),
         generics: vec![Generic {
-            constraint: Ty::Constr(TypeConstraint::FloatingPoint),
+            constraint: ValueTy::Constr(TypeConstraint::FloatingPoint),
         }],
-        parameters: vec![Ty::Param(0, "T".to_string())],
-        return_type: Ty::Param(0, "T".to_string()),
+        parameters: vec![ValueTy::Param(0, "T".to_string())],
+        return_type: ValueTy::Param(0, "T".to_string()),
     };
     // fn sin<T: FloatingPoint>(T) -> T
     static ref SIN: FuncDecl = FuncDecl {
         name: "sin".to_string(),
         generics: vec![Generic {
-            constraint: Ty::Constr(TypeConstraint::FloatingPoint),
+            constraint: ValueTy::Constr(TypeConstraint::FloatingPoint),
         }],
-        parameters: vec![Ty::Param(0, "T".to_string())],
-        return_type: Ty::Param(0, "T".to_string()),
+        parameters: vec![ValueTy::Param(0, "T".to_string())],
+        return_type: ValueTy::Param(0, "T".to_string()),
     };
 
     // fn matches_regexp(String, String) -> Bool
     static ref MATCHES_REGEX: FuncDecl = FuncDecl {
         name: "matches_regex".to_string(),
         generics: vec![],
-        parameters: vec![Ty::String, Ty::String],
-        return_type: Ty::Bool,
+        parameters: vec![ValueTy::String, ValueTy::String],
+        return_type: ValueTy::Bool,
     };
 }
 
@@ -143,7 +152,7 @@ impl MethodLookup {
         MethodLookup {}
     }
 
-    pub(crate) fn get(&self, ty: &Ty, name: &str) -> Option<FuncDecl> {
+    pub(crate) fn get(&self, ty: &ValueTy, name: &str) -> Option<FuncDecl> {
         unimplemented!("method lookup {} {}", ty, name)
     }
 }
