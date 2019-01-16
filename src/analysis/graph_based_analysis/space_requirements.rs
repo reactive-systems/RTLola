@@ -80,7 +80,7 @@ pub(crate) fn determine_buffer_size(
 pub(crate) type TrackingRequirements = HashMap<NodeId, Vec<(NodeId, TrackingRequirement)>>;
 
 pub(crate) fn determine_tracking_size(
-    dependency_graph: &DependencyGraph,
+    dependency_graph: &DependencyGraph
     // TODO add typing
 ) -> TrackingRequirements {
     let mut tracking: HashMap<NodeId, Vec<(NodeId, TrackingRequirement)>> = HashMap::new();

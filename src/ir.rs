@@ -62,7 +62,11 @@ pub enum Tracking {
     /// Need to store every single value of a stream
     All(StreamReference),
     /// Need to store `num` values of `trackee`, evicting/add a value every `rate` time units.
-    Bounded{ trackee: StreamReference, num: u128, rate: Duration }
+    Bounded {
+        trackee: StreamReference,
+        num: u128,
+        rate: Duration,
+    },
 }
 
 impl PartialOrd for MemorizationBound {
@@ -178,9 +182,7 @@ pub enum Op {
     },
     /// Accessing another stream synchronously
     /// No arguments; StreamInstance contains further arguments.
-    SyncStreamLookup {
-        instance: StreamInstance,
-    },
+    SyncStreamLookup { instance: StreamInstance },
     /// A window expression over a duration
     WindowLookup(WindowReference),
     /// An if-then-else expression
@@ -537,16 +539,21 @@ impl OutputStream {
 impl Statement {
     fn get_dependencies(&self) -> Vec<StreamReference> {
         match &self.op {
-            Op::LoadConstant(_) | Op::ArithLog(_) | Op::Tuple | Op::Function(_) => {
-                Vec::new()
-            }
+            Op::LoadConstant(_) | Op::ArithLog(_) | Op::Tuple | Op::Function(_) => Vec::new(),
             Op::StreamLookup { instance, .. } => vec![instance.reference],
             Op::SyncStreamLookup { instance } => vec![instance.reference],
-            Op::Ite { consequence, alternative } => {
-                let mut lhs: Vec<StreamReference> =
-                    consequence.iter().flat_map(|stm| stm.get_dependencies()).collect();
-                let mut rhs: Vec<StreamReference> =
-                    alternative.iter().flat_map(|stm| stm.get_dependencies()).collect();
+            Op::Ite {
+                consequence,
+                alternative,
+            } => {
+                let mut lhs: Vec<StreamReference> = consequence
+                    .iter()
+                    .flat_map(|stm| stm.get_dependencies())
+                    .collect();
+                let mut rhs: Vec<StreamReference> = alternative
+                    .iter()
+                    .flat_map(|stm| stm.get_dependencies())
+                    .collect();
                 lhs.append(&mut rhs);
                 lhs
             }

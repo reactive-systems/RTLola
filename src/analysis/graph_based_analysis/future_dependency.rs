@@ -12,7 +12,9 @@ pub(crate) type FutureDependentStreams = HashSet<NodeId>;
 
 /// Computes the set of streams and triggers (represented by their NodeId)
 /// that (transitively) depend on future values.
-pub(crate) fn future_dependent_stream(dependency_graph: &DependencyGraph) -> FutureDependentStreams {
+pub(crate) fn future_dependent_stream(
+    dependency_graph: &DependencyGraph,
+) -> FutureDependentStreams {
     let mut future_dependent_streams: HashSet<NodeId> = HashSet::new();
 
     for node_index in dependency_graph.node_indices() {
