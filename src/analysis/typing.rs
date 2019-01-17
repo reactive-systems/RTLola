@@ -1922,4 +1922,24 @@ mod tests {
         assert_eq!(0, num_type_errors(spec));
     }
 
+    #[test]
+    fn test_rt_offset() {
+        let spec =
+            "output a: Int8 { extend @1s } := 1\noutput b: Int8 { extend @1s } := a[-1s] ? 0";
+        assert_eq!(0, num_type_errors(spec));
+    }
+
+    #[test]
+    fn test_rt_offset_skip() {
+        let spec =
+            "output a: Int8 { extend @1s } := 1\noutput b: Int8 { extend @2s } := a[-1s] ? 0";
+        assert_eq!(0, num_type_errors(spec));
+    }
+
+    #[test]
+    fn test_rt_offset_fail() {
+        let spec =
+            "output a: Int8 { extend @2s } := 1\noutput b: Int8 { extend @1s } := a[-1s] ? 0";
+        assert_eq!(0, num_type_errors(spec));
+    }
 }
