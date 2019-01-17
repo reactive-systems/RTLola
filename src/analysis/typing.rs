@@ -9,8 +9,8 @@
 use super::naming::{Declaration, DeclarationTable};
 use crate::ast::LolaSpec;
 use crate::ast::{
-    Constant, Expression, ExpressionKind, Input, LitKind, Literal, Offset, Output, StreamInstance,
-    Trigger, Type, TypeKind, WindowOperation,
+    Constant, Expression, ExpressionKind, ExtendRate, Input, LitKind, Literal, Offset, Output,
+    StreamInstance, Trigger, Type, TypeKind, WindowOperation,
 };
 use crate::reporting::Handler;
 use crate::reporting::LabeledSpan;
@@ -684,8 +684,8 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
         offset: &'a Offset,
         window_op: Option<WindowOperation>,
     ) -> Result<(), ()> {
-        match offset {
-            Offset::DiscreteOffset(off_expr) => {
+        match (offset, window_op) {
+            (Offset::DiscreteOffset(off_expr), None) => {
                 // recursion
                 self.infer_expression(
                     off_expr,
@@ -777,12 +777,90 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
                     })
                 }
             }
-            Offset::RealTimeOffset(_, _) => {
+            (Offset::RealTimeOffset(off_expr, unit), None) => {
                 assert!(
                     stream.arguments.is_empty(),
                     "parameterized timed streams currently not implemented"
                 );
-                assert!(window_op.is_some(), "real-time offsets are not implemented");
+
+                self.infer_expression(
+                    off_expr,
+                    Some(ValueTy::Constr(TypeConstraint::Numeric)),
+                    StreamVarOrTy::Ty(StreamTy::new(TimingInfo::Event)),
+                )?;
+
+                let offset_literal = match &off_expr.kind {
+                    ExpressionKind::Lit(l) => l,
+                    _ => unreachable!("offset expressions have to be literal"),
+                };
+
+                // need to derive "inner" type
+                let decl = self.declarations[&stream._id];
+                let decl_id: NodeId = match decl {
+                    Declaration::In(input) => input._id,
+                    Declaration::Out(output) => output._id,
+                    _ => unreachable!(),
+                };
+                let decl_stream_var: StreamVar = self.stream_vars[&decl_id];
+                let decl_stream_type = self.stream_unifier.get_type(decl_stream_var).unwrap();
+
+                assert!(
+                    decl_stream_type.parameters.len() == stream.arguments.len(),
+                    "TODO: transform into error message"
+                );
+                let duration: Duration = (&ExtendRate::Duration(
+                    Expression::new(ExpressionKind::Lit(offset_literal.clone()), Span::unknown())
+                        .into(),
+                    *unit,
+                ))
+                    .into();
+                let target = StreamTy::new(TimingInfo::RealTime(Freq::new(
+                    &format!("{:?}", duration),
+                    duration,
+                )));
+
+                // stream type
+
+                // ?decl_stream_var = target
+                self.stream_unifier
+                    .unify_var_ty(decl_stream_var, target)
+                    .map_err(|err| {
+                        self.handle_error(err, stream._span);
+                    })?;
+                // an offset expression does not pose restrictions on `stream_var`
+
+                // value type
+                let negative_offset = match offset_literal.kind {
+                    LitKind::Int(i) => i < 0,
+                    LitKind::Float(f) => f < 0.0,
+                    _ => unreachable!("unexpected offset expressions `{}`", off_expr),
+                };
+
+                let decl_var: ValueVar = self.value_vars[&decl_id];
+                if negative_offset || !stream.arguments.is_empty() {
+                    self.unifier
+                        .unify_var_ty(var, ValueTy::Option(ValueTy::Infer(decl_var).into()))
+                        .map_err(|err| {
+                            self.handle_error(err, span);
+                        })
+                } else {
+                    self.unifier.unify_var_var(var, decl_var).map_err(|err| {
+                        self.handle_error(err, span);
+                    })
+                }
+            }
+            (Offset::RealTimeOffset(off_expr, unit), Some(window_op)) => {
+                assert!(
+                    stream.arguments.is_empty(),
+                    "parameterized timed streams currently not implemented"
+                );
+
+                // offset expression
+                self.infer_expression(
+                    off_expr,
+                    Some(ValueTy::Constr(TypeConstraint::Numeric)),
+                    StreamVarOrTy::Ty(StreamTy::new(TimingInfo::Event)),
+                )?;
 
                 // need to derive "inner" type
                 let decl = self.declarations[&stream._id];
@@ -823,6 +901,7 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
                         self.handle_error(err, span);
                     })
             }
+            _ => unreachable!("lookup {:?} {:?}", offset, window_op),
         }
     }
 
