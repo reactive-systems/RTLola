@@ -464,7 +464,7 @@ fn parse_type(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> Type {
                 let val = inner
                     .next()
                     .expect("mismatch between AST and parser: expect integer literal");
-                assert_eq!(val.as_rule(), Rule::IntegerLiteral);
+                assert_eq!(val.as_rule(), Rule::SignedIntegerLiteral);
                 let unit = inner
                     .next()
                     .expect("mismatch between AST and parser: expect time unit");
@@ -1226,6 +1226,13 @@ mod tests {
     #[test]
     fn parse_method_call_with_param() {
         let spec = "output count := count.offset<Int8>(-1).default(0) + 1\n";
+        let ast = parse(spec).unwrap_or_else(|e| panic!("{}", e));
+        cmp_ast_spec(&ast, spec);
+    }
+
+    #[test]
+    fn parse_realtime_offset() {
+        let spec = "output a := b[-1s]\n";
         let ast = parse(spec).unwrap_or_else(|e| panic!("{}", e));
         cmp_ast_spec(&ast, spec);
     }
