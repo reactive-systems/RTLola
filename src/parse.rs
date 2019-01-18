@@ -77,6 +77,7 @@ pub(crate) fn parse(content: &str) -> Result<LolaSpec, pest::error::Error<Rule>>
             _ => unreachable!(),
         }
     }
+    crate::analysis::id_assignment::assign_ids(&mut spec);
     Ok(spec)
 }
 

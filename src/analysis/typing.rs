@@ -23,8 +23,8 @@ use log::{debug, trace};
 use std::collections::HashMap;
 use std::time::Duration;
 
-pub(crate) struct TypeAnalysis<'a> {
-    handler: &'a Handler,
+pub(crate) struct TypeAnalysis<'a, 'b> {
+    handler: &'b Handler,
     declarations: &'a DeclarationTable<'a>,
     method_lookup: MethodLookup,
     unifier: ValueUnifier<ValueTy>,
@@ -34,11 +34,26 @@ pub(crate) struct TypeAnalysis<'a> {
     stream_vars: HashMap<NodeId, StreamVar>,
 }
 
-impl<'a> TypeAnalysis<'a> {
+pub(crate) struct TypeTable {
+    value_tt: HashMap<NodeId, ValueTy>,
+    stream_tt: HashMap<NodeId, StreamTy>,
+}
+
+impl TypeTable {
+    pub(crate) fn get_value_type(&self, nid: NodeId) -> &ValueTy {
+        self.value_tt.get(&nid).unwrap()
+    }
+
+    pub(crate) fn get_stream_type(&self, nid: NodeId) -> &StreamTy {
+        self.stream_tt.get(&nid).unwrap()
+    }
+}
+
+impl<'a, 'b> TypeAnalysis<'a, 'b> {
     pub(crate) fn new(
-        handler: &'a Handler,
+        handler: &'b Handler,
         declarations: &'a DeclarationTable<'a>,
-    ) -> TypeAnalysis<'a> {
+    ) -> TypeAnalysis<'a, 'b> {
         TypeAnalysis {
             handler,
             declarations,
@@ -50,13 +65,35 @@ impl<'a> TypeAnalysis<'a> {
         }
     }
 
-    pub(crate) fn check(&mut self, spec: &'a LolaSpec) {
+    pub(crate) fn check(&mut self, spec: &'a LolaSpec) -> Option<TypeTable> {
         self.infer_types(spec);
         if self.handler.contains_error() {
-            return;
+            return None;
         }
 
         self.assign_types(spec);
+
+        Some(self.extract_type_table(spec))
+    }
+
+    fn extract_type_table(&mut self, spec: &LolaSpec) -> TypeTable {
+        let value_nids: Vec<NodeId> = self.value_vars.keys().map(|nid| *nid).collect();
+        let vtt: HashMap<NodeId, ValueTy> = value_nids
+            .into_iter()
+            .map(|nid| (nid, self.get_type(nid)))
+            .collect();
+
+        // Note: If there is a `None` for a stream, `get_stream_type` would report the error.
+        let stream_nids: Vec<NodeId> = self.stream_vars.keys().map(|nid| *nid).collect();
+        let stt: HashMap<NodeId, StreamTy> = stream_nids
+            .into_iter()
+            .flat_map(|nid| self.get_stream_type(nid).map(|ty| (nid, ty)))
+            .collect();
+
+        TypeTable {
+            value_tt: vtt,
+            stream_tt: stt,
+        }
     }
 
     fn infer_types(&mut self, spec: &'a LolaSpec) {
@@ -1374,14 +1411,13 @@ mod tests {
             Err(e) => panic!("Spec {} cannot be parsed: {}.", spec, e),
             Ok(s) => s,
         };
-        assign_ids(&mut spec);
         let mut na = NamingAnalysis::new(&handler);
-        na.check(&spec);
+        let decl_table = na.check(&spec);
         assert!(
             !handler.contains_error(),
             "Spec produces errors in naming analysis."
         );
-        let mut type_analysis = TypeAnalysis::new(&handler, &na.result);
+        let mut type_analysis = TypeAnalysis::new(&handler, &decl_table);
         type_analysis.check(&spec);
         handler.emitted_errors()
     }
@@ -1394,14 +1430,13 @@ mod tests {
             Err(e) => panic!("Spec {} cannot be parsed: {}.", spec, e),
             Ok(s) => s,
         };
-        assign_ids(&mut spec);
         let mut na = NamingAnalysis::new(&handler);
-        na.check(&spec);
+        let decl_table = na.check(&spec);
         assert!(
             !handler.contains_error(),
             "Spec produces errors in naming analysis."
         );
-        let mut type_analysis = TypeAnalysis::new(&handler, &na.result);
+        let mut type_analysis = TypeAnalysis::new(&handler, &decl_table);
         type_analysis.check(&spec);
         type_analysis.get_type(
             spec.outputs

@@ -12,13 +12,17 @@ use simplelog::*;
 
 use super::super::analysis;
 use super::super::parse::{LolaParser, Rule};
+use crate::ir::LolaIR;
+use crate::lowering::Lowering;
 use crate::parse::SourceMapper;
+use crate::reporting::Handler;
 
 enum Analysis {
     Parse,
     AST,
     Prettyprint,
     Analyze,
+    IR,
 }
 
 pub struct Config {
@@ -147,6 +151,19 @@ impl Config {
                     filename,
                 }
             }
+            ("ir", Some(parse_matches)) | ("intermediate-representation", Some(parse_matches)) => {
+                // Now we have a reference to clone's matches
+                let filename = parse_matches
+                    .value_of("INPUT")
+                    .map(|s| s.to_string())
+                    .unwrap();
+                eprintln!("Input file `{}`", filename);
+
+                Config {
+                    which: Analysis::IR,
+                    filename,
+                }
+            }
             ("", None) => {
                 println!("No subcommand was used");
                 println!("{}", matches.usage());
@@ -181,8 +198,19 @@ impl Config {
             }
             Analysis::Analyze => {
                 let mut spec = crate::parse::parse(&contents).unwrap_or_else(|e| panic!("{}", e));
-                let report = analysis::analyze(&mut spec, mapper);
-                println!("{:?}", report);
+                let handler = Handler::new(mapper);
+                let report = analysis::analyze(&mut spec, &handler);
+                //println!("{:?}", report);
+                Ok(())
+            }
+            Analysis::IR => {
+                let mut spec = crate::parse::parse(&contents).unwrap_or_else(|e| panic!("{}", e));
+
+                let handler = Handler::new(mapper);
+                let analysis_result = crate::analysis::analyze(&spec, &handler);
+                assert!(analysis_result.is_success());
+                let ir = Lowering::new(&spec, &analysis_result).lower();
+                //println!("{:?}", report);
                 Ok(())
             }
         }

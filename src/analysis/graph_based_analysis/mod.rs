@@ -3,11 +3,67 @@ pub mod evaluation_order;
 pub mod future_dependency;
 pub mod space_requirements;
 
+use super::lola_version::LolaVersionTable;
+use super::typing::TypeTable;
+use super::DeclarationTable;
+use crate::ast::LolaSpec;
+use crate::reporting::Handler;
 use ast_node::NodeId;
 use ast_node::Span;
 use petgraph::Directed;
 use petgraph::Graph;
 use std::time::Duration;
+
+pub(crate) use self::evaluation_order::EvaluationOrderResult;
+pub(crate) use self::future_dependency::FutureDependentStreams;
+pub(crate) use self::space_requirements::SpaceRequirements;
+use self::space_requirements::TrackingRequirements;
+
+pub(crate) struct GraphAnalysisResult {
+    pub(crate) dependency_graph: DependencyGraph,
+    pub(crate) evaluation_order: EvaluationOrderResult,
+    pub(crate) future_dependent_streams: FutureDependentStreams,
+    pub(crate) space_requirements: SpaceRequirements,
+    pub(crate) tracking_requirements: TrackingRequirements,
+}
+
+pub(crate) fn analyze<'a>(
+    spec: &'a LolaSpec,
+    version_analysis: &LolaVersionTable,
+    declaration_table: &DeclarationTable<'a>,
+    type_table: &TypeTable,
+    handler: &Handler,
+) -> Option<GraphAnalysisResult> {
+    let dependency_analysis =
+        dependency_graph::analyse_dependencies(spec, version_analysis, declaration_table, &handler);
+
+    if handler.contains_error() {
+        handler.error("aborting due to previous error");
+        return None;
+    }
+
+    let (evaluation_order_result, pruned_graph) =
+        evaluation_order::determine_evaluation_order(dependency_analysis.dependency_graph);
+
+    let future_dependent_streams = future_dependency::future_dependent_stream(&pruned_graph);
+
+    let space_requirements =
+        space_requirements::determine_buffer_size(&pruned_graph, &future_dependent_streams);
+
+    let tracking_requirements = space_requirements::determine_tracking_size(
+        &pruned_graph,
+        type_table,
+        &future_dependent_streams,
+    );
+
+    Some(GraphAnalysisResult {
+        dependency_graph: pruned_graph,
+        evaluation_order: evaluation_order_result,
+        future_dependent_streams,
+        space_requirements,
+        tracking_requirements,
+    })
+}
 
 #[derive(Debug, Copy, Clone)]
 pub(crate) enum StreamNode {

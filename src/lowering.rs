@@ -1,5 +1,5 @@
 use crate::analysis::naming::DeclarationTable;
-use crate::analysis::typing::TypeAnalysis;
+use crate::analysis::typing::TypeTable;
 // Only import the unambiguous Nodes, use `ast::`/`ir::` prefix for disambiguation.
 use crate::analysis::naming::Declaration;
 use crate::ast;
@@ -9,6 +9,8 @@ use crate::ir::{
     EventDrivenStream, LolaIR, MemorizationBound, ParametrizedStream, StreamReference,
     TimeDrivenStream, WindowReference,
 };
+use crate::parse::SourceMapper;
+use crate::reporting::Handler;
 use crate::ty::TimingInfo;
 use ast_node::{AstNode, NodeId};
 use std::collections::HashMap;
@@ -20,6 +22,8 @@ use crate::analysis::graph_based_analysis::space_requirements::{
 };
 //use crate::analysis::graph_based_analysis::future_dependency::FutureDependentStreams;
 use crate::analysis::graph_based_analysis::{ComputeStep, StorageRequirement, TrackingRequirement};
+
+use crate::analysis::AnalysisResult;
 
 type EvalTable = HashMap<NodeId, u32>;
 
@@ -33,26 +37,19 @@ macro_rules! hashmap {
     }}
 }
 
-struct Lowering<'a> {
+pub(crate) struct Lowering<'a> {
     ast: &'a LolaSpec,
     ref_lookup: HashMap<NodeId, StreamReference>,
-    dt: DeclarationTable<'a>,
-    tt: TypeAnalysis<'a>,
+    dt: &'a DeclarationTable<'a>,
+    tt: &'a TypeTable,
     et: EvalTable,
-    mt: MemoryTable,
+    mt: &'a MemoryTable,
+    tr: &'a TrackingRequirements,
     ir: LolaIR,
-    tr: TrackingRequirements,
 }
 
 impl<'a> Lowering<'a> {
-    pub(crate) fn new(
-        ast: &'a LolaSpec,
-        dt: DeclarationTable<'a>,
-        tt: TypeAnalysis<'a>,
-        eval_order: EvaluationOrderResult,
-        mt: MemoryTable,
-        tr: TrackingRequirements,
-    ) -> Lowering<'a> {
+    pub(crate) fn new(ast: &'a LolaSpec, analysis_result: &'a AnalysisResult<'a>) -> Lowering<'a> {
         let mut ir = LolaIR {
             inputs: Vec::new(),
             outputs: Vec::new(),
@@ -63,17 +60,34 @@ impl<'a> Lowering<'a> {
             triggers: Vec::new(),
             feature_flags: Vec::new(),
         };
+
         ir.inputs.reserve(ast.inputs.len());
         ir.outputs.reserve(ast.outputs.len());
+        let graph = analysis_result.graph_analysis_result.as_ref().unwrap();
+
         Lowering {
             ast,
             ref_lookup: Lowering::create_ref_lookup(&ast.inputs, &ast.outputs),
-            dt,
-            tt,
-            et: Self::order_to_table(eval_order),
-            mt,
+            dt: analysis_result.declaration_table.as_ref().unwrap(),
+            tt: analysis_result.type_table.as_ref().unwrap(),
+            et: Self::order_to_table(
+                &analysis_result
+                    .graph_analysis_result
+                    .as_ref()
+                    .unwrap()
+                    .evaluation_order,
+            ),
+            mt: &analysis_result
+                .graph_analysis_result
+                .as_ref()
+                .unwrap()
+                .space_requirements,
+            tr: &analysis_result
+                .graph_analysis_result
+                .as_ref()
+                .unwrap()
+                .tracking_requirements,
             ir,
-            tr,
         }
     }
 
@@ -122,7 +136,7 @@ impl<'a> Lowering<'a> {
 
         let input = ir::InputStream {
             name: input.name.name.clone(),
-            ty: self.lower_type(input._id),
+            ty: self.lower_value_type(*input.id()),
             dependent_streams: trackings,
             dependent_windows: Vec::new(),
             layer, // Not necessarily 0 when parametrized inputs exist.
@@ -170,7 +184,7 @@ impl<'a> Lowering<'a> {
 
         let output = ir::OutputStream {
             name: ast_output.name.name.clone(),
-            ty: self.lower_type(ast_output._id),
+            ty: self.lower_value_type(*ast_output.id()),
             expr: self.lower_expression(&ast_output.expression),
             dependent_streams: trackings,
             dependent_windows: Vec::new(),
@@ -291,9 +305,13 @@ impl<'a> Lowering<'a> {
 
     fn lower_window(&mut self, expr: &ast::Expression) -> WindowReference {
         if let ExpressionKind::Lookup(inst, offset, Some(op)) = &expr.kind {
-            let duration = match offset {
-                ast::Offset::DiscreteOffset(_) => panic!(), // TODO: Eradicate in preceding step.
-                ast::Offset::RealTimeOffset(expr, unit) => unimplemented!(),
+            let duration = match self.lower_offset(offset) {
+                ir::Offset::PastDiscreteOffset(_)
+                | ir::Offset::FutureDiscreteOffset(_)
+                | ir::Offset::PastRealTimeOffset(_) => {
+                    panic!("Bug: Should be caught in preceeding step.")
+                }
+                ir::Offset::FutureRealTimeOffset(dur) => dur,
             };
             let target = self.extract_target_from_lookup(&expr.kind);
             let reference = WindowReference {
@@ -367,7 +385,7 @@ impl<'a> Lowering<'a> {
     fn lower_param(&mut self, param: &ast::Parameter) -> ir::Parameter {
         ir::Parameter {
             name: param.name.name.clone(),
-            ty: self.lower_type(param._id),
+            ty: self.lower_value_type(*param.id()),
         }
     }
 
@@ -381,9 +399,10 @@ impl<'a> Lowering<'a> {
         }
     }
 
-    fn lower_type(&mut self, id: NodeId) -> ir::Type {
-        self.tt.get_type(id).into()
+    fn lower_value_type(&mut self, id: NodeId) -> ir::Type {
+        self.tt.get_value_type(id).into()
     }
+
     fn lower_expression(&mut self, expression: &ast::Expression) -> ir::Expression {
         use crate::ir::{Op, Statement, Temporary};
         let mut mm = MemoryManager::new();
@@ -415,9 +434,9 @@ impl<'a> Lowering<'a> {
         mm: &mut MemoryManager,
         target_temp: Option<ir::Temporary>,
     ) -> LoweringState {
-        use crate::ir::{Op, Statement, Temporary};
+        use crate::ir::{Op, Statement};
 
-        let result_type = self.lower_type(expr._id);
+        let result_type = self.lower_value_type(expr._id);
 
         match &expr.kind {
             ExpressionKind::Lit(l) => {
@@ -629,7 +648,7 @@ impl<'a> Lowering<'a> {
                 offset: self.lower_offset(&offset),
             };
 
-            let lookup_type = self.lower_type(lookup_expr._id);
+            let lookup_type = self.lower_value_type(lookup_expr._id);
             let lookup_result = target_temp.unwrap_or_else(|| mm.temp_for_type(&lookup_type));
             let lookup_stmt = ir::Statement {
                 target: lookup_result,
@@ -690,12 +709,7 @@ impl<'a> Lowering<'a> {
         output: &ast::Output,
         reference: StreamReference,
     ) -> Option<TimeDrivenStream> {
-        match self
-            .tt
-            .get_stream_type(output._id)
-            .expect("type information has to be present")
-            .timing
-        {
+        match &self.tt.get_stream_type(output._id).timing {
             TimingInfo::RealTime(f) => Some(TimeDrivenStream {
                 reference,
                 extend_rate: f.d,
@@ -731,21 +745,24 @@ impl<'a> Lowering<'a> {
         ins.chain(outs).collect()
     }
 
-    fn order_to_table(eo: EvaluationOrderResult) -> EvalTable {
-        fn extr_id(step: ComputeStep) -> NodeId {
+    fn order_to_table(eo: &EvaluationOrderResult) -> EvalTable {
+        fn extr_id(step: &ComputeStep) -> NodeId {
             // TODO: Rework when parameters actually exist.
             use self::ComputeStep::*;
             match step {
-                Evaluate(nid) | Extend(nid) | Invoke(nid) | Terminate(nid) => nid,
+                Evaluate(nid) | Extend(nid) | Invoke(nid) | Terminate(nid) => *nid,
             }
         }
-        let o2t = |eo: EvalOrder| {
-            eo.into_iter()
-                .enumerate()
-                .flat_map(|(ix, layer)| layer.into_iter().map(move |s| (extr_id(s), ix as u32)))
+        let o2t = |eo: &EvalOrder| {
+            let mut res = Vec::new();
+            for (ix, layer) in eo.iter().enumerate() {
+                let vals = layer.iter().map(|s| (extr_id(s), ix as u32));
+                res.extend(vals);
+            }
+            res.into_iter()
         };
-        o2t(eo.periodic_streams_order)
-            .chain(o2t(eo.event_based_streams_order))
+        o2t(&eo.periodic_streams_order)
+            .chain(o2t(&eo.event_based_streams_order))
             .collect()
     }
 
@@ -801,7 +818,7 @@ impl LoweringState {
         self
     }
 
-    fn merge_temps(mut self, other: HashMap<ir::Temporary, ir::Type>) -> LoweringState {
+    fn merge_temps(self, other: HashMap<ir::Temporary, ir::Type>) -> LoweringState {
         self.merge_with(LoweringState::new(Vec::new(), other))
     }
 

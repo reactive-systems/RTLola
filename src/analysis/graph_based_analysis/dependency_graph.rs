@@ -937,22 +937,17 @@ mod tests {
     /// Parses the content, runs naming analysis, and check expected number of errors and version
     fn check_graph(content: &str, num_errors: usize, num_warnings: usize) {
         let mut ast = parse(content).unwrap_or_else(|e| panic!("{}", e));
-        id_assignment::assign_ids(&mut ast);
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), content));
         let mut naming_analyzer = NamingAnalysis::new(&handler);
-        naming_analyzer.check(&ast);
+        let decl_table = naming_analyzer.check(&ast);
         let mut version_analyzer = LolaVersionAnalysis::new(&handler);
         let version = version_analyzer.analyse(&ast);
         assert!(
             !version.is_none(),
             "We only analyze dependencies for specifications that so far seem to be ok."
         );
-        let _dependency_analysis = analyse_dependencies(
-            &ast,
-            &version_analyzer.result,
-            &naming_analyzer.result,
-            &handler,
-        );
+        let _dependency_analysis =
+            analyse_dependencies(&ast, &version_analyzer.result, &decl_table, &handler);
         assert_eq!(num_errors, handler.emitted_errors());
         assert_eq!(num_warnings, handler.emitted_warnings());
     }

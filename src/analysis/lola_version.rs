@@ -322,7 +322,6 @@ mod tests {
         expected_versions: Vec<(StreamIndex, LanguageSpec)>,
     ) {
         let mut ast = parse(content).unwrap_or_else(|e| panic!("{}", e));
-        id_assignment::assign_ids(&mut ast);
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), content));
         let mut version_analyzer = LolaVersionAnalysis::new(&handler);
         let version = version_analyzer.analyse(&ast);

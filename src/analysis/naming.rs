@@ -43,15 +43,15 @@ pub(crate) const KEYWORDS: [&str; 26] = [
 
 pub(crate) type DeclarationTable<'a> = HashMap<NodeId, Declaration<'a>>;
 
-pub(crate) struct NamingAnalysis<'a> {
+pub(crate) struct NamingAnalysis<'a, 'b> {
     declarations: ScopedDecl<'a>,
     type_declarations: ScopedDecl<'a>,
-    pub result: DeclarationTable<'a>,
-    handler: &'a Handler,
+    result: DeclarationTable<'a>,
+    handler: &'b Handler,
 }
 
-impl<'a> NamingAnalysis<'a> {
-    pub(crate) fn new(handler: &'a Handler) -> Self {
+impl<'a, 'b> NamingAnalysis<'a, 'b> {
+    pub(crate) fn new(handler: &'b Handler) -> Self {
         let mut scoped_decls = ScopedDecl::new();
 
         for (name, ty) in ValueTy::primitive_types() {
@@ -174,7 +174,7 @@ impl<'a> NamingAnalysis<'a> {
     }
 
     /// Entry method, checks that every identifier in the given spec is bound.
-    pub(crate) fn check(&mut self, spec: &'a LolaSpec) {
+    pub(crate) fn check(&mut self, spec: &'a LolaSpec) -> DeclarationTable<'a> {
         for import in &spec.imports {
             match import.name.name.as_str() {
                 "math" => stdlib::import_math_module(&mut self.declarations),
@@ -213,7 +213,9 @@ impl<'a> NamingAnalysis<'a> {
         }
 
         self.check_outputs(&spec);
-        self.check_triggers(&spec)
+        self.check_triggers(&spec);
+
+        self.result.clone()
     }
 
     /// Checks that if the trigger has a name, it is unique
@@ -554,7 +556,6 @@ mod tests {
     /// Parses the content, runs naming analysis, and returns number of errors
     fn number_of_naming_errors(content: &str) -> usize {
         let mut ast = parse(content).unwrap_or_else(|e| panic!("{}", e));
-        id_assignment::assign_ids(&mut ast);
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), content));
         let mut naming_analyzer = NamingAnalysis::new(&handler);
         naming_analyzer.check(&ast);

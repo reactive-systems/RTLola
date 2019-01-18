@@ -6,7 +6,7 @@ use ast_node::Span;
 use std::time::Duration;
 
 /// The root Lola specification
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct LolaSpec {
     pub language: Option<LanguageSpec>,
     pub imports: Vec<Import>,
@@ -53,7 +53,7 @@ impl<'a> From<&'a str> for LanguageSpec {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Import {
     pub name: Ident,
     pub(crate) id: NodeId,
@@ -61,7 +61,7 @@ pub struct Import {
 }
 
 /// A declaration of a constant (stream)
-#[derive(AstNode, Debug)]
+#[derive(AstNode, Debug, Clone)]
 pub struct Constant {
     pub name: Ident,
     pub ty: Option<Type>,
@@ -71,7 +71,7 @@ pub struct Constant {
 }
 
 /// A declaration of an input stream
-#[derive(AstNode, Debug)]
+#[derive(AstNode, Debug, Clone)]
 pub struct Input {
     pub name: Ident,
     pub ty: Type,
@@ -81,7 +81,7 @@ pub struct Input {
 }
 
 /// A declaration of an output stream
-#[derive(AstNode, Debug)]
+#[derive(AstNode, Debug, Clone)]
 pub struct Output {
     pub name: Ident,
     pub ty: Type,
@@ -100,7 +100,7 @@ pub struct Parameter {
     pub(crate) _span: Span,
 }
 
-#[derive(AstNode, Debug)]
+#[derive(AstNode, Debug, Clone)]
 pub struct TemplateSpec {
     pub inv: Option<InvokeSpec>,
     pub ext: Option<ExtendSpec>,
@@ -109,7 +109,7 @@ pub struct TemplateSpec {
     pub(crate) _span: Span,
 }
 
-#[derive(AstNode, Debug)]
+#[derive(AstNode, Debug, Clone)]
 pub struct InvokeSpec {
     pub target: Expression,
     pub condition: Option<Expression>,
@@ -118,7 +118,7 @@ pub struct InvokeSpec {
     pub(crate) _span: Span,
 }
 
-#[derive(AstNode, Debug)]
+#[derive(AstNode, Debug, Clone)]
 pub struct ExtendSpec {
     pub target: Option<Expression>,
     pub freq: Option<ExtendRate>,
@@ -126,7 +126,7 @@ pub struct ExtendSpec {
     pub(crate) _span: Span,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ExtendRate {
     Frequency(Box<Expression>, FreqUnit),
     Duration(Box<Expression>, TimeUnit),
@@ -191,7 +191,7 @@ impl Into<Duration> for &ExtendRate {
     }
 }
 
-#[derive(AstNode, Debug)]
+#[derive(AstNode, Debug, Clone)]
 pub struct TerminateSpec {
     pub target: Expression,
     pub(crate) _id: NodeId,
@@ -199,7 +199,7 @@ pub struct TerminateSpec {
 }
 
 /// A declaration of a trigger
-#[derive(AstNode, Debug)]
+#[derive(AstNode, Debug, Clone)]
 pub struct Trigger {
     pub name: Option<Ident>,
     pub expression: Expression,
@@ -208,7 +208,7 @@ pub struct Trigger {
     pub(crate) _span: Span,
 }
 
-#[derive(AstNode, Debug)]
+#[derive(AstNode, Debug, Clone)]
 pub struct TypeDeclaration {
     pub name: Option<Ident>,
     pub fields: Vec<Box<TypeDeclField>>,
@@ -216,7 +216,7 @@ pub struct TypeDeclaration {
     pub(crate) _span: Span,
 }
 
-#[derive(AstNode, Debug)]
+#[derive(AstNode, Debug, Clone)]
 pub struct TypeDeclField {
     pub ty: Type,
     pub name: String,

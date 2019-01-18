@@ -95,25 +95,19 @@ mod tests {
         expected_future_dependent: Vec<usize>,
     ) {
         let mut spec = parse(content).unwrap_or_else(|e| panic!("{}", e));
-        id_assignment::assign_ids(&mut spec);
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), content));
         let mut naming_analyzer = NamingAnalysis::new(&handler);
-        naming_analyzer.check(&spec);
+        let decl_table = naming_analyzer.check(&spec);
         let mut version_analyzer = LolaVersionAnalysis::new(&handler);
         let _version = version_analyzer.analyse(&spec);
 
-        let dependency_analysis = analyse_dependencies(
-            &spec,
-            &version_analyzer.result,
-            &naming_analyzer.result,
-            &handler,
-        );
+        let dependency_analysis =
+            analyse_dependencies(&spec, &version_analyzer.result, &decl_table, &handler);
 
-        let evaluation_order_result =
+        let (evaluation_order_result, pruned_graph) =
             determine_evaluation_order(dependency_analysis.dependency_graph);
 
-        let future_dependent_stream =
-            future_dependent_stream(&evaluation_order_result.pruned_dependency_graph);
+        let future_dependent_stream = future_dependent_stream(&pruned_graph);
 
         assert_eq!(expected_errors, handler.emitted_errors());
         assert_eq!(expected_warning, handler.emitted_warnings());

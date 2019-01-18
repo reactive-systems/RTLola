@@ -11,6 +11,7 @@ use crate::analysis::graph_based_analysis::StreamNode::*;
 use crate::analysis::graph_based_analysis::TimeOffset;
 use crate::analysis::graph_based_analysis::TrackingRequirement;
 use crate::analysis::typing::TypeAnalysis;
+use crate::analysis::typing::TypeTable;
 use crate::ty::TimingInfo;
 use ast_node::NodeId;
 use petgraph::visit::EdgeRef;
@@ -91,7 +92,7 @@ pub(crate) type TrackingRequirements = HashMap<NodeId, Vec<(NodeId, TrackingRequ
 
 pub(crate) fn determine_tracking_size(
     dependency_graph: &DependencyGraph,
-    type_analysis: &mut TypeAnalysis,
+    type_table: &TypeTable,
     future_dependent_stream: &HashSet<NodeId>,
 ) -> TrackingRequirements {
     let mut tracking: HashMap<NodeId, Vec<(NodeId, TrackingRequirement)>> = HashMap::new();
@@ -99,7 +100,7 @@ pub(crate) fn determine_tracking_size(
         let id = get_ast_id(*dependency_graph.node_weight(node_index).unwrap());
         let mut tracking_requirements: Vec<(NodeId, TrackingRequirement)> = Vec::new();
 
-        let this_is_time_based = is_it_time_based(dependency_graph, node_index, type_analysis);
+        let this_is_time_based = is_it_time_based(dependency_graph, node_index, type_table);
 
         for edge in dependency_graph.edges_directed(node_index, Direction::Outgoing) {
             // TODO What about the invoke expression (if we allow one)?
@@ -111,15 +112,9 @@ pub(crate) fn determine_tracking_size(
                     "time based access of future dependent streams is not implemented"
                 ); // TODO time based access of future dependent streams is not implemented
                 if let TimeOffset::UpToNow(offset_duration) = offset {
-                    let src_timing = type_analysis
-                        .get_stream_type(src_id)
-                        .expect("typing information should be available")
-                        .timing;
+                    let src_timing = &type_table.get_stream_type(src_id).timing;
                     if this_is_time_based {
-                        let out_timing = type_analysis
-                            .get_stream_type(id)
-                            .expect("typing information should be available")
-                            .timing;
+                        let out_timing = &type_table.get_stream_type(id).timing;
                         if let TimingInfo::RealTime(freq) = out_timing {
                             let complete_periods =
                                 (dur_as_nanos(*offset_duration) / dur_as_nanos(freq.d)) as u16;
@@ -169,14 +164,10 @@ pub(crate) fn determine_tracking_size(
 fn is_it_time_based(
     dependency_graph: &DependencyGraph,
     node_index: NIx,
-    type_analysis: &mut TypeAnalysis,
+    type_table: &TypeTable,
 ) -> bool {
     let id = get_ast_id(*dependency_graph.node_weight(node_index).unwrap());
-    match type_analysis
-        .get_stream_type(id)
-        .expect("We should have complete type information")
-        .timing
-    {
+    match type_table.get_stream_type(id).timing {
         TimingInfo::Event => false,
         TimingInfo::RealTime(_) => true,
     }
@@ -215,30 +206,21 @@ mod tests {
         expected_buffer_size: Vec<(StreamIndex, StorageRequirement)>,
     ) {
         let mut spec = parse(content).unwrap_or_else(|e| panic!("{}", e));
-        id_assignment::assign_ids(&mut spec);
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), content));
         let mut naming_analyzer = NamingAnalysis::new(&handler);
-        naming_analyzer.check(&spec);
+        let decl_table = naming_analyzer.check(&spec);
         let mut version_analyzer = LolaVersionAnalysis::new(&handler);
         let _version = version_analyzer.analyse(&spec);
 
-        let dependency_analysis = analyse_dependencies(
-            &spec,
-            &version_analyzer.result,
-            &naming_analyzer.result,
-            &handler,
-        );
+        let dependency_analysis =
+            analyse_dependencies(&spec, &version_analyzer.result, &decl_table, &handler);
 
-        let evaluation_order_result =
+        let (evaluation_order_result, pruned_graph) =
             determine_evaluation_order(dependency_analysis.dependency_graph);
 
-        let future_dependent_stream =
-            future_dependent_stream(&evaluation_order_result.pruned_dependency_graph);
+        let future_dependent_stream = future_dependent_stream(&pruned_graph);
 
-        let space_requirements = determine_buffer_size(
-            &evaluation_order_result.pruned_dependency_graph,
-            &future_dependent_stream,
-        );
+        let space_requirements = determine_buffer_size(&pruned_graph, &future_dependent_stream);
 
         assert_eq!(expected_errors, handler.emitted_errors());
         assert_eq!(expected_warning, handler.emitted_warnings());
@@ -267,30 +249,24 @@ mod tests {
         expected_tracking_requirements: Vec<(StreamIndex, Vec<(StreamIndex, TrackingRequirement)>)>,
     ) {
         let mut spec = parse(content).unwrap_or_else(|e| panic!("{}", e));
-        id_assignment::assign_ids(&mut spec);
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), content));
         let mut naming_analyzer = NamingAnalysis::new(&handler);
-        naming_analyzer.check(&spec);
+        let decl_table = naming_analyzer.check(&spec);
         let mut version_analyzer = LolaVersionAnalysis::new(&handler);
         let _version = version_analyzer.analyse(&spec);
 
-        let dependency_analysis = analyse_dependencies(
-            &spec,
-            &version_analyzer.result,
-            &naming_analyzer.result,
-            &handler,
-        );
-        let mut type_analysis = TypeAnalysis::new(&handler, &naming_analyzer.result);
-        type_analysis.check(&spec);
-        let evaluation_order_result =
+        let dependency_analysis =
+            analyse_dependencies(&spec, &version_analyzer.result, &decl_table, &handler);
+        let mut type_analysis = TypeAnalysis::new(&handler, &decl_table);
+        let type_table = type_analysis.check(&spec);
+        let (evaluation_order_result, pruned_graph) =
             determine_evaluation_order(dependency_analysis.dependency_graph);
 
-        let future_dependent_stream =
-            future_dependent_stream(&evaluation_order_result.pruned_dependency_graph);
+        let future_dependent_stream = future_dependent_stream(&pruned_graph);
 
         let tracking_requirements = determine_tracking_size(
-            &evaluation_order_result.pruned_dependency_graph,
-            &mut type_analysis,
+            &pruned_graph,
+            &type_table.unwrap(),
             &future_dependent_stream,
         );
 

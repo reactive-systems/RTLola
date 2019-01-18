@@ -20,14 +20,13 @@ use std::collections::HashMap;
 pub(crate) type EvalOrder = Vec<Vec<ComputeStep>>;
 
 pub(crate) struct EvaluationOrderResult {
-    pub pruned_dependency_graph: DependencyGraph,
     pub event_based_streams_order: EvalOrder,
     pub periodic_streams_order: EvalOrder,
 }
 
 pub(crate) fn determine_evaluation_order(
     mut dependency_graph: DependencyGraph,
-) -> EvaluationOrderResult {
+) -> (EvaluationOrderResult, DependencyGraph) {
     prune_graph(&mut dependency_graph);
     let pruned_dependency_graph = dependency_graph.clone();
 
@@ -37,11 +36,13 @@ pub(crate) fn determine_evaluation_order(
     let event_based_streams_order = get_compute_order(compute_graph_event_based);
     let periodic_streams_order = get_compute_order(compute_graph_periodic);
 
-    EvaluationOrderResult {
+    (
+        EvaluationOrderResult {
+            event_based_streams_order,
+            periodic_streams_order,
+        },
         pruned_dependency_graph,
-        event_based_streams_order,
-        periodic_streams_order,
-    }
+    )
 }
 
 fn prune_graph(dependency_graph: &mut DependencyGraph) {

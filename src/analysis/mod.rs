@@ -6,7 +6,7 @@
 //! * `type_checker` checks whether components of the AST have a valid type
 
 pub(crate) mod graph_based_analysis;
-mod id_assignment;
+pub(crate) mod id_assignment;
 mod lola_version;
 pub(crate) mod naming;
 pub(crate) mod typing;
@@ -14,68 +14,90 @@ pub(crate) mod typing;
 use self::naming::NamingAnalysis;
 use self::typing::TypeAnalysis;
 use super::ast::LolaSpec;
-use crate::analysis::graph_based_analysis::dependency_graph::analyse_dependencies;
-use crate::analysis::graph_based_analysis::evaluation_order::determine_evaluation_order;
-use crate::analysis::graph_based_analysis::future_dependency::future_dependent_stream;
-use crate::analysis::graph_based_analysis::space_requirements::determine_buffer_size;
-use crate::analysis::graph_based_analysis::space_requirements::determine_tracking_size;
 use crate::analysis::lola_version::LolaVersionAnalysis;
 use crate::parse::SourceMapper;
 use crate::reporting::Handler;
 
 pub trait AnalysisError<'a>: std::fmt::Debug {}
 
-pub(crate) fn analyze(spec: &mut LolaSpec, mapper: SourceMapper) -> bool {
-    let handler = Handler::new(mapper);
-    id_assignment::assign_ids(spec);
-    let mut naming_analyzer = NamingAnalysis::new(&handler);
-    naming_analyzer.check(spec);
+// Export output types.
+pub(crate) use self::graph_based_analysis::GraphAnalysisResult;
+pub(crate) use self::naming::DeclarationTable;
+pub(crate) use self::typing::TypeTable;
+pub(crate) use crate::ast::LanguageSpec;
 
-    if handler.contains_error() {
-        handler.error("aborting due to previous error");
-        return false;
+pub(crate) struct AnalysisResult<'a> {
+    pub(crate) declaration_table: Option<DeclarationTable<'a>>,
+    pub(crate) type_table: Option<TypeTable>,
+    pub(crate) version: Option<LanguageSpec>,
+    pub(crate) graph_analysis_result: Option<GraphAnalysisResult>,
+}
+
+impl<'a> AnalysisResult<'a> {
+    fn new() -> AnalysisResult<'a> {
+        AnalysisResult {
+            declaration_table: None,
+            type_table: None,
+            version: None,
+            graph_analysis_result: None,
+        }
     }
 
-    let mut type_analysis = TypeAnalysis::new(&handler, &naming_analyzer.result);
-    type_analysis.check(&spec);
+    pub(crate) fn is_success(&self) -> bool {
+        self.declaration_table.is_some()
+            && self.type_table.is_some()
+            && self.version.is_some()
+            && self.graph_analysis_result.is_some()
+    }
+}
+
+pub(crate) fn analyze<'a, 'b>(spec: &'a LolaSpec, handler: &'b Handler) -> AnalysisResult<'a> {
+    let mut result = AnalysisResult::new();
+
+    let mut naming_analyzer = NamingAnalysis::new(&handler);
+    let decl_table = naming_analyzer.check(spec);
+
     if handler.contains_error() {
         handler.error("aborting due to previous error");
-        return false;
+        return result;
+    } else {
+        result.declaration_table = Some(decl_table);
+    }
+
+    let mut type_analysis = TypeAnalysis::new(&handler, result.declaration_table.as_ref().unwrap());
+    let type_table = type_analysis.check(&spec);
+    assert_eq!(type_table.is_none(), handler.contains_error());
+
+    if handler.contains_error() {
+        handler.error("aborting due to previous error");
+        return AnalysisResult::new();
+    } else {
+        result.type_table = type_table;
     }
 
     let mut version_analyzer = LolaVersionAnalysis::new(&handler);
     let version_result = version_analyzer.analyse(spec);
     if version_result.is_none() {
         print!("error");
-        unimplemented!();
+        return AnalysisResult::new();
+    } else {
+        result.version = version_result;
     }
-    let dependency_analysis = analyse_dependencies(
+
+    let graph_result = graph_based_analysis::analyze(
         spec,
         &version_analyzer.result,
-        &naming_analyzer.result,
+        result.declaration_table.as_ref().unwrap(),
+        result.type_table.as_mut().unwrap(),
         &handler,
     );
 
-    if handler.contains_error() {
+    if handler.contains_error() || graph_result.is_none() {
         handler.error("aborting due to previous error");
-        return false;
+        return AnalysisResult::new();
+    } else {
+        result.graph_analysis_result = graph_result;
     }
 
-    let evaluation_order_result = determine_evaluation_order(dependency_analysis.dependency_graph);
-
-    let future_dependent_stream =
-        future_dependent_stream(&evaluation_order_result.pruned_dependency_graph);
-
-    let _space_requirements = determine_buffer_size(
-        &evaluation_order_result.pruned_dependency_graph,
-        &future_dependent_stream,
-    );
-
-    let _tracking_requirements = determine_tracking_size(
-        &evaluation_order_result.pruned_dependency_graph,
-        &mut type_analysis,
-        &future_dependent_stream,
-    );
-
-    unimplemented!();
+    result
 }

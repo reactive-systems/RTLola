@@ -36,16 +36,16 @@ pub enum Type {
     Option(Box<Type>),
 }
 
-impl From<ValueTy> for Type {
-    fn from(ty: ValueTy) -> Type {
+impl From<&ValueTy> for Type {
+    fn from(ty: &ValueTy) -> Type {
         match ty {
             ValueTy::Bool => Type::Bool,
-            ValueTy::Int(i) => Type::Int(i),
-            ValueTy::UInt(u) => Type::UInt(u),
-            ValueTy::Float(f) => Type::Float(f),
+            ValueTy::Int(i) => Type::Int(*i),
+            ValueTy::UInt(u) => Type::UInt(*u),
+            ValueTy::Float(f) => Type::Float(*f),
             ValueTy::String => Type::String,
             ValueTy::Tuple(t) => Type::Tuple(t.into_iter().map(|e| e.into()).collect()),
-            ValueTy::Option(o) => Type::Option(Box::new((*o).into())),
+            ValueTy::Option(o) => Type::Option(Box::new(o.as_ref().into())),
             _ => unreachable!("cannot lower `ValueTy` {}", ty),
         }
     }
@@ -479,6 +479,10 @@ impl LolaIR {
             .iter()
             .map(|t| self.get_out(t.reference))
             .collect()
+    }
+
+    pub fn get_window(&self, window: WindowReference) -> &SlidingWindow {
+        &self.sliding_windows[window.ix]
     }
 }
 
