@@ -37,6 +37,7 @@ pub(crate) fn future_dependent_stream(
                         TimeOffset::Future(_) => true,
                         TimeOffset::UpToNow(_) => false,
                     },
+                    Offset::SlidingWindow => false,
                 },
                 _ => false,
             });
@@ -138,5 +139,4 @@ mod tests {
     fn a_simple_past_dependence_is_not_a_future_dependence() {
         check_future_dependence("output a := b[-1]?0 input b: Int8", 0, 0, 0, vec![])
     }
-
 }

@@ -38,6 +38,7 @@ pub(crate) enum TimeOffset {
 pub(crate) enum Offset {
     Discrete(i32),
     Time(TimeOffset),
+    SlidingWindow,
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]

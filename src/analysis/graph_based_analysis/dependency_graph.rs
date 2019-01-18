@@ -312,7 +312,6 @@ impl<'a> DependencyAnalyser<'a> {
             ExpressionKind::Tuple(_) => unimplemented!(),
             ExpressionKind::Function(_, _, _) => unimplemented!(),
             ExpressionKind::Field(_, _) => unimplemented!(),
-            ExpressionKind::Field(_, _) => unimplemented!(),
             ExpressionKind::Method(_, _, _, _) => unimplemented!(),
         }
     }
@@ -346,7 +345,6 @@ impl<'a> DependencyAnalyser<'a> {
             ExpressionKind::MissingExpression() => unreachable!(),
             ExpressionKind::Tuple(_) => unimplemented!(),
             ExpressionKind::Function(_, _, _) => unimplemented!(),
-            ExpressionKind::Field(_, _) => unimplemented!(),
             ExpressionKind::Field(_, _) => unimplemented!(),
             ExpressionKind::Method(_, _, _, _) => unimplemented!(),
         }
@@ -426,7 +424,7 @@ impl<'a> DependencyAnalyser<'a> {
                     );
                 }
             },
-            ExpressionKind::Lookup(instance, offset, _) => {
+            ExpressionKind::Lookup(instance, offset, op) => {
                 let target_stream_id = match &self.naming_table[instance.id()] {
                     Declaration::Out(output) => output.id(),
                     Declaration::In(input) => input.id(),
@@ -434,12 +432,24 @@ impl<'a> DependencyAnalyser<'a> {
                 };
                 let target_stream_entry = mapping[&target_stream_id];
                 let target_stream_index = target_stream_entry.normal_time_index;
-                let offset = self.translate_offset(offset, self.naming_table);
-                self.dependency_graph.add_edge(
-                    current_node,
-                    target_stream_index,
-                    StreamDependency::Access(location, offset, *expr.span()),
-                );
+                match op {
+                    Some(_) => {
+                        let offset = Offset::SlidingWindow;
+                        self.dependency_graph.add_edge(
+                            current_node,
+                            target_stream_index,
+                            StreamDependency::Access(location, offset, *expr.span()),
+                        );
+                    }
+                    None => {
+                        let offset = self.translate_offset(offset, self.naming_table);
+                        self.dependency_graph.add_edge(
+                            current_node,
+                            target_stream_index,
+                            StreamDependency::Access(location, offset, *expr.span()),
+                        );
+                    }
+                }
             }
             ExpressionKind::Field(_, _) => unimplemented!(),
             ExpressionKind::Method(_, _, _, _) => unimplemented!(),
@@ -452,6 +462,7 @@ impl<'a> DependencyAnalyser<'a> {
                 |&edge| match self.dependency_graph.edge_weight(edge).unwrap() {
                     StreamDependency::Access(_, offset, _) => match offset {
                         Offset::Time(_, ..) => true,
+                        Offset::SlidingWindow => true,
                         Offset::Discrete(_) => false,
                     },
                     _ => false,
@@ -459,6 +470,7 @@ impl<'a> DependencyAnalyser<'a> {
             );
 
         if any_rt {
+            // TODO Max
             unimplemented!()
         }
 
@@ -471,6 +483,9 @@ impl<'a> DependencyAnalyser<'a> {
                 StreamDependency::Access(_, offset, _) => match offset {
                     Offset::Time(_, ..) => unreachable!("This is a cycle without realtime"),
                     Offset::Discrete(offset) => total_weight += offset,
+                    Offset::SlidingWindow => {
+                        unreachable!("Sliding windows do not count for cycles")
+                    }
                 },
             }
         }
@@ -963,6 +978,12 @@ mod tests {
     #[test]
     fn negative_cycle_should_be_no_problem() {
         check_graph("output a: Int8 := a[-1]?0", 0, 0)
+    }
+
+    #[test]
+    #[ignore]
+    fn self_sliding_window_should_be_no_problem() {
+        check_graph("output a: Int8 := a[1s,sum]?0", 0, 0)
     }
 
     #[test]
