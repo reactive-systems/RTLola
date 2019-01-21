@@ -378,9 +378,7 @@ impl<'a> Lowering<'a> {
                         reference: self.get_ref(*inp.id()),
                         arguments: Vec::new(),
                     };
-                    let op = Op::SyncStreamLookup {
-                        instance: lu_target,
-                    };
+                    let op = Op::SyncStreamLookup(lu_target);
                     let stmt = Statement {
                         target: result,
                         op,
@@ -394,9 +392,7 @@ impl<'a> Lowering<'a> {
                         reference: self.get_ref(*out.id()),
                         arguments: Vec::new(),
                     };
-                    let op = Op::SyncStreamLookup {
-                        instance: lu_target,
-                    };
+                    let op = Op::SyncStreamLookup(lu_target);
                     let stmt = Statement {
                         target: result,
                         op,
@@ -492,8 +488,8 @@ impl<'a> Lowering<'a> {
                     hashmap![result => result_type],
                 ))
             }
-            ExpressionKind::Function(kind, _, args) => {
-                let ir_kind = self.lower_function_kind(kind, args.first().map(|a| a.as_ref()));
+            ExpressionKind::Function(name, _, args) => {
+                let ir_kind = name.name.clone();
                 let (state, values) = self.lower_expression_list(args, mm);
                 let result = target_temp.unwrap_or_else(|| mm.temp_for_type(&result_type));
                 let stmt = Statement {
@@ -509,14 +505,6 @@ impl<'a> Lowering<'a> {
             ExpressionKind::Field(_, _) => unimplemented!(),
             ExpressionKind::Method(_, _, _, _) => unimplemented!(),
         }
-    }
-
-    fn lower_function_kind(
-        &self,
-        ident: &crate::parse::Ident,
-        first_arg: Option<&ast::Expression>,
-    ) -> ir::FunctionKind {
-        unimplemented!("check declaration table + typing information instead");
     }
 
     fn lower_expression_list(
@@ -960,6 +948,44 @@ mod tests {
 
         for ty in &expr.temporaries {
             assert_eq!(ty, &stream.ty);
+        }
+    }
+
+    #[test]
+    fn lower_function_expression() {
+        let ir = spec_to_ir("import math input a: Float32 output v: Float64 := sqrt(a)");
+        let stream: &OutputStream = &ir.outputs[0];
+
+        let ty = Type::Float(crate::ty::FloatTy::F64);
+
+        assert_eq!(stream.ty, ty);
+
+        let expr = &stream.expr;
+        assert_eq!(expr.stmts.len(), 2);
+
+        let load = &expr.stmts[0];
+
+        println!("{:?}", expr.stmts);
+
+        match &load.op {
+            Op::SyncStreamLookup(StreamInstance {
+                reference,
+                arguments,
+            }) => {
+                assert!(arguments.is_empty(), "Lookup does not have arguments.");
+                match reference {
+                    StreamReference::InRef(0) => {}
+                    _ => panic!("Incorrect StreamReference"),
+                }
+            }
+            _ => panic!("Need to load the constant first."),
+        };
+
+        let sqrt = &expr.stmts[1];
+
+        match &sqrt.op {
+            Op::Function(s) => assert_eq!("sqrt", s),
+            _ => panic!("Need to apply the function!"),
         }
     }
 

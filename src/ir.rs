@@ -182,7 +182,7 @@ pub enum Op {
     },
     /// Accessing another stream synchronously
     /// No arguments; StreamInstance contains further arguments.
-    SyncStreamLookup { instance: StreamInstance },
+    SyncStreamLookup(StreamInstance),
     /// A window expression over a duration
     WindowLookup(WindowReference),
     /// An if-then-else expression
@@ -196,7 +196,7 @@ pub enum Op {
     Tuple,
     /// A function call
     /// Arguments in statement in proper order.
-    Function(FunctionKind),
+    Function(String),
 }
 
 /// Represents a constant value of a certain kind.
@@ -284,21 +284,6 @@ pub enum ArithLogOp {
     Ge,
     /// The `>` operator (greater than)
     Gt,
-}
-
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub enum FunctionKind {
-    NthRoot(u32),
-    Projection(u32),
-    Sin,
-    Cos,
-    Tan,
-    Arcsin,
-    Arccos,
-    Arctan,
-    Exp,
-    Floor,
-    Ceil,
 }
 
 /// Represents an instance of a sliding window.
