@@ -17,7 +17,6 @@ use crate::ast::LitKind;
 use crate::ast::LolaSpec;
 use crate::ast::Output;
 use crate::ast::TemplateSpec;
-use crate::ast::TimeUnit;
 use crate::ast::UnOp;
 use crate::reporting::DiagnosticBuilder;
 use crate::reporting::Handler;
@@ -307,40 +306,6 @@ impl<'a> DependencyAnalyser<'a> {
             ExpressionKind::Ite(_, _, _) => unreachable!(),
             ExpressionKind::ParenthesizedExpression(_, expr, _) => {
                 self.evaluate_discrete(expr, naming_table)
-            }
-            ExpressionKind::MissingExpression() => unreachable!(),
-            ExpressionKind::Tuple(_) => unimplemented!(),
-            ExpressionKind::Function(_, _, _) => unimplemented!(),
-            ExpressionKind::Field(_, _) => unimplemented!(),
-            ExpressionKind::Method(_, _, _, _) => unimplemented!(),
-        }
-    }
-
-    fn evaluate_float(
-        &self,
-        expr: &crate::ast::Expression,
-        naming_table: &'a DeclarationTable,
-    ) -> f64 {
-        // TODO need typing information
-        match &expr.kind {
-            ExpressionKind::Lit(lit) => match &lit.kind {
-                LitKind::Int(int) => *int as f64,
-                LitKind::Float(float) => *float as f64,
-                _ => unimplemented!(),
-            },
-            ExpressionKind::Ident(_) => match &naming_table[&expr.id()] {
-                _ => unimplemented!(),
-            },
-            ExpressionKind::Default(_, _) => unreachable!(),
-            ExpressionKind::Lookup(_, _, _) => unreachable!(),
-            ExpressionKind::Binary(_, _, _) => unimplemented!(),
-            ExpressionKind::Unary(op, expr) => {
-                assert_eq!(UnOp::Neg, *op);
-                -self.evaluate_float(expr, naming_table)
-            }
-            ExpressionKind::Ite(_, _, _) => unreachable!(),
-            ExpressionKind::ParenthesizedExpression(_, expr, _) => {
-                self.evaluate_float(expr, naming_table)
             }
             ExpressionKind::MissingExpression() => unreachable!(),
             ExpressionKind::Tuple(_) => unimplemented!(),
@@ -926,7 +891,6 @@ pub(crate) fn analyse_dependencies<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::analysis::id_assignment;
     use crate::analysis::lola_version::LolaVersionAnalysis;
     use crate::analysis::naming::NamingAnalysis;
     use crate::parse::parse;
@@ -936,7 +900,7 @@ mod tests {
 
     /// Parses the content, runs naming analysis, and check expected number of errors and version
     fn check_graph(content: &str, num_errors: usize, num_warnings: usize) {
-        let mut ast = parse(content).unwrap_or_else(|e| panic!("{}", e));
+        let ast = parse(content).unwrap_or_else(|e| panic!("{}", e));
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), content));
         let mut naming_analyzer = NamingAnalysis::new(&handler);
         let decl_table = naming_analyzer.check(&ast);

@@ -34,6 +34,7 @@ impl Handler {
         *self.error_count.borrow()
     }
 
+    #[allow(dead_code)]
     pub(crate) fn emitted_warnings(&self) -> usize {
         *self.warning_count.borrow()
     }
@@ -51,6 +52,7 @@ impl Handler {
         self.emitter.borrow_mut().emit(&self.mapper, &diagnostic)
     }
 
+    #[allow(dead_code)]
     pub(crate) fn warn(&self, message: &str) {
         self.emit(&Diagnostic {
             level: Warning,
@@ -95,6 +97,7 @@ impl Handler {
         DiagnosticBuilder::new(&self, level, message)
     }
 
+    #[allow(dead_code)]
     pub(crate) fn bug_with_span(&self, message: &str, span: LabeledSpan) {
         self.emit(&Diagnostic {
             level: Bug,
@@ -287,12 +290,16 @@ impl StderrEmitter {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Level {
     /// A compiler bug
+    #[allow(dead_code)]
     Bug,
     /// A fatal error, immediate exit afterwards
+    #[allow(dead_code)]
     Fatal,
     Error,
     Warning,
+    #[allow(dead_code)]
     Note,
+    #[allow(dead_code)]
     Help,
 }
 
@@ -401,6 +408,7 @@ impl<'a> DiagnosticBuilder<'a> {
         self.status = DiagnosticBuilderStatus::Emitted;
     }
 
+    #[allow(dead_code)]
     pub(crate) fn cancel(&mut self) {
         assert_eq!(self.status, DiagnosticBuilderStatus::Building);
         self.status = DiagnosticBuilderStatus::Cancelled;

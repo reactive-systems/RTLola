@@ -15,7 +15,6 @@ use self::naming::NamingAnalysis;
 use self::typing::TypeAnalysis;
 use super::ast::LolaSpec;
 use crate::analysis::lola_version::LolaVersionAnalysis;
-use crate::parse::SourceMapper;
 use crate::reporting::Handler;
 
 pub trait AnalysisError<'a>: std::fmt::Debug {}

@@ -9,8 +9,6 @@ use crate::ir::{
     EventDrivenStream, LolaIR, MemorizationBound, ParametrizedStream, StreamReference,
     TimeDrivenStream, WindowReference,
 };
-use crate::parse::SourceMapper;
-use crate::reporting::Handler;
 use crate::ty::TimingInfo;
 use ast_node::{AstNode, NodeId};
 use std::collections::HashMap;
@@ -70,23 +68,9 @@ impl<'a> Lowering<'a> {
             ref_lookup: Lowering::create_ref_lookup(&ast.inputs, &ast.outputs),
             dt: analysis_result.declaration_table.as_ref().unwrap(),
             tt: analysis_result.type_table.as_ref().unwrap(),
-            et: Self::order_to_table(
-                &analysis_result
-                    .graph_analysis_result
-                    .as_ref()
-                    .unwrap()
-                    .evaluation_order,
-            ),
-            mt: &analysis_result
-                .graph_analysis_result
-                .as_ref()
-                .unwrap()
-                .space_requirements,
-            tr: &analysis_result
-                .graph_analysis_result
-                .as_ref()
-                .unwrap()
-                .tracking_requirements,
+            et: Self::order_to_table(&graph.evaluation_order),
+            mt: &graph.space_requirements,
+            tr: &graph.tracking_requirements,
             ir,
         }
     }
@@ -231,80 +215,8 @@ impl<'a> Lowering<'a> {
         }
     }
 
-    /// Returns the flattened result of calling f on each node recursively in `pre_order` or post_order.
-    fn collect_expression<T, F>(expr: &'a ast::Expression, f: &F, pre_order: bool) -> Vec<T>
-    where
-        F: Fn(&'a ast::Expression) -> Vec<T>,
-    {
-        let recursion = |e| Lowering::collect_expression(e, &f, pre_order);
-        let pre = if pre_order {
-            f(expr).into_iter()
-        } else {
-            Vec::new().into_iter()
-        };
-        let post = || {
-            if pre_order {
-                Vec::new().into_iter()
-            } else {
-                f(expr).into_iter()
-            }
-        };
-        match &expr.kind {
-            ExpressionKind::Lit(_) => pre.chain(post()).collect(),
-            ExpressionKind::Ident(_) => pre.chain(post()).collect(),
-            ExpressionKind::Default(e, dft) => pre
-                .chain(recursion(e))
-                .chain(recursion(dft))
-                .chain(post())
-                .collect(),
-            ExpressionKind::Lookup(inst, _, _) => {
-                let args = inst.arguments.iter().flat_map(|a| recursion(a));
-                pre.chain(args).chain(post()).collect()
-            }
-            ExpressionKind::Binary(_, lhs, rhs) => pre
-                .chain(recursion(lhs))
-                .chain(recursion(rhs))
-                .chain(post())
-                .collect(),
-            ExpressionKind::Unary(_, operand) => {
-                pre.chain(recursion(operand)).chain(post()).collect()
-            }
-            ExpressionKind::Ite(cond, cons, alt) => pre
-                .chain(recursion(cond))
-                .chain(recursion(cons))
-                .chain(recursion(alt))
-                .chain(post())
-                .collect(),
-            ExpressionKind::ParenthesizedExpression(_, e, _) => pre
-                .chain(Lowering::collect_expression(e, &f, pre_order))
-                .chain(post())
-                .collect(),
-            ExpressionKind::MissingExpression() => panic!(), // TODO: Eradicate in preceding step.
-            ExpressionKind::Tuple(exprs) => {
-                let elems = exprs.iter().flat_map(|a| recursion(a));
-                pre.chain(elems).chain(post()).collect()
-            }
-            ExpressionKind::Function(_, _, args) => {
-                let args = args.iter().flat_map(|a| recursion(a));
-                pre.chain(args).chain(post()).collect()
-            }
-            ExpressionKind::Field(e, _) => pre.chain(recursion(e)).chain(post()).collect(),
-            ExpressionKind::Method(_, _, _, _) => unimplemented!(),
-        }
-    }
-    //
-    //    fn find_windows(expr: &ast::Expression) -> Vec<&ast::Expression> {
-    //        fn f(e: &ast::Expression) -> Vec<&ast::Expression> {
-    //            match &e.kind {
-    //                ExpressionKind::Lookup(_, _, Some(_)) => vec![e],
-    //                _ => Vec::new()
-    //            }
-    //        }
-    //        Lowering::collect_expression(expr, &f)
-    //    }
-
     fn lower_window(&mut self, expr: &ast::Expression) -> WindowReference {
-        if let ExpressionKind::Lookup(inst, offset, Some(op)) = &expr.kind {
+        if let ExpressionKind::Lookup(_, offset, Some(op)) = &expr.kind {
             let duration = match self.lower_offset(offset) {
                 ir::Offset::PastDiscreteOffset(_)
                 | ir::Offset::FutureDiscreteOffset(_)
@@ -331,7 +243,7 @@ impl<'a> Lowering<'a> {
     }
 
     fn extract_target_from_lookup(&self, lookup: &ExpressionKind) -> StreamReference {
-        if let ExpressionKind::Lookup(inst, offset, op) = lookup {
+        if let ExpressionKind::Lookup(inst, _, _) = lookup {
             let decl = self.get_decl(inst.id());
             let nid = match decl {
                 Declaration::Out(out) => out.id(),
@@ -402,7 +314,6 @@ impl<'a> Lowering<'a> {
     }
 
     fn lower_storage_req(&self, req: StorageRequirement) -> MemorizationBound {
-        use self::StorageRequirement::*;
         match req {
             StorageRequirement::Finite(b) => MemorizationBound::Bounded(b as u16),
             StorageRequirement::FutureRef(_) | StorageRequirement::Unbounded => {
@@ -416,22 +327,21 @@ impl<'a> Lowering<'a> {
     }
 
     fn lower_expression(&mut self, expression: &ast::Expression) -> ir::Expression {
-        use crate::ir::{Op, Statement, Temporary};
         let mut mm = MemoryManager::new();
 
         let state = self.lower_subexpression(expression, &mut mm, None);
 
-        let mut temps: Vec<(Temporary, ir::Type)> = state.temps.clone().into_iter().collect();
-        temps.sort_unstable_by_key(|(temp, ty)| temp.0);
+        let mut temps: Vec<(ir::Temporary, ir::Type)> = state.temps.clone().into_iter().collect();
+        temps.sort_unstable_by_key(|(temp, _)| temp.0);
         // Make sure every temporary has its type.
-        temps.iter().enumerate().for_each(|(i, (temp, ty))| {
+        temps.iter().enumerate().for_each(|(i, (temp, _))| {
             assert_eq!(
                 i, temp.0 as usize,
                 "Temporary {} does not have a type! Found type for Temporary {} instead.",
                 i, temp.0
             )
         });
-        let temporaries = temps.into_iter().map(|(temp, ty)| ty).collect();
+        let temporaries = temps.into_iter().map(|(_, ty)| ty).collect();
 
         ir::Expression {
             stmts: state.stmts,
@@ -461,7 +371,7 @@ impl<'a> Lowering<'a> {
                 };
                 LoweringState::new(vec![stmt], hashmap![result => result_type])
             }
-            ExpressionKind::Ident(i) => match self.get_decl(expr.id()) {
+            ExpressionKind::Ident(_) => match self.get_decl(expr.id()) {
                 Declaration::In(inp) => {
                     let result = target_temp.unwrap_or_else(|| mm.temp_for_type(&result_type));
                     let lu_target = ir::StreamInstance {
@@ -507,7 +417,7 @@ impl<'a> Lowering<'a> {
                     self.lower_subexpression(e, mm, target_temp)
                 }
             }
-            ExpressionKind::Lookup(inst, _, _) => {
+            ExpressionKind::Lookup(_, _, _) => {
                 // Stray lookup without any default expression surrounding it, see `ExpressionKind::Default` case.
                 // This is only valid for sync accesses, i.e. the offset is 0.
                 // TODO: Double check: is a [0] access even allowed anymore? Or should it be sample&hold or a no-offset lookup instead.
@@ -596,7 +506,7 @@ impl<'a> Lowering<'a> {
                     hashmap![result => result_type],
                 ))
             }
-            ExpressionKind::Field(e, _) => unimplemented!(),
+            ExpressionKind::Field(_, _) => unimplemented!(),
             ExpressionKind::Method(_, _, _, _) => unimplemented!(),
         }
     }
@@ -614,7 +524,6 @@ impl<'a> Lowering<'a> {
         expressions: &Vec<Box<ast::Expression>>,
         mm: &mut MemoryManager,
     ) -> (LoweringState, Vec<ir::Temporary>) {
-        let init: (LoweringState, Vec<ir::Temporary>) = (LoweringState::empty(), Vec::new());
         let states: Vec<LoweringState> = expressions
             .iter()
             .map(|e| self.lower_subexpression(e, mm, None))
@@ -650,7 +559,7 @@ impl<'a> Lowering<'a> {
             let default_temp = state.get_target();
 
 
-            let op = if let Some(window_op) = op {
+            let op = if op.is_some() {
                 let window_ref = self.lower_window(&lookup_expr);
                 ir::Op::WindowLookup(window_ref)
             } else {
@@ -926,7 +835,6 @@ impl MemoryManager {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::ir::*;
 
     fn spec_to_ir(spec: &str) -> LolaIR {

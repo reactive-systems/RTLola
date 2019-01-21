@@ -165,6 +165,7 @@ impl ValueTy {
         }
     }
 
+    #[allow(dead_code)]
     pub(crate) fn is_error(&self) -> bool {
         use self::ValueTy::*;
         match self {

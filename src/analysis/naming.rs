@@ -549,13 +549,12 @@ impl<'a> Into<Declaration<'a>> for &'a Parameter {
 mod tests {
 
     use super::*;
-    use crate::analysis::id_assignment;
     use crate::parse::{parse, SourceMapper};
     use std::path::PathBuf;
 
     /// Parses the content, runs naming analysis, and returns number of errors
     fn number_of_naming_errors(content: &str) -> usize {
-        let mut ast = parse(content).unwrap_or_else(|e| panic!("{}", e));
+        let ast = parse(content).unwrap_or_else(|e| panic!("{}", e));
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), content));
         let mut naming_analyzer = NamingAnalysis::new(&handler);
         naming_analyzer.check(&ast);

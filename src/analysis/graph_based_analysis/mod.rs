@@ -20,7 +20,6 @@ pub(crate) use self::space_requirements::SpaceRequirements;
 use self::space_requirements::TrackingRequirements;
 
 pub(crate) struct GraphAnalysisResult {
-    pub(crate) dependency_graph: DependencyGraph,
     pub(crate) evaluation_order: EvaluationOrderResult,
     pub(crate) future_dependent_streams: FutureDependentStreams,
     pub(crate) space_requirements: SpaceRequirements,
@@ -57,7 +56,6 @@ pub(crate) fn analyze<'a>(
     );
 
     Some(GraphAnalysisResult {
-        dependency_graph: pruned_graph,
         evaluation_order: evaluation_order_result,
         future_dependent_streams,
         space_requirements,

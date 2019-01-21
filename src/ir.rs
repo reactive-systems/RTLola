@@ -504,7 +504,7 @@ impl std::ops::Add for ValSize {
 }
 
 impl Type {
-    fn size(&self) -> Option<ValSize> {
+    pub fn size(&self) -> Option<ValSize> {
         unimplemented!();
         /*match self {
             Type::Primitive(a) => a.size(),
@@ -523,61 +523,5 @@ impl Type {
             PrimitiveType::String => None, // Strings do not have a a priori fixed value
             PrimitiveType::Bool => Some(ValSize::from(1)),
         }*/
-    }
-}
-
-impl OutputStream {
-    fn get_dependencies(&self) -> Vec<StreamReference> {
-        let mut vec: Vec<StreamReference> = self
-            .expr
-            .stmts
-            .iter()
-            .flat_map(|stm| stm.get_dependencies())
-            .collect();
-        let set: std::collections::HashSet<StreamReference> = vec.drain(..).collect();
-        vec.extend(set.into_iter());
-        vec
-    }
-}
-
-impl Statement {
-    fn get_dependencies(&self) -> Vec<StreamReference> {
-        match &self.op {
-            Op::LoadConstant(_) | Op::ArithLog(_) | Op::Tuple | Op::Function(_) => Vec::new(),
-            Op::StreamLookup { instance, .. } => vec![instance.reference],
-            Op::SyncStreamLookup { instance } => vec![instance.reference],
-            Op::Ite {
-                consequence,
-                alternative,
-            } => {
-                let mut lhs: Vec<StreamReference> = consequence
-                    .iter()
-                    .flat_map(|stm| stm.get_dependencies())
-                    .collect();
-                let mut rhs: Vec<StreamReference> = alternative
-                    .iter()
-                    .flat_map(|stm| stm.get_dependencies())
-                    .collect();
-                lhs.append(&mut rhs);
-                lhs
-            }
-            Op::WindowLookup(_) => unimplemented!(),
-        }
-    }
-}
-
-#[cfg(test)]
-mod dependencies_test {
-    use super::*;
-
-    #[test]
-    fn constant_test() {
-        let stm = Statement {
-            target: Temporary(1),
-            op: Op::LoadConstant(Constant::Bool(true)),
-            args: Vec::new(),
-        };
-        let res = stm.get_dependencies();
-        assert!(res.is_empty());
     }
 }

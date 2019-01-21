@@ -73,10 +73,10 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
 
         self.assign_types(spec);
 
-        Some(self.extract_type_table(spec))
+        Some(self.extract_type_table())
     }
 
-    fn extract_type_table(&mut self, spec: &LolaSpec) -> TypeTable {
+    fn extract_type_table(&mut self) -> TypeTable {
         let value_nids: Vec<NodeId> = self.value_vars.keys().map(|nid| *nid).collect();
         let vtt: HashMap<NodeId, ValueTy> = value_nids
             .into_iter()
@@ -719,7 +719,7 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
                     })
                 }
             }
-            Offset::RealTimeOffset(off_expr, unit) => {
+            Offset::RealTimeOffset(_, _) => {
                 assert!(
                     stream.arguments.is_empty(),
                     "parameterized timed streams currently not implemented"
@@ -913,7 +913,6 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
                     ),
                 );
             }
-            _ => unreachable!(),
         }
     }
 
@@ -1098,7 +1097,7 @@ impl UnifiableTy for ValueTy {
     /// Checks recursively if the `right` type can be transformed to match `self`.
     fn coerces_with<U: Unifier<Var = Self::V, Ty = Self>>(
         &self,
-        unifier: &mut U,
+        _unifier: &mut U,
         right: &ValueTy,
     ) -> bool {
         debug!("coerce {} {}", self, right);
@@ -1251,13 +1250,13 @@ impl UnifyKey for ValueVar {
 impl UnifiableTy for StreamTy {
     type V = StreamVar;
 
-    fn normalize_ty<U: Unifier<Var = Self::V, Ty = Self>>(&self, unifier: &mut U) -> Self {
+    fn normalize_ty<U: Unifier<Var = Self::V, Ty = Self>>(&self, _unifier: &mut U) -> Self {
         self.clone()
     }
 
     fn coerces_with<U: Unifier<Var = Self::V, Ty = Self>>(
         &self,
-        unifier: &mut U,
+        _unifier: &mut U,
         right: &Self,
     ) -> bool {
         debug!("coerce {} {}", self, right);
@@ -1277,7 +1276,7 @@ impl UnifiableTy for StreamTy {
 
     fn equal_to<U: Unifier<Var = Self::V, Ty = Self>>(
         &self,
-        unifier: &mut U,
+        _unifier: &mut U,
         right: &Self,
     ) -> Option<Self> {
         trace!("comp {} {}", self, right);
@@ -1290,7 +1289,7 @@ impl UnifiableTy for StreamTy {
 
     fn contains_var<U: Unifier<Var = Self::V, Ty = Self>>(
         &self,
-        unifier: &mut U,
+        _unifier: &mut U,
         var: Self::V,
     ) -> bool {
         trace!("check occurrence {} {}", var, self);
@@ -1397,7 +1396,6 @@ impl InferError {
 mod tests {
 
     use super::*;
-    use crate::analysis::id_assignment::*;
     use crate::analysis::naming::*;
     use crate::parse::*;
     use crate::reporting::Handler;
@@ -1407,7 +1405,7 @@ mod tests {
     fn num_type_errors(spec: &str) -> usize {
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
 
-        let mut spec = match parse(spec) {
+        let spec = match parse(spec) {
             Err(e) => panic!("Spec {} cannot be parsed: {}.", spec, e),
             Ok(s) => s,
         };
@@ -1426,7 +1424,7 @@ mod tests {
     fn get_type(spec: &str) -> ValueTy {
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
 
-        let mut spec = match parse(spec) {
+        let spec = match parse(spec) {
             Err(e) => panic!("Spec {} cannot be parsed: {}.", spec, e),
             Ok(s) => s,
         };

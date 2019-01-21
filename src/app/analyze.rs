@@ -12,7 +12,6 @@ use simplelog::*;
 
 use super::super::analysis;
 use super::super::parse::{LolaParser, Rule};
-use crate::ir::LolaIR;
 use crate::lowering::Lowering;
 use crate::parse::SourceMapper;
 use crate::reporting::Handler;
@@ -199,17 +198,17 @@ impl Config {
             Analysis::Analyze => {
                 let mut spec = crate::parse::parse(&contents).unwrap_or_else(|e| panic!("{}", e));
                 let handler = Handler::new(mapper);
-                let report = analysis::analyze(&mut spec, &handler);
+                let _ = analysis::analyze(&mut spec, &handler);
                 //println!("{:?}", report);
                 Ok(())
             }
             Analysis::IR => {
-                let mut spec = crate::parse::parse(&contents).unwrap_or_else(|e| panic!("{}", e));
+                let spec = crate::parse::parse(&contents).unwrap_or_else(|e| panic!("{}", e));
 
                 let handler = Handler::new(mapper);
                 let analysis_result = crate::analysis::analyze(&spec, &handler);
                 assert!(analysis_result.is_success());
-                let ir = Lowering::new(&spec, &analysis_result).lower();
+                let _ = Lowering::new(&spec, &analysis_result).lower();
                 //println!("{:?}", report);
                 Ok(())
             }

@@ -78,7 +78,6 @@ mod tests {
     use crate::analysis::graph_based_analysis::dependency_graph::analyse_dependencies;
     use crate::analysis::graph_based_analysis::evaluation_order::determine_evaluation_order;
     use crate::analysis::graph_based_analysis::future_dependency::future_dependent_stream;
-    use crate::analysis::id_assignment;
     use crate::analysis::lola_version::LolaVersionAnalysis;
     use crate::analysis::naming::NamingAnalysis;
     use crate::parse::parse;
@@ -94,7 +93,7 @@ mod tests {
         // index of output stream with future dependence
         expected_future_dependent: Vec<usize>,
     ) {
-        let mut spec = parse(content).unwrap_or_else(|e| panic!("{}", e));
+        let spec = parse(content).unwrap_or_else(|e| panic!("{}", e));
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), content));
         let mut naming_analyzer = NamingAnalysis::new(&handler);
         let decl_table = naming_analyzer.check(&spec);
@@ -104,7 +103,7 @@ mod tests {
         let dependency_analysis =
             analyse_dependencies(&spec, &version_analyzer.result, &decl_table, &handler);
 
-        let (evaluation_order_result, pruned_graph) =
+        let (_, pruned_graph) =
             determine_evaluation_order(dependency_analysis.dependency_graph);
 
         let future_dependent_stream = future_dependent_stream(&pruned_graph);

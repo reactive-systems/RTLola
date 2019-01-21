@@ -8,15 +8,6 @@ pub struct Generic {
     pub constraint: ValueTy,
 }
 
-/// different kinds of type declarations, can be e.g., alias, newtype, struct, enum
-#[derive(Debug)]
-pub enum TypeDecl {
-    //Alias(String, Ty),
-//NewType(String, Ty),
-//Struct(String, Vec<(String, Ty)>),
-//Enum(String, Vec<(String, Ty)>),
-}
-
 /// A (possibly generic) function declaration
 #[derive(Debug)]
 pub struct FuncDecl {
