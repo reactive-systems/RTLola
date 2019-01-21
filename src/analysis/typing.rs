@@ -749,7 +749,8 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
                 {
                     TimingInfo::RealTime(_) => {}
                     _ => {
-                        self.handler.error_with_span("Sliding windows are only allowed in real-time streams",
+                        self.handler.error_with_span(
+                            "Sliding windows are only allowed in real-time streams",
                             LabeledSpan::new(span, "unexpected sliding window", true),
                         );
                         return Err(());

@@ -110,8 +110,8 @@ impl Freq {
             return false;
         }
         // TODO: replace by self.as_nanos() when stabilized
-        let left_nanos =
-            u128::from(self.d.as_secs()) * u128::from(Freq::NANOS_PER_SEC) + u128::from(self.d.subsec_nanos());
+        let left_nanos = u128::from(self.d.as_secs()) * u128::from(Freq::NANOS_PER_SEC)
+            + u128::from(self.d.subsec_nanos());
         let right_nanos = u128::from(other.d.as_secs()) * u128::from(Freq::NANOS_PER_SEC)
             + u128::from(other.d.subsec_nanos());
         assert!(left_nanos >= right_nanos);
@@ -199,9 +199,7 @@ impl ValueTy {
     /// Replaces constraints by default values
     pub(crate) fn replace_constr(&self) -> ValueTy {
         match &self {
-            ValueTy::Tuple(t) => {
-                ValueTy::Tuple(t.iter().map(|el| el.replace_constr()).collect())
-            }
+            ValueTy::Tuple(t) => ValueTy::Tuple(t.iter().map(|el| el.replace_constr()).collect()),
             ValueTy::Option(ty) => ValueTy::Option(ty.replace_constr().into()),
             ValueTy::Constr(c) => match c.has_default() {
                 Some(d) => d,
