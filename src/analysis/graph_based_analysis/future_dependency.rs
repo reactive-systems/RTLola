@@ -103,8 +103,7 @@ mod tests {
         let dependency_analysis =
             analyse_dependencies(&spec, &version_analyzer.result, &decl_table, &handler);
 
-        let (_, pruned_graph) =
-            determine_evaluation_order(dependency_analysis.dependency_graph);
+        let (_, pruned_graph) = determine_evaluation_order(dependency_analysis.dependency_graph);
 
         let future_dependent_stream = future_dependent_stream(&pruned_graph);
 

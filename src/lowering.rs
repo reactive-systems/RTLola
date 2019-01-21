@@ -558,7 +558,6 @@ impl<'a> Lowering<'a> {
             state = state.merge_with(self.lower_subexpression(dft, mm, target_temp));
             let default_temp = state.get_target();
 
-
             let op = if op.is_some() {
                 let window_ref = self.lower_window(&lookup_expr);
                 ir::Op::WindowLookup(window_ref)
@@ -598,18 +597,16 @@ impl<'a> Lowering<'a> {
                     ir::Offset::PastRealTimeOffset(duration)
                 }
             }
-            ast::Offset::DiscreteOffset(e) => {
-                match self.extract_literal(e) {
-                    ir::Constant::Int(i) => {
-                        if i > 0 {
-                            ir::Offset::FutureDiscreteOffset(i as u128)
-                        } else {
-                            ir::Offset::PastDiscreteOffset(i.abs() as u128)
-                        }
+            ast::Offset::DiscreteOffset(e) => match self.extract_literal(e) {
+                ir::Constant::Int(i) => {
+                    if i > 0 {
+                        ir::Offset::FutureDiscreteOffset(i as u128)
+                    } else {
+                        ir::Offset::PastDiscreteOffset(i.abs() as u128)
                     }
-                    _ => unreachable!("Eradicated in preceding step.")
                 }
-            }
+                _ => unreachable!("Eradicated in preceding step."),
+            },
         }
     }
 
@@ -645,7 +642,7 @@ impl<'a> Lowering<'a> {
                 let nanos = (value % 1_000_000_000f64) as u32;
                 (std::time::Duration::new(secs, nanos), f > 0.0)
             }
-            _ => unreachable!("Eradicated in preceding step.")
+            _ => unreachable!("Eradicated in preceding step."),
         }
     }
 

@@ -10,7 +10,7 @@ use crate::analysis::graph_based_analysis::StreamDependency::InvokeByName;
 use crate::analysis::graph_based_analysis::StreamNode::*;
 use crate::analysis::graph_based_analysis::TimeOffset;
 use crate::analysis::graph_based_analysis::TrackingRequirement;
-use crate::analysis::typing::{TypeTable, TypeAnalysis};
+use crate::analysis::typing::{TypeAnalysis, TypeTable};
 use crate::ty::TimingInfo;
 use ast_node::NodeId;
 use petgraph::visit::EdgeRef;
@@ -213,8 +213,7 @@ mod tests {
         let dependency_analysis =
             analyse_dependencies(&spec, &version_analyzer.result, &decl_table, &handler);
 
-        let (_, pruned_graph) =
-            determine_evaluation_order(dependency_analysis.dependency_graph);
+        let (_, pruned_graph) = determine_evaluation_order(dependency_analysis.dependency_graph);
 
         let future_dependent_stream = future_dependent_stream(&pruned_graph);
 
@@ -257,8 +256,7 @@ mod tests {
             analyse_dependencies(&spec, &version_analyzer.result, &decl_table, &handler);
         let mut type_analysis = TypeAnalysis::new(&handler, &decl_table);
         let type_table = type_analysis.check(&spec);
-        let (_, pruned_graph) =
-            determine_evaluation_order(dependency_analysis.dependency_graph);
+        let (_, pruned_graph) = determine_evaluation_order(dependency_analysis.dependency_graph);
 
         let future_dependent_stream = future_dependent_stream(&pruned_graph);
 
