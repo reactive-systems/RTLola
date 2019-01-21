@@ -44,7 +44,7 @@ impl From<&ValueTy> for Type {
             ValueTy::UInt(u) => Type::UInt(*u),
             ValueTy::Float(f) => Type::Float(*f),
             ValueTy::String => Type::String,
-            ValueTy::Tuple(t) => Type::Tuple(t.into_iter().map(|e| e.into()).collect()),
+            ValueTy::Tuple(t) => Type::Tuple(t.iter().map(|e| e.into()).collect()),
             ValueTy::Option(o) => Type::Option(Box::new(o.as_ref().into())),
             _ => unreachable!("cannot lower `ValueTy` {}", ty),
         }

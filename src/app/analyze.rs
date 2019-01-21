@@ -196,9 +196,9 @@ impl Config {
                 Ok(())
             }
             Analysis::Analyze => {
-                let mut spec = crate::parse::parse(&contents).unwrap_or_else(|e| panic!("{}", e));
+                let spec = crate::parse::parse(&contents).unwrap_or_else(|e| panic!("{}", e));
                 let handler = Handler::new(mapper);
-                let _ = analysis::analyze(&mut spec, &handler);
+                let _ = analysis::analyze(&spec, &handler);
                 //println!("{:?}", report);
                 Ok(())
             }

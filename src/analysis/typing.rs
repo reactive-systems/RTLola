@@ -41,11 +41,11 @@ pub(crate) struct TypeTable {
 
 impl TypeTable {
     pub(crate) fn get_value_type(&self, nid: NodeId) -> &ValueTy {
-        self.value_tt.get(&nid).unwrap()
+        &self.value_tt[&nid]
     }
 
     pub(crate) fn get_stream_type(&self, nid: NodeId) -> &StreamTy {
-        self.stream_tt.get(&nid).unwrap()
+        &self.stream_tt[&nid]
     }
 }
 
@@ -77,14 +77,14 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
     }
 
     fn extract_type_table(&mut self) -> TypeTable {
-        let value_nids: Vec<NodeId> = self.value_vars.keys().map(|nid| *nid).collect();
+        let value_nids: Vec<NodeId> = self.value_vars.keys().cloned().collect();
         let vtt: HashMap<NodeId, ValueTy> = value_nids
             .into_iter()
             .map(|nid| (nid, self.get_type(nid)))
             .collect();
 
         // Note: If there is a `None` for a stream, `get_stream_type` would report the error.
-        let stream_nids: Vec<NodeId> = self.stream_vars.keys().map(|nid| *nid).collect();
+        let stream_nids: Vec<NodeId> = self.stream_vars.keys().cloned().collect();
         let stt: HashMap<NodeId, StreamTy> = stream_nids
             .into_iter()
             .flat_map(|nid| self.get_stream_type(nid).map(|ty| (nid, ty)))
@@ -498,7 +498,7 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
                 )?;
             }
             Lookup(stream, offset, aggregation) => {
-                self.infer_lookup_expr(var, stream_var, expr._span, stream, offset, aggregation)?
+                self.infer_lookup_expr(var, stream_var, expr._span, stream, offset, *aggregation)?
             }
             Default(left, right) => {
                 self.infer_expression(
@@ -637,7 +637,7 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
         span: Span,
         stream: &'a StreamInstance,
         offset: &'a Offset,
-        window_op: &Option<WindowOperation>,
+        window_op: Option<WindowOperation>,
     ) -> Result<(), ()> {
         match offset {
             Offset::DiscreteOffset(off_expr) => {
@@ -749,9 +749,8 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
                 {
                     TimingInfo::RealTime(_) => {}
                     _ => {
-                        self.handler.error_with_span(
-                            &format!("Sliding windows are only allowed in real-time streams"),
-                            LabeledSpan::new(span, &format!("unexpected sliding window"), true),
+                        self.handler.error_with_span("Sliding windows are only allowed in real-time streams",
+                            LabeledSpan::new(span, "unexpected sliding window", true),
                         );
                         return Err(());
                     }
@@ -1084,7 +1083,7 @@ impl UnifiableTy for ValueTy {
                 Some(other_ty) => other_ty.normalize_ty(unifier),
             },
             ValueTy::Tuple(t) => {
-                ValueTy::Tuple(t.into_iter().map(|el| el.normalize_ty(unifier)).collect())
+                ValueTy::Tuple(t.iter().map(|el| el.normalize_ty(unifier)).collect())
             }
             ValueTy::Option(ty) => ValueTy::Option(Box::new(ty.normalize_ty(unifier))),
             _ if self.is_primitive() => self.clone(),
@@ -1217,8 +1216,8 @@ impl UnifiableTy for ValueTy {
     }
 
     fn is_inferred(&self) -> Option<ValueVar> {
-        if let &ValueTy::Infer(v) = self {
-            Some(v)
+        if let ValueTy::Infer(v) = self {
+            Some(*v)
         } else {
             None
         }

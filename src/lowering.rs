@@ -111,16 +111,16 @@ impl<'a> Lowering<'a> {
     /// Does *not* add dependent windows, yet.
     fn lower_input(&mut self, input: &ast::Input) {
         let nid = *input.id();
-        let ast_req = self.get_memory(input.id());
+        let ast_req = self.get_memory(nid);
         let memory_bound = self.lower_storage_req(ast_req);
-        let reference = self.get_ref(input.id());
-        let layer = self.get_layer(input.id());
+        let reference = self.get_ref(nid);
+        let layer = self.get_layer(nid);
 
         let trackings = self.collect_tracking_info(nid, None);
 
         let input = ir::InputStream {
             name: input.name.name.clone(),
-            ty: self.lower_value_type(*input.id()),
+            ty: self.lower_value_type(nid),
             dependent_streams: trackings,
             dependent_windows: Vec::new(),
             layer, // Not necessarily 0 when parametrized inputs exist.
@@ -157,10 +157,10 @@ impl<'a> Lowering<'a> {
     /// Does *not* add dependent windows, yet.
     fn lower_output(&mut self, ast_output: &ast::Output) {
         let nid = *ast_output.id();
-        let ast_req = self.get_memory(ast_output.id());
+        let ast_req = self.get_memory(nid);
         let memory_bound = self.lower_storage_req(ast_req);
-        let layer = self.get_layer(ast_output.id());
-        let reference = self.get_ref(ast_output.id());
+        let layer = self.get_layer(nid);
+        let reference = self.get_ref(nid);
         let time_driven = self.check_time_driven(&ast_output, reference);
         let parametrized = self.check_parametrized(&ast_output, reference);
 
@@ -168,7 +168,7 @@ impl<'a> Lowering<'a> {
 
         let output = ir::OutputStream {
             name: ast_output.name.name.clone(),
-            ty: self.lower_value_type(*ast_output.id()),
+            ty: self.lower_value_type(nid),
             expr: self.lower_expression(&ast_output.expression),
             dependent_streams: trackings,
             dependent_windows: Vec::new(),
@@ -198,7 +198,7 @@ impl<'a> Lowering<'a> {
         trackee: NodeId,
         req: TrackingRequirement,
     ) -> ir::Tracking {
-        let trackee = self.get_ref(&trackee);
+        let trackee = self.get_ref(trackee);
         match req {
             TrackingRequirement::Unbounded => ir::Tracking::All(trackee),
             TrackingRequirement::Finite(num) => {
@@ -207,7 +207,7 @@ impl<'a> Lowering<'a> {
                     .unwrap_or(Duration::from_secs(0));
                 ir::Tracking::Bounded {
                     trackee,
-                    num: num as u128,
+                    num: u128::from(num),
                     rate,
                 }
             }
@@ -244,7 +244,7 @@ impl<'a> Lowering<'a> {
 
     fn extract_target_from_lookup(&self, lookup: &ExpressionKind) -> StreamReference {
         if let ExpressionKind::Lookup(inst, _, _) = lookup {
-            let decl = self.get_decl(inst.id());
+            let decl = self.get_decl(*inst.id());
             let nid = match decl {
                 Declaration::Out(out) => out.id(),
                 Declaration::In(inp) => inp.id(),
@@ -371,11 +371,11 @@ impl<'a> Lowering<'a> {
                 };
                 LoweringState::new(vec![stmt], hashmap![result => result_type])
             }
-            ExpressionKind::Ident(_) => match self.get_decl(expr.id()) {
+            ExpressionKind::Ident(_) => match self.get_decl(*expr.id()) {
                 Declaration::In(inp) => {
                     let result = target_temp.unwrap_or_else(|| mm.temp_for_type(&result_type));
                     let lu_target = ir::StreamInstance {
-                        reference: self.get_ref(inp.id()),
+                        reference: self.get_ref(*inp.id()),
                         arguments: Vec::new(),
                     };
                     let op = Op::SyncStreamLookup {
@@ -391,7 +391,7 @@ impl<'a> Lowering<'a> {
                 Declaration::Out(out) => {
                     let result = target_temp.unwrap_or_else(|| mm.temp_for_type(&result_type));
                     let lu_target = ir::StreamInstance {
-                        reference: self.get_ref(out.id()),
+                        reference: self.get_ref(*out.id()),
                         arguments: Vec::new(),
                     };
                     let op = Op::SyncStreamLookup {
@@ -493,7 +493,7 @@ impl<'a> Lowering<'a> {
                 ))
             }
             ExpressionKind::Function(kind, _, args) => {
-                let ir_kind = self.lower_function_kind(kind, args.first());
+                let ir_kind = self.lower_function_kind(kind, args.first().map(|a| a.as_ref()));
                 let (state, values) = self.lower_expression_list(args, mm);
                 let result = target_temp.unwrap_or_else(|| mm.temp_for_type(&result_type));
                 let stmt = Statement {
@@ -514,14 +514,14 @@ impl<'a> Lowering<'a> {
     fn lower_function_kind(
         &self,
         ident: &crate::parse::Ident,
-        first_arg: Option<&Box<ast::Expression>>,
+        first_arg: Option<&ast::Expression>,
     ) -> ir::FunctionKind {
         unimplemented!("check declaration table + typing information instead");
     }
 
     fn lower_expression_list(
         &mut self,
-        expressions: &Vec<Box<ast::Expression>>,
+        expressions: &[Box<ast::Expression>],
         mm: &mut MemoryManager,
     ) -> (LoweringState, Vec<ir::Temporary>) {
         let states: Vec<LoweringState> = expressions
@@ -590,7 +590,7 @@ impl<'a> Lowering<'a> {
     fn lower_offset(&self, offset: &ast::Offset) -> ir::Offset {
         match offset {
             ast::Offset::RealTimeOffset(e, unit) => {
-                let (duration, pos) = self.lower_time_spec(e, unit);
+                let (duration, pos) = self.lower_time_spec(e, *unit);
                 if pos {
                     ir::Offset::FutureRealTimeOffset(duration)
                 } else {
@@ -612,7 +612,7 @@ impl<'a> Lowering<'a> {
 
     /// Returns a duration representing the `lit` in combination with `unit`. The bool flag
     /// is true if the literal is strictly greater than 0.
-    fn lower_time_spec(&self, e: &ast::Expression, unit: &ast::TimeUnit) -> (Duration, bool) {
+    fn lower_time_spec(&self, e: &ast::Expression, unit: ast::TimeUnit) -> (Duration, bool) {
         use crate::ast::TimeUnit;
         use crate::ir::Constant;
 
@@ -717,8 +717,8 @@ impl<'a> Lowering<'a> {
     }
 
     fn create_ref_lookup(
-        inputs: &Vec<ast::Input>,
-        outputs: &Vec<ast::Output>,
+        inputs: &[ast::Input],
+        outputs: &[ast::Output],
     ) -> HashMap<NodeId, StreamReference> {
         let ins = inputs
             .iter()
@@ -732,17 +732,17 @@ impl<'a> Lowering<'a> {
     }
 
     fn order_to_table(eo: &EvaluationOrderResult) -> EvalTable {
-        fn extr_id(step: &ComputeStep) -> NodeId {
+        fn extr_id(step: ComputeStep) -> NodeId {
             // TODO: Rework when parameters actually exist.
             use self::ComputeStep::*;
             match step {
-                Evaluate(nid) | Extend(nid) | Invoke(nid) | Terminate(nid) => *nid,
+                Evaluate(nid) | Extend(nid) | Invoke(nid) | Terminate(nid) => nid,
             }
         }
         let o2t = |eo: &EvalOrder| {
             let mut res = Vec::new();
             for (ix, layer) in eo.iter().enumerate() {
-                let vals = layer.iter().map(|s| (extr_id(s), ix as u32));
+                let vals = layer.iter().map(|s| (extr_id(*s), ix as u32));
                 res.extend(vals);
             }
             res.into_iter()
@@ -752,20 +752,20 @@ impl<'a> Lowering<'a> {
             .collect()
     }
 
-    fn get_decl(&self, nid: &NodeId) -> &Declaration {
-        self.dt.get(nid).expect("Bug in DeclarationTable.")
+    fn get_decl(&self, nid: NodeId) -> &Declaration {
+        self.dt.get(&nid).expect("Bug in DeclarationTable.")
     }
 
-    fn get_layer(&self, nid: &NodeId) -> u32 {
-        *self.et.get(nid).expect("Bug in EvaluationOrder.")
+    fn get_layer(&self, nid: NodeId) -> u32 {
+        *self.et.get(&nid).expect("Bug in EvaluationOrder.")
     }
 
-    fn get_memory(&self, nid: &NodeId) -> StorageRequirement {
-        *self.mt.get(nid).expect("Bug in MemoryTable.")
+    fn get_memory(&self, nid: NodeId) -> StorageRequirement {
+        *self.mt.get(&nid).expect("Bug in MemoryTable.")
     }
 
-    fn get_ref(&self, nid: &NodeId) -> StreamReference {
-        *self.ref_lookup.get(nid).expect("Bug in ReferenceLookup.")
+    fn get_ref(&self, nid: NodeId) -> StreamReference {
+        *self.ref_lookup.get(&nid).expect("Bug in ReferenceLookup.")
     }
 }
 

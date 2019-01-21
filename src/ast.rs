@@ -170,7 +170,7 @@ impl Into<Duration> for &ExtendRate {
                 match l.kind {
                     LitKind::Int(i) => {
                         // TODO: Improve: Robust against overflows.
-                        let value = i as u128 * factor as u128; // Multiplication might fail.
+                        let value = i as u128 * u128::from(factor); // Multiplication might fail.
                         let secs = (value / 10u128.pow(9)) as u64; // Cast might fail.
                         let nanos = (value % 10u128.pow(9)) as u32; // Perfectly safe cast to u32.
                         Duration::new(secs, nanos)
