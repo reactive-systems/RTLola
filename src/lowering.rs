@@ -923,3 +923,175 @@ impl MemoryManager {
         ir::Temporary(self.next_temp - 1)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ir::*;
+
+    fn spec_to_ir(spec: &str) -> LolaIR {
+        crate::parse(spec)
+    }
+
+    fn check_stream_number(
+        ir: &LolaIR,
+        inputs: usize,
+        outputs: usize,
+        time: usize,
+        event: usize,
+        param: usize,
+        sliding: usize,
+        triggers: usize,
+    ) {
+        assert_eq!(ir.inputs.len(), inputs);
+        assert_eq!(ir.outputs.len(), outputs);
+        assert_eq!(ir.time_driven.len(), time);
+        assert_eq!(ir.event_driven.len(), event);
+        assert_eq!(ir.parametrized.len(), param);
+        assert_eq!(ir.sliding_windows.len(), sliding);
+        assert_eq!(ir.triggers.len(), triggers);
+    }
+
+    #[test]
+    fn lower_one_input() {
+        let ir = spec_to_ir("input a: Int32");
+        check_stream_number(&ir, 1, 0, 0, 0, 0, 0, 0);
+    }
+
+    #[test]
+    fn lower_one_output_event() {
+        let ir = spec_to_ir("output a: Int32 := 34");
+        check_stream_number(&ir, 0, 1, 0, 1, 0, 0, 0);
+    }
+
+    #[test]
+    fn lower_one_output_time() {
+        let ir = spec_to_ir("output a: Int32 { extend @1Hz } := 34");
+        check_stream_number(&ir, 0, 1, 1, 0, 0, 0, 0);
+    }
+
+    #[test]
+    fn lower_one_sliding() {
+        let ir = spec_to_ir("input a: Int32 output b: Int64 { extend @1Hz } := a[3s, sum] ? 4");
+        check_stream_number(&ir, 1, 1, 1, 0, 0, 1, 0);
+    }
+
+    #[test]
+    #[ignore]
+    fn lower_multiple_streams_with_windows() {
+        let ir = spec_to_ir(
+            "\
+             input a: Int32 \n\
+             input b: Bool \n\
+             output c: Int32 := a \n\
+             output d: Int64 { extend @1Hz } := a[3s, sum] ? 19 \n\
+             output e: Bool := a > 4 && b \n\
+             output f: Int64 { extend @1Hz } := if e[0] then c[0] else 0 \n\
+             output g: Float64 { extend @0.1Hz } :=  f[10s, avg] \n\
+             trigger g > 17.0 \
+             ",
+        );
+        check_stream_number(&ir, 2, 5, 4, 1, 0, 2, 1);
+    }
+
+    #[test]
+    fn lower_constant_expression() {
+        let ir = spec_to_ir("output a: Int32 := 3+4*7");
+        let stream: &OutputStream = &ir.outputs[0];
+
+        let ty = Type::Int(crate::ty::IntTy::I32);
+
+        assert_eq!(stream.ty, ty);
+
+        let expr = &stream.expr;
+        // Load constant 3, load constant 4, load constant 7, add, multiply
+        let mut mult = None;
+        let mut add = None;
+        let mut load_3 = None;
+        let mut load_4 = None;
+        let mut load_7 = None;
+        for stmt in &expr.stmts {
+            match stmt.op {
+                Op::ArithLog(ArithLogOp::Mul) => {
+                    assert!(mult.is_none());
+                    mult = Some(stmt);
+                }
+                Op::ArithLog(ArithLogOp::Add) => {
+                    assert!(add.is_none());
+                    add = Some(stmt);
+                }
+                Op::LoadConstant(Constant::Int(7)) => {
+                    assert!(load_7.is_none());
+                    load_7 = Some(stmt);
+                }
+                Op::LoadConstant(Constant::Int(4)) => {
+                    assert!(load_4.is_none());
+                    load_4 = Some(stmt);
+                }
+                Op::LoadConstant(Constant::Int(3)) => {
+                    assert!(load_3.is_none());
+                    load_3 = Some(stmt);
+                }
+                _ => panic!("There shouldn't be any other statement."),
+            }
+        }
+        assert!(mult.is_some());
+        assert!(add.is_some());
+        assert!(load_3.is_some());
+        assert!(load_4.is_some());
+        assert!(load_7.is_some());
+
+        let mult = mult.unwrap();
+        let add = add.unwrap();
+        let load_3 = load_3.unwrap();
+        let load_4 = load_4.unwrap();
+        let load_7 = load_7.unwrap();
+
+        // 3+4*7
+        assert_eq!(mult.args[0], load_4.target);
+        assert_eq!(mult.args[1], load_7.target);
+        assert_eq!(add.args[0], load_3.target);
+        assert_eq!(add.args[1], mult.target);
+
+        for ty in &expr.temporaries {
+            assert_eq!(ty, &stream.ty);
+        }
+    }
+
+    #[test]
+    fn input_lookup() {
+        let ir = spec_to_ir("input a: Int32");
+        let inp = &ir.inputs[0];
+        assert_eq!(inp, ir.get_in(inp.reference));
+    }
+
+    #[test]
+    fn output_lookup() {
+        let ir = spec_to_ir("output b: Int32 := 3 + 4");
+        let outp = &ir.outputs[0];
+        assert_eq!(outp, ir.get_out(outp.reference));
+    }
+
+    #[test]
+    fn window_lookup() {
+        let ir = spec_to_ir("input a: Int32 output b: Int32 { extend @1Hz } := a[3s, sum] ? 3");
+        let window = &ir.sliding_windows[0];
+        assert_eq!(window, ir.get_window(window.reference));
+    }
+
+    #[test]
+    #[should_panic]
+    fn invalid_lookup_no_out() {
+        let ir = spec_to_ir("input a: Int32");
+        let r = StreamReference::OutRef(0);
+        ir.get_in(r);
+    }
+
+    #[test]
+    #[should_panic]
+    fn invalid_lookup_index_oob() {
+        let ir = spec_to_ir("input a: Int32");
+        let r = StreamReference::InRef(24);
+        ir.get_in(r);
+    }
+}
