@@ -363,19 +363,31 @@ impl<'a> Lowering<'a> {
         ast_output: &ast::Output,
         reference: StreamReference,
     ) -> Option<ParametrizedStream> {
-        if let Some(_temp_spec) = ast_output.template_spec.as_ref() {
-            // TODO: Finalize and implement parametrization.
-            Some(ParametrizedStream {
-                reference,
-                params: ast_output
-                    .params
-                    .iter()
-                    .map(|p| self.lower_param(p))
-                    .collect(),
-                invoke: None,
-                extend: None,
-                terminate: None,
-            })
+        if let Some(temp_spec) = ast_output.template_spec.as_ref() {
+            // Check if it is merely timed, not parametrized.
+            if temp_spec
+                .ext
+                .as_ref()
+                .map(|e| e.target.is_none() && e.freq.is_some())
+                .unwrap_or(false)
+                && temp_spec.inv.is_none()
+                && temp_spec.ter.is_none()
+            {
+                None
+            } else {
+                // TODO: Finalize and implement parametrization.
+                Some(ParametrizedStream {
+                    reference,
+                    params: ast_output
+                        .params
+                        .iter()
+                        .map(|p| self.lower_param(p))
+                        .collect(),
+                    invoke: None,
+                    extend: None,
+                    terminate: None,
+                })
+            }
         } else {
             assert!(ast_output.params.is_empty());
             None
@@ -409,7 +421,6 @@ impl<'a> Lowering<'a> {
 
         let state = self.lower_subexpression(expression, &mut mm, None);
 
-        // TODO: HashMap<Temporary, ir::Type> -> Vec<ir::Type> with correspondences.
         let mut temps: Vec<(Temporary, ir::Type)> = state.temps.clone().into_iter().collect();
         temps.sort_unstable_by_key(|(temp, ty)| temp.0);
         // Make sure every temporary has its type.
@@ -638,14 +649,19 @@ impl<'a> Lowering<'a> {
             state = state.merge_with(self.lower_subexpression(dft, mm, target_temp));
             let default_temp = state.get_target();
 
-            // Default is a no-op after the lookup, so only handle lookup.
-            let target_instance = ir::StreamInstance {
-                reference: target_ref,
-                arguments: lookup_args,
-            };
-            let op = ir::Op::StreamLookup {
-                instance: target_instance,
-                offset: self.lower_offset(&offset),
+
+            let op = if let Some(window_op) = op {
+                let window_ref = self.lower_window(&lookup_expr);
+                ir::Op::WindowLookup(window_ref)
+            } else {
+                let target_instance = ir::StreamInstance {
+                    reference: target_ref,
+                    arguments: lookup_args,
+                };
+                ir::Op::StreamLookup {
+                    instance: target_instance,
+                    offset: self.lower_offset(&offset),
+                }
             };
 
             let lookup_type = self.lower_value_type(lookup_expr._id);
@@ -664,7 +680,71 @@ impl<'a> Lowering<'a> {
     }
 
     fn lower_offset(&self, offset: &ast::Offset) -> ir::Offset {
-        unimplemented!()
+        match offset {
+            ast::Offset::RealTimeOffset(e, unit) => {
+                let (duration, pos) = self.lower_time_spec(e, unit);
+                if pos {
+                    ir::Offset::FutureRealTimeOffset(duration)
+                } else {
+                    ir::Offset::PastRealTimeOffset(duration)
+                }
+            }
+            ast::Offset::DiscreteOffset(e) => {
+                match self.extract_literal(e) {
+                    ir::Constant::Int(i) => {
+                        if i > 0 {
+                            ir::Offset::FutureDiscreteOffset(i as u128)
+                        } else {
+                            ir::Offset::PastDiscreteOffset(i.abs() as u128)
+                        }
+                    }
+                    _ => unreachable!("Eradicated in preceding step.")
+                }
+            }
+        }
+    }
+
+    /// Returns a duration representing the `lit` in combination with `unit`. The bool flag
+    /// is true if the literal is strictly greater than 0.
+    fn lower_time_spec(&self, e: &ast::Expression, unit: &ast::TimeUnit) -> (Duration, bool) {
+        use crate::ast::TimeUnit;
+        use crate::ir::Constant;
+
+        let factor: u64 = match unit {
+            TimeUnit::NanoSecond => 1u64,
+            TimeUnit::MicroSecond => 10u64.pow(3),
+            TimeUnit::MilliSecond => 10u64.pow(6),
+            TimeUnit::Second => 10u64.pow(9),
+            TimeUnit::Minute => 10u64.pow(9) * 60,
+            TimeUnit::Hour => 10u64.pow(9) * 60 * 60,
+            TimeUnit::Day => 10u64.pow(9) * 60 * 60 * 24,
+            TimeUnit::Week => 10u64.pow(9) * 60 * 24 * 24 * 7,
+            TimeUnit::Year => 10u64.pow(9) * 60 * 24 * 24 * 7 * 365, // fits in u57
+        };
+        match self.extract_literal(e) {
+            Constant::Int(i) => {
+                // TODO: Improve: Robust against overflows.
+                let value = i as u128 * u128::from(factor); // Multiplication might fail.
+                let secs = (value / 10u128.pow(9)) as u64; // Cast might fail.
+                let nanos = (value % 10u128.pow(9)) as u32; // Perfectly safe cast to u32.
+                (std::time::Duration::new(secs, nanos), i > 0)
+            }
+            Constant::Float(f) => {
+                // TODO: Improve: Robust against overflows and inaccuracies.
+                let value = f * factor as f64;
+                let secs = (value / 1_000_000_000f64) as u64;
+                let nanos = (value % 1_000_000_000f64) as u32;
+                (std::time::Duration::new(secs, nanos), f > 0.0)
+            }
+            _ => unreachable!("Eradicated in preceding step.")
+        }
+    }
+
+    fn extract_literal(&self, e: &ast::Expression) -> ir::Constant {
+        match &e.kind {
+            ExpressionKind::Lit(l) => self.lower_literal(l),
+            _ => unreachable!("Made impossible in preceding step."),
+        }
     }
 
     fn lower_literal(&self, lit: &ast::Literal) -> ir::Constant {
@@ -783,6 +863,7 @@ impl<'a> Lowering<'a> {
     }
 }
 
+#[derive(Debug)]
 struct LoweringState {
     stmts: Vec<ir::Statement>,
     temps: HashMap<ir::Temporary, ir::Type>,
@@ -795,7 +876,7 @@ impl LoweringState {
 
     fn get_target(&self) -> ir::Temporary {
         self.stmts
-            .first()
+            .last()
             .expect("A expression needs to return a value.")
             .target
     }
