@@ -518,6 +518,21 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
                     Declaration::Func(fun_decl) => fun_decl,
                     _ => unreachable!("expected function declaration"),
                 };
+                if params.len() != fun_decl.parameters.len() {
+                    self.handler.error_with_span(
+                        &format!(
+                            "this function takes {} parameters but {} parameters were supplied",
+                            fun_decl.parameters.len(),
+                            params.len()
+                        ),
+                        LabeledSpan::new(
+                            expr._span,
+                            &format!("expected {} parameters", fun_decl.parameters.len()),
+                            true,
+                        ),
+                    );
+                    return Err(());
+                }
                 assert_eq!(params.len(), fun_decl.parameters.len());
 
                 println!("{:?}", fun_decl);
@@ -666,10 +681,23 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
                 let decl_stream_var: StreamVar = self.stream_vars[&decl_id];
                 let decl_stream_type = self.stream_unifier.get_type(decl_stream_var).unwrap();
 
-                assert!(
-                    decl_stream_type.parameters.len() == stream.arguments.len(),
-                    "TODO: transform into error message"
-                );
+                if decl_stream_type.parameters.len() != stream.arguments.len() {
+                    self.handler.error_with_span(
+                        &format!(
+                            "this stream takes {} parameters but {} parameters were supplied",
+                            decl_stream_type.parameters.len(),
+                            stream.arguments.len()
+                        ),
+                        LabeledSpan::new(
+                            span,
+                            &format!("expected {} parameters", decl_stream_type.parameters.len()),
+                            true,
+                        ),
+                    );
+                    return Err(());
+                }
+
+                assert_eq!(decl_stream_type.parameters.len(), stream.arguments.len(),);
 
                 let mut params = Vec::with_capacity(stream.arguments.len());
                 for (arg_expr, target) in stream.arguments.iter().zip(decl_stream_type.parameters) {
@@ -1625,6 +1653,12 @@ mod tests {
     }
 
     #[test]
+    fn test_trigonometric_faulty_3() {
+        let spec = "import math\noutput o: Float64 := cos()";
+        assert_eq!(1, num_type_errors(spec));
+    }
+
+    #[test]
     fn test_regex() {
         let spec =
             "import regex\ninput s: String\noutput o: Bool := matches_regex(s[0], r\"(a+b)\")";
@@ -1727,6 +1761,12 @@ mod tests {
     #[test]
     fn test_param_spec_faulty() {
         let spec = "input in: Int8\n output a<p1: Int8>: Int8 { invoke in } := 3\n output b: Int8 := a(true)[-2] ? 1";
+        assert_eq!(1, num_type_errors(spec));
+    }
+
+    #[test]
+    fn test_param_spec_wrong_parameters() {
+        let spec = "input in<a: Int8, b: Int8>: Int8\noutput x := in(1)[0]";
         assert_eq!(1, num_type_errors(spec));
     }
 
