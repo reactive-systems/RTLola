@@ -652,14 +652,4 @@ mod tests {
             number_of_naming_errors("import math\noutput x: Float32 := sqrt(2)")
         )
     }
-
-    #[test]
-    fn duration_type() {
-        assert_eq!(
-            0,
-            number_of_naming_errors(
-                "input in: Int8\noutput out: Int8 { extend @5Hz } := in.window<3s>()"
-            )
-        )
-    }
 }

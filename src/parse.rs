@@ -459,23 +459,6 @@ fn parse_type(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> Type {
                 return Type::new_simple(pair.as_str().to_string(), pair.as_span().into());
             }
             Rule::Type => tuple.push(parse_type(spec, pair)),
-            Rule::Duration => {
-                let span = pair.as_span().into();
-                let mut inner = pair.into_inner();
-                let val = inner
-                    .next()
-                    .expect("mismatch between AST and parser: expect integer literal");
-                assert_eq!(val.as_rule(), Rule::SignedIntegerLiteral);
-                let unit = inner
-                    .next()
-                    .expect("mismatch between AST and parser: expect time unit");
-                assert_eq!(unit.as_rule(), Rule::UnitOfTime);
-                return Type::new_duration(
-                    val.as_str().parse().unwrap(),
-                    parse_duration_unit(unit.as_str()),
-                    span,
-                );
-            }
             _ => unreachable!("{:?} is not a type", pair.as_rule()),
         }
     }

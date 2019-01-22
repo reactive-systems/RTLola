@@ -147,13 +147,13 @@ Literal = { StringLiteral | RawStringLiteral | NumberLiteral | BooleanLiteral}
 IntegerLiteral = @{ Digit+ }
 SignedIntegerLiteral = @{ ("+" | "-")?~IntegerLiteral }
 
-Type = {"("~ (Type ~(","~Type)*)?~ ")" | Ident | Duration | "_"}  // _ => infer type
+Type = {"("~ (Type ~(","~Type)*)?~ ")" | Ident | "_"}  // _ => infer type
 
 //////////////////////////////////////////////////
 ////////////////// Time Related //////////////////
 //////////////////////////////////////////////////
 
-Duration = ${ SignedIntegerLiteral ~ UnitOfTime}
+Duration = { Expr ~ UnitOfTime}
 
 UnitOfTime = { "ns" | "μs" | "us" | "ms" | "s" | "min" | "h" | "d" | "w" | "a" }
 
