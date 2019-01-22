@@ -32,11 +32,14 @@ pub(crate) struct TypeAnalysis<'a, 'b> {
     /// maps `NodeId`'s to the variables used in `unifier`
     value_vars: HashMap<NodeId, ValueVar>,
     stream_vars: HashMap<NodeId, StreamVar>,
+    /// maps function-like nodes (UnOp, BinOp, Func, Mathod) to the generic parameters
+    generic_function_vars: HashMap<NodeId, Vec<ValueVar>>,
 }
 
 pub(crate) struct TypeTable {
     value_tt: HashMap<NodeId, ValueTy>,
     stream_tt: HashMap<NodeId, StreamTy>,
+    func_tt: HashMap<NodeId, Vec<ValueTy>>,
 }
 
 impl TypeTable {
@@ -62,6 +65,7 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
             stream_unifier: ValueUnifier::new(),
             value_vars: HashMap::new(),
             stream_vars: HashMap::new(),
+            generic_function_vars: HashMap::new(),
         }
     }
 
@@ -90,9 +94,27 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
             .flat_map(|nid| self.get_stream_type(nid).map(|ty| (nid, ty)))
             .collect();
 
+        let mut func_tt = HashMap::with_capacity(self.generic_function_vars.len());
+        let source = &self.generic_function_vars;
+        let unifier = &mut self.unifier;
+        for (&key, val) in source {
+            func_tt.insert(
+                key,
+                val.iter()
+                    .map(|&var| {
+                        unifier
+                            .get_normalized_type(var)
+                            .unwrap_or(ValueTy::Error)
+                            .replace_constr()
+                    })
+                    .collect(),
+            );
+        }
+
         TypeTable {
             value_tt: vtt,
             stream_tt: stt,
+            func_tt,
         }
     }
 
@@ -479,6 +501,7 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
             }
             Unary(op, appl) => {
                 self.infer_function_application(
+                    expr._id,
                     var,
                     stream_var,
                     expr._span,
@@ -489,6 +512,7 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
             }
             Binary(op, left, right) => {
                 self.infer_function_application(
+                    expr._id,
                     var,
                     stream_var,
                     expr._span,
@@ -544,6 +568,7 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
                 let params: Vec<&Expression> = params.iter().map(|e| e.as_ref()).collect();
 
                 self.infer_function_application(
+                    expr._id,
                     var,
                     stream_var,
                     expr._span,
@@ -569,6 +594,7 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
                         parameters.extend(params.iter().map(|e| e.as_ref()));
 
                         self.infer_function_application(
+                            expr._id,
                             var,
                             stream_var,
                             expr._span,
@@ -798,6 +824,7 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
 
     fn infer_function_application(
         &mut self,
+        node_id: NodeId,
         var: ValueVar,
         stream_var: StreamVar,
         span: Span,
@@ -850,6 +877,9 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
         self.unifier
             .unify_var_ty(var, ty)
             .map_err(|err| self.handle_error(err, span))?;
+
+        // store generic parameters for later lookup
+        self.generic_function_vars.insert(node_id, generics);
         Ok(())
     }
 
