@@ -43,14 +43,12 @@ fn analyse_expression(
             Offset::DiscreteOffset(expr) => {
                 analyse_expression(version_tracker, &*expr, false);
             }
-            Offset::RealTimeOffset(offset, _) => {
-                analyse_expression(version_tracker, &*offset, false);
+            Offset::RealTimeOffset(time_spec) => {
+                let span = time_spec.span();
                 version_tracker.cannot_be_lola2 =
-                    Some((*expr.span(), String::from("Real time offset – no Lola2")));
-                version_tracker.cannot_be_classic = Some((
-                    *expr.span(),
-                    String::from("Real time offset – no ClassicLola"),
-                ));
+                    Some((*span, String::from("Real time offset – no Lola2")));
+                version_tracker.cannot_be_classic =
+                    Some((*span, String::from("Real time offset – no ClassicLola")));
             }
         },
         ExpressionKind::Binary(_, left, right) => {

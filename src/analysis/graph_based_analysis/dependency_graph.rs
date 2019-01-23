@@ -11,7 +11,6 @@ use crate::analysis::lola_version::LolaVersionTable;
 use crate::analysis::naming::Declaration;
 use crate::analysis::naming::DeclarationTable;
 use crate::ast::ExpressionKind;
-use crate::ast::ExtendRate;
 use crate::ast::LanguageSpec;
 use crate::ast::LitKind;
 use crate::ast::LolaSpec;
@@ -360,14 +359,11 @@ impl<'a> DependencyAnalyser<'a> {
                 let offset = self.evaluate_discrete(expr, naming_table);
                 Offset::Discrete(offset)
             }
-            crate::ast::Offset::RealTimeOffset(expr, unit) => {
-                let offset = self.evaluate_float(expr, naming_table);
-                let rate = ExtendRate::Duration(expr.clone(), *unit);
-                // TODO use epsilon
-                if offset <= 0.0 {
-                    Offset::Time(TimeOffset::UpToNow((&rate).into()))
+            crate::ast::Offset::RealTimeOffset(time_spec) => {
+                if time_spec.signum <= 0 {
+                    Offset::Time(TimeOffset::UpToNow(time_spec.period))
                 } else {
-                    Offset::Time(TimeOffset::Future((&rate).into()))
+                    Offset::Time(TimeOffset::Future(time_spec.period))
                 }
             }
         }

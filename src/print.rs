@@ -131,12 +131,15 @@ impl Display for ExtendSpec {
     }
 }
 
-impl Display for ExtendRate {
+impl Display for TimeSpec {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        match self {
-            ExtendRate::Frequency(e, fu) => write!(f, "{}{}", e, fu),
-            ExtendRate::Duration(e, tu) => write!(f, "{}{}", e, tu),
-        }
+        // TODO: Better display for duration.
+        write!(
+            f,
+            "{}{:?}",
+            if self.signum >= 0 { "" } else { "-" },
+            self.period
+        )
     }
 }
 
@@ -170,7 +173,7 @@ impl Display for TypeKind {
             TypeKind::Simple(name) => write!(f, "{}", name),
             TypeKind::Malformed(s) => write!(f, "{}", s),
             TypeKind::Tuple(types) => write_delim_list(f, types, "(", ")", ", "),
-            TypeKind::Duration(val, unit) => write!(f, "{}{}", val, unit),
+            TypeKind::Duration(dur) => write!(f, "{:?}", dur), // TODO: Improve
             TypeKind::Inferred => write!(f, "?"),
         }
     }
@@ -247,45 +250,8 @@ impl Display for Offset {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         match self {
             Offset::DiscreteOffset(e) => write!(f, "{}", e),
-            Offset::RealTimeOffset(e, u) => write!(f, "{}{}", e, u),
+            Offset::RealTimeOffset(time_spec) => write!(f, "{}", time_spec),
         }
-    }
-}
-
-impl Display for TimeUnit {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                TimeUnit::NanoSecond => "ns",
-                TimeUnit::MicroSecond => "ms",
-                TimeUnit::MilliSecond => "μs",
-                TimeUnit::Second => "s",
-                TimeUnit::Minute => "min",
-                TimeUnit::Hour => "h",
-                TimeUnit::Day => "d",
-                TimeUnit::Week => "w",
-                TimeUnit::Year => "a",
-            }
-        )
-    }
-}
-
-impl Display for FreqUnit {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                FreqUnit::MicroHertz => "μHz",
-                FreqUnit::MilliHertz => "mHz",
-                FreqUnit::Hertz => "Hz",
-                FreqUnit::KiloHertz => "kHz",
-                FreqUnit::MegaHertz => "MHz",
-                FreqUnit::GigaHertz => "GHz",
-            }
-        )
     }
 }
 

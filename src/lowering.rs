@@ -660,12 +660,11 @@ impl<'a> Lowering<'a> {
 
     fn lower_offset(&self, offset: &ast::Offset) -> ir::Offset {
         match offset {
-            ast::Offset::RealTimeOffset(e, unit) => {
-                let (duration, pos) = self.lower_time_spec(e, *unit);
-                if pos {
-                    ir::Offset::FutureRealTimeOffset(duration)
+            ast::Offset::RealTimeOffset(time_spec) => {
+                if time_spec.signum > 0 {
+                    ir::Offset::FutureRealTimeOffset(time_spec.period)
                 } else {
-                    ir::Offset::PastRealTimeOffset(duration)
+                    ir::Offset::PastRealTimeOffset(time_spec.period)
                 }
             }
             ast::Offset::DiscreteOffset(e) => match self.extract_literal(e) {
@@ -678,42 +677,6 @@ impl<'a> Lowering<'a> {
                 }
                 _ => unreachable!("Eradicated in preceding step."),
             },
-        }
-    }
-
-    /// Returns a duration representing the `lit` in combination with `unit`. The bool flag
-    /// is true if the literal is strictly greater than 0.
-    fn lower_time_spec(&self, e: &ast::Expression, unit: ast::TimeUnit) -> (Duration, bool) {
-        use crate::ast::TimeUnit;
-        use crate::ir::Constant;
-
-        let factor: u64 = match unit {
-            TimeUnit::NanoSecond => 1u64,
-            TimeUnit::MicroSecond => 10u64.pow(3),
-            TimeUnit::MilliSecond => 10u64.pow(6),
-            TimeUnit::Second => 10u64.pow(9),
-            TimeUnit::Minute => 10u64.pow(9) * 60,
-            TimeUnit::Hour => 10u64.pow(9) * 60 * 60,
-            TimeUnit::Day => 10u64.pow(9) * 60 * 60 * 24,
-            TimeUnit::Week => 10u64.pow(9) * 60 * 24 * 24 * 7,
-            TimeUnit::Year => 10u64.pow(9) * 60 * 24 * 24 * 7 * 365, // fits in u57
-        };
-        match self.extract_literal(e) {
-            Constant::Int(i) => {
-                // TODO: Improve: Robust against overflows.
-                let value = i as u128 * u128::from(factor); // Multiplication might fail.
-                let secs = (value / 10u128.pow(9)) as u64; // Cast might fail.
-                let nanos = (value % 10u128.pow(9)) as u32; // Perfectly safe cast to u32.
-                (std::time::Duration::new(secs, nanos), i > 0)
-            }
-            Constant::Float(f) => {
-                // TODO: Improve: Robust against overflows and inaccuracies.
-                let value = f * factor as f64;
-                let secs = (value / 1_000_000_000f64) as u64;
-                let nanos = (value % 1_000_000_000f64) as u32;
-                (std::time::Duration::new(secs, nanos), f > 0.0)
-            }
-            _ => unreachable!("Eradicated in preceding step."),
         }
     }
 

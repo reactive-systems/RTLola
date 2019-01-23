@@ -129,7 +129,7 @@ impl<'a, 'b> NamingAnalysis<'a, 'b> {
             TypeKind::Tuple(ref elements) => elements.iter().for_each(|ty| {
                 self.check_type(ty);
             }),
-            TypeKind::Duration(_, _) => {}
+            TypeKind::Duration(_) => {}
             TypeKind::Inferred => {}
         }
     }
@@ -296,13 +296,6 @@ impl<'a, 'b> NamingAnalysis<'a, 'b> {
                     }
                 }
                 if let Some(ref extend) = template_spec.ext {
-                    if let Some(ref freq) = extend.freq {
-                        match freq {
-                            ExtendRate::Frequency(expr, _) | ExtendRate::Duration(expr, _) => {
-                                self.check_expression(&expr);
-                            }
-                        }
-                    }
                     if let Some(ref cond) = extend.target {
                         self.check_expression(&cond);
                     }
@@ -358,7 +351,8 @@ impl<'a, 'b> NamingAnalysis<'a, 'b> {
 
     fn check_offset(&mut self, offset: &'a Offset) {
         match offset {
-            DiscreteOffset(off) | RealTimeOffset(off, _) => self.check_expression(off),
+            DiscreteOffset(off) => self.check_expression(off),
+            RealTimeOffset(_) => {}
         }
     }
 

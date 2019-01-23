@@ -121,74 +121,19 @@ pub struct InvokeSpec {
 #[derive(AstNode, Debug, Clone)]
 pub struct ExtendSpec {
     pub target: Option<Expression>,
-    pub freq: Option<ExtendRate>,
+    pub freq: Option<TimeSpec>,
     pub(crate) _id: NodeId,
     pub(crate) _span: Span,
 }
 
-#[derive(Debug, Clone)]
-pub enum ExtendRate {
-    Frequency(Box<Expression>, FreqUnit),
-    Duration(Box<Expression>, TimeUnit),
-}
+pub(crate) type Signum = i8;
 
-impl Into<Duration> for &ExtendRate {
-    fn into(self) -> Duration {
-        let (expr, factor) = match &self {
-            ExtendRate::Duration(expr, unit) => {
-                (
-                    expr,
-                    match unit {
-                        TimeUnit::NanoSecond => 1u64,
-                        TimeUnit::MicroSecond => 10u64.pow(3),
-                        TimeUnit::MilliSecond => 10u64.pow(6),
-                        TimeUnit::Second => 10u64.pow(9),
-                        TimeUnit::Minute => 10u64.pow(9) * 60,
-                        TimeUnit::Hour => 10u64.pow(9) * 60 * 60,
-                        TimeUnit::Day => 10u64.pow(9) * 60 * 60 * 24,
-                        TimeUnit::Week => 10u64.pow(9) * 60 * 24 * 24 * 7,
-                        TimeUnit::Year => 10u64.pow(9) * 60 * 24 * 24 * 7 * 365, // fits in u57
-                    },
-                )
-            }
-            ExtendRate::Frequency(expr, unit) => {
-                (
-                    expr,
-                    match unit {
-                        FreqUnit::MicroHertz => 10u64.pow(15), // fits in u50,
-                        FreqUnit::MilliHertz => 10u64.pow(12),
-                        FreqUnit::Hertz => 10u64.pow(9),
-                        FreqUnit::KiloHertz => 10u64.pow(6),
-                        FreqUnit::MegaHertz => 10u64.pow(3),
-                        FreqUnit::GigaHertz => 1u64,
-                    },
-                )
-            }
-        };
-        match &expr.kind {
-            ExpressionKind::Lit(l) => {
-                match l.kind {
-                    LitKind::Int(i) => {
-                        // TODO: Improve: Robust against overflows.
-                        let value = i as u128 * u128::from(factor); // Multiplication might fail.
-                        let secs = (value / 10u128.pow(9)) as u64; // Cast might fail.
-                        let nanos = (value % 10u128.pow(9)) as u32; // Perfectly safe cast to u32.
-                        Duration::new(secs, nanos)
-                    }
-                    LitKind::Float(f) => {
-                        // TODO: Improve: Robust against overflows and inaccuracies.
-                        let value = f * factor as f64;
-                        let secs = (value / 1_000_000_000f64) as u64;
-                        let nanos = (value % 1_000_000_000f64) as u32;
-                        Duration::new(secs, nanos)
-                    }
-                    _ => panic!(),
-                }
-            }
-
-            _ => panic!(),
-        }
-    }
+#[derive(AstNode, Debug, Clone, Copy)]
+pub struct TimeSpec {
+    pub signum: Signum,
+    pub period: Duration,
+    pub(crate) _id: NodeId,
+    pub(crate) _span: Span,
 }
 
 #[derive(AstNode, Debug, Clone)]
@@ -278,14 +223,6 @@ impl Type {
             _span: Span::unknown(),
         }
     }
-
-    pub fn new_duration(val: u32, unit: TimeUnit, span: Span) -> Type {
-        Type {
-            _id: NodeId::DUMMY,
-            kind: TypeKind::Duration(val, unit),
-            _span: span,
-        }
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -295,7 +232,7 @@ pub enum TypeKind {
     /// A tuple type, e.g., (Int32, Float32)
     Tuple(Vec<Type>),
     /// A duration, e.g., `22s`
-    Duration(u32, TimeUnit),
+    Duration(Duration),
     /// Should be inferred, i.e., is not annotated
     Inferred,
     /// Malformed type, e.g, `mis$ing`
@@ -486,31 +423,5 @@ pub enum Offset {
     /// A discrete offset, e.g., `0`, `-4`, or `42`
     DiscreteOffset(Box<Expression>),
     /// A real-time offset, e.g., `3ms`, `4min`, `2.3h`
-    RealTimeOffset(Box<Expression>, TimeUnit),
-}
-
-/// Supported time unit for real time expressions
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum TimeUnit {
-    NanoSecond,
-    MicroSecond,
-    MilliSecond,
-    Second,
-    Minute,
-    Hour,
-    Day,
-    Week,
-    /// Note: A year is always, *always*, 365 days long.
-    Year,
-}
-
-/// Supported frequencies for sliding windows.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum FreqUnit {
-    MicroHertz, // ~11 Days
-    MilliHertz, // ~16 Minutes
-    Hertz,
-    KiloHertz,
-    MegaHertz,
-    GigaHertz,
+    RealTimeOffset(TimeSpec),
 }

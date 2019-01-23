@@ -8,6 +8,7 @@ use pest::iterators::{Pair, Pairs};
 use pest::prec_climber::{Assoc, Operator, PrecClimber};
 use pest::Parser;
 use std::path::PathBuf;
+use std::time::Duration;
 
 #[derive(Parser)]
 #[grammar = "lola.pest"]
@@ -276,8 +277,104 @@ fn parse_template_spec(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> TemplateSpe
     }
 }
 
-fn parse_frequency(spec: &mut LolaSpec, freq: Pair<'_, Rule>) -> ExtendRate {
+pub(crate) fn build_time_spec(expr: Expression, unit_str: &str, span: Span) -> TimeSpec {
+    fn float_to_duration(secs: f64) -> Duration {
+        if secs <= 300_000_000.0 {
+            // Ten years.
+            //          Duration::from_float_secs(secs); // Experimental, unfortunately.
+            let nanos_per_sec: u128 = 10u128.pow(9); // Needs to be u128 for the type conversion magic to work.
+            let nanos = ((secs * nanos_per_sec as f64) as u128 % nanos_per_sec) as u32;
+            let secs = secs.floor() as u64;
+            Duration::new(secs, nanos)
+        } else {
+            panic!("Duration unreasonably large.")
+        }
+    }
+    let (uf, ue, invert): (u64, i32, bool) = match unit_str {
+        "ns" => (1, -9, false),
+        "μs" | "us" => (1, -6, false),
+        "ms" => (1, -3, false),
+        "s" => (1, 0, false),
+        "min" => (60, 0, false),
+        "h" => (60 * 60, 0, false),
+        "d" => (60 * 60 * 24, 0, false),
+        "w" => (60 * 60 * 24 * 7, 0, false),
+        "a" => (60 * 60 * 24 * 7 * 365, 0, false),
+        "μHz" | "uHz" => (1, -6, true),
+        "mHz" => (1, -3, true),
+        "Hz" => (1, 0, true),
+        "kHz" => (1, 3, true),
+        "MHz" => (1, 6, true),
+        "GHz" => (1, 9, true),
+        _ => unreachable!(),
+    };
+    if let ExpressionKind::Lit(l) = expr.kind {
+        match l.kind {
+            LitKind::Int(i) => {
+                let x = i.abs() as u128;
+                let signum = if i < 0 { -1i8 } else { 1i8 };
+                // Safe because x was a 64 bit number in the original spec and uf is at most u60:
+                let v = x * u128::from(uf);
+                // Distinguish the nice-and-easy integer case and the imprecise float case.
+                let period = if !invert && ue >= 0 {
+                    let factor = 10u128.pow(ue as u32);
+                    // Test for an overflow or overly large value.
+                    let secs = v.checked_mul(factor);
+                    if secs.is_some() && secs.unwrap() <= 300_000_000 {
+                        Duration::new(secs.unwrap() as u64, 0)
+                    } else {
+                        panic!("Duration unreasonably large.")
+                    }
+                } else {
+                    // Invert factor first if apropos, because the inversion is definitely safe.
+                    let factor = if invert {
+                        1.0 / 10f64.powi(ue)
+                    } else {
+                        10f64.powi(ue)
+                    };
+                    // We're already at floats, so we can multiply shamelessly.
+                    let secs = (v as f64) * factor;
+                    float_to_duration(secs)
+                };
+                TimeSpec {
+                    period,
+                    signum,
+                    _id: NodeId::DUMMY,
+                    _span: span,
+                }
+            }
+            LitKind::Float(f) => {
+                // Everything is in float, messy, and imprecise.
+                let x = f.abs();
+                let signum = if f < 0.0 { -1i8 } else { 1i8 };
+                let v = x * uf as f64;
+
+                // Invert factor first if apropos, because the inversion is definitely safe.
+                let factor = if invert {
+                    1.0 / 10f64.powi(ue)
+                } else {
+                    10f64.powi(ue)
+                };
+
+                let secs = v * factor;
+                let period = float_to_duration(secs);
+                TimeSpec {
+                    period,
+                    signum,
+                    _id: NodeId::DUMMY,
+                    _span: span,
+                }
+            }
+            _ => panic!("Needs to be numeric!"),
+        }
+    } else {
+        panic!("Expression needs to be a literal. ")
+    }
+}
+
+fn parse_frequency(spec: &mut LolaSpec, freq: Pair<'_, Rule>) -> TimeSpec {
     let freq_rule = freq.as_rule();
+    let freq_span = freq.as_span().into();
     let mut children = freq.into_inner();
     let expr = children.next().expect("mismatch between grammar and AST");
     let span = expr.as_span().into();
@@ -287,13 +384,11 @@ fn parse_frequency(spec: &mut LolaSpec, freq: Pair<'_, Rule>) -> ExtendRate {
     match freq_rule {
         Rule::Frequency => {
             assert_eq!(unit_pair.as_rule(), Rule::UnitOfFreq);
-            let unit = parse_frequency_unit(unit_str);
-            ExtendRate::Frequency(Box::new(expr), unit)
+            build_time_spec(expr, unit_str, freq_span)
         }
         Rule::Duration => {
             assert_eq!(unit_pair.as_rule(), Rule::UnitOfTime);
-            let unit = parse_duration_unit(unit_str);
-            ExtendRate::Duration(Box::new(expr), unit)
+            build_time_spec(expr, unit_str, freq_span)
         }
         _ => unreachable!(),
     }
@@ -529,33 +624,6 @@ fn parse_vec_of_types(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>) -> Vec<Type> 
     pairs.map(|expr| parse_type(spec, expr)).collect()
 }
 
-fn parse_duration_unit(str: &str) -> TimeUnit {
-    match str {
-        "ns" => TimeUnit::NanoSecond,
-        "μs" | "us" => TimeUnit::MicroSecond,
-        "ms" => TimeUnit::MilliSecond,
-        "s" => TimeUnit::Second,
-        "min" => TimeUnit::Minute,
-        "h" => TimeUnit::Hour,
-        "d" => TimeUnit::Day,
-        "w" => TimeUnit::Week,
-        "a" => TimeUnit::Year,
-        _ => unreachable!(),
-    }
-}
-
-fn parse_frequency_unit(str: &str) -> FreqUnit {
-    match str {
-        "μHz" | "uHz" => FreqUnit::MicroHertz,
-        "mHz" => FreqUnit::MilliHertz,
-        "Hz" => FreqUnit::Hertz,
-        "kHz" => FreqUnit::KiloHertz,
-        "MHz" => FreqUnit::MegaHertz,
-        "GHz" => FreqUnit::GigaHertz,
-        _ => unreachable!(),
-    }
-}
-
 fn parse_lookup_expression(spec: &mut LolaSpec, pair: Pair<'_, Rule>, span: Span) -> Expression {
     let mut children = pair.into_inner();
     let stream_instance = children
@@ -574,6 +642,7 @@ fn parse_lookup_expression(spec: &mut LolaSpec, pair: Pair<'_, Rule>, span: Span
         }
         Rule::Duration => {
             // Real time offset
+            let duration_span = second_child.as_span().into();
             let mut duration_children = second_child.into_inner();
             let time_interval = duration_children
                 .next()
@@ -587,14 +656,12 @@ fn parse_lookup_expression(spec: &mut LolaSpec, pair: Pair<'_, Rule>, span: Span
                 .next()
                 .expect("Duration needs a time unit.")
                 .as_str();
-            let unit = parse_duration_unit(unit_string);
-            let offset = Offset::RealTimeOffset(
-                Box::new(Expression::new(
-                    ExpressionKind::Lit(Literal::new_int(val, time_interval_span)),
-                    time_interval_span,
-                )),
-                unit,
+            let duration_value = Expression::new(
+                ExpressionKind::Lit(Literal::new_int(val, duration_span)),
+                time_interval_span,
             );
+            let time_spec = build_time_spec(duration_value, unit_string, time_interval_span);
+            let offset = Offset::RealTimeOffset(time_spec);
             // Now check whether it is a window or not.
             let aggregation = match children.next().map(|x| x.as_rule()) {
                 Some(Rule::Sum) => Some(WindowOperation::Sum),
@@ -1166,7 +1233,9 @@ mod tests {
             "output s: Int { invoke inp unless 3 > 5 extend b @ 5GHz terminate false } := 3\n";
         let throw = |e| panic!("{}", e);
         let ast = parse(spec).unwrap_or_else(throw);
-        cmp_ast_spec(&ast, spec);
+        // 5GHz correspond to 5ns.
+        let spec = spec.replace("5GHz", "5ns");
+        cmp_ast_spec(&ast, spec.as_str());
     }
 
     #[test]

@@ -72,12 +72,8 @@ where
     if let Some(ref mut target) = ts.target {
         assign_ids_expr(target, next_id);
     }
-    if let Some(ref mut freq) = ts.freq {
-        match freq {
-            ExtendRate::Duration(expr, _) | ExtendRate::Frequency(expr, _) => {
-                assign_ids_expr(expr, next_id);
-            }
-        }
+    if let Some(ref mut time_spec) = ts.freq {
+        time_spec.set_id(next_id());
     }
 }
 fn assign_ids_terminate_spec<E>(ts: &mut TerminateSpec, next_id: &mut E)
@@ -152,7 +148,7 @@ where
                 .for_each(|e| assign_ids_expr(e, next_id));
             match offset {
                 Offset::DiscreteOffset(expr) => assign_ids_expr(expr, next_id),
-                Offset::RealTimeOffset(expr, _) => assign_ids_expr(expr, next_id),
+                Offset::RealTimeOffset(time_spec) => time_spec.set_id(next_id()),
             }
         }
         ExpressionKind::Binary(_, lhs, rhs) => {
