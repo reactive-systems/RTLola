@@ -1289,4 +1289,38 @@ mod tests {
         let ast = parse(spec).unwrap_or_else(|e| panic!("{}", e));
         cmp_ast_spec(&ast, spec);
     }
+
+    fn time_spec_int(val: i128, unit: &str) -> Duration {
+        build_time_spec(
+            Expression::new(
+                ExpressionKind::Lit(Literal::new_int(val, Span::unknown())),
+                Span::unknown(),
+            ),
+            unit,
+            Span::unknown(),
+        )
+        .period
+    }
+
+    #[test]
+    fn test_time_spec_to_duration_conversion() {
+        assert_eq!(time_spec_int(1, "s"), Duration::new(1, 0));
+        assert_eq!(time_spec_int(2, "min"), Duration::new(2 * 60, 0));
+        assert_eq!(time_spec_int(33, "h"), Duration::new(33 * 60 * 60, 0));
+        assert_eq!(time_spec_int(12354, "ns"), Duration::new(0, 12354));
+        assert_eq!(time_spec_int(90351, "us"), Duration::new(0, 90351 * 1_000));
+        assert_eq!(time_spec_int(248, "ms"), Duration::new(0, 248 * 1_000_000));
+        assert_eq!(
+            time_spec_int(29_489_232, "ms"),
+            Duration::new(29_489, 232 * 1_000_000)
+        );
+    }
+
+    #[test]
+    fn test_frequency_to_duration_conversion() {
+        assert_eq!(time_spec_int(1, "Hz"), Duration::new(1, 0));
+        assert_eq!(time_spec_int(10, "Hz"), Duration::new(0, 100_000_000));
+        assert_eq!(time_spec_int(400, "uHz"), Duration::new(2_500, 0));
+        assert_eq!(time_spec_int(20, "mHz"), Duration::new(50, 0));
+    }
 }

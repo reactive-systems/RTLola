@@ -747,15 +747,11 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
                 // ?decl_stream_var = target
                 self.stream_unifier
                     .unify_var_ty(decl_stream_var, target)
-                    .map_err(|err| {
-                        self.handle_error(err, stream._span);
-                    })?;
+                    .map_err(|err| self.handle_error(err, stream._span))?;
                 // ?stream_var = Non-parametric Event
                 self.stream_unifier
                     .unify_var_ty(stream_var, StreamTy::new(TimingInfo::Event))
-                    .map_err(|err| {
-                        self.handle_error(err, stream._span);
-                    })?;
+                    .map_err(|err| self.handle_error(err, stream._span))?;
 
                 // value type
                 // constraints
@@ -766,13 +762,11 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
                 if negative_offset || !stream.arguments.is_empty() {
                     self.unifier
                         .unify_var_ty(var, ValueTy::Option(ValueTy::Infer(decl_var).into()))
-                        .map_err(|err| {
-                            self.handle_error(err, span);
-                        })
+                        .map_err(|err| self.handle_error(err, span))
                 } else {
-                    self.unifier.unify_var_var(var, decl_var).map_err(|err| {
-                        self.handle_error(err, span);
-                    })
+                    self.unifier
+                        .unify_var_var(var, decl_var)
+                        .map_err(|err| self.handle_error(err, span))
                 }
             }
             (Offset::RealTimeOffset(time_spec), None) => {
@@ -803,12 +797,15 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
 
                 // stream type
 
-                // ?decl_stream_var = target
+                let target_var = self.stream_unifier.new_var();
                 self.stream_unifier
-                    .unify_var_ty(decl_stream_var, target)
-                    .map_err(|err| {
-                        self.handle_error(err, stream._span);
-                    })?;
+                    .unify_var_ty(target_var, target)
+                    .expect("cannot fail since `target_var` is fresh");
+
+                // verify that accessed stream is compatible
+                self.stream_unifier
+                    .unify_var_var(target_var, decl_stream_var)
+                    .map_err(|err| self.handle_error(err, stream._span))?;
                 // an offset expression does not pose restrictions on `stream_var`
 
                 // value type
@@ -818,13 +815,11 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
                 if negative_offset || !stream.arguments.is_empty() {
                     self.unifier
                         .unify_var_ty(var, ValueTy::Option(ValueTy::Infer(decl_var).into()))
-                        .map_err(|err| {
-                            self.handle_error(err, span);
-                        })
+                        .map_err(|err| self.handle_error(err, span))
                 } else {
-                    self.unifier.unify_var_var(var, decl_var).map_err(|err| {
-                        self.handle_error(err, span);
-                    })
+                    self.unifier
+                        .unify_var_var(var, decl_var)
+                        .map_err(|err| self.handle_error(err, span))
                 }
             }
             (Offset::RealTimeOffset(_), Some(window_op)) => {
@@ -868,9 +863,7 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
                 let decl_var: ValueVar = self.value_vars[&decl_id];
                 self.unifier
                     .unify_var_ty(var, ValueTy::Option(ValueTy::Infer(decl_var).into()))
-                    .map_err(|err| {
-                        self.handle_error(err, span);
-                    })
+                    .map_err(|err| self.handle_error(err, span))
             }
             _ => unreachable!("lookup {:?} {:?}", offset, window_op),
         }
@@ -1377,10 +1370,10 @@ impl UnifiableTy for StreamTy {
             return false;
         }
 
-        // RealTime<freq_self> -> RealTime<freq_right> if freq_right is multiple of freq_self
+        // RealTime<freq_self> -> RealTime<freq_right> if freq_left is multiple of freq_right
         match (&self.timing, &right.timing) {
             (TimingInfo::RealTime(target), TimingInfo::RealTime(other)) => {
-                other.is_multiple_of(target)
+                target.is_multiple_of(other)
             }
             _ => false,
         }
@@ -1983,6 +1976,12 @@ mod tests {
     fn test_rt_offset_skip() {
         let spec =
             "output a: Int8 { extend @1s } := 1\noutput b: Int8 { extend @2s } := a[-1s] ? 0";
+        assert_eq!(0, num_type_errors(spec));
+    }
+    #[test]
+    fn test_rt_offset_skip2() {
+        let spec =
+            "output a: Int8 { extend @1s } := 1\noutput b: Int8 { extend @2s } := a[-2s] ? 0";
         assert_eq!(0, num_type_errors(spec));
     }
 
