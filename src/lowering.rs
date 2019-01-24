@@ -512,12 +512,11 @@ impl<'a> Lowering<'a> {
                         .iter()
                         .map(|param| {
                             if let ValueTy::Param(i, _) = param {
-                                i
+                                (&req_arg_types[*i as usize]).into()
                             } else {
-                                panic!()
+                                param.into()
                             }
                         })
-                        .map(|i| (&req_arg_types[*i as usize]).into())
                         .zip(args.iter().map(|e| e.as_ref()))
                         .collect::<Vec<(ir::Type, &ast::Expression)>>()
                 } else {
@@ -1095,6 +1094,53 @@ mod tests {
 
         match &sqrt.op {
             Op::Function(s) => assert_eq!("sqrt", s),
+            _ => panic!("Need to apply the function!"),
+        }
+    }
+
+    #[test]
+    fn lower_function_expression_regex() {
+        let ir = spec_to_ir(
+            "import regex\ninput a: String output v: Bool := matches_regex(a, r\"a*b\")",
+        );
+
+        let stream: &OutputStream = &ir.outputs[0];
+
+        let ty = Type::Bool;
+
+        assert_eq!(stream.ty, ty);
+
+        let expr = &stream.expr;
+        assert_eq!(expr.stmts.len(), 3);
+
+        let load = &expr.stmts[0];
+
+        println!("{:?}", expr.stmts);
+
+        match &load.op {
+            Op::SyncStreamLookup(StreamInstance {
+                reference,
+                arguments,
+            }) => {
+                assert!(arguments.is_empty(), "Lookup does not have arguments.");
+                match reference {
+                    StreamReference::InRef(0) => {}
+                    _ => panic!("Incorrect StreamReference"),
+                }
+            }
+            _ => panic!("Need to load the constant first."),
+        };
+
+        let constant = &expr.stmts[1];
+        match &constant.op {
+            Op::LoadConstant(Constant::Str(s)) => assert_eq!(s, "a*b"),
+            c => panic!("expected constant, found {:?}", c),
+        }
+
+        let regex_match = &expr.stmts[2];
+
+        match &regex_match.op {
+            Op::Function(s) => assert_eq!(s, "matches_regex"),
             _ => panic!("Need to apply the function!"),
         }
     }
