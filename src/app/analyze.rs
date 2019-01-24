@@ -78,6 +78,15 @@ impl Config {
                             .required(true)
                             .index(1),
                     ),
+            ).subcommand(
+                SubCommand::with_name("ir")
+                    .about("Parses the input file and returns the intermediate representation")
+                    .arg(
+                        Arg::with_name("INPUT")
+                            .help("Sets the input file to use")
+                            .required(true)
+                            .index(1),
+                    ),
             )
             .get_matches_from(args);
 
@@ -208,8 +217,8 @@ impl Config {
                 let handler = Handler::new(mapper);
                 let analysis_result = crate::analysis::analyze(&spec, &handler);
                 assert!(analysis_result.is_success());
-                let _ = Lowering::new(&spec, &analysis_result).lower();
-                //println!("{:?}", report);
+                let ir = Lowering::new(&spec, &analysis_result).lower();
+                println!("{:#?}", ir);
                 Ok(())
             }
         }
