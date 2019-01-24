@@ -34,8 +34,8 @@ pub(crate) fn future_dependent_stream(
                 Access(_, offset, _) => match offset {
                     Offset::Discrete(offset) => *offset > 0,
                     Offset::Time(duration) => match duration {
-                        TimeOffset::Future(_) => true,
-                        TimeOffset::UpToNow(_) => false,
+                        TimeOffset::Future(_, _) => true,
+                        TimeOffset::UpToNow(_, _) => false,
                     },
                     Offset::SlidingWindow => false,
                 },

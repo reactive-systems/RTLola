@@ -10,19 +10,19 @@ use crate::{FloatTy, IntTy, UIntTy};
 fn get_byte_size(value_ty: &ValueTy) -> MemoryBound {
     match value_ty {
         ValueTy::Bool => MemoryBound::Bounded(1),
-        ValueTy::Int(intTy) => MemoryBound::Bounded(match intTy {
+        ValueTy::Int(int_ty) => MemoryBound::Bounded(match int_ty {
             IntTy::I8 => 1,
             IntTy::I16 => 2,
             IntTy::I32 => 4,
             IntTy::I64 => 8,
         }),
-        ValueTy::UInt(uIntTy) => MemoryBound::Bounded(match uIntTy {
+        ValueTy::UInt(uint_ty) => MemoryBound::Bounded(match uint_ty {
             UIntTy::U8 => 1,
             UIntTy::U16 => 2,
             UIntTy::U32 => 4,
             UIntTy::U64 => 8,
         }),
-        ValueTy::Float(floatTy) => MemoryBound::Bounded(match floatTy {
+        ValueTy::Float(float_ty) => MemoryBound::Bounded(match float_ty {
             FloatTy::F32 => 4,
             FloatTy::F64 => 8,
         }),
@@ -43,10 +43,10 @@ fn get_byte_size(value_ty: &ValueTy) -> MemoryBound {
         // an optional value type, e.g., resulting from accessing a stream with offset -1
         ValueTy::Option(inner) => get_byte_size(inner),
         // Used during type inference
-        ValueTy::Infer(valueVar) => unreachable!(),
-        ValueTy::Constr(typeConstraint) => unreachable!(),
+        ValueTy::Infer(_value_var) => unreachable!(),
+        ValueTy::Constr(_type_constraint) => unreachable!(),
         // A reference to a generic parameter in a function declaration, e.g. `T` in `a<T>(x:T) -> T`
-        ValueTy::Param(u8, String) => MemoryBound::Bounded(0),
+        ValueTy::Param(_, _) => MemoryBound::Bounded(0),
         ValueTy::Error => unreachable!(),
     }
 }
@@ -105,8 +105,8 @@ pub(crate) fn determine_worst_case_memory_consumption(
                     .expect("We should have determined the tracking requirements for all streams that did not get pruned!");
                 let mut it = tracking_requirement.iter();
                 let mut tracking_per_instance: u128 = 0u128;
-                while let Some((nodeId, tracking)) = it.next() {
-                    let value_type = type_table.get_value_type(*nodeId);
+                while let Some((node_id, tracking)) = it.next() {
+                    let value_type = type_table.get_value_type(*node_id);
                     let value_type_size = if let MemoryBound::Bounded(i) = get_byte_size(value_type)
                     {
                         i
@@ -115,7 +115,7 @@ pub(crate) fn determine_worst_case_memory_consumption(
                     };
 
                     match tracking {
-                        TrackingRequirement::Finite(size) => tracking_per_instance += *size as u128,
+                        TrackingRequirement::Finite(size) => tracking_per_instance += (*size as u128)*value_type_size,
                         // TODO What about accessing a future dependent stream?
                         TrackingRequirement::Future => unimplemented!(),
                         TrackingRequirement::Unbounded => unimplemented!(),
@@ -135,8 +135,8 @@ pub(crate) fn determine_worst_case_memory_consumption(
         if let Some(tracking_requirement) = tracking_requirements.get(&trigger.id) {
             let mut it = tracking_requirement.iter();
             let mut tracking_per_instance: u128 = 0u128;
-            while let Some((nodeId, tracking)) = it.next() {
-                let value_type = type_table.get_value_type(*nodeId);
+            while let Some((node_id, tracking)) = it.next() {
+                let value_type = type_table.get_value_type(*node_id);
                 let value_type_size = if let MemoryBound::Bounded(i) = get_byte_size(value_type) {
                     i
                 } else {
@@ -144,7 +144,7 @@ pub(crate) fn determine_worst_case_memory_consumption(
                 };
 
                 match tracking {
-                    TrackingRequirement::Finite(size) => tracking_per_instance += *size as u128,
+                    TrackingRequirement::Finite(size) => tracking_per_instance += (*size as u128)*value_type_size,
                     // TODO What about accessing a future dependent stream?
                     TrackingRequirement::Future => unimplemented!(),
                     TrackingRequirement::Unbounded => unimplemented!(),

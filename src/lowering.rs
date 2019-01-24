@@ -24,6 +24,8 @@ use crate::analysis::graph_based_analysis::{ComputeStep, StorageRequirement, Tra
 use self::lowering_state::*;
 use crate::analysis::AnalysisResult;
 
+use num::{One, Signed, ToPrimitive};
+
 type EvalTable = HashMap<NodeId, u32>;
 
 pub(crate) struct Lowering<'a> {
@@ -753,7 +755,7 @@ impl<'a> Lowering<'a> {
         match &lit.kind {
             LitKind::Str(s) | LitKind::RawStr(s) => ir::Constant::Str(s.clone()),
             LitKind::Int(i) => ir::Constant::Int(*i),
-            LitKind::Float(f) => ir::Constant::Float(*f),
+            LitKind::Float(f, _precise) => ir::Constant::Float(*f),
             LitKind::Bool(b) => ir::Constant::Bool(*b),
         }
     }
@@ -793,7 +795,11 @@ impl<'a> Lowering<'a> {
         match &self.tt.get_stream_type(output.id).timing {
             TimingInfo::RealTime(f) => Some(TimeDrivenStream {
                 reference,
-                extend_rate: f.d,
+                extend_rate: Duration::from_nanos(
+                    f.ns.to_integer()
+                        .to_u64()
+                        .expect("extend duration [ns] does not fit in u64"),
+                ),
             }),
             _ => None,
         }
@@ -1003,6 +1009,12 @@ mod tests {
     #[test]
     fn lower_one_output_event() {
         let ir = spec_to_ir("output a: Int32 := 34");
+        check_stream_number(&ir, 0, 1, 0, 1, 0, 0, 0);
+    }
+
+    #[test]
+    fn lower_one_output_event_float() {
+        let ir = spec_to_ir("output a: Float64 := 34.");
         check_stream_number(&ir, 0, 1, 0, 1, 0, 0, 0);
     }
 

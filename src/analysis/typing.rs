@@ -23,6 +23,8 @@ use ena::unify::{
     UnifyKey, UnifyValue,
 };
 use log::{debug, trace};
+use num::BigRational;
+use num::Signed;
 use std::collections::HashMap;
 
 pub(crate) struct TypeAnalysis<'a, 'b> {
@@ -266,7 +268,10 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
         if let Some(template_spec) = &output.template_spec {
             if let Some(extend) = &template_spec.ext {
                 if let Some(time_spec) = &extend.freq {
-                    frequence = Some(Freq::new(&format!("{}", time_spec), time_spec.period));
+                    frequence = Some(Freq::new(
+                        &format!("{}", time_spec),
+                        time_spec.exact_period.clone(),
+                    ));
                 }
             }
         }
@@ -413,15 +418,15 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
 
     fn get_constraint_for_literal(&self, lit: &Literal) -> ValueTy {
         use crate::ast::LitKind::*;
-        match lit.kind {
+        match &lit.kind {
             Str(_) | RawStr(_) => ValueTy::String,
             Bool(_) => ValueTy::Bool,
-            Int(i) => ValueTy::Constr(if i < 0 {
+            Int(i) => ValueTy::Constr(if *i < 0 {
                 TypeConstraint::SignedInteger
             } else {
                 TypeConstraint::Integer
             }),
-            Float(_) => ValueTy::Constr(TypeConstraint::FloatingPoint),
+            Float(_, _) => ValueTy::Constr(TypeConstraint::FloatingPoint),
         }
     }
 
@@ -728,8 +733,8 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
                 )?;
 
                 let negative_offset = match &off_expr.kind {
-                    ExpressionKind::Lit(l) => match l.kind {
-                        LitKind::Int(i) => i < 0,
+                    ExpressionKind::Lit(l) => match &l.kind {
+                        LitKind::Int(i) => i.is_negative(),
                         _ => unreachable!("offset expressions have to be integers"),
                     },
                     _ => unreachable!("offset expressions have to be literal"),
@@ -828,7 +833,7 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
                 );
                 let target = StreamTy::new(TimingInfo::RealTime(Freq::new(
                     &format!("{:?}", time_spec.period),
-                    time_spec.period,
+                    time_spec.exact_period.abs().clone(),
                 )));
 
                 // stream type
@@ -845,7 +850,7 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
                 // an offset expression does not pose restrictions on `stream_var`
 
                 // value type
-                let negative_offset = time_spec.signum < 0;
+                let negative_offset = time_spec.exact_period.is_negative();
 
                 let decl_var: ValueVar = self.value_vars[&decl_id];
                 if negative_offset || !stream.arguments.is_empty() {
@@ -1436,7 +1441,7 @@ impl UnifiableTy for StreamTy {
         // RealTime<freq_self> -> RealTime<freq_right> if freq_left is multiple of freq_right
         match (&self.timing, &right.timing) {
             (TimingInfo::RealTime(target), TimingInfo::RealTime(other)) => {
-                target.is_multiple_of(other)
+                other.is_multiple_of(target)
             }
             _ => false,
         }
@@ -1627,7 +1632,7 @@ mod tests {
 
     #[test]
     fn simple_const_float() {
-        let spec = "constant c: Float32 := 2.0";
+        let spec = "constant c: Float32 := 2.1";
         assert_eq!(0, num_type_errors(spec));
     }
 

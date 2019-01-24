@@ -7,6 +7,7 @@ use crate::analysis::naming::{Declaration, DeclarationTable};
 use crate::ast::{ExpressionKind, LanguageSpec, LitKind, LolaSpec, Output, TemplateSpec, UnOp};
 use crate::parse::{NodeId, Span};
 use crate::reporting::{DiagnosticBuilder, Handler, LabeledSpan, Level};
+use num::Signed;
 use petgraph::algo::tarjan_scc;
 use petgraph::graph::edge_index;
 use petgraph::graph::node_index;
@@ -311,9 +312,15 @@ impl<'a> DependencyAnalyser<'a> {
             }
             crate::ast::Offset::RealTimeOffset(time_spec) => {
                 if time_spec.signum <= 0 {
-                    Offset::Time(TimeOffset::UpToNow(time_spec.period))
+                    Offset::Time(TimeOffset::UpToNow(
+                        time_spec.period,
+                        time_spec.exact_period.abs(),
+                    ))
                 } else {
-                    Offset::Time(TimeOffset::Future(time_spec.period))
+                    Offset::Time(TimeOffset::Future(
+                        time_spec.period,
+                        time_spec.exact_period.abs(),
+                    ))
                 }
             }
         }

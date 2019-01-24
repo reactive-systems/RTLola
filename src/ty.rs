@@ -3,7 +3,6 @@
 //! It is inspired by https://doc.rust-lang.org/nightly/nightly-rustc/rustc/ty/index.html
 
 use crate::analysis::typing::ValueVar;
-use std::time::Duration;
 
 /// The `stream` type, storing information about timing of a stream (event-based, real-time).
 #[derive(Debug, PartialEq, Eq, PartialOrd, Clone, Hash)]
@@ -65,11 +64,13 @@ pub enum FloatTy {
     F64,
 }
 use self::FloatTy::*;
+use num::BigRational;
+use num::Zero;
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Hash)]
 pub struct Freq {
     repr: String,
-    pub(crate) d: Duration,
+    pub(crate) ns: BigRational,
 }
 
 impl std::fmt::Display for Freq {
@@ -96,26 +97,18 @@ impl StreamTy {
 }
 
 impl Freq {
-    pub(crate) fn new(repr: &str, d: Duration) -> Self {
+    pub(crate) fn new(repr: &str, ns: BigRational) -> Self {
         Freq {
             repr: repr.to_string(),
-            d,
+            ns,
         }
     }
 
-    const NANOS_PER_SEC: u32 = 1_000_000_000;
-
     pub(crate) fn is_multiple_of(&self, other: &Freq) -> bool {
-        if self.d < other.d {
+        if self.ns > other.ns {
             return false;
         }
-        // TODO: replace by self.as_nanos() when stabilized
-        let left_nanos = u128::from(self.d.as_secs()) * u128::from(Freq::NANOS_PER_SEC)
-            + u128::from(self.d.subsec_nanos());
-        let right_nanos = u128::from(other.d.as_secs()) * u128::from(Freq::NANOS_PER_SEC)
-            + u128::from(other.d.subsec_nanos());
-        assert!(left_nanos >= right_nanos);
-        left_nanos % right_nanos == 0
+        (&other.ns % &self.ns).is_zero()
     }
 }
 

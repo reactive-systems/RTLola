@@ -2,7 +2,9 @@
 
 use super::ast::*;
 use super::parse::Ident;
+use num::{BigInt, Signed, ToPrimitive, Zero};
 use std::fmt::{Display, Formatter, Result};
+use std::ops::{Div, Rem};
 
 /// Writes out the joined vector `v`, enclosed by the given strings `pref` and `suff`.
 pub(crate) fn write_delim_list<T: Display>(
@@ -133,12 +135,91 @@ impl Display for ExtendSpec {
 
 impl Display for TimeSpec {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        // TODO: Better display for duration.
+        let value = self.exact_period.to_integer();
+        let abs_value = value.abs();
+
+        if !value.is_zero() {
+            if (&abs_value)
+                .rem(10u64.pow(9) * 60 * 60 * 24 * 365)
+                .is_zero()
+            {
+                let x: BigInt = abs_value / (10u64.pow(9) * 60 * 60 * 24 * 365);
+                return write!(
+                    f,
+                    "{}{:?}a",
+                    if value.is_negative() { "-" } else { "" },
+                    x.to_u128().unwrap()
+                );
+            }
+            if (&abs_value).rem(10u64.pow(9) * 60 * 60 * 24 * 7).is_zero() {
+                let x: BigInt = abs_value / (10u64.pow(9) * 60 * 60 * 24 * 7);
+                return write!(
+                    f,
+                    "{}{:?}w",
+                    if value.is_negative() { "-" } else { "" },
+                    x.to_u128().unwrap()
+                );
+            }
+            if (&abs_value).rem(10u64.pow(9) * 60 * 60 * 24).is_zero() {
+                let x: BigInt = abs_value / (10u64.pow(9) * 60 * 60 * 24);
+                return write!(
+                    f,
+                    "{}{:?}d",
+                    if value.is_negative() { "-" } else { "" },
+                    x.to_u128().unwrap()
+                );
+            }
+            if (&abs_value).rem(10u64.pow(9) * 60 * 60).is_zero() {
+                let x: BigInt = abs_value / (10u64.pow(9) * 60 * 60);
+                return write!(
+                    f,
+                    "{}{:?}h",
+                    if value.is_negative() { "-" } else { "" },
+                    x.to_u128().unwrap()
+                );
+            }
+            if (&abs_value).rem(10u64.pow(9) * 60).is_zero() {
+                let x: BigInt = abs_value / (10u64.pow(9) * 60);
+                return write!(
+                    f,
+                    "{}{:?}min",
+                    if value.is_negative() { "-" } else { "" },
+                    x.to_u128().unwrap()
+                );
+            }
+            if (&abs_value).rem(10u64.pow(9)).is_zero() {
+                let x: BigInt = abs_value / (10u64.pow(9));
+                return write!(
+                    f,
+                    "{}{:?}s",
+                    if value.is_negative() { "-" } else { "" },
+                    x.to_u128().unwrap()
+                );
+            }
+            if (&abs_value).rem(10u64.pow(6)).is_zero() {
+                let x: BigInt = abs_value / (10u64.pow(6));
+                return write!(
+                    f,
+                    "{}{:?}ms",
+                    if value.is_negative() { "-" } else { "" },
+                    x.to_u128().unwrap()
+                );
+            }
+            if (&abs_value).rem(10u64.pow(3)).is_zero() {
+                let x: BigInt = abs_value / (10u64.pow(3));
+                return write!(
+                    f,
+                    "{}{:?}μs",
+                    if value.is_negative() { "-" } else { "" },
+                    x.to_u128().unwrap()
+                );
+            }
+        }
         write!(
             f,
-            "{}{:?}",
-            if self.signum >= 0 { "" } else { "-" },
-            self.period
+            "{}{:?}ns",
+            if value.is_negative() { "-" } else { "" },
+            abs_value.to_u128().unwrap()
         )
     }
 }
@@ -290,7 +371,8 @@ impl Display for Literal {
         match &self.kind {
             LitKind::Bool(val) => write!(f, "{}", val),
             LitKind::Int(i) => write!(f, "{}", i),
-            LitKind::Float(fl) => {
+            LitKind::Float(fl, _precise) => {
+                // TODO this looses precision
                 if fl.fract() == 0.0 {
                     write!(f, "{:.1}", fl)
                 } else {

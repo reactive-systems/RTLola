@@ -1,8 +1,13 @@
 //! This module contains the AST data structures for the Lola Language.
 
 use super::parse::Ident;
+use crate::convert_to_f64;
 use crate::parse::NodeId;
 use crate::parse::Span;
+use num::BigInt;
+use num::BigRational;
+use num::FromPrimitive;
+use num::One;
 use std::time::Duration;
 
 /// The root Lola specification
@@ -128,10 +133,11 @@ pub struct ExtendSpec {
 
 pub(crate) type Signum = i8;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct TimeSpec {
     pub signum: Signum,
     pub period: Duration,
+    pub exact_period: BigRational,
     pub(crate) id: NodeId,
     pub(crate) span: Span,
 }
@@ -328,10 +334,10 @@ impl Literal {
         }
     }
 
-    pub fn new_float(val: f64, span: Span) -> Literal {
+    pub fn new_float(val: BigRational, span: Span) -> Literal {
         Literal {
             id: NodeId::DUMMY,
-            kind: LitKind::Float(val),
+            kind: LitKind::Float(convert_to_f64(&val), val),
             span,
         }
     }
@@ -362,7 +368,7 @@ pub enum LitKind {
     /// An integer literal (`1`)
     Int(i128),
     /// A float literal (`1f64` or `1E10f64`)
-    Float(f64),
+    Float(f64, BigRational),
     /// A boolean literal (`true`)
     Bool(bool),
 }

@@ -19,5 +19,6 @@ termcolor = "1"  # color output to terminal
 itertools = "0.8"
 petgraph = "0.4.13"
 ena = "0.11" # union-find implementation
+num = "0.2"
 
 [features]

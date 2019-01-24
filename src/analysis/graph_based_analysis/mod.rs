@@ -18,6 +18,7 @@ pub(crate) use self::evaluation_order::EvaluationOrderResult;
 pub(crate) use self::future_dependency::FutureDependentStreams;
 pub(crate) use self::space_requirements::SpaceRequirements;
 use self::space_requirements::TrackingRequirements;
+use num::BigRational;
 
 pub(crate) enum MemoryBound {
     Bounded(u128),
@@ -96,13 +97,13 @@ pub(crate) enum ComputeStep {
     Terminate(NodeId),
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub(crate) enum TimeOffset {
-    UpToNow(Duration),
-    Future(Duration),
+    UpToNow(Duration, BigRational),
+    Future(Duration, BigRational),
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub(crate) enum Offset {
     Discrete(i32),
     Time(TimeOffset),
@@ -117,7 +118,7 @@ pub(crate) enum Location {
     Expression,
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub(crate) enum StreamDependency {
     Access(Location, Offset, Span),
     InvokeByName(Span),

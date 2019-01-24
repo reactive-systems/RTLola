@@ -13,6 +13,7 @@ use crate::analysis::graph_based_analysis::TrackingRequirement;
 use crate::analysis::typing::TypeTable;
 use crate::parse::NodeId;
 use crate::ty::TimingInfo;
+use num::{BigRational, ToPrimitive};
 use petgraph::visit::EdgeRef;
 use petgraph::Direction;
 use std::cmp::max;
@@ -22,7 +23,7 @@ use std::time::Duration;
 
 const NANOS_PER_SEC: u32 = 1_000_000_000;
 
-fn dur_as_nanos(dur: Duration) -> u128 {
+pub(crate) fn dur_as_nanos(dur: Duration) -> u128 {
     u128::from(dur.as_secs()) * u128::from(NANOS_PER_SEC) + u128::from(dur.subsec_nanos())
 }
 
@@ -110,19 +111,25 @@ pub(crate) fn determine_tracking_size(
                     !future_dependent_stream.contains(&src_id),
                     "time based access of future dependent streams is not implemented"
                 ); // TODO time based access of future dependent streams is not implemented
-                if let TimeOffset::UpToNow(offset_duration) = offset {
+                if let TimeOffset::UpToNow(_, exact_offset_duration) = offset {
                     let src_timing = &type_table.get_stream_type(src_id).timing;
                     if this_is_time_based {
                         let out_timing = &type_table.get_stream_type(id).timing;
                         if let TimingInfo::RealTime(freq) = out_timing {
-                            let complete_periods =
-                                (dur_as_nanos(*offset_duration) / dur_as_nanos(freq.d)) as u16;
-                            let needed_space =
-                                if dur_as_nanos(*offset_duration) % dur_as_nanos(freq.d) == 0 {
-                                    complete_periods
-                                } else {
-                                    complete_periods + 1
-                                };
+                            let result: BigRational = exact_offset_duration / &freq.ns;
+                            let needed_space: u16 = if result.is_integer() {
+                                result
+                                    .trunc()
+                                    .to_integer()
+                                    .to_u16()
+                                    .expect("buffer size does not fit in u16")
+                            } else {
+                                result
+                                    .ceil()
+                                    .to_integer()
+                                    .to_u16()
+                                    .expect("buffer size does not fit in u16")
+                            };
                             tracking_requirements
                                 .push((src_id, TrackingRequirement::Finite(needed_space)));
                         // TODO We might be able to use the max(src_duration, out_duration)
@@ -136,14 +143,20 @@ pub(crate) fn determine_tracking_size(
                                     .push((src_id, TrackingRequirement::Unbounded));
                             }
                             TimingInfo::RealTime(freq) => {
-                                let complete_periods =
-                                    (dur_as_nanos(*offset_duration) / dur_as_nanos(freq.d)) as u16;
-                                let needed_space =
-                                    if dur_as_nanos(*offset_duration) % dur_as_nanos(freq.d) == 0 {
-                                        complete_periods
-                                    } else {
-                                        complete_periods + 1
-                                    };
+                                let result: BigRational = exact_offset_duration / &freq.ns;
+                                let needed_space: u16 = if result.is_integer() {
+                                    result
+                                        .trunc()
+                                        .to_integer()
+                                        .to_u16()
+                                        .expect("buffer size does not fit in u16")
+                                } else {
+                                    result
+                                        .ceil()
+                                        .to_integer()
+                                        .to_u16()
+                                        .expect("buffer size does not fit in u16")
+                                };
                                 tracking_requirements
                                     .push((src_id, TrackingRequirement::Finite(needed_space)));
                             }

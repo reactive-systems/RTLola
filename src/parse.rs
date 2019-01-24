@@ -1,6 +1,8 @@
 //! This module contains the parser for the Lola Language.
 
 use super::ast::*;
+use crate::analysis::graph_based_analysis::space_requirements::dur_as_nanos;
+use num::{BigInt, BigRational, FromPrimitive, One, Signed, ToPrimitive};
 use pest;
 use pest::iterators::{Pair, Pairs};
 use pest::prec_climber::{Assoc, Operator, PrecClimber};
@@ -277,88 +279,121 @@ fn parse_template_spec(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> TemplateSpe
 }
 
 pub(crate) fn build_time_spec(expr: Expression, unit_str: &str, span: Span) -> TimeSpec {
-    fn float_to_duration(secs: f64) -> Duration {
-        if secs <= 300_000_000.0 {
-            // Ten years.
-            //          Duration::from_float_secs(secs); // Experimental, unfortunately.
-            let nanos_per_sec: u128 = 10u128.pow(9); // Needs to be u128 for the type conversion magic to work.
-            let nanos = ((secs * nanos_per_sec as f64) as u128 % nanos_per_sec) as u32;
-            let secs = secs.floor() as u64;
-            Duration::new(secs, nanos)
-        } else {
-            panic!("Duration unreasonably large.")
-        }
-    }
-    let (uf, ue, invert): (u64, i32, bool) = match unit_str {
-        "ns" => (1, -9, false),
-        "μs" | "us" => (1, -6, false),
-        "ms" => (1, -3, false),
-        "s" => (1, 0, false),
-        "min" => (60, 0, false),
-        "h" => (60 * 60, 0, false),
-        "d" => (60 * 60 * 24, 0, false),
-        "w" => (60 * 60 * 24 * 7, 0, false),
-        "a" => (60 * 60 * 24 * 7 * 365, 0, false),
-        "μHz" | "uHz" => (1, -6, true),
-        "mHz" => (1, -3, true),
-        "Hz" => (1, 0, true),
-        "kHz" => (1, 3, true),
-        "MHz" => (1, 6, true),
-        "GHz" => (1, 9, true),
+    let (factor, invert): (BigRational, bool) = match unit_str {
+        "ns" => (BigRational::from_u64(1u64).unwrap(), false),
+        "μs" | "us" => (BigRational::from_u64(10u64.pow(3)).unwrap(), false),
+        "ms" => (BigRational::from_u64(10u64.pow(6)).unwrap(), false),
+        "s" => (BigRational::from_u64(10u64.pow(9)).unwrap(), false),
+        "min" => (BigRational::from_u64(10u64.pow(9) * 60).unwrap(), false),
+        "h" => (
+            BigRational::from_u64(10u64.pow(9) * 60 * 60).unwrap(),
+            false,
+        ),
+        "d" => (
+            BigRational::from_u64(10u64.pow(9) * 60 * 60 * 24).unwrap(),
+            false,
+        ),
+        "w" => (
+            BigRational::from_u64(10u64.pow(9) * 60 * 60 * 24 * 7).unwrap(),
+            false,
+        ),
+        "a" => (
+            BigRational::from_u64(10u64.pow(9) * 60 * 60 * 24 * 365).unwrap(),
+            false,
+        ),
+        "μHz" | "uHz" => (BigRational::from_u64(10u64.pow(15)).unwrap(), true),
+        "mHz" => (BigRational::from_u64(10u64.pow(12)).unwrap(), true),
+        "Hz" => (BigRational::from_u64(10u64.pow(9)).unwrap(), true),
+        "kHz" => (BigRational::from_u64(10u64.pow(6)).unwrap(), true),
+        "MHz" => (BigRational::from_u64(10u64.pow(3)).unwrap(), true),
+        "GHz" => (BigRational::from_u64(1).unwrap(), true),
         _ => unreachable!(),
     };
+
     if let ExpressionKind::Lit(l) = expr.kind {
         match l.kind {
             LitKind::Int(i) => {
-                let x = i.abs() as u128;
-                let signum = if i < 0 { -1i8 } else { 1i8 };
-                // Safe because x was a 64 bit number in the original spec and uf is at most u60:
-                let v = x * u128::from(uf);
-                // Distinguish the nice-and-easy integer case and the imprecise float case.
-                let period = if !invert && ue >= 0 {
-                    let factor = 10u128.pow(ue as u32);
-                    // Test for an overflow or overly large value.
-                    let secs = v.checked_mul(factor);
-                    if secs.is_some() && secs.unwrap() <= 300_000_000 {
-                        Duration::new(secs.unwrap() as u64, 0)
-                    } else {
-                        panic!("Duration unreasonably large.")
+                let mut period: BigRational = BigRational::from_integer(BigInt::from(i));
+                if invert {
+                    period = num::BigRational::one() / period;
+                }
+                period *= factor;
+                if period.is_negative() {
+                    let rounded_period: Duration = Duration::from_nanos(
+                        (-period.clone())
+                            .to_integer()
+                            .to_u64()
+                            .expect("Period [ns] too large for u64!"),
+                    );
+                    TimeSpec {
+                        period: rounded_period,
+                        exact_period: period,
+                        signum: match dur_as_nanos(rounded_period) {
+                            0 => 0,
+                            _ => -1,
+                        },
+                        id: NodeId::DUMMY,
+                        span,
                     }
                 } else {
-                    let factor = 10f64.powi(ue);
-                    let secs = if invert {
-                        1.0 / ((v as f64) * factor)
-                    } else {
-                        (v as f64) * factor
-                    };
-                    float_to_duration(secs)
-                };
-                TimeSpec {
-                    period,
-                    signum,
-                    id: NodeId::DUMMY,
-                    span,
+                    let rounded_period: Duration = Duration::from_nanos(
+                        period
+                            .to_integer()
+                            .to_u64()
+                            .expect("Period [ns] too large for u64!"),
+                    );
+                    TimeSpec {
+                        period: rounded_period,
+                        exact_period: period,
+                        signum: match dur_as_nanos(rounded_period) {
+                            0 => 0,
+                            _ => 1,
+                        },
+                        id: NodeId::DUMMY,
+                        span,
+                    }
                 }
             }
-            LitKind::Float(f) => {
-                // Everything is in float, messy, and imprecise.
-                let x = f.abs();
-                let signum = if f < 0.0 { -1i8 } else { 1i8 };
-                let v = x * uf as f64;
-
-                let factor = 10f64.powi(ue);
-                let secs = if invert {
-                    1.0 / ((v as f64) * factor)
+            LitKind::Float(_, precise) => {
+                let mut period: BigRational = precise.clone();
+                if invert {
+                    period = BigRational::one() / period;
+                }
+                period *= factor;
+                if period.is_negative() {
+                    let rounded_period: Duration = Duration::from_nanos(
+                        (-period.clone())
+                            .to_integer()
+                            .to_u64()
+                            .expect("Period [ns] too large for u64!"),
+                    );
+                    TimeSpec {
+                        period: rounded_period,
+                        exact_period: period,
+                        signum: match dur_as_nanos(rounded_period) {
+                            0 => 0,
+                            _ => -1,
+                        },
+                        id: NodeId::DUMMY,
+                        span: span,
+                    }
                 } else {
-                    (v as f64) * factor
-                };
-
-                let period = float_to_duration(secs);
-                TimeSpec {
-                    period,
-                    signum,
-                    id: NodeId::DUMMY,
-                    span,
+                    let rounded_period: Duration = Duration::from_nanos(
+                        period
+                            .to_integer()
+                            .to_u64()
+                            .expect("Period [ns] too large for u64!"),
+                    );
+                    TimeSpec {
+                        period: rounded_period,
+                        exact_period: period,
+                        signum: match dur_as_nanos(rounded_period) {
+                            0 => 0,
+                            _ => 1,
+                        },
+                        id: NodeId::DUMMY,
+                        span: span,
+                    }
                 }
             }
             _ => panic!("Needs to be numeric!"),
@@ -576,13 +611,239 @@ fn parse_literal(pair: Pair<'_, Rule>) -> Literal {
             Literal::new_raw_str(str_rep, inner.as_span().into())
         }
         Rule::NumberLiteral => {
-            let str_rep = inner.as_str();
-            if let Result::Ok(i) = str_rep.parse::<i128>() {
-                return Literal::new_int(i, inner.as_span().into());
-            } else if let Result::Ok(f) = str_rep.parse::<f64>() {
-                return Literal::new_float(f, inner.as_span().into());
+            let str_rep: &str = inner.as_str();
+            let mut value: BigRational = num::Zero::zero();
+            let mut char_indices = str_rep.char_indices();
+            let mut negated = false;
+
+            let ten = num::BigRational::from_i64(10).unwrap();
+            let zero: BigRational = num::Zero::zero();
+            let one = num::BigRational::from_i64(1).unwrap();
+            let two = num::BigRational::from_i64(2).unwrap();
+            let three = num::BigRational::from_i64(3).unwrap();
+            let four = num::BigRational::from_i64(4).unwrap();
+            let five = num::BigRational::from_i64(5).unwrap();
+            let six = num::BigRational::from_i64(6).unwrap();
+            let seven = num::BigRational::from_i64(7).unwrap();
+            let eight = num::BigRational::from_i64(8).unwrap();
+            let nine = num::BigRational::from_i64(9).unwrap();
+
+            let mut contains_fractional = false;
+            let mut contains_exponent = false;
+
+            //parse the before the point/exponent
+
+            loop {
+                match char_indices.next() {
+                    Some((_, '+')) => {}
+                    Some((_, '-')) => {
+                        negated = true;
+                    }
+                    Some((_, '.')) => {
+                        contains_fractional = true;
+                        break;
+                    }
+                    Some((_, 'e')) => {
+                        contains_exponent = true;
+                        break;
+                    }
+                    Some((_, '0')) => {
+                        value *= &ten;
+                    }
+                    Some((_, '1')) => {
+                        value *= &ten;
+                        value += &one;
+                    }
+                    Some((_, '2')) => {
+                        value *= &ten;
+                        value += &two;
+                    }
+                    Some((_, '3')) => {
+                        value *= &ten;
+                        value += &three;
+                    }
+                    Some((_, '4')) => {
+                        value *= &ten;
+                        value += &four;
+                    }
+                    Some((_, '5')) => {
+                        value *= &ten;
+                        value += &five;
+                    }
+                    Some((_, '6')) => {
+                        value *= &ten;
+                        value += &six;
+                    }
+                    Some((_, '7')) => {
+                        value *= &ten;
+                        value += &seven;
+                    }
+                    Some((_, '8')) => {
+                        value *= &ten;
+                        value += &eight;
+                    }
+                    Some((_, '9')) => {
+                        value *= &ten;
+                        value += &nine;
+                    }
+                    Some((_, _)) => unreachable!(),
+                    None => {
+                        break;
+                    }
+                }
+            }
+
+            if contains_fractional {
+                let mut number_of_fractional_positions: BigRational = zero.clone();
+                loop {
+                    match char_indices.next() {
+                        Some((_, 'e')) => {
+                            contains_exponent = true;
+                            break;
+                        }
+                        Some((_, '0')) => {
+                            value *= &ten;
+                            number_of_fractional_positions += &one;
+                        }
+                        Some((_, '1')) => {
+                            value *= &ten;
+                            value += &one;
+                            number_of_fractional_positions += &one;
+                        }
+                        Some((_, '2')) => {
+                            value *= &ten;
+                            value += &two;
+                            number_of_fractional_positions += &one;
+                        }
+                        Some((_, '3')) => {
+                            value *= &ten;
+                            value += &three;
+                            number_of_fractional_positions += &one;
+                        }
+                        Some((_, '4')) => {
+                            value *= &ten;
+                            value += &four;
+                            number_of_fractional_positions += &one;
+                        }
+                        Some((_, '5')) => {
+                            value *= &ten;
+                            value += &five;
+                            number_of_fractional_positions += &one;
+                        }
+                        Some((_, '6')) => {
+                            value *= &ten;
+                            value += &six;
+                            number_of_fractional_positions += &one;
+                        }
+                        Some((_, '7')) => {
+                            value *= &ten;
+                            value += &seven;
+                            number_of_fractional_positions += &one;
+                        }
+                        Some((_, '8')) => {
+                            value *= &ten;
+                            value += &eight;
+                            number_of_fractional_positions += &one;
+                        }
+                        Some((_, '9')) => {
+                            value *= &ten;
+                            value += &nine;
+                            number_of_fractional_positions += &one;
+                        }
+                        Some((_, _)) => unreachable!(),
+                        None => {
+                            break;
+                        }
+                    }
+                }
+                while number_of_fractional_positions > zero {
+                    value /= &ten;
+                    number_of_fractional_positions -= &one;
+                }
+            }
+
+            if contains_exponent {
+                let mut negated_exponent = false;
+                let mut exponent: BigRational = zero.clone();
+                loop {
+                    match char_indices.next() {
+                        Some((_, '+')) => {}
+                        Some((_, '-')) => {
+                            negated_exponent = true;
+                        }
+                        Some((_, '0')) => {
+                            exponent *= &ten;
+                        }
+                        Some((_, '1')) => {
+                            exponent *= &ten;
+                            exponent += &one;
+                        }
+                        Some((_, '2')) => {
+                            exponent *= &ten;
+                            exponent += &two;
+                        }
+                        Some((_, '3')) => {
+                            exponent *= &ten;
+                            exponent += &three;
+                        }
+                        Some((_, '4')) => {
+                            exponent *= &ten;
+                            exponent += &four;
+                        }
+                        Some((_, '5')) => {
+                            exponent *= &ten;
+                            exponent += &five;
+                        }
+                        Some((_, '6')) => {
+                            exponent *= &ten;
+                            exponent += &six;
+                        }
+                        Some((_, '7')) => {
+                            exponent *= &ten;
+                            exponent += &seven;
+                        }
+                        Some((_, '8')) => {
+                            exponent *= &ten;
+                            exponent += &eight;
+                        }
+                        Some((_, '9')) => {
+                            exponent *= &ten;
+                            exponent += &nine;
+                        }
+                        Some((_, _)) => unreachable!(),
+                        None => {
+                            break;
+                        }
+                    }
+                }
+                let mut new_value = value.clone();
+                if negated_exponent {
+                    while exponent > zero {
+                        new_value /= &ten;
+                        exponent -= &one;
+                    }
+                } else {
+                    while exponent > zero {
+                        new_value *= &ten;
+                        exponent -= &one;
+                    }
+                }
+                value = new_value;
+            }
+            if negated {
+                value = -value;
+            }
+
+            if value.is_integer() && !contains_fractional {
+                Literal::new_int(
+                    value
+                        .to_integer()
+                        .to_i128()
+                        .expect("Literal does not fit in i128"),
+                    inner.as_span().into(),
+                )
             } else {
-                panic!("Number literal not valid in rust.")
+                Literal::new_float(value, inner.as_span().into())
             }
         }
         Rule::True => Literal::new_bool(true, inner.as_span().into()),
