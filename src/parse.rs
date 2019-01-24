@@ -326,14 +326,12 @@ pub(crate) fn build_time_spec(expr: Expression, unit_str: &str, span: Span) -> T
                         panic!("Duration unreasonably large.")
                     }
                 } else {
-                    // Invert factor first if apropos, because the inversion is definitely safe.
-                    let factor = if invert {
-                        1.0 / 10f64.powi(ue)
+                    let factor = 10f64.powi(ue);
+                    let secs = if invert {
+                        1.0 / ((v as f64) * factor)
                     } else {
-                        10f64.powi(ue)
+                        (v as f64) * factor
                     };
-                    // We're already at floats, so we can multiply shamelessly.
-                    let secs = (v as f64) * factor;
                     float_to_duration(secs)
                 };
                 TimeSpec {
@@ -349,14 +347,13 @@ pub(crate) fn build_time_spec(expr: Expression, unit_str: &str, span: Span) -> T
                 let signum = if f < 0.0 { -1i8 } else { 1i8 };
                 let v = x * uf as f64;
 
-                // Invert factor first if apropos, because the inversion is definitely safe.
-                let factor = if invert {
-                    1.0 / 10f64.powi(ue)
+                let factor = 10f64.powi(ue);
+                let secs = if invert {
+                    1.0 / ((v as f64) * factor)
                 } else {
-                    10f64.powi(ue)
+                    (v as f64) * factor
                 };
 
-                let secs = v * factor;
                 let period = float_to_duration(secs);
                 TimeSpec {
                     period,
@@ -1230,11 +1227,11 @@ mod tests {
     #[test]
     fn build_template_spec() {
         let spec =
-            "output s: Int { invoke inp unless 3 > 5 extend b @ 5GHz terminate false } := 3\n";
+            "output s: Int { invoke inp unless 3 > 5 extend b @ 0.5GHz terminate false } := 3\n";
         let throw = |e| panic!("{}", e);
         let ast = parse(spec).unwrap_or_else(throw);
-        // 5GHz correspond to 5ns.
-        let spec = spec.replace("5GHz", "5ns");
+        // 0.5GHz correspond to 2ns.
+        let spec = spec.replace("0.5GHz", "2ns");
         cmp_ast_spec(&ast, spec.as_str());
     }
 
