@@ -5,8 +5,8 @@ pub(crate) mod candidates;
 mod checker;
 
 use super::type_checker::checker::*;
+use crate::parse::NodeId;
 use crate::reporting::Handler;
-use ast_node::NodeId;
 
 use crate::analysis::common::Type;
 pub(crate) use crate::analysis::type_checker::candidates::TimingInfo;

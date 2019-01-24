@@ -1,13 +1,12 @@
 //! This module provides naming analysis for a given Lola AST.
 
-use super::super::ast::Offset::*;
-use super::super::ast::*;
-use crate::parse::Ident;
+use crate::ast::Offset::*;
+use crate::ast::*;
+use crate::parse::{Ident, NodeId, Span};
 use crate::reporting::{Handler, LabeledSpan};
 use crate::stdlib;
 use crate::stdlib::FuncDecl;
 use crate::ty::ValueTy;
-use ast_node::{AstNode, NodeId, Span};
 use std::collections::HashMap;
 
 // These MUST all be lowercase
@@ -117,12 +116,12 @@ impl<'a, 'b> NamingAnalysis<'a, 'b> {
             TypeKind::Simple(ref name) | TypeKind::Malformed(ref name) => {
                 if let Some(decl) = self.type_declarations.get_decl_for(&name) {
                     assert!(decl.is_type());
-                    self.result.insert(*ty.id(), decl);
+                    self.result.insert(ty.id, decl);
                 } else {
                     // it does not exist
                     self.handler.error_with_span(
                         &format!("cannot find type `{}` in this scope", name),
-                        LabeledSpan::new(ty._span, "not found in this scope", true),
+                        LabeledSpan::new(ty.span, "not found in this scope", true),
                     );
                 }
             }
@@ -259,7 +258,7 @@ impl<'a, 'b> NamingAnalysis<'a, 'b> {
                                     ),
                                 );
                                 builder.add_span_with_label(
-                                    previous_trigger._span,
+                                    previous_trigger.span,
                                     &format!("previous trigger definition `{}` here", ident.name),
                                     false,
                                 );
@@ -323,7 +322,7 @@ impl<'a, 'b> NamingAnalysis<'a, 'b> {
                         "the name `{}` is not a stream",
                         instance.stream_identifier.name
                     ),
-                    LabeledSpan::new(instance._span, "expected a stream here", true),
+                    LabeledSpan::new(instance.span, "expected a stream here", true),
                 );
                 if let Some(span) = decl.get_span() {
                     builder.add_span_with_label(
@@ -334,13 +333,13 @@ impl<'a, 'b> NamingAnalysis<'a, 'b> {
                 }
                 builder.emit();
             } else {
-                self.result.insert(*instance.id(), decl);
+                self.result.insert(instance.id, decl);
             }
         } else {
             // it does not exist
             self.handler.error_with_span(
                 "name `{}` does not exist in current scope",
-                LabeledSpan::new(instance._span, "does not exist", true),
+                LabeledSpan::new(instance.span, "does not exist", true),
             );
         }
         // check paramterization
@@ -360,7 +359,7 @@ impl<'a, 'b> NamingAnalysis<'a, 'b> {
         if let Some(decl) = self.declarations.get_decl_for(&ident.name) {
             assert!(!decl.is_type());
 
-            self.result.insert(*expression.id(), decl);
+            self.result.insert(expression.id, decl);
         } else {
             self.handler.error_with_span(
                 "name `{}` does not exist in current scope",
@@ -370,7 +369,7 @@ impl<'a, 'b> NamingAnalysis<'a, 'b> {
     }
 
     fn check_expression(&mut self, expression: &'a Expression) {
-        assert!(*expression.id() != NodeId::DUMMY);
+        assert!(expression.id != NodeId::DUMMY);
 
         use self::ExpressionKind::*;
         match &expression.kind {

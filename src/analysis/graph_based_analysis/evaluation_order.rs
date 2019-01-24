@@ -14,7 +14,7 @@ use crate::analysis::graph_based_analysis::StreamNode::RTOutput;
 use crate::analysis::graph_based_analysis::StreamNode::RTTrigger;
 use crate::analysis::graph_based_analysis::StreamNode::Trigger;
 use crate::analysis::graph_based_analysis::TimeOffset;
-use ast_node::NodeId;
+use crate::parse::NodeId;
 use std::collections::HashMap;
 
 pub(crate) type EvalOrder = Vec<Vec<ComputeStep>>;

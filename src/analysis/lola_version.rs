@@ -1,7 +1,7 @@
-use super::super::ast::*;
+use crate::ast::*;
+use crate::parse::{NodeId, Span};
 use crate::reporting::Handler;
 use crate::reporting::LabeledSpan;
-use ast_node::{AstNode, NodeId, Span};
 use std::collections::HashMap;
 
 pub(crate) type LolaVersionTable = HashMap<NodeId, LanguageSpec>;
@@ -44,11 +44,11 @@ fn analyse_expression(
                 analyse_expression(version_tracker, &*expr, false);
             }
             Offset::RealTimeOffset(time_spec) => {
-                let span = time_spec.span();
+                let span = time_spec.span;
                 version_tracker.cannot_be_lola2 =
-                    Some((*span, String::from("Real time offset – no Lola2")));
+                    Some((span, String::from("Real time offset – no Lola2")));
                 version_tracker.cannot_be_classic =
-                    Some((*span, String::from("Real time offset – no ClassicLola")));
+                    Some((span, String::from("Real time offset – no ClassicLola")));
             }
         },
         ExpressionKind::Binary(_, left, right) => {
@@ -102,9 +102,9 @@ impl<'a> LolaVersionAnalysis<'a> {
 
     fn analyse_input(&mut self, input: &'a Input) {
         if input.params.is_empty() {
-            self.result.insert(*input.id(), LanguageSpec::Classic);
+            self.result.insert(input.id, LanguageSpec::Classic);
         } else {
-            self.result.insert(*input.id(), LanguageSpec::Lola2);
+            self.result.insert(input.id, LanguageSpec::Lola2);
         }
     }
 
@@ -121,14 +121,14 @@ impl<'a> LolaVersionAnalysis<'a> {
         // TODO check extend for frequency
 
         if version_tracker.cannot_be_classic.is_none() {
-            self.result.insert(*output.id(), LanguageSpec::Classic);
+            self.result.insert(output.id, LanguageSpec::Classic);
             return;
         }
         if version_tracker.cannot_be_lola2.is_none() {
-            self.result.insert(*output.id(), LanguageSpec::Lola2);
+            self.result.insert(output.id, LanguageSpec::Lola2);
             return;
         }
-        self.result.insert(*output.id(), LanguageSpec::RTLola);
+        self.result.insert(output.id, LanguageSpec::RTLola);
     }
 
     fn analyse_trigger(&mut self, trigger: &'a Trigger) {
@@ -136,14 +136,14 @@ impl<'a> LolaVersionAnalysis<'a> {
         analyse_expression(&mut version_tracker, &trigger.expression, true);
 
         if version_tracker.cannot_be_classic.is_none() {
-            self.result.insert(*trigger.id(), LanguageSpec::Classic);
+            self.result.insert(trigger.id, LanguageSpec::Classic);
             return;
         }
         if version_tracker.cannot_be_lola2.is_none() {
-            self.result.insert(*trigger.id(), LanguageSpec::Lola2);
+            self.result.insert(trigger.id, LanguageSpec::Lola2);
             return;
         }
-        self.result.insert(*trigger.id(), LanguageSpec::RTLola);
+        self.result.insert(trigger.id, LanguageSpec::RTLola);
     }
 
     pub(crate) fn analyse(&mut self, spec: &'a LolaSpec) -> Option<LanguageSpec> {
@@ -199,10 +199,10 @@ impl<'a> LolaVersionAnalysis<'a> {
     ) {
         for trigger in &spec.trigger {
             let span = match trigger.name {
-                None => *trigger.span(),
+                None => trigger.span,
                 Some(ref trigger_name) => trigger_name.span,
             };
-            match &self.result[trigger.id()] {
+            match &self.result[&trigger.id] {
                 LanguageSpec::Classic => {}
                 LanguageSpec::Lola2 => {
                     if reason_against_classic_lola.is_none() {
@@ -240,7 +240,7 @@ impl<'a> LolaVersionAnalysis<'a> {
     ) {
         for output in &spec.outputs {
             let span = output.name.span;
-            match &self.result[output.id()] {
+            match &self.result[&output.id] {
                 LanguageSpec::Classic => {}
                 LanguageSpec::Lola2 => {
                     if reason_against_classic_lola.is_none() {
@@ -283,7 +283,7 @@ impl<'a> LolaVersionAnalysis<'a> {
         reason_against_classic_lola: &mut Option<WhyNot>,
     ) {
         for input in &spec.inputs {
-            match &self.result[input.id()] {
+            match &self.result[&input.id] {
                 LanguageSpec::Classic => {}
                 LanguageSpec::Lola2 => {
                     if reason_against_classic_lola.is_none() {
@@ -326,9 +326,9 @@ mod tests {
         assert_eq!(expected_version, version);
         for (index, version) in expected_versions {
             let node_id = match index {
-                StreamIndex::In(i) => ast.inputs[i]._id,
-                StreamIndex::Out(i) => ast.outputs[i]._id,
-                StreamIndex::Trig(i) => ast.trigger[i]._id,
+                StreamIndex::In(i) => ast.inputs[i].id,
+                StreamIndex::Out(i) => ast.outputs[i].id,
+                StreamIndex::Trig(i) => ast.trigger[i].id,
             };
             let actual_version = version_analyzer
                 .result
@@ -371,7 +371,6 @@ mod tests {
             vec![(StreamIndex::Trig(0), LanguageSpec::Classic)],
         )
     }
-
 
     #[test]
     fn time_offset_in_trigger_causes_rtlola() {

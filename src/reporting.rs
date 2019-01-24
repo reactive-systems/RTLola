@@ -1,8 +1,8 @@
 //! This module contains helper to report messages (warnings/errors)
 
 use self::Level::*;
+use crate::parse::Span;
 use crate::parse::{CodeLine, SourceMapper};
-use ast_node::Span;
 use std::cell::RefCell;
 use std::io::Write;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};

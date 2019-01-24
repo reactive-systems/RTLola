@@ -5,7 +5,7 @@ use crate::analysis::graph_based_analysis::Offset;
 use crate::analysis::graph_based_analysis::StreamDependency::Access;
 use crate::analysis::graph_based_analysis::StreamNode::*;
 use crate::analysis::graph_based_analysis::TimeOffset;
-use ast_node::NodeId;
+use crate::parse::NodeId;
 use petgraph::Direction;
 use std::collections::HashSet;
 
@@ -115,7 +115,7 @@ mod tests {
         );
         for index in expected_future_dependent {
             let output = &spec.outputs[index];
-            assert!(future_dependent_stream.contains(&output._id));
+            assert!(future_dependent_stream.contains(&output.id));
         }
     }
 

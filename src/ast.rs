@@ -1,8 +1,8 @@
 //! This module contains the AST data structures for the Lola Language.
 
 use super::parse::Ident;
-use ast_node::NodeId;
-use ast_node::Span;
+use crate::parse::NodeId;
+use crate::parse::Span;
 use std::time::Duration;
 
 /// The root Lola specification
@@ -61,166 +61,166 @@ pub struct Import {
 }
 
 /// A declaration of a constant (stream)
-#[derive(AstNode, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub struct Constant {
     pub name: Ident,
     pub ty: Option<Type>,
     pub literal: Literal,
-    pub(crate) _id: NodeId,
-    pub(crate) _span: Span,
+    pub(crate) id: NodeId,
+    pub(crate) span: Span,
 }
 
 /// A declaration of an input stream
-#[derive(AstNode, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub struct Input {
     pub name: Ident,
     pub ty: Type,
     pub params: Vec<Parameter>,
-    pub(crate) _id: NodeId,
-    pub(crate) _span: Span,
+    pub(crate) id: NodeId,
+    pub(crate) span: Span,
 }
 
 /// A declaration of an output stream
-#[derive(AstNode, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub struct Output {
     pub name: Ident,
     pub ty: Type,
     pub params: Vec<Parameter>,
     pub template_spec: Option<TemplateSpec>,
     pub expression: Expression,
-    pub(crate) _id: NodeId,
-    pub(crate) _span: Span,
+    pub(crate) id: NodeId,
+    pub(crate) span: Span,
 }
 
-#[derive(AstNode, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub struct Parameter {
     pub name: Ident,
     pub ty: Type,
-    pub(crate) _id: NodeId,
-    pub(crate) _span: Span,
+    pub(crate) id: NodeId,
+    pub(crate) span: Span,
 }
 
-#[derive(AstNode, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub struct TemplateSpec {
     pub inv: Option<InvokeSpec>,
     pub ext: Option<ExtendSpec>,
     pub ter: Option<TerminateSpec>,
-    pub(crate) _id: NodeId,
-    pub(crate) _span: Span,
+    pub(crate) id: NodeId,
+    pub(crate) span: Span,
 }
 
-#[derive(AstNode, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub struct InvokeSpec {
     pub target: Expression,
     pub condition: Option<Expression>,
     pub is_if: bool,
-    pub(crate) _id: NodeId,
-    pub(crate) _span: Span,
+    pub(crate) id: NodeId,
+    pub(crate) span: Span,
 }
 
-#[derive(AstNode, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub struct ExtendSpec {
     pub target: Option<Expression>,
     pub freq: Option<TimeSpec>,
-    pub(crate) _id: NodeId,
-    pub(crate) _span: Span,
+    pub(crate) id: NodeId,
+    pub(crate) span: Span,
 }
 
 pub(crate) type Signum = i8;
 
-#[derive(AstNode, Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct TimeSpec {
     pub signum: Signum,
     pub period: Duration,
-    pub(crate) _id: NodeId,
-    pub(crate) _span: Span,
+    pub(crate) id: NodeId,
+    pub(crate) span: Span,
 }
 
-#[derive(AstNode, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub struct TerminateSpec {
     pub target: Expression,
-    pub(crate) _id: NodeId,
-    pub(crate) _span: Span,
+    pub(crate) id: NodeId,
+    pub(crate) span: Span,
 }
 
 /// A declaration of a trigger
-#[derive(AstNode, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub struct Trigger {
     pub name: Option<Ident>,
     pub expression: Expression,
     pub message: Option<String>,
-    pub(crate) _id: NodeId,
-    pub(crate) _span: Span,
+    pub(crate) id: NodeId,
+    pub(crate) span: Span,
 }
 
-#[derive(AstNode, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub struct TypeDeclaration {
     pub name: Option<Ident>,
     pub fields: Vec<Box<TypeDeclField>>,
-    pub(crate) _id: NodeId,
-    pub(crate) _span: Span,
+    pub(crate) id: NodeId,
+    pub(crate) span: Span,
 }
 
-#[derive(AstNode, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub struct TypeDeclField {
     pub ty: Type,
     pub name: String,
-    pub(crate) _id: NodeId,
-    pub(crate) _span: Span,
+    pub(crate) id: NodeId,
+    pub(crate) span: Span,
 }
 
-#[derive(AstNode, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub struct StreamInstance {
     pub stream_identifier: Ident,
     pub arguments: Vec<Box<Expression>>,
-    pub(crate) _id: NodeId,
-    pub(crate) _span: Span,
+    pub(crate) id: NodeId,
+    pub(crate) span: Span,
 }
 
-#[derive(AstNode, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub struct Parenthesis {
-    pub(crate) _id: NodeId,
-    pub(crate) _span: Span,
+    pub(crate) id: NodeId,
+    pub(crate) span: Span,
 }
 
 impl Parenthesis {
     pub fn new(span: Span) -> Parenthesis {
         Parenthesis {
-            _id: NodeId::DUMMY,
-            _span: span,
+            id: NodeId::DUMMY,
+            span: span,
         }
     }
 }
 
-#[derive(AstNode, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub struct Type {
     pub kind: TypeKind,
-    pub(crate) _id: NodeId,
-    pub(crate) _span: Span,
+    pub(crate) id: NodeId,
+    pub(crate) span: Span,
 }
 
 impl Type {
     pub fn new_simple(name: String, span: Span) -> Type {
         Type {
-            _id: NodeId::DUMMY,
+            id: NodeId::DUMMY,
             kind: TypeKind::Simple(name),
-            _span: span,
+            span: span,
         }
     }
 
     pub fn new_tuple(tuple: Vec<Type>, span: Span) -> Type {
         Type {
-            _id: NodeId::DUMMY,
+            id: NodeId::DUMMY,
             kind: TypeKind::Tuple(tuple),
-            _span: span,
+            span: span,
         }
     }
 
     pub fn new_inferred() -> Type {
         Type {
-            _id: NodeId::DUMMY,
+            id: NodeId::DUMMY,
             kind: TypeKind::Inferred,
-            _span: Span::unknown(),
+            span: Span::unknown(),
         }
     }
 }
@@ -242,19 +242,19 @@ pub enum TypeKind {
 /// An expression
 ///
 /// inspired by https://doc.rust-lang.org/nightly/nightly-rustc/src/syntax/ast.rs.html
-#[derive(AstNode, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub struct Expression {
     pub(crate) kind: ExpressionKind,
-    pub(crate) _id: NodeId,
-    pub(crate) _span: Span,
+    pub(crate) id: NodeId,
+    pub(crate) span: Span,
 }
 
 impl Expression {
     pub fn new(kind: ExpressionKind, span: Span) -> Expression {
         Expression {
-            _id: NodeId::DUMMY,
+            id: NodeId::DUMMY,
             kind,
-            _span: span,
+            span: span,
         }
     }
 }
@@ -302,51 +302,51 @@ pub enum WindowOperation {
     Integral,
 }
 
-#[derive(AstNode, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub struct Literal {
     pub kind: LitKind,
-    pub(crate) _id: NodeId,
-    pub(crate) _span: Span,
+    pub(crate) id: NodeId,
+    pub(crate) span: Span,
 }
 
 impl Literal {
     pub fn new_bool(val: bool, span: Span) -> Literal {
         Literal {
-            _id: NodeId::DUMMY,
+            id: NodeId::DUMMY,
             kind: LitKind::Bool(val),
-            _span: span,
+            span: span,
         }
     }
 
     pub fn new_int(val: i128, span: Span) -> Literal {
         Literal {
-            _id: NodeId::DUMMY,
+            id: NodeId::DUMMY,
             kind: LitKind::Int(val),
-            _span: span,
+            span: span,
         }
     }
 
     pub fn new_float(val: f64, span: Span) -> Literal {
         Literal {
-            _id: NodeId::DUMMY,
+            id: NodeId::DUMMY,
             kind: LitKind::Float(val),
-            _span: span,
+            span: span,
         }
     }
 
     pub(crate) fn new_str(val: &str, span: Span) -> Literal {
         Literal {
-            _id: NodeId::DUMMY,
+            id: NodeId::DUMMY,
             kind: LitKind::Str(val.to_string()),
-            _span: span,
+            span: span,
         }
     }
 
     pub(crate) fn new_raw_str(val: &str, span: Span) -> Literal {
         Literal {
-            _id: NodeId::DUMMY,
+            id: NodeId::DUMMY,
             kind: LitKind::RawStr(val.to_string()),
-            _span: span,
+            span: span,
         }
     }
 }

@@ -4,9 +4,9 @@ use super::candidates::*;
 use super::TypeCheckResult;
 use crate::ast::*;
 use crate::parse::Ident;
+use crate::parse::Span;
 use crate::reporting::{Handler, LabeledSpan};
 use ast_node;
-use ast_node::Span;
 use ast_node::{AstNode, NodeId};
 use std::collections::HashMap;
 

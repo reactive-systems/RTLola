@@ -7,9 +7,8 @@ use super::lola_version::LolaVersionTable;
 use super::typing::TypeTable;
 use super::DeclarationTable;
 use crate::ast::LolaSpec;
+use crate::parse::{NodeId, Span};
 use crate::reporting::Handler;
-use ast_node::NodeId;
-use ast_node::Span;
 use petgraph::Directed;
 use petgraph::Graph;
 use std::time::Duration;
@@ -65,21 +64,21 @@ pub(crate) fn analyze<'a>(
 
 #[derive(Debug, Copy, Clone)]
 pub(crate) enum StreamNode {
-    ClassicInput(ast_node::NodeId),
-    ClassicOutput(ast_node::NodeId),
-    ParameterizedInput(ast_node::NodeId),
-    ParameterizedOutput(ast_node::NodeId),
-    RTOutput(ast_node::NodeId),
-    Trigger(ast_node::NodeId),
-    RTTrigger(ast_node::NodeId),
+    ClassicInput(NodeId),
+    ClassicOutput(NodeId),
+    ParameterizedInput(NodeId),
+    ParameterizedOutput(NodeId),
+    RTOutput(NodeId),
+    Trigger(NodeId),
+    RTTrigger(NodeId),
 }
 
 #[derive(Debug, Copy, Clone)]
 pub(crate) enum ComputeStep {
-    Invoke(ast_node::NodeId),
-    Extend(ast_node::NodeId),
-    Evaluate(ast_node::NodeId),
-    Terminate(ast_node::NodeId),
+    Invoke(NodeId),
+    Extend(NodeId),
+    Evaluate(NodeId),
+    Terminate(NodeId),
 }
 
 #[derive(Debug, Copy, Clone)]

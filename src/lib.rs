@@ -10,9 +10,6 @@ extern crate pest_derive;
 #[macro_use]
 extern crate lazy_static;
 
-#[macro_use]
-extern crate ast_node_derive;
-
 mod analysis;
 pub mod app;
 mod ast;

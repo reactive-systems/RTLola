@@ -10,9 +10,9 @@ use crate::analysis::graph_based_analysis::StreamDependency::InvokeByName;
 use crate::analysis::graph_based_analysis::StreamNode::*;
 use crate::analysis::graph_based_analysis::TimeOffset;
 use crate::analysis::graph_based_analysis::TrackingRequirement;
-use crate::analysis::typing::{TypeAnalysis, TypeTable};
+use crate::analysis::typing::TypeTable;
+use crate::parse::NodeId;
 use crate::ty::TimingInfo;
-use ast_node::NodeId;
 use petgraph::visit::EdgeRef;
 use petgraph::Direction;
 use std::cmp::max;
@@ -174,7 +174,6 @@ fn is_it_time_based(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::analysis::graph_based_analysis::dependency_graph::analyse_dependencies;
     use crate::analysis::graph_based_analysis::evaluation_order::determine_evaluation_order;
     use crate::analysis::graph_based_analysis::future_dependency::future_dependent_stream;
@@ -184,6 +183,7 @@ mod tests {
     use crate::analysis::graph_based_analysis::TrackingRequirement;
     use crate::analysis::lola_version::LolaVersionAnalysis;
     use crate::analysis::naming::NamingAnalysis;
+    use crate::analysis::typing::TypeAnalysis;
     use crate::parse::parse;
     use crate::parse::SourceMapper;
     use crate::reporting::Handler;
@@ -224,9 +224,9 @@ mod tests {
         assert_eq!(expected_number_of_entries, space_requirements.len());
         for (index, expected_buffer_size) in expected_buffer_size {
             let node_id = match index {
-                StreamIndex::Out(i) => spec.outputs[i]._id,
-                StreamIndex::In(i) => spec.inputs[i]._id,
-                StreamIndex::Trig(i) => spec.trigger[i]._id,
+                StreamIndex::Out(i) => spec.outputs[i].id,
+                StreamIndex::In(i) => spec.inputs[i].id,
+                StreamIndex::Trig(i) => spec.trigger[i].id,
             };
             let actual_buffer = space_requirements.get(&node_id).unwrap_or_else(|| {
                 panic!("There is no buffer size for this NodeId in the result",)
@@ -271,9 +271,9 @@ mod tests {
         assert_eq!(expected_number_of_entries, tracking_requirements.len());
         for (index, expected_tracking_info) in expected_tracking_requirements {
             let node_id = match index {
-                StreamIndex::In(i) => spec.inputs[i]._id,
-                StreamIndex::Out(i) => spec.outputs[i]._id,
-                StreamIndex::Trig(i) => spec.trigger[i]._id,
+                StreamIndex::In(i) => spec.inputs[i].id,
+                StreamIndex::Out(i) => spec.outputs[i].id,
+                StreamIndex::Trig(i) => spec.trigger[i].id,
             };
             let actual_tracking_info = tracking_requirements.get(&node_id).unwrap_or_else(|| {
                 panic!("There is no tracking info for this NodeId in the result",)

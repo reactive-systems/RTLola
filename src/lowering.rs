@@ -9,8 +9,8 @@ use crate::ir::{
     EventDrivenStream, LolaIR, MemorizationBound, ParametrizedStream, StreamReference,
     TimeDrivenStream, WindowReference,
 };
+use crate::parse::NodeId;
 use crate::ty::TimingInfo;
-use ast_node::{AstNode, NodeId};
 use std::collections::HashMap;
 use std::time::Duration;
 
@@ -101,7 +101,7 @@ impl<'a> Lowering<'a> {
 
     /// Does *not* add dependent windows, yet.
     fn lower_input(&mut self, input: &ast::Input) {
-        let nid = *input.id();
+        let nid = input.id;
         let ast_req = self.get_memory(nid);
         let memory_bound = self.lower_storage_req(ast_req);
         let reference = self.get_ref(nid);
@@ -147,7 +147,7 @@ impl<'a> Lowering<'a> {
 
     /// Does *not* add dependent windows, yet.
     fn lower_output(&mut self, ast_output: &ast::Output) {
-        let nid = *ast_output.id();
+        let nid = ast_output.id;
         let ast_req = self.get_memory(nid);
         let memory_bound = self.lower_storage_req(ast_req);
         let layer = self.get_layer(nid);
@@ -236,17 +236,17 @@ impl<'a> Lowering<'a> {
 
     fn extract_target_from_lookup(&self, lookup: &ExpressionKind) -> StreamReference {
         if let ExpressionKind::Lookup(inst, _, _) = lookup {
-            let decl = self.get_decl(*inst.id());
+            let decl = self.get_decl(inst.id);
             let nid = match decl {
-                Declaration::Out(out) => out.id(),
-                Declaration::In(inp) => inp.id(),
+                Declaration::Out(out) => out.id,
+                Declaration::In(inp) => inp.id,
                 Declaration::Const(_) => unimplemented!(),
                 Declaration::Param(_) => unimplemented!(),
                 Declaration::Type(_) | Declaration::Func(_) => {
                     panic!("Bug in implementation: Invalid lookup.")
                 }
             };
-            *self.ref_lookup.get(nid).expect("Bug in ReferenceLookup.")
+            *self.ref_lookup.get(&nid).expect("Bug in ReferenceLookup.")
         } else {
             panic!("Bug in implementation: Called `extract_target_from_lookup` on non-lookup expression.")
         }
@@ -301,7 +301,7 @@ impl<'a> Lowering<'a> {
     fn lower_param(&mut self, param: &ast::Parameter) -> ir::Parameter {
         ir::Parameter {
             name: param.name.name.clone(),
-            ty: self.lower_value_type(*param.id()),
+            ty: self.lower_value_type(param.id),
         }
     }
 
@@ -343,7 +343,7 @@ impl<'a> Lowering<'a> {
     ) -> LoweringState {
         use crate::ir::{Op, Statement};
 
-        let result_type = self.lower_value_type(*expr.id());
+        let result_type = self.lower_value_type(expr.id);
 
         match &expr.kind {
             ExpressionKind::Lit(l) => {
@@ -356,13 +356,13 @@ impl<'a> Lowering<'a> {
                 };
                 state.with_stmt(stmt)
             }
-            ExpressionKind::Ident(_) => match self.get_decl(*expr.id()) {
+            ExpressionKind::Ident(_) => match self.get_decl(expr.id) {
                 Declaration::In(inp) => {
-                    let lu_target_ref = self.get_ref(*inp.id());
+                    let lu_target_ref = self.get_ref(inp.id);
                     self.lower_sync_lookup(state, lu_target_ref)
                 }
                 Declaration::Out(out) => {
-                    let lu_target_ref = self.get_ref(*out.id());
+                    let lu_target_ref = self.get_ref(out.id);
                     self.lower_sync_lookup(state, lu_target_ref)
                 }
                 Declaration::Param(_) | Declaration::Const(_) => unimplemented!(),
@@ -384,7 +384,7 @@ impl<'a> Lowering<'a> {
                 unimplemented!("Assert offset is 0, transform into sync access.")
             }
             ExpressionKind::Binary(ast_op, lhs, rhs) => {
-                let req_arg_types = self.tt.get_func_arg_types(*expr.id());
+                let req_arg_types = self.tt.get_func_arg_types(expr.id);
                 assert_eq!(req_arg_types.len(), 1);
                 let req_arg_type = (&req_arg_types[0]).into();
 
@@ -506,8 +506,8 @@ impl<'a> Lowering<'a> {
                 use crate::ty::ValueTy;
                 let ir_kind = name.name.clone();
 
-                let req_arg_types = self.tt.get_func_arg_types(*expr.id());
-                let args = if let Declaration::Func(fd) = self.get_decl(*expr.id()) {
+                let req_arg_types = self.tt.get_func_arg_types(expr.id);
+                let args = if let Declaration::Func(fd) = self.get_decl(expr.id) {
                     fd.parameters
                         .iter()
                         .map(|param| {
@@ -605,7 +605,7 @@ impl<'a> Lowering<'a> {
         dft: &ast::Expression,
         mut state: LoweringState,
     ) -> LoweringState {
-        let result_type = self.lower_value_type(*lookup_expr.id());
+        let result_type = self.lower_value_type(lookup_expr.id);
 
         if let ExpressionKind::Lookup(instance, offset, op) = &lookup_expr.kind {
             let target_ref = self.extract_target_from_lookup(&lookup_expr.kind);
@@ -638,7 +638,7 @@ impl<'a> Lowering<'a> {
                 }
             };
 
-            let lookup_type = self.lower_value_type(lookup_expr._id);
+            let lookup_type = self.lower_value_type(lookup_expr.id);
             let lookup_stmt = ir::Statement {
                 target: state.temp_for_type(&lookup_type),
                 op,
@@ -728,7 +728,7 @@ impl<'a> Lowering<'a> {
         output: &ast::Output,
         reference: StreamReference,
     ) -> Option<TimeDrivenStream> {
-        match &self.tt.get_stream_type(output._id).timing {
+        match &self.tt.get_stream_type(output.id).timing {
             TimingInfo::RealTime(f) => Some(TimeDrivenStream {
                 reference,
                 extend_rate: f.d,
@@ -756,11 +756,11 @@ impl<'a> Lowering<'a> {
         let ins = inputs
             .iter()
             .enumerate()
-            .map(|(ix, i)| (*i.id(), StreamReference::InRef(ix)));
+            .map(|(ix, i)| (i.id, StreamReference::InRef(ix)));
         let outs = outputs
             .iter()
             .enumerate()
-            .map(|(ix, o)| (*o.id(), StreamReference::OutRef(ix))); // Re-start indexing @ 0.
+            .map(|(ix, o)| (o.id, StreamReference::OutRef(ix))); // Re-start indexing @ 0.
         ins.chain(outs).collect()
     }
 

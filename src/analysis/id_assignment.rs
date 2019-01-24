@@ -1,6 +1,5 @@
-use super::super::ast::*;
-use ast_node;
-use ast_node::{AstNode, NodeId};
+use crate::ast::*;
+use crate::parse::NodeId;
 
 pub(crate) fn assign_ids(spec: &mut LolaSpec) {
     let mut free_id = 0;
@@ -11,32 +10,32 @@ pub(crate) fn assign_ids(spec: &mut LolaSpec) {
     };
 
     for td in &mut spec.type_declarations {
-        assert_eq!(*td.id(), NodeId::DUMMY, "Ids already assigned.");
-        td.set_id(next_id());
+        assert_eq!(td.id, NodeId::DUMMY, "Ids already assigned.");
+        td.id = next_id();
         for field in &mut td.fields {
-            field.set_id(next_id());
+            field.id = next_id();
             assign_ids_type(&mut field.ty, &mut next_id);
         }
     }
     for c in &mut spec.constants {
-        assert_eq!(*c.id(), NodeId::DUMMY, "Ids already assigned.");
-        c.set_id(next_id());
+        assert_eq!(c.id, NodeId::DUMMY, "Ids already assigned.");
+        c.id = next_id();
         if let Some(ref mut t) = c.ty {
             assign_ids_type(t, &mut next_id);
         }
         assign_ids_literal(&mut c.literal, &mut next_id);
     }
     for i in &mut spec.inputs {
-        assert_eq!(*i.id(), NodeId::DUMMY, "Ids already assigned.");
-        i.set_id(next_id());
+        assert_eq!(i.id, NodeId::DUMMY, "Ids already assigned.");
+        i.id = next_id();
         assign_ids_type(&mut i.ty, &mut next_id);
         for param in i.params.iter_mut() {
             assign_ids_parameter(param, &mut next_id);
         }
     }
     for o in &mut spec.outputs {
-        assert_eq!(*o.id(), NodeId::DUMMY, "Ids already assigned.");
-        o.set_id(next_id());
+        assert_eq!(o.id, NodeId::DUMMY, "Ids already assigned.");
+        o.id = next_id();
         assign_ids_type(&mut o.ty, &mut next_id);
 
         for param in o.params.iter_mut() {
@@ -48,8 +47,8 @@ pub(crate) fn assign_ids(spec: &mut LolaSpec) {
         assign_ids_expr(&mut o.expression, &mut next_id);
     }
     for t in &mut spec.trigger {
-        assert_eq!(*t.id(), NodeId::DUMMY, "Ids already assigned.");
-        t.set_id(next_id());
+        assert_eq!(t.id, NodeId::DUMMY, "Ids already assigned.");
+        t.id = next_id();
         assign_ids_expr(&mut t.expression, &mut next_id);
     }
 }
@@ -58,7 +57,7 @@ fn assign_ids_invoke_spec<E>(ts: &mut InvokeSpec, next_id: &mut E)
 where
     E: FnMut() -> NodeId,
 {
-    ts.set_id(next_id());
+    ts.id = next_id();
     assign_ids_expr(&mut ts.target, next_id);
     if let Some(ref mut cond) = ts.condition {
         assign_ids_expr(cond, next_id);
@@ -68,19 +67,19 @@ fn assign_ids_extend_spec<E>(ts: &mut ExtendSpec, next_id: &mut E)
 where
     E: FnMut() -> NodeId,
 {
-    ts.set_id(next_id());
+    ts.id = next_id();
     if let Some(ref mut target) = ts.target {
         assign_ids_expr(target, next_id);
     }
     if let Some(ref mut time_spec) = ts.freq {
-        time_spec.set_id(next_id());
+        time_spec.id = next_id();
     }
 }
 fn assign_ids_terminate_spec<E>(ts: &mut TerminateSpec, next_id: &mut E)
 where
     E: FnMut() -> NodeId,
 {
-    ts.set_id(next_id());
+    ts.id = next_id();
     assign_ids_expr(&mut ts.target, next_id);
 }
 
@@ -88,7 +87,7 @@ fn assign_ids_template_spec<E>(ts: &mut TemplateSpec, next_id: &mut E)
 where
     E: FnMut() -> NodeId,
 {
-    ts.set_id(next_id());
+    ts.id = next_id();
     if let Some(ref mut inv) = ts.inv {
         assign_ids_invoke_spec(inv, next_id);
     }
@@ -104,7 +103,7 @@ fn assign_ids_parameter<E>(param: &mut Parameter, next_id: &mut E)
 where
     E: FnMut() -> NodeId,
 {
-    param.set_id(next_id());
+    param.id = next_id();
     assign_ids_type(&mut param.ty, next_id);
 }
 
@@ -112,14 +111,14 @@ fn assign_ids_literal<E>(lit: &mut Literal, next_id: &mut E)
 where
     E: FnMut() -> NodeId,
 {
-    lit.set_id(next_id());
+    lit.id = next_id();
 }
 
 fn assign_ids_type<E>(ty: &mut Type, next_id: &mut E)
 where
     E: FnMut() -> NodeId,
 {
-    ty.set_id(next_id());
+    ty.id = next_id();
     if let TypeKind::Tuple(ref mut elements) = ty.kind {
         for element in elements.iter_mut() {
             assign_ids_type(element, next_id);
@@ -131,7 +130,7 @@ fn assign_ids_expr<E>(exp: &mut Expression, next_id: &mut E)
 where
     E: FnMut() -> NodeId,
 {
-    exp.set_id(next_id());
+    exp.id = next_id();
     match &mut exp.kind {
         ExpressionKind::Lit(lit) => {
             assign_ids_literal(lit, next_id);
@@ -142,13 +141,13 @@ where
             assign_ids_expr(rhs, next_id);
         }
         ExpressionKind::Lookup(inst, offset, _winop) => {
-            inst.set_id(next_id());
+            inst.id = next_id();
             inst.arguments
                 .iter_mut()
                 .for_each(|e| assign_ids_expr(e, next_id));
             match offset {
                 Offset::DiscreteOffset(expr) => assign_ids_expr(expr, next_id),
-                Offset::RealTimeOffset(time_spec) => time_spec.set_id(next_id()),
+                Offset::RealTimeOffset(time_spec) => time_spec.id = next_id(),
             }
         }
         ExpressionKind::Binary(_, lhs, rhs) => {
@@ -164,10 +163,10 @@ where
         ExpressionKind::ParenthesizedExpression(open, e, close) => {
             assign_ids_expr(e, next_id);
             if let Some(ref mut paren) = open {
-                paren.set_id(next_id());
+                paren.id = next_id();
             }
             if let Some(ref mut paren) = close {
-                paren.set_id(next_id());
+                paren.id = next_id();
             }
         }
         ExpressionKind::MissingExpression() => {}
@@ -189,22 +188,21 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::super::super::ast::Input;
-    use super::super::super::parse::Ident;
     use super::*;
-    use ast_node::{NodeId, Span};
+    use crate::ast::Input;
+    use crate::parse::{Ident, Span};
 
-    fn get_id_o(s: Option<&Output>) -> &NodeId {
+    fn get_id_o(s: Option<&Output>) -> NodeId {
         if let Some(o) = s {
-            &o.ty._id
+            o.ty.id
         } else {
             panic!("Assigning ids must not remove streams!")
         }
     }
-    fn get_id_c(s: Option<&Constant>) -> &NodeId {
+    fn get_id_c(s: Option<&Constant>) -> NodeId {
         if let Some(o) = s {
             if let Some(ref ty) = o.ty {
-                ty.id()
+                ty.id
             } else {
                 panic!("Assigning ids must not remove types!")
             }
@@ -224,31 +222,31 @@ mod tests {
     }
     fn input() -> Input {
         Input {
-            _id: NodeId::DUMMY,
+            id: NodeId::DUMMY,
             name: Ident::new(String::from("Something"), span()),
             params: Vec::new(),
             ty: Type::new_simple(String::from("something"), span()),
-            _span: span(),
+            span: span(),
         }
     }
     fn constant() -> Constant {
         Constant {
-            _id: NodeId::DUMMY,
+            id: NodeId::DUMMY,
             name: ident(),
             ty: Some(ty()),
             literal: Literal::new_bool(false, span()),
-            _span: span(),
+            span: span(),
         }
     }
     fn output(expr: Expression) -> Output {
         Output {
-            _id: NodeId::DUMMY,
+            id: NodeId::DUMMY,
             name: ident(),
             ty: ty(),
             params: Vec::new(),
             template_spec: None,
             expression: expr,
-            _span: span(),
+            span: span(),
         }
     }
 
@@ -257,8 +255,8 @@ mod tests {
         let mut spec = LolaSpec::new();
         spec.inputs.push(input());
         assign_ids(&mut spec);
-        assert_ne!(*spec.inputs[0].id(), NodeId::DUMMY);
-        assert_ne!(*spec.inputs[0].ty.id(), NodeId::DUMMY);
+        assert_ne!(spec.inputs[0].id, NodeId::DUMMY);
+        assert_ne!(spec.inputs[0].ty.id, NodeId::DUMMY);
     }
 
     #[test]
@@ -266,7 +264,7 @@ mod tests {
         let mut spec = LolaSpec::new();
         spec.inputs.push(input());
         assign_ids(&mut spec);
-        assert_ne!(*spec.inputs[0].ty.id(), *spec.inputs[0].id());
+        assert_ne!(spec.inputs[0].ty.id, spec.inputs[0].id);
     }
 
     #[test]
@@ -279,15 +277,15 @@ mod tests {
         spec.outputs.push(output(expr));
         assign_ids(&mut spec);
         let mut v = vec![
-            *spec.inputs[0].ty.id(),
-            *spec.inputs[0].id(),
-            *spec.inputs[1].ty.id(),
-            *spec.inputs[1].id(),
-            *get_id_c(spec.constants.get(0)),
-            *spec.constants[0].id(),
-            *get_id_o(spec.outputs.get(0)),
-            *spec.outputs[0].id(),
-            *spec.outputs[0].expression.id(),
+            spec.inputs[0].ty.id,
+            spec.inputs[0].id,
+            spec.inputs[1].ty.id,
+            spec.inputs[1].id,
+            get_id_c(spec.constants.get(0)),
+            spec.constants[0].id,
+            get_id_o(spec.outputs.get(0)),
+            spec.outputs[0].id,
+            spec.outputs[0].expression.id,
         ];
         v.dedup();
         assert_eq!(v.len(), 9, "Some ids occur multiple times.");
@@ -302,7 +300,7 @@ mod tests {
     fn already_assigned() {
         let mut spec = LolaSpec::new();
         let mut input = input();
-        input.set_id(NodeId::from_u32(42));
+        input.id = NodeId::from_u32(42);
         spec.inputs.push(input);
         // Should panic:
         assign_ids(&mut spec);
@@ -320,15 +318,15 @@ mod tests {
         spec.outputs.push(output(expr));
         assign_ids(&mut spec);
         let mut v = vec![
-            *get_id_o(spec.outputs.get(0)),
-            *spec.outputs[0].id(),
-            *spec.outputs[0].expression.id(),
+            get_id_o(spec.outputs.get(0)),
+            spec.outputs[0].id,
+            spec.outputs[0].expression.id,
         ];
         if let ExpressionKind::Binary(BinOp::Div, ref lhs, ref rhs) =
             spec.outputs[0].expression.kind
         {
-            v.push(*rhs.id());
-            v.push(*lhs.id());
+            v.push(rhs.id);
+            v.push(lhs.id);
         } else {
             panic!("Assigning ids must not change the ast in any other way.")
         }

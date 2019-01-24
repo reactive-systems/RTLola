@@ -1,8 +1,6 @@
 //! This module contains the parser for the Lola Language.
 
 use super::ast::*;
-use ast_node::NodeId;
-use ast_node::Span;
 use pest;
 use pest::iterators::{Pair, Pairs};
 use pest::prec_climber::{Assoc, Operator, PrecClimber};
@@ -113,11 +111,11 @@ fn parse_constant(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> Constant {
     );
     let literal = parse_literal(pairs.next().expect("mismatch between grammar and AST"));
     Constant {
-        _id: NodeId::DUMMY,
+        id: NodeId::DUMMY,
         name,
         ty: Some(ty),
         literal,
-        _span: span,
+        span: span,
     }
 }
 
@@ -148,11 +146,11 @@ fn parse_inputs(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> Vec<Input> {
         let end = pair.as_span().end();
         let ty = parse_type(spec, pair);
         inputs.push(Input {
-            _id: NodeId::DUMMY,
+            id: NodeId::DUMMY,
             name,
             params,
             ty,
-            _span: Span { start, end },
+            span: Span { start, end },
         })
     }
 
@@ -201,13 +199,13 @@ fn parse_output(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> Output {
     let expr_span = pair.as_span();
     let expression = build_expression_ast(spec, pair.into_inner(), expr_span.into());
     Output {
-        _id: NodeId::DUMMY,
+        id: NodeId::DUMMY,
         name,
         ty,
         params,
         template_spec: tspec,
         expression,
-        _span: span,
+        span: span,
     }
 }
 
@@ -227,8 +225,8 @@ fn parse_parameter_list(spec: &mut LolaSpec, param_list: Pairs<'_, Rule>) -> Vec
         params.push(Parameter {
             name,
             ty,
-            _id: NodeId::DUMMY,
-            _span: span,
+            id: NodeId::DUMMY,
+            span: span,
         });
     }
     params
@@ -264,16 +262,16 @@ fn parse_template_spec(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> TemplateSpe
         let expr = build_expression_ast(spec, expr.into_inner(), expr_span);
         ter_spec = Some(TerminateSpec {
             target: expr,
-            _id: NodeId::DUMMY,
-            _span: span_ter,
+            id: NodeId::DUMMY,
+            span: span_ter,
         });
     }
     TemplateSpec {
         inv: inv_spec,
         ext: ext_spec,
         ter: ter_spec,
-        _id: NodeId::DUMMY,
-        _span: span,
+        id: NodeId::DUMMY,
+        span: span,
     }
 }
 
@@ -337,8 +335,8 @@ pub(crate) fn build_time_spec(expr: Expression, unit_str: &str, span: Span) -> T
                 TimeSpec {
                     period,
                     signum,
-                    _id: NodeId::DUMMY,
-                    _span: span,
+                    id: NodeId::DUMMY,
+                    span: span,
                 }
             }
             LitKind::Float(f) => {
@@ -358,8 +356,8 @@ pub(crate) fn build_time_spec(expr: Expression, unit_str: &str, span: Span) -> T
                 TimeSpec {
                     period,
                     signum,
-                    _id: NodeId::DUMMY,
-                    _span: span,
+                    id: NodeId::DUMMY,
+                    span: span,
                 }
             }
             _ => panic!("Needs to be numeric!"),
@@ -414,8 +412,8 @@ fn parse_ext_spec(spec: &mut LolaSpec, ext_pair: Pair<'_, Rule>) -> ExtendSpec {
     ExtendSpec {
         target,
         freq,
-        _id: NodeId::DUMMY,
-        _span: span_ext,
+        id: NodeId::DUMMY,
+        span: span_ext,
     }
 }
 
@@ -451,8 +449,8 @@ fn parse_inv_spec(spec: &mut LolaSpec, inv_pair: Pair<'_, Rule>) -> InvokeSpec {
         condition: cond_expr,
         is_if,
         target: inv_target,
-        _id: NodeId::DUMMY,
-        _span: span_inv,
+        id: NodeId::DUMMY,
+        span: span_inv,
     }
 }
 
@@ -487,11 +485,11 @@ fn parse_trigger(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> Trigger {
     }
 
     Trigger {
-        _id: NodeId::DUMMY,
+        id: NodeId::DUMMY,
         name,
         expression,
         message,
-        _span: span,
+        span: span,
     }
 }
 
@@ -524,15 +522,15 @@ fn parse_type_declaration(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> TypeDecl
         fields.push(Box::new(TypeDeclField {
             name: field_name,
             ty,
-            _id: NodeId::DUMMY,
-            _span: pair.as_span().into(),
+            id: NodeId::DUMMY,
+            span: pair.as_span().into(),
         }));
     }
 
     TypeDeclaration {
         name: Some(name),
-        _span: span,
-        _id: NodeId::DUMMY,
+        span: span,
+        id: NodeId::DUMMY,
         fields,
     }
 }
@@ -602,8 +600,8 @@ fn parse_stream_instance(spec: &mut LolaSpec, instance: Pair<'_, Rule>) -> Strea
     StreamInstance {
         stream_identifier: stream_ident,
         arguments: args,
-        _id: NodeId::DUMMY,
-        _span: span,
+        id: NodeId::DUMMY,
+        span: span,
     }
 }
 
@@ -800,7 +798,7 @@ fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>, span: Span)
                             let ident = match l.kind {
                                 LitKind::Int(i) => {
                                     assert!(i >= 0);
-                                    Ident::new(format!("{}", i), l._span)
+                                    Ident::new(format!("{}", i), l.span)
                                 }
                                 _ => {
                                     panic!("expected unsigned integer, found {}", l);
@@ -836,6 +834,63 @@ pub struct Ident {
 impl Ident {
     pub fn new(name: String, span: Span) -> Ident {
         Ident { name, span }
+    }
+}
+
+/// Every node in the AST gets a unique id, represented by a 32bit unsiged integer.
+/// They are used in the later analysis phases to store information about AST nodes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct NodeId(u32);
+
+impl NodeId {
+    pub fn new(x: usize) -> NodeId {
+        assert!(x < (std::u32::MAX as usize));
+        NodeId(x as u32)
+    }
+
+    pub fn from_u32(x: u32) -> NodeId {
+        NodeId(x)
+    }
+
+    /// When parsing, we initially give all AST nodes this AST node id.
+    /// Then later, in the renumber pass, we renumber them to have small, positive ids.
+    pub const DUMMY: NodeId = NodeId(!0);
+}
+
+impl std::fmt::Display for NodeId {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+/// A span marks a range in a file.
+/// Start and end positions are *byte* offsets.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Span {
+    pub start: usize,
+    pub end: usize,
+    // TODO Do we need this here or do we want to keep a mapping from byte positions to lines in the LSP part.
+    // line: usize,
+    // /// The LSP uses UTF-16 code units (2 bytes) as their unit for offsets.
+    // lineOffsetLSP: usize,
+}
+
+impl Span {
+    pub fn unknown() -> Span {
+        use std::usize;
+        Span {
+            start: usize::MAX,
+            end: usize::MAX,
+        }
+    }
+}
+
+impl<'a> From<pest::Span<'a>> for Span {
+    fn from(span: pest::Span<'a>) -> Self {
+        Span {
+            start: span.start(),
+            end: span.end(),
+        }
     }
 }
 
