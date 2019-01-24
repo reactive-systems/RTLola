@@ -50,6 +50,10 @@ impl TypeTable {
     pub(crate) fn get_stream_type(&self, nid: NodeId) -> &StreamTy {
         &self.stream_tt[&nid]
     }
+
+    pub(crate) fn get_func_arg_types(&self, nid: NodeId) -> &Vec<ValueTy> {
+        &self.func_tt[&nid]
+    }
 }
 
 impl<'a, 'b> TypeAnalysis<'a, 'b> {

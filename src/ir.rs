@@ -197,6 +197,12 @@ pub enum Op {
     /// A function call
     /// Arguments in statement in proper order.
     Function(String),
+    /// Converts a value to a different type.
+    /// One arguments containing the value to convert.
+    Convert,
+    /// Moves the value of a temporary to a different one.
+    /// One argument, the source temporary.
+    Move,
 }
 
 /// Represents a constant value of a certain kind.

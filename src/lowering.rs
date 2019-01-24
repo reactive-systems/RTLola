@@ -21,19 +21,10 @@ use crate::analysis::graph_based_analysis::space_requirements::{
 //use crate::analysis::graph_based_analysis::future_dependency::FutureDependentStreams;
 use crate::analysis::graph_based_analysis::{ComputeStep, StorageRequirement, TrackingRequirement};
 
+use self::lowering_state::*;
 use crate::analysis::AnalysisResult;
 
 type EvalTable = HashMap<NodeId, u32>;
-
-/// Amazing macro for hashmap initialization. (credits: https://stackoverflow.com/questions/28392008/more-concise-hashmap-initialization)
-/// Use by calling hashmap!['a' => 1, 'b' => 4, 'c' => 7].
-macro_rules! hashmap {
-    ($( $key: expr => $val: expr ),*) => {{
-         let mut map = ::std::collections::HashMap::new();
-         $( map.insert($key, $val); )*
-         map
-    }}
-}
 
 pub(crate) struct Lowering<'a> {
     ast: &'a LolaSpec,
@@ -166,10 +157,11 @@ impl<'a> Lowering<'a> {
 
         let trackings = self.collect_tracking_info(nid, time_driven);
 
+        let output_type = self.lower_value_type(nid);
         let output = ir::OutputStream {
             name: ast_output.name.name.clone(),
-            ty: self.lower_value_type(nid),
-            expr: self.lower_expression(&ast_output.expression),
+            ty: output_type.clone(),
+            expr: self.lower_expression(&ast_output.expression, &output_type),
             dependent_streams: trackings,
             dependent_windows: Vec::new(),
             memory_bound,
@@ -326,225 +318,282 @@ impl<'a> Lowering<'a> {
         self.tt.get_value_type(id).into()
     }
 
-    fn lower_expression(&mut self, expression: &ast::Expression) -> ir::Expression {
-        let mut mm = MemoryManager::new();
-
-        let state = self.lower_subexpression(expression, &mut mm, None);
-
-        let mut temps: Vec<(ir::Temporary, ir::Type)> = state.temps.clone().into_iter().collect();
-        temps.sort_unstable_by_key(|(temp, _)| temp.0);
-        // Make sure every temporary has its type.
-        temps.iter().enumerate().for_each(|(i, (temp, _))| {
-            assert_eq!(
-                i, temp.0 as usize,
-                "Temporary {} does not have a type! Found type for Temporary {} instead.",
-                i, temp.0
-            )
-        });
-        let temporaries = temps.into_iter().map(|(_, ty)| ty).collect();
-
-        ir::Expression {
-            stmts: state.stmts,
-            temporaries,
+    fn lower_expression(
+        &mut self,
+        expression: &ast::Expression,
+        expected_type: &ir::Type,
+    ) -> ir::Expression {
+        let mut state = self.lower_subexpression(expression, LoweringState::empty());
+        if state.result_type() != expected_type {
+            let convert = ir::Statement {
+                target: state.temp_for_type(expected_type),
+                op: ir::Op::Convert,
+                args: vec![state.get_target()],
+            };
+            state = state.with_stmt(convert)
         }
+        let (stmts, temporaries) = state.finalize();
+        ir::Expression { stmts, temporaries }
     }
 
     fn lower_subexpression(
         &mut self,
         expr: &ast::Expression,
-        mm: &mut MemoryManager,
-        target_temp: Option<ir::Temporary>,
+        mut state: LoweringState,
     ) -> LoweringState {
         use crate::ir::{Op, Statement};
 
-        let result_type = self.lower_value_type(expr._id);
+        let result_type = self.lower_value_type(*expr.id());
 
         match &expr.kind {
             ExpressionKind::Lit(l) => {
-                let result = target_temp.unwrap_or_else(|| mm.temp_for_type(&result_type));
                 let op = Op::LoadConstant(self.lower_literal(l));
                 let args = Vec::new();
                 let stmt = Statement {
-                    target: result,
+                    target: state.temp_for_type(&result_type),
                     op,
                     args,
                 };
-                LoweringState::new(vec![stmt], hashmap![result => result_type])
+                state.with_stmt(stmt)
             }
             ExpressionKind::Ident(_) => match self.get_decl(*expr.id()) {
                 Declaration::In(inp) => {
-                    let result = target_temp.unwrap_or_else(|| mm.temp_for_type(&result_type));
-                    let lu_target = ir::StreamInstance {
-                        reference: self.get_ref(*inp.id()),
-                        arguments: Vec::new(),
-                    };
-                    let op = Op::SyncStreamLookup(lu_target);
-                    let stmt = Statement {
-                        target: result,
-                        op,
-                        args: Vec::new(),
-                    };
-                    LoweringState::new(vec![stmt], hashmap![result => result_type])
+                    let lu_target_ref = self.get_ref(*inp.id());
+                    self.lower_sync_lookup(state, lu_target_ref)
                 }
                 Declaration::Out(out) => {
-                    let result = target_temp.unwrap_or_else(|| mm.temp_for_type(&result_type));
-                    let lu_target = ir::StreamInstance {
-                        reference: self.get_ref(*out.id()),
-                        arguments: Vec::new(),
-                    };
-                    let op = Op::SyncStreamLookup(lu_target);
-                    let stmt = Statement {
-                        target: result,
-                        op,
-                        args: Vec::new(),
-                    };
-                    LoweringState::new(vec![stmt], hashmap![result => result_type])
+                    let lu_target_ref = self.get_ref(*out.id());
+                    self.lower_sync_lookup(state, lu_target_ref)
                 }
                 Declaration::Param(_) | Declaration::Const(_) => unimplemented!(),
                 Declaration::Type(_) | Declaration::Func(_) => unreachable!("Bug in TypeChecker."),
             },
             ExpressionKind::Default(e, dft) => {
                 if let ExpressionKind::Lookup(_, _, _) = &e.kind {
-                    self.lower_lookup_expression(e, dft, mm, target_temp)
+                    self.lower_lookup_expression(e, dft, state)
                 } else {
                     // A "stray" default expression such as `5 ? 3` is valid, but a no-op.
                     // Thus, print a warning. Evaluating the expression is necessary, the dft can be skipped.
                     println!("WARNING: No-Op Default operation!");
-                    self.lower_subexpression(e, mm, target_temp)
+                    self.lower_subexpression(e, state)
                 }
             }
             ExpressionKind::Lookup(_, _, _) => {
                 // Stray lookup without any default expression surrounding it, see `ExpressionKind::Default` case.
-                // This is only valid for sync accesses, i.e. the offset is 0.
-                // TODO: Double check: is a [0] access even allowed anymore? Or should it be sample&hold or a no-offset lookup instead.
-                // TODO: If it is allowed, transform lookup into ExpressionKind::Ident, call recursively. Yes, [0] is a no-op!
-                unimplemented!()
+                // This is only valid for sync accesses, i.e. the offset is 0. And this is an `Ident` expression.
+                unimplemented!("Assert offset is 0, transform into sync access.")
             }
             ExpressionKind::Binary(ast_op, lhs, rhs) => {
-                let lhs_state = self.lower_subexpression(lhs, mm, None);
-                let rhs_state = self.lower_subexpression(rhs, mm, None);
-                let args = vec![lhs_state.get_target(), rhs_state.get_target()];
-                let state = lhs_state.merge_with(rhs_state);
+                let req_arg_types = self.tt.get_func_arg_types(*expr.id());
+                assert_eq!(req_arg_types.len(), 1);
+                let req_arg_type = (&req_arg_types[0]).into();
+
+                state = self.lower_subexpression(lhs, state);
+                let lhs_type = state.result_type();
+                if lhs_type != &req_arg_type {
+                    let conversion_source = state.get_target();
+                    let conversion_target = state.temp_for_type(&req_arg_type);
+                    state = self.convert_temp(state, conversion_source, conversion_target);
+                }
+                let lhs_target = state.get_target();
+
+                state = self.lower_subexpression(rhs, state);
+                let rhs_type = state.result_type();
+                if rhs_type != &req_arg_type {
+                    let conversion_source = state.get_target();
+                    let conversion_target = state.temp_for_type(&req_arg_type);
+                    state = self.convert_temp(state, conversion_source, conversion_target);
+                }
+                let rhs_target = state.get_target();
+
+                let args = vec![lhs_target, rhs_target];
                 let op = Op::ArithLog(Lowering::lower_bin_op(*ast_op));
-                let result = target_temp.unwrap_or_else(|| mm.temp_for_type(&result_type));
                 let stmt = Statement {
-                    target: result,
+                    target: state.temp_for_type(&result_type),
                     op,
                     args,
                 };
-                let new_state = LoweringState::new(vec![stmt], hashmap![result => result_type]);
-                state.merge_with(new_state)
+                state.with_stmt(stmt)
             }
             ExpressionKind::Unary(ast_op, operand) => {
-                let state = self.lower_subexpression(operand, mm, None);
+                state = self.lower_subexpression(operand, state);
                 let op = Op::ArithLog(Lowering::lower_un_op(*ast_op));
-                let result = target_temp.unwrap_or_else(|| mm.temp_for_type(&result_type));
                 let stmt = Statement {
-                    target: result,
+                    target: state.temp_for_type(&result_type),
                     op,
                     args: vec![state.get_target()],
                 };
-                let new_state = LoweringState::new(vec![stmt], hashmap![result => result_type]);
-                state.merge_with(new_state)
+                state.with_stmt(stmt)
             }
             ExpressionKind::Ite(cond, cons, alt) => {
-                let cond_state = self.lower_subexpression(cond, mm, None);
-                let result = target_temp.unwrap_or_else(|| mm.temp_for_type(&result_type));
-                let cons_state = self.lower_subexpression(cons, mm, Some(result));
-                let alt_state = self.lower_subexpression(alt, mm, Some(result));
+                // Plan:
+                // a) Compute condition.
+                // b) Branch state off, lower consequence.
+                // c) If apropos, convert consequence.
+                // d) Merge temps from branch into state.
+                // e) Branch state off, lower alternative.
+                // f) Move or convert alternative into result of consequence.
+                // g) Merge temps into state.
+                // h) Add Ite Statement.
 
+                // a) Compute condition.
+                state = self.lower_subexpression(cond, state);
+                let cond_target = state.get_target();
+
+                // b) Branch state off, lower consequence.
+                let mut cons_state = self.lower_subexpression(cons, state.branch());
+
+                // c) If apropos, convert consequence.
+                if &result_type != cons_state.result_type() {
+                    let conversion_source = cons_state.get_target();
+                    let conversion_target = cons_state.temp_for_type(&result_type);
+                    cons_state =
+                        self.convert_temp(cons_state, conversion_source, conversion_target);
+                }
+                let branch_target = cons_state.get_target();
+
+                // d) Merge temps from branch into state.
+                let (cons_stmts, cons_temps) = cons_state.destruct();
+                state = state.with_temps(cons_temps);
+
+                // e) Branch state off, lower alternative.
+                let mut alt_state = self.lower_subexpression(alt, state.branch());
+
+                // f) Move or convert alternative into result of consequence.
+                alt_state = if &result_type != alt_state.result_type() {
+                    self.convert_temp(alt_state, branch_target, branch_target)
+                } else {
+                    let move_source = alt_state.get_target();
+                    alt_state.with_stmt(ir::Statement {
+                        target: branch_target,
+                        op: Op::Move,
+                        args: vec![move_source],
+                    })
+                };
+
+                // g) Merge temps into state.
+                let (alt_stmts, alt_temps) = alt_state.destruct();
+                state = state.with_temps(alt_temps);
+
+                // h) Add Ite Statement.
                 let op = Op::Ite {
-                    consequence: cons_state.stmts,
-                    alternative: alt_state.stmts,
+                    consequence: cons_stmts,
+                    alternative: alt_stmts,
                 };
-                let stmt = Statement {
-                    target: result,
+                let ite_stmt = Statement {
+                    target: branch_target,
                     op,
-                    args: vec![cond_state.get_target()],
+                    args: vec![cond_target],
                 };
 
-                // Result temp and type already registered in cons and alt states.
-                cond_state
-                    .merge_temps(cons_state.temps)
-                    .merge_temps(alt_state.temps)
-                    .merge_with(LoweringState::new(vec![stmt], HashMap::new()))
+                state.with_stmt(ite_stmt)
             }
-            ExpressionKind::ParenthesizedExpression(_, e, _) => {
-                self.lower_subexpression(e, mm, target_temp)
-            }
+            ExpressionKind::ParenthesizedExpression(_, e, _) => self.lower_subexpression(e, state),
             ExpressionKind::MissingExpression() => {
                 panic!("How wasn't this caught in a preceding step?!")
             }
             ExpressionKind::Tuple(exprs) => {
-                let (state, values) = self.lower_expression_list(exprs, mm);
-                let result = target_temp.unwrap_or_else(|| mm.temp_for_type(&result_type));
+                let lowered_list = self.lower_expression_list(exprs, state);
+                state = lowered_list.0;
                 let stmt = Statement {
-                    target: result,
+                    target: state.temp_for_type(&result_type),
                     op: Op::Tuple,
-                    args: values,
+                    args: lowered_list.1,
                 };
-                state.merge_with(LoweringState::new(
-                    vec![stmt],
-                    hashmap![result => result_type],
-                ))
+                state.with_stmt(stmt)
             }
             ExpressionKind::Function(name, _, args) => {
                 let ir_kind = name.name.clone();
-                let (state, values) = self.lower_expression_list(args, mm);
-                let result = target_temp.unwrap_or_else(|| mm.temp_for_type(&result_type));
+                let lowered_list = self.lower_expression_list(args, state);
+                state = lowered_list.0;
                 let stmt = Statement {
-                    target: result,
+                    target: state.temp_for_type(&result_type),
                     op: Op::Function(ir_kind),
-                    args: values,
+                    args: lowered_list.1,
                 };
-                state.merge_with(LoweringState::new(
-                    vec![stmt],
-                    hashmap![result => result_type],
-                ))
+                state.with_stmt(stmt)
             }
             ExpressionKind::Field(_, _) => unimplemented!(),
             ExpressionKind::Method(_, _, _, _) => unimplemented!(),
         }
     }
 
+    fn convert_temp(
+        &self,
+        state: LoweringState,
+        source: ir::Temporary,
+        target: ir::Temporary,
+    ) -> LoweringState {
+        state.with_stmt(ir::Statement {
+            target,
+            op: ir::Op::Convert,
+            args: vec![source],
+        })
+    }
+
+    fn lower_sync_lookup(
+        &self,
+        mut state: LoweringState,
+        lu_target_ref: StreamReference,
+    ) -> LoweringState {
+        let lu_target = ir::StreamInstance {
+            reference: lu_target_ref,
+            arguments: Vec::new(),
+        };
+        let lu_type = match lu_target_ref {
+            StreamReference::InRef(_) => &self.ir.get_in(lu_target_ref).ty,
+            StreamReference::OutRef(_) => &self.ir.get_out(lu_target_ref).ty,
+        };
+
+        let lu_target_temp = state.temp_for_type(lu_type);
+
+        let lu_stmt = ir::Statement {
+            target: lu_target_temp,
+            op: ir::Op::SyncStreamLookup(lu_target),
+            args: Vec::new(),
+        };
+
+        state.with_stmt(lu_stmt)
+    }
+
     fn lower_expression_list(
         &mut self,
         expressions: &[Box<ast::Expression>],
-        mm: &mut MemoryManager,
+        state: LoweringState,
     ) -> (LoweringState, Vec<ir::Temporary>) {
-        let states: Vec<LoweringState> = expressions
+        expressions
             .iter()
-            .map(|e| self.lower_subexpression(e, mm, None))
-            .collect();
-        let values: Vec<ir::Temporary> = states.iter().map(|s| s.get_target()).collect();
-        let state = states
-            .into_iter()
-            .fold(LoweringState::empty(), |accu, s| accu.merge_with(s));
-        (state, values)
+            .fold((state, Vec::new()), |(mut state, mut results), e| {
+                state = self.lower_subexpression(e, state);
+                results.push(state.get_target());
+                (state, results)
+            })
     }
 
     fn lower_lookup_expression(
         &mut self,
         lookup_expr: &ast::Expression,
         dft: &ast::Expression,
-        mm: &mut MemoryManager,
-        target_temp: Option<ir::Temporary>,
+        mut state: LoweringState,
     ) -> LoweringState {
+        let result_type = self.lower_value_type(*lookup_expr.id());
+
         if let ExpressionKind::Lookup(instance, offset, op) = &lookup_expr.kind {
-            // Translate look-up, add default value.
             let target_ref = self.extract_target_from_lookup(&lookup_expr.kind);
 
-            // Compute all arguments.
-            let mut state = LoweringState::empty();
-            let mut lookup_args = Vec::new();
-            for arg in &instance.arguments {
-                state = state.merge_with(self.lower_subexpression(arg.as_ref(), mm, None));
-                lookup_args.push(state.get_target());
-            }
+            // Compute the default value first.
+            state = self.lower_subexpression(dft, state);
 
-            // Compute default value. Write it in the target temp to avoid unnecessary copying later.
-            state = state.merge_with(self.lower_subexpression(dft, mm, target_temp));
+            let default_type = state.result_type();
+            if default_type != &result_type {
+                let conversion_source = state.get_target();
+                let conversion_target = state.temp_for_type(&result_type);
+                state = self.convert_temp(state, conversion_source, conversion_target);
+            }
             let default_temp = state.get_target();
+
+            // Compute all arguments.
+            let (mut state, lookup_args) = self.lower_expression_list(&instance.arguments, state);
 
             let op = if op.is_some() {
                 let window_ref = self.lower_window(&lookup_expr);
@@ -561,15 +610,19 @@ impl<'a> Lowering<'a> {
             };
 
             let lookup_type = self.lower_value_type(lookup_expr._id);
-            let lookup_result = target_temp.unwrap_or_else(|| mm.temp_for_type(&lookup_type));
             let lookup_stmt = ir::Statement {
-                target: lookup_result,
+                target: state.temp_for_type(&lookup_type),
                 op,
                 args: vec![default_temp],
             };
-            let lookup_state =
-                LoweringState::new(vec![lookup_stmt], hashmap![lookup_result => lookup_type]);
-            state.merge_with(lookup_state)
+            state = state.with_stmt(lookup_stmt);
+
+            if lookup_type != result_type {
+                let conversion_source = state.get_target();
+                let conversion_target = state.temp_for_type(&result_type);
+                state = self.convert_temp(state, conversion_source, conversion_target);
+            }
+            state
         } else {
             panic!("Called `lower_lookup_expression` on a non-lookup expression.");
         }
@@ -757,64 +810,92 @@ impl<'a> Lowering<'a> {
     }
 }
 
-#[derive(Debug)]
-struct LoweringState {
-    stmts: Vec<ir::Statement>,
-    temps: HashMap<ir::Temporary, ir::Type>,
-}
+mod lowering_state {
 
-impl LoweringState {
-    fn new(stmts: Vec<ir::Statement>, temps: HashMap<ir::Temporary, ir::Type>) -> LoweringState {
-        LoweringState { stmts, temps }
+    use crate::ir;
+    use std::collections::HashMap;
+
+    #[derive(Debug)]
+    pub(crate) struct LoweringState {
+        stmts: Vec<ir::Statement>,
+        temps: HashMap<ir::Temporary, ir::Type>,
+        next_temp: u32,
     }
 
-    fn get_target(&self) -> ir::Temporary {
-        self.stmts
-            .last()
-            .expect("A expression needs to return a value.")
-            .target
-    }
+    impl LoweringState {
+        pub(crate) fn result_type(&self) -> &ir::Type {
+            &self.temps[&self.get_target()]
+        }
 
-    fn merge_with(mut self, other: LoweringState) -> LoweringState {
-        let mut map = HashMap::new();
-        for (key, ty) in self.temps.iter().chain(other.temps.iter()) {
-            if let Some(conflict) = map.get(key) {
-                panic!(
-                    "Bug: Cannot assign first type {:?} and then {:?} to the same temporary {:?}.",
-                    conflict, ty, key
-                );
-            } else {
-                map.insert(*key, ty.clone());
+        pub(crate) fn get_target(&self) -> ir::Temporary {
+            self.stmts
+                .last()
+                .expect("A expression needs to return a value.")
+                .target
+        }
+
+        pub(crate) fn branch(&self) -> LoweringState {
+            LoweringState {
+                stmts: Vec::new(),
+                temps: self.temps.clone(),
+                next_temp: self.next_temp,
             }
         }
-        // Enter new values.
-        self.temps = map;
-        self.stmts.extend(other.stmts);
-        self
-    }
 
-    fn merge_temps(self, other: HashMap<ir::Temporary, ir::Type>) -> LoweringState {
-        self.merge_with(LoweringState::new(Vec::new(), other))
-    }
+        pub(crate) fn with_temps(
+            mut self,
+            others: HashMap<ir::Temporary, ir::Type>,
+        ) -> LoweringState {
+            others
+                .iter()
+                .for_each(|(temp, ty)| self.add_temp(*temp, ty));
+            self
+        }
 
-    fn empty() -> LoweringState {
-        LoweringState::new(Vec::new(), HashMap::new())
-    }
-}
+        pub(crate) fn temp_for_type(&mut self, ty: &ir::Type) -> ir::Temporary {
+            let temp = ir::Temporary(self.next_temp);
+            self.next_temp += 1;
+            self.add_temp(temp, ty);
+            temp
+        }
 
-/// Manages memory for evaluation of expressions.
-struct MemoryManager {
-    next_temp: u32,
-}
+        fn add_temp(&mut self, temp: ir::Temporary, ty: &ir::Type) {
+            assert!(self.temps.get(&temp).is_none());
+            self.temps.insert(temp, ty.clone());
+        }
 
-impl MemoryManager {
-    fn new() -> MemoryManager {
-        MemoryManager { next_temp: 0u32 }
-    }
+        pub(crate) fn with_stmt(mut self, stmt: ir::Statement) -> LoweringState {
+            self.stmts.push(stmt);
+            self
+        }
 
-    fn temp_for_type(&mut self, _t: &ir::Type) -> ir::Temporary {
-        self.next_temp += 1;
-        ir::Temporary(self.next_temp - 1)
+        pub(crate) fn empty() -> LoweringState {
+            LoweringState {
+                stmts: Vec::new(),
+                temps: HashMap::new(),
+                next_temp: 0,
+            }
+        }
+
+        pub(crate) fn destruct(self) -> (Vec<ir::Statement>, HashMap<ir::Temporary, ir::Type>) {
+            (self.stmts, self.temps)
+        }
+
+        pub(crate) fn finalize(self) -> (Vec<ir::Statement>, Vec<ir::Type>) {
+            let mut temps: Vec<(ir::Temporary, ir::Type)> = self.temps.into_iter().collect();
+            temps.sort_unstable_by_key(|(temp, _)| temp.0);
+            // Make sure every temporary has its type.
+            // Should not be necessary, but this is a crucial property, so better safe than sorry.
+            temps.iter().enumerate().for_each(|(i, (temp, _))| {
+                assert_eq!(
+                    i, temp.0 as usize,
+                    "Temporary {} does not have a type! Found type for Temporary {} instead.",
+                    i, temp.0
+                )
+            });
+            let temporaries = temps.into_iter().map(|(_, ty)| ty).collect();
+            (self.stmts, temporaries)
+        }
     }
 }
 
