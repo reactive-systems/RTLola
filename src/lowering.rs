@@ -503,13 +503,43 @@ impl<'a> Lowering<'a> {
                 state.with_stmt(stmt)
             }
             ExpressionKind::Function(name, _, args) => {
+                use crate::ty::ValueTy;
                 let ir_kind = name.name.clone();
-                let lowered_list = self.lower_expression_list(args, state);
-                state = lowered_list.0;
+
+                let req_arg_types = self.tt.get_func_arg_types(*expr.id());
+                let args = if let Declaration::Func(fd) = self.get_decl(*expr.id()) {
+                    fd.parameters
+                        .iter()
+                        .map(|param| {
+                            if let ValueTy::Param(i, _) = param {
+                                i
+                            } else {
+                                panic!()
+                            }
+                        })
+                        .map(|i| (&req_arg_types[*i as usize]).into())
+                        .zip(args.iter().map(|e| e.as_ref()))
+                        .collect::<Vec<(ir::Type, &ast::Expression)>>()
+                } else {
+                    panic!()
+                };
+
+                let mut arg_temps = Vec::new();
+                for (req_type, arg_expr) in args {
+                    state = self.lower_subexpression(arg_expr, state);
+                    let actual_type = state.result_type();
+                    if actual_type != &req_type {
+                        let conv_src = state.get_target();
+                        let conv_tar = state.temp_for_type(&req_type);
+                        state = self.convert_temp(state, conv_src, conv_tar);
+                    }
+                    arg_temps.push(state.get_target())
+                }
+
                 let stmt = Statement {
                     target: state.temp_for_type(&result_type),
                     op: Op::Function(ir_kind),
-                    args: lowered_list.1,
+                    args: arg_temps,
                 };
                 state.with_stmt(stmt)
             }
@@ -1030,6 +1060,42 @@ mod tests {
         for ty in &expr.temporaries {
             assert_eq!(ty, &stream.ty);
         }
+    }
+
+    #[test]
+    fn lower_expr_with_widening() {
+        let ir = spec_to_ir("input a: UInt8 output b: UInt16 := a");
+        let stream = &ir.outputs[0];
+
+        let expr = &stream.expr;
+        let stmts = &expr.stmts;
+        assert_eq!(stmts.len(), 2);
+
+        let lu_target = match &stmts[0] {
+            Statement {
+                target,
+                op: Op::SyncStreamLookup(_),
+                args,
+            } if args.is_empty() => *target,
+            _ => panic!("Incorrect stream lookup."),
+        };
+        let res_target = match &stmts[1] {
+            Statement {
+                target,
+                op: Op::Convert,
+                args,
+            } if args.len() == 1 => {
+                assert_eq!(args[0], lu_target);
+                *target
+            }
+            _ => panic!(),
+        };
+
+        let lu_type = Type::UInt(crate::ty::UIntTy::U8);
+        let result_type = Type::UInt(crate::ty::UIntTy::U16);
+
+        assert_eq!(lu_type, expr.temporaries[lu_target.0 as usize]);
+        assert_eq!(result_type, expr.temporaries[res_target.0 as usize]);
     }
 
     #[test]
