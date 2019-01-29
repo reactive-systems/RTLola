@@ -35,7 +35,7 @@ impl Evaluation {
     }
 
     fn type_of(&self, temp: Temporary, inst: &OutInstance) -> &Type {
-        &self.exprs[inst.0].temporaries[temp.0 as usize]
+        &self.exprs[inst.0].temporaries[temp.0]
     }
 
     fn get_signed(&self, temp: Temporary, inst: &OutInstance) -> i128 {
@@ -131,9 +131,27 @@ impl Evaluation {
                 };
                 self.write(stmt.target, res, inst);
             },
-            Op::Function(_) => unimplemented!(),
-            Op::WindowLookup(_) => unimplemented!(),
-            Op::Tuple => unimplemented!(),
+            Op::WindowLookup(window_ref) => {
+                let window: Window = (window_ref.ix, Vec::new());
+                let ws = self.global_store.get_window(window);
+                let res = ws.get_value();
+                self.write(stmt.target, res, inst);
+            }
+            Op::Function(name) => {
+                let arg = self.get(stmt.args[0], inst);
+                if let Value::Float(f) = arg {
+                    let res = Value::Float(match name.as_ref() {
+                        "sqrt" => f.sqrt(),
+                        "sin" => f.sin(),
+                        "cos" => f.cos(),
+                        _ => panic!("Unknown function!")
+                    });
+                    self.write(stmt.target, res, inst);
+                } else {
+                    panic!();
+                }
+            }
+            Op::Tuple => unimplemented!("Who needs tuples, anyway?"),
         }
     }
 
