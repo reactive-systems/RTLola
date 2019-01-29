@@ -15,6 +15,7 @@ use std::rc::Rc;
 use std::fmt;
 use self::event_driven_manager::EventEvaluation;
 use self::time_driven_manager::TimeEvaluation;
+use self::evaluation::Evaluation;
 
 pub struct Evaluator {
     /// Handles all kind of output behavior according to config.
@@ -22,6 +23,8 @@ pub struct Evaluator {
 
     /// Intermediate representation of input Lola specification.
     spec: LolaIR,
+
+    evaluation: Evaluation,
 }
 
 impl lola_parser::LolaBackend for Evaluator {
@@ -55,12 +58,18 @@ impl Evaluator {
             let time_manager = TimeDrivenManager::setup(ir_clone_2, cfg_clone_2);
             time_manager.start(Some(start_time), work_tx, eof_rx)
         });
-        // Either it will never terminate, or it will run out of data.
-        event.join().expect("Couldn't join event based thread.");
-        // Terminate time as well.
-        eof_tx.send(true).expect("Cannot stop time based thread.");
 
-        std::process::exit(1)
+        let e = Evaluation::new(&ir);
+        let mut evaluator = Evaluator{
+            output_handler: OutputHandler::new(&config),
+            spec: ir,
+            evaluation: e,
+        };
+
+        work_rx.iter().map(|wi| evaluator.eval_workitem(wi));
+
+        panic!("Both producers hung up!");
+
     }
 
     fn eval_workitem(&mut self, wi: WorkItem) {
