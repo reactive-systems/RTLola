@@ -48,3 +48,4 @@ pub fn parse(spec_str: &str) -> LolaIR {
 
 // Re-export on the root level
 pub use crate::ir::*;
+pub use crate::ty::{FloatTy, IntTy, UIntTy};

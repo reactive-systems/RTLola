@@ -151,7 +151,13 @@ pub struct Expression {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
-pub struct Temporary(pub u32);
+pub struct Temporary(pub usize);
+
+impl From<u32> for Temporary {
+    fn from(u: u32) -> Temporary {
+        Temporary(u as usize)
+    }
+}
 
 /// A statement is of the form `target = op <arguments>`
 #[derive(Debug, PartialEq, Clone)]

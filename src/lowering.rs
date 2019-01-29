@@ -845,7 +845,7 @@ mod lowering_state {
         }
 
         pub(crate) fn temp_for_type(&mut self, ty: &ir::Type) -> ir::Temporary {
-            let temp = ir::Temporary(self.next_temp);
+            let temp = ir::Temporary::from(self.next_temp);
             self.next_temp += 1;
             self.add_temp(temp, ty);
             temp
