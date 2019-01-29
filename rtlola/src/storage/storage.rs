@@ -1,7 +1,8 @@
 
+use crate::evaluator::{OutInstance, Window};
+use super::Value;
+
 use lola_parser::{LolaIR, StreamReference, Type, WindowOperation};
-use crate::evaluator::evaluation::value::Value;
-use crate::evaluator::evaluation::{OutInstance, Window};
 use std::time::SystemTime;
 
 pub(crate) struct GlobalStore {

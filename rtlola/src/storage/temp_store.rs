@@ -1,6 +1,6 @@
 
 use lola_parser::*;
-use crate::evaluator::evaluation::value::Value;
+use super::Value;
 
 pub(crate) struct TempStore {
     offsets: Vec<usize>,

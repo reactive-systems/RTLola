@@ -1,17 +1,12 @@
-mod temp_store;
-pub(crate) mod value;
-
-use self::temp_store::TempStore;
-use self::value::Value;
-use crate::evaluator::storage::{GlobalStore, InstanceStore};
 
 use lola_parser::*;
-use std::collections::HashMap;
+
+use crate::storage::{Value, TempStore, GlobalStore};
 
 pub(crate) type OutInstance = (usize, Vec<Value>);
 pub(crate) type Window = (usize, Vec<Value>);
 
-pub(crate) struct Evaluation {
+pub(crate) struct Evaluator {
     // Indexed by stream reference.
     temp_stores: Vec<TempStore>,
     // Indexed by stream reference.
@@ -19,12 +14,12 @@ pub(crate) struct Evaluation {
     global_store: GlobalStore,
 }
 
-impl Evaluation {
-    pub(crate) fn new(ir: &LolaIR) -> Evaluation {
+impl Evaluator {
+    pub(crate) fn new(ir: &LolaIR) -> Evaluator {
         let temp_stores = ir.outputs.iter().map(|o| TempStore::new(&o.expr)).collect();
         let global_store = GlobalStore::new(&ir);
         let exprs = ir.outputs.iter().map(|o| o.expr.clone()).collect();
-        Evaluation { temp_stores, exprs, global_store }
+        Evaluator { temp_stores, exprs, global_store }
     }
 
     pub(crate) fn eval_stream(&mut self, expr: &Expression, inst: OutInstance) {

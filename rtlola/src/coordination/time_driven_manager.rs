@@ -1,14 +1,16 @@
-use crate::evaluator::io_handler::OutputHandler;
-use crate::util;
-use crate::evaluator::config::EvalConfig;
-use crate::evaluator::{EvaluationError, WorkItem};
+
+use super::WorkItem;
+use crate::basics::{ EvalConfig, OutputHandler };
+use crate::basics::util;
+
 use std::sync::mpsc::{Receiver, Sender};
 use lola_parser::{LolaIR, StreamReference};
 use std::cmp::Ordering;
-use std::rc::Rc;
 use std::time::{Duration, SystemTime};
 
 const NANOS_PER_SEC: u128 = 1_000_000_000;
+
+pub(crate) type TimeEvaluation = Vec<StreamReference>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct TDMState {
@@ -312,10 +314,9 @@ impl TimeDrivenManager {
     }
 }
 
-pub(crate) type TimeEvaluation = Vec<StreamReference>;
-
 mod tests {
-    use crate::evaluator::{io_handler::OutputHandler, time_driven_manager::*};
+    use super::*;
+    use crate::basics::{EvalConfig, OutputHandler};
     use lola_parser::LolaIR;
     use std::time::{Duration, SystemTime};
     use std::rc::Rc;

@@ -1,4 +1,5 @@
 use std::cmp::Ordering;
+use super::{InputSource, OutputChannel};
 
 #[derive(Clone, Debug)]
 pub struct EvalConfig {
@@ -45,19 +46,6 @@ impl Ord for Verbosity {
     fn cmp(&self, other: &Verbosity) -> Ordering {
         self.as_num().cmp(&other.as_num())
     }
-}
-
-#[derive(Debug, Clone)]
-pub enum OutputChannel {
-    StdOut,
-    StdErr,
-    File(String),
-}
-
-#[derive(Debug, Clone)]
-pub enum InputSource {
-    StdIn,
-    File(String),
 }
 
 impl EvalConfig {

@@ -1,6 +1,8 @@
 
 use std::ops;
 
+use self::Value::*;
+
 #[derive(Debug, PartialEq, PartialOrd)]
 pub(crate) enum Value {
     Unsigned(u128),
@@ -9,8 +11,6 @@ pub(crate) enum Value {
     Bool(bool),
     Str(String),
 }
-
-use crate::evaluator::evaluation::value::Value::*;
 
 impl ops::Add for Value {
     type Output = Value;

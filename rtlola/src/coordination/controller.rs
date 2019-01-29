@@ -1,39 +1,33 @@
-pub(crate) mod config;
-mod event_driven_manager;
-mod io_handler;
-mod time_driven_manager;
-mod evaluation;
-mod storage;
 
 use std::thread;
 use std::sync::mpsc;
-use crate::evaluator::{
-    config::*, event_driven_manager::EventDrivenManager, io_handler::*, time_driven_manager::TimeDrivenManager,
-};
 use lola_parser::*;
-use std::rc::Rc;
 use std::fmt;
-use self::event_driven_manager::EventEvaluation;
-use self::time_driven_manager::TimeEvaluation;
-use self::evaluation::Evaluation;
 
-pub struct Evaluator {
+use crate::basics::OutputHandler;
+use crate::basics::EvalConfig;
+use crate::evaluator::Evaluator;
+
+use super::time_driven_manager::{ TimeDrivenManager, TimeEvaluation };
+use super::event_driven_manager::{ EventDrivenManager, EventEvaluation };
+
+pub struct Controller {
     /// Handles all kind of output behavior according to config.
     output_handler: OutputHandler,
 
     /// Intermediate representation of input Lola specification.
     spec: LolaIR,
 
-    evaluation: Evaluation,
+    evaluator: Evaluator,
 }
 
-impl lola_parser::LolaBackend for Evaluator {
+impl lola_parser::LolaBackend for Controller {
     fn supported_feature_flags() -> Vec<lola_parser::FeatureFlag> {
         unimplemented!()
     }
 }
 
-impl Evaluator {
+impl Controller {
 
     /// Starts the evaluation process, i.e. periodically computes outputs for time-driven streams
     /// and fetches/expects events from specified input source.
@@ -59,14 +53,14 @@ impl Evaluator {
             time_manager.start(Some(start_time), work_tx, eof_rx)
         });
 
-        let e = Evaluation::new(&ir);
-        let mut evaluator = Evaluator{
+        let e = Evaluator::new(&ir);
+        let mut ctrl = Controller{
             output_handler: OutputHandler::new(&config),
             spec: ir,
-            evaluation: e,
+            evaluator: e,
         };
 
-        work_rx.iter().map(|wi| evaluator.eval_workitem(wi));
+        work_rx.iter().map(|wi| ctrl.eval_workitem(wi));
 
         panic!("Both producers hung up!");
 

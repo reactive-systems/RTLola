@@ -1,6 +1,19 @@
-use crate::evaluator::config::{EvalConfig, Verbosity, OutputChannel};
+use super::{Verbosity, EvalConfig};
 use std::io::{stdout, stderr, Write};
 use std::fs::File;
+
+#[derive(Debug, Clone)]
+pub enum OutputChannel {
+    StdOut,
+    StdErr,
+    File(String),
+}
+
+#[derive(Debug, Clone)]
+pub enum InputSource {
+    StdIn,
+    File(String),
+}
 
 pub(crate) struct OutputHandler {
     pub(crate) verbosity: Verbosity,
@@ -42,7 +55,7 @@ impl OutputHandler {
     }
 
     fn print(&self, msg: String) {
-        use crate::evaluator::config::OutputChannel;
+        use crate::basics::OutputChannel;
         let _ = match self.channel {
             OutputChannel::StdOut => stdout().write(msg.as_bytes()),
             OutputChannel::StdErr => stderr().write(msg.as_bytes()),

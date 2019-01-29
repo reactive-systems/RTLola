@@ -1,9 +1,8 @@
-use crate::evaluator::io_handler::OutputHandler;
-use crate::evaluator::{WorkItem, EvaluationError};
-use crate::evaluator::config::EvalConfig;
+use crate::basics::{ OutputHandler, EvalConfig };
+use crate::coordination::WorkItem;
+
 use lola_parser::{LolaIR, Stream, StreamReference};
 use std::ops::AddAssign;
-use std::rc::Rc;
 use std::sync::mpsc::Sender;
 
 /// Represents the current cycle count for event-driven events.
