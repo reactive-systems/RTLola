@@ -1,11 +1,13 @@
-#[allow(dead_code)]
+use std::cmp::Ordering;
+
+#[derive(Clone, Debug)]
 pub struct EvalConfig {
-    source: InputSource,
-    verbosity: Verbosity,
-    output_channel: OutputChannel,
+    pub source: InputSource,
+    pub verbosity: Verbosity,
+    pub output_channel: OutputChannel,
 }
 
-#[allow(dead_code)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Verbosity {
     /// Prints fine-grained debug information. Not suitable for production.
     Debug,
@@ -21,74 +23,71 @@ pub enum Verbosity {
     Silent,
 }
 
-#[allow(dead_code)]
+impl Verbosity {
+    fn as_num(self) -> u8 {
+        match self {
+            Verbosity::Debug => 4,
+            Verbosity::Outputs => 3,
+            Verbosity::Triggers => 2,
+            Verbosity::WarningsOnly => 1,
+            Verbosity::Silent => 0,
+        }
+    }
+}
+
+impl PartialOrd for Verbosity {
+    fn partial_cmp(&self, other: &Verbosity) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Verbosity {
+    fn cmp(&self, other: &Verbosity) -> Ordering {
+        self.as_num().cmp(&other.as_num())
+    }
+}
+
+#[derive(Debug, Clone)]
 pub enum OutputChannel {
     StdOut,
     StdErr,
     File(String),
 }
 
-#[allow(dead_code)]
+#[derive(Debug, Clone)]
 pub enum InputSource {
     StdIn,
     File(String),
 }
 
-#[allow(dead_code)]
 impl EvalConfig {
-    fn print_outputs(mut self) -> Self {
-        self.verbosity = Verbosity::Outputs;
-        self
+
+    pub fn new(source: Option<String>, verbosity: Verbosity, output: OutputChannel) -> Self {
+        EvalConfig {
+            source: source.map(InputSource::File).unwrap_or(InputSource::StdIn),
+            verbosity,
+            output_channel: output,
+        }
     }
 
-    fn debug_mode(mut self) -> Self {
-        self.verbosity = Verbosity::Debug;
-        self
+    pub fn debug() -> Self {
+        let mut cfg = EvalConfig::default();
+        cfg.verbosity = Verbosity::Debug;
+        cfg
     }
 
-    fn print_triggers(mut self) -> Self {
-        self.verbosity = Verbosity::Triggers;
-        self
+    pub fn release(file: Option<String>, output: OutputChannel) -> Self {
+        EvalConfig::new(file, Verbosity::Triggers, output)
     }
 
-    fn silent_mode(mut self) -> Self {
-        self.verbosity = Verbosity::Silent;
-        self
-    }
-
-    fn print_warnings(mut self) -> Self {
-        self.verbosity = Verbosity::WarningsOnly;
-        self
-    }
-
-    fn with_input_file(mut self, path: &str) -> Self {
-        self.source = InputSource::File(String::from(path));
-        self
-    }
-
-    fn with_std_input(mut self) -> Self {
-        self.source = InputSource::StdIn;
-        self
-    }
-
-    fn with_std_out(mut self) -> Self {
-        self.output_channel = OutputChannel::StdOut;
-        self
-    }
-
-    fn with_std_err(mut self) -> Self {
-        self.output_channel = OutputChannel::StdErr;
-        self
-    }
-
-    fn with_output_file(mut self, path: &str) -> Self {
-        self.output_channel = OutputChannel::File(String::from(path));
-        self
-    }
 }
 
 impl Default for EvalConfig {
     fn default() -> EvalConfig {
-        EvalConfig { source: InputSource::StdIn, verbosity: Verbosity::Triggers, output_channel: OutputChannel::StdOut }
+        EvalConfig {
+            source: InputSource::StdIn,
+            verbosity: Verbosity::Triggers,
+            output_channel: OutputChannel::StdOut
+        }
     }
 }

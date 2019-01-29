@@ -1,5 +1,8 @@
-use crate::evaluator::io_handler::{OutputHandler, OutputKind};
+use crate::evaluator::io_handler::OutputHandler;
 use crate::util;
+use crate::evaluator::config::EvalConfig;
+use crate::evaluator::{EvaluationError, WorkItem};
+use std::sync::mpsc::{Receiver, Sender};
 use lola_parser::{LolaIR, StreamReference};
 use std::cmp::Ordering;
 use std::rc::Rc;
@@ -25,7 +28,7 @@ enum StateCompare {
 /// Represents the current cycle count for time-driven events. `u128` is sufficient to represent
 /// 10^22 years of runtime for evaluation cycles that are 1ns apart.
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
-pub struct TimeDrivenCycleCount(u128);
+pub(crate) struct TimeDrivenCycleCount(u128);
 
 impl From<u128> for TimeDrivenCycleCount {
     fn from(i: u128) -> TimeDrivenCycleCount {
@@ -39,17 +42,20 @@ struct Deadline {
     due: Vec<StreamReference>,
 }
 
-pub struct TimeDrivenManager {
+pub(crate) struct TimeDrivenManager {
     last_state: Option<TDMState>,
     deadlines: Vec<Deadline>,
     hyper_period: Duration,
     start_time: Option<SystemTime>,
-    handler: Rc<OutputHandler>,
+    handler: OutputHandler,
 }
 
 impl TimeDrivenManager {
     /// Creates a new TimeDrivenManager managing time-driven output streams.
-    pub fn new(ir: &LolaIR, handler: Rc<OutputHandler>) -> TimeDrivenManager {
+    pub(crate) fn setup(ir: LolaIR, config: EvalConfig) -> TimeDrivenManager {
+
+        let handler = OutputHandler::new(&config);
+
         if ir.time_driven.is_empty() {
             return TimeDrivenManager {
                 last_state: None,
@@ -94,8 +100,9 @@ impl TimeDrivenManager {
         TimeDrivenManager { last_state: None, deadlines, hyper_period, start_time: None, handler }
     }
 
-    pub fn start(&mut self, time: Option<SystemTime>) {
-        self.start_time = time.or(Some(SystemTime::now()))
+    pub fn start(mut self, time: Option<SystemTime>, work_chan: Sender<WorkItem>, stop_chan: Receiver<bool>) -> ! {
+        self.start_time = time.or(Some(SystemTime::now()));
+        unimplemented!()
     }
 
     /// Determines how long the current thread can wait until the next time-based evaluation cycle
@@ -104,7 +111,7 @@ impl TimeDrivenManager {
     ///
     /// *Returns:* `WaitingTime` _t_ and `TimeDrivenCycleCount` _i_ where _i_ nanoseconds can pass
     /// until the _i_th time-driven evaluation cycle needs to be started.
-    pub fn wait_for(&self, time: Option<SystemTime>) -> (Duration, TimeDrivenCycleCount) {
+    fn wait_for(&self, time: Option<SystemTime>) -> (Duration, TimeDrivenCycleCount) {
         let time = time.unwrap_or_else(SystemTime::now);
         let current_state = self.current_state(time);
         if let Some(last_state) = self.last_state {
@@ -130,7 +137,7 @@ impl TimeDrivenManager {
 
     /// Returns all time-driven streams that are due to be extended in time-driven evaluation
     /// cycle `c`. The returned collection is ordered according to the evaluation order.
-    pub fn due_streams(&mut self, time: Option<SystemTime>) -> Option<&Vec<StreamReference>> {
+    fn due_streams(&mut self, time: Option<SystemTime>) -> Option<&Vec<StreamReference>> {
         let time = time.unwrap_or_else(SystemTime::now);
         let state = self.current_state(time);
         if let Some(old_state) = self.last_state {
@@ -154,7 +161,7 @@ impl TimeDrivenManager {
             panic!("Missed {} cycles and {} deadlines.", cycles, deadlines);
         } else {
             // Otherwise, inform the output handler and carry on.
-            self.handler.emit(OutputKind::RuntimeWarning, || {
+            self.handler.runtime_warning(|| {
                 format!("Warning: Pressure exceeds capacity! missed {} cycles and {} deadlines", cycles, deadlines)
             })
         }
@@ -166,7 +173,7 @@ impl TimeDrivenManager {
             panic!("Called `TimeDrivenManager::wait_for` too early; no deadline has passed.");
         } else {
             // Otherwise, inform the output handler and carry on.
-            self.handler.emit(OutputKind::Debug, || {
+            self.handler.debug(|| {
                 String::from("Warning: Called `TimeDrivenManager::wait_for` twice for the same deadline.")
             })
         }
@@ -305,12 +312,16 @@ impl TimeDrivenManager {
     }
 }
 
+pub(crate) type TimeEvaluation = Vec<StreamReference>;
+
 mod tests {
     use crate::evaluator::{io_handler::OutputHandler, time_driven_manager::*};
     use lola_parser::LolaIR;
+    use std::time::{Duration, SystemTime};
+    use std::rc::Rc;
 
     fn to_ir(spec: &str) -> LolaIR {
-        unimplemented!("We need some interface from the parser.")
+        lola_parser::parse(spec)
     }
 
     #[test]
@@ -356,7 +367,7 @@ mod tests {
     }
     #[test]
     fn test_compare_states() {
-        let handler = Rc::new(OutputHandler::default());
+        let handler = OutputHandler::default();
         fn dl(s: u64, n: u32) -> Deadline {
             Deadline { pause: Duration::new(s, n), due: Vec::new() }
         }

@@ -1,67 +1,58 @@
-use crate::evaluator::config::{EvalConfig, Verbosity};
+use crate::evaluator::config::{EvalConfig, Verbosity, OutputChannel};
+use std::io::{stdout, stderr, Write};
+use std::fs::File;
 
-pub struct OutputHandler {
-    verbosity: Verbosity,
+pub(crate) struct OutputHandler {
+    pub(crate) verbosity: Verbosity,
+    channel: OutputChannel,
+    file: Option<File>
 }
 
 impl OutputHandler {
-    pub fn new(config: &EvalConfig) -> OutputHandler {
-        unimplemented!()
+    pub(crate) fn new(config: &EvalConfig) -> OutputHandler {
+        OutputHandler {
+            verbosity: config.verbosity,
+            channel: config.output_channel.clone(),
+            file: None,
+        }
+    }
+
+    pub(crate) fn runtime_warning<F, T: Into<String>>(&self, msg: F) where F: FnOnce() -> T {
+        self.emit(Verbosity::WarningsOnly, msg);
+    }
+
+    pub(crate) fn trigger<F, T: Into<String>>(&self, msg: F) where F: FnOnce() -> T {
+        self.emit(Verbosity::Triggers, msg);
+    }
+
+    pub(crate) fn debug<F, T: Into<String>>(&self, msg: F) where F: FnOnce() -> T {
+        self.emit(Verbosity::Debug, msg);
+    }
+
+    pub(crate) fn output<F, T: Into<String>>(&self, msg: F) where F: FnOnce() -> T {
+        self.emit(Verbosity::Outputs, msg);
     }
 
     /// Accepts a message and forwards it to the appropriate output channel.
     /// If the configuration prohibits printing the message, `msg` is never called.
-    pub fn emit<T>(&self, kind: OutputKind, msg: T)
-    where
-        T: FnOnce() -> String,
-    {
-        match self.verbosity {
-            Verbosity::Debug => self.print(msg()),
-            Verbosity::Outputs => match kind {
-                OutputKind::Trigger | OutputKind::Output | OutputKind::RuntimeWarning => self.print(msg()),
-                OutputKind::Debug => {}
-            },
-            Verbosity::Triggers => match kind {
-                OutputKind::Trigger | OutputKind::RuntimeWarning => self.print(msg()),
-                OutputKind::Debug | OutputKind::Output => {}
-            },
-            Verbosity::WarningsOnly => match kind {
-                OutputKind::RuntimeWarning => self.print(msg()),
-                OutputKind::Output | OutputKind::Debug | OutputKind::Trigger => {}
-            },
-            Verbosity::Silent => {}
+    fn emit<F, T: Into<String>>(&self, kind: Verbosity, msg: F) where F: FnOnce() -> T, {
+        if kind >= self.verbosity {
+            self.print(msg().into());
         }
     }
 
     fn print(&self, msg: String) {
-        unimplemented!()
+        use crate::evaluator::config::OutputChannel;
+        let _ = match self.channel {
+            OutputChannel::StdOut => stdout().write(msg.as_bytes()),
+            OutputChannel::StdErr => stderr().write(msg.as_bytes()),
+            OutputChannel::File(_) => self.file.as_ref().unwrap().write(msg.as_bytes()),
+        }; // TODO: Decide how to handle the result.
     }
 }
 
 impl Default for OutputHandler {
     fn default() -> OutputHandler {
-        OutputHandler { verbosity: Verbosity::WarningsOnly }
-    }
-}
-
-#[allow(dead_code)]
-#[derive(PartialEq, Eq, Debug, Clone, Copy)]
-pub enum OutputKind {
-    /// Information about trigger events.
-    Trigger,
-    /// Information about the values of output streams.
-    Output,
-    /// Fine-grained debug information.
-    Debug,
-    /// Warning for problems occurring during runtime such as too high pressure,
-    /// invalid inputs, skipped evaluation steps, or high memory consumption.
-    RuntimeWarning,
-}
-
-pub struct InputHandler {}
-
-impl InputHandler {
-    pub fn new(config: &EvalConfig) -> InputHandler {
-        unimplemented!()
+        OutputHandler::new(&EvalConfig::default())
     }
 }

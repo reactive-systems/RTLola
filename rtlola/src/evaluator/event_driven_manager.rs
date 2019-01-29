@@ -1,11 +1,18 @@
 use crate::evaluator::io_handler::OutputHandler;
+use crate::evaluator::{WorkItem, EvaluationError};
+use crate::evaluator::config::EvalConfig;
 use lola_parser::{LolaIR, Stream, StreamReference};
 use std::ops::AddAssign;
 use std::rc::Rc;
+use std::sync::mpsc::Sender;
 
 /// Represents the current cycle count for event-driven events.
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
-pub struct EventDrivenCycleCount(u128);
+struct EventDrivenCycleCount(u128);
+
+type EDCC = EventDrivenCycleCount;
+
+type EDM = EventDrivenManager;
 
 impl From<u128> for EventDrivenCycleCount {
     fn from(i: u128) -> EventDrivenCycleCount {
@@ -23,14 +30,17 @@ pub struct EventDrivenManager {
     current_cycle: EventDrivenCycleCount,
     layer_counter: usize,
     layers: Vec<Vec<StreamReference>>,
-    handler: Rc<OutputHandler>,
+    handler: OutputHandler,
 }
 
 impl EventDrivenManager {
     /// Creates a new EventDrivenManager managing event-driven output streams.
-    pub fn new(ir: &LolaIR, handler: Rc<OutputHandler>) -> EventDrivenManager {
+    pub(crate) fn setup(ir: LolaIR, config: EvalConfig) -> EventDrivenManager {
+
+        let handler = OutputHandler::new(&config);
+
         if ir.event_driven.is_empty() {
-            return EventDrivenManager { current_cycle: 0.into(), layer_counter: 0, layers: vec![Vec::new()], handler };
+            return EDM { current_cycle: 0.into(), layer_counter: 0, layers: vec![Vec::new()], handler };
         }
 
         // Zip eval layer with stream reference.
@@ -54,7 +64,11 @@ impl EventDrivenManager {
             layers[ix].push(stream)
         }
 
-        EventDrivenManager { current_cycle: 0.into(), layer_counter: 0, layers, handler }
+        EDM { current_cycle: 0.into(), layer_counter: 0, layers, handler }
+    }
+
+    pub(crate) fn start(self, work_queue: Sender<WorkItem>) -> ! {
+        unimplemented!()
     }
 
     fn check_layers(vec: &Vec<usize>) {
@@ -70,7 +84,7 @@ impl EventDrivenManager {
     /// the evaluation order for evaluation cycle `for_cycle`. Returns `None` if the evaluation
     /// cycle is over.
     /// `panic`s if the old cycle is not completed before the next one is requested.
-    pub fn next_evaluation_layer(&mut self, for_cycle: EventDrivenCycleCount) -> Option<&[StreamReference]> {
+    fn next_evaluation_layer(&mut self, for_cycle: EventDrivenCycleCount) -> Option<&[StreamReference]> {
         debug_assert_eq!(
             for_cycle, self.current_cycle,
             "Requested new evaluation cycle before completing the last one."
@@ -88,4 +102,9 @@ impl EventDrivenManager {
         self.layer_counter = 0;
         self.current_cycle += 1;
     }
+}
+
+pub(crate) struct EventEvaluation {
+    pub(crate) event: Vec<(StreamReference, String)>,
+    pub(crate) layers: Vec<Vec<StreamReference>>,
 }
