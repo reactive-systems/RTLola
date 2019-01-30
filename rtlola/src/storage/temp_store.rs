@@ -102,7 +102,7 @@ impl TempStore {
     }
 
     pub(crate) fn write_bool(&mut self, t: Temporary, v: bool) {
-        self.data[self.offsets[t.0 as usize]] = (v as u8)
+        self.data[self.offsets[t.0 as usize]] = v as u8
     }
 
     pub(crate) fn move_val(&mut self, src: Temporary, tar: Temporary) {

@@ -60,7 +60,7 @@ impl Controller {
             evaluator: e,
         };
 
-        work_rx.iter().map(|wi| ctrl.eval_workitem(wi));
+        let _ = work_rx.iter().map(|wi| ctrl.eval_workitem(wi));
 
         panic!("Both producers hung up!");
 
