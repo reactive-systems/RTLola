@@ -1,13 +1,15 @@
 
 use std::ops;
+use std::hash::{Hash, Hasher};
+use ordered_float::NotNaN;
 
 use self::Value::*;
 
-#[derive(Debug, PartialEq, PartialOrd)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Hash)]
 pub(crate) enum Value {
     Unsigned(u128),
     Signed(i128),
-    Float(f64),
+    Float(NotNaN<f64>),
     Bool(bool),
     Str(String),
 }
@@ -95,7 +97,7 @@ impl ops::BitAnd for Value {
 impl ops::Not for Value {
     type Output = Value;
     fn not(self) -> Value {
-        match (self) {
+        match self {
             Signed(v) => Signed(-v), // TODO Check
             Float(v) => Float(-v),
             Bool(v) => Bool(!v),

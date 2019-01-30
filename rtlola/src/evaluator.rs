@@ -5,6 +5,7 @@ use crate::storage::{Value, TempStore, GlobalStore};
 
 pub(crate) type OutInstance = (usize, Vec<Value>);
 pub(crate) type Window = (usize, Vec<Value>);
+use ordered_float::NotNaN;
 
 pub(crate) struct Evaluator {
     // Indexed by stream reference.
@@ -135,12 +136,13 @@ impl Evaluator {
             Op::Function(name) => {
                 let arg = self.get(stmt.args[0], inst);
                 if let Value::Float(f) = arg {
-                    let res = Value::Float(match name.as_ref() {
+                    let res = match name.as_ref() {
                         "sqrt" => f.sqrt(),
                         "sin" => f.sin(),
                         "cos" => f.cos(),
                         _ => panic!("Unknown function!")
-                    });
+                    };
+                    let res = Value::Float(NotNaN::new(res).expect(unimplemented!()));
                     self.write(stmt.target, res, inst);
                 } else {
                     panic!();
