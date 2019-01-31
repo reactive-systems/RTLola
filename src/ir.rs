@@ -334,6 +334,28 @@ pub enum StreamReference {
     OutRef(usize),
 }
 
+impl StreamReference {
+    pub fn out_ix(&self) -> usize {
+        match self {
+            StreamReference::InRef(_) => panic!(),
+            StreamReference::OutRef(ix) => *ix,
+        }
+    }
+
+    pub fn in_ix(&self) -> usize {
+        match self {
+            StreamReference::OutRef(_) => panic!(),
+            StreamReference::InRef(ix) => *ix,
+        }
+    }
+
+    pub fn ix_unchecked(&self) -> usize {
+        match self {
+            StreamReference::InRef(ix) | StreamReference::OutRef(ix) => *ix,
+        }
+    }
+}
+
 /// A trait for any kind of stream.
 pub trait Stream {
     fn eval_layer(&self) -> u32;
@@ -485,7 +507,7 @@ impl LolaIR {
 
 /// The size of a specific value in bytes.
 #[derive(Debug, Clone, Copy)]
-pub struct ValSize(u32); // Needs to be reasonable large for compound types.
+pub struct ValSize(pub u32); // Needs to be reasonable large for compound types.
 
 impl From<u8> for ValSize {
     fn from(val: u8) -> ValSize {
@@ -502,23 +524,23 @@ impl std::ops::Add for ValSize {
 
 impl Type {
     pub fn size(&self) -> Option<ValSize> {
-        unimplemented!();
-        /*match self {
-            Type::Primitive(a) => a.size(),
-            Type::Tuple(v) => v.iter().map(|x| x.size()).fold(Some(ValSize(0)), |val, i| {
-                if let Some(val) = val {
-                    i.map(|i| val + i)
-                } else {
-                    None
-                }
+        match self {
+            Type::Bool => Some(ValSize(1)),
+            Type::Int(IntTy::I8) => Some(ValSize(1)),
+            Type::Int(IntTy::I16) => Some(ValSize(2)),
+            Type::Int(IntTy::I32) => Some(ValSize(4)),
+            Type::Int(IntTy::I64) => Some(ValSize(8)),
+            Type::UInt(UIntTy::U8) => Some(ValSize(1)),
+            Type::UInt(UIntTy::U16) => Some(ValSize(2)),
+            Type::UInt(UIntTy::U32) => Some(ValSize(4)),
+            Type::UInt(UIntTy::U64) => Some(ValSize(8)),
+            Type::Float(FloatTy::F32) => Some(ValSize(4)),
+            Type::Float(FloatTy::F64) => Some(ValSize(8)),
+            Type::Option(_) => panic!("Should not be used directly!"),
+            Type::Tuple(t) => t.iter().map(Type::size).fold(Some(ValSize(0)), |acc, e| {
+                acc.and_then(|acc| e.map(|e| ValSize(e.0 + acc.0)))
             }),
-        }*/
-        /*match self {
-            PrimitiveType::Int(w) | PrimitiveType::UInt(w) | PrimitiveType::Float(w) => {
-                Some(ValSize::from(w))
-            }
-            PrimitiveType::String => None, // Strings do not have a a priori fixed value
-            PrimitiveType::Bool => Some(ValSize::from(1)),
-        }*/
+            Type::String => None,
+        }
     }
 }
