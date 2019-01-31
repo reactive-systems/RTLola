@@ -1,15 +1,15 @@
 
 use std::ops;
 use std::hash::{Hash, Hasher};
-use ordered_float::NotNaN;
+use ordered_float::NotNan;
 
 use self::Value::*;
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Hash)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Hash, Clone)]
 pub(crate) enum Value {
     Unsigned(u128),
     Signed(i128),
-    Float(NotNaN<f64>),
+    Float(NotNan<f64>),
     Bool(bool),
     Str(String),
 }

@@ -366,6 +366,7 @@ mod tests {
             assert_eq!(was, *expected, "Expected {}, but was {}.", expected, was);
         }
     }
+
     #[test]
     fn test_compare_states() {
         let handler = OutputHandler::default();

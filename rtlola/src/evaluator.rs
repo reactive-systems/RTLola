@@ -4,8 +4,10 @@ use lola_parser::*;
 use crate::storage::{Value, TempStore, GlobalStore};
 
 pub(crate) type OutInstance = (usize, Vec<Value>);
-pub(crate) type Window = (usize, Vec<Value>);
-use ordered_float::NotNaN;
+pub(crate) type Window = (usize, Vec<Value>, WindowOperation);
+use ordered_float::NotNan;
+
+use std::time::Instant;
 
 pub(crate) struct Evaluator {
     // Indexed by stream reference.
@@ -13,19 +15,22 @@ pub(crate) struct Evaluator {
     // Indexed by stream reference.
     exprs: Vec<Expression>,
     global_store: GlobalStore,
+    window_ops: Vec<WindowOperation>,
 }
 
 impl Evaluator {
-    pub(crate) fn new(ir: &LolaIR) -> Evaluator {
+    pub(crate) fn new(ir: &LolaIR, ts: Instant) -> Evaluator {
         let temp_stores = ir.outputs.iter().map(|o| TempStore::new(&o.expr)).collect();
-        let global_store = GlobalStore::new(&ir);
+        let global_store = GlobalStore::new(&ir, ts);
         let exprs = ir.outputs.iter().map(|o| o.expr.clone()).collect();
-        Evaluator { temp_stores, exprs, global_store }
+        let window_ops = ir.sliding_windows.iter().map(|w| w.op).collect();
+        Evaluator { temp_stores, exprs, global_store, window_ops }
     }
 
-    pub(crate) fn eval_stream(&mut self, expr: &Expression, inst: OutInstance) {
-        for stmt in &self.exprs[inst.0].stmts.clone() {
-            self.eval_stmt(stmt, &inst);
+    pub(crate) fn eval_stream(&mut self, inst: OutInstance, ts: Option<Instant>) {
+        let (ix, _) = inst;
+        for stmt in &self.exprs[ix].stmts.clone() {
+            self.eval_stmt(stmt, &inst, ts.unwrap_or_else(Instant::now));
         }
         // TODO: Put value in global store.
     }
@@ -54,7 +59,7 @@ impl Evaluator {
         self.temp_stores[inst.0].write_value(temp, value);
     }
 
-    fn eval_stmt(&mut self, stmt: &Statement, inst: &OutInstance) {
+    fn eval_stmt(&mut self, stmt: &Statement, inst: &OutInstance, ts: Instant) {
         match &stmt.op {
             Op::Convert | Op::Move => {
                 let arg = stmt.args[0];
@@ -68,7 +73,7 @@ impl Evaluator {
                     alternative
                 };
                 for stmt in cont_with {
-                    self.eval_stmt(stmt, inst);
+                    self.eval_stmt(stmt, inst, ts);
                 }
             },
             Op::LoadConstant(c) => {
@@ -117,7 +122,7 @@ impl Evaluator {
             }
             Op::SyncStreamLookup(tar_inst) => {
                 let res = self.perform_lookup(inst, tar_inst, 0);
-                self.write(stmt.target, res, inst);
+                self.write(stmt.target, res.unwrap(), inst); // Unwrap sound in sync lookups.
             },
             Op::StreamLookup { instance: tar_inst, offset } => {
                 let res = match offset {
@@ -125,12 +130,12 @@ impl Evaluator {
                     Offset::PastDiscreteOffset(u) => self.perform_lookup(inst, tar_inst, *u as i16),
                     Offset::PastRealTimeOffset(dur) => unimplemented!(),
                 };
-                self.write(stmt.target, res, inst);
+                let v = res.unwrap_or_else(|| self.get(stmt.args[0], inst));
+                self.write(stmt.target, v, inst);
             },
             Op::WindowLookup(window_ref) => {
-                let window: Window = (window_ref.ix, Vec::new());
-                let ws = self.global_store.get_window(window);
-                let res = ws.get_value();
+                let window: Window = (window_ref.ix, Vec::new(), self.window_ops[window_ref.ix]);
+                let res = self.global_store.get_window_mut(window).get_value(ts);
                 self.write(stmt.target, res, inst);
             }
             Op::Function(name) => {
@@ -142,7 +147,7 @@ impl Evaluator {
                         "cos" => f.cos(),
                         _ => panic!("Unknown function!")
                     };
-                    let res = Value::Float(NotNaN::new(res).expect(unimplemented!()));
+                    let res = Value::Float(NotNan::new(res).expect("TODO: Handle"));
                     self.write(stmt.target, res, inst);
                 } else {
                     panic!();
@@ -152,15 +157,15 @@ impl Evaluator {
         }
     }
 
-    fn perform_lookup(&self, inst: &OutInstance, tar_inst: &StreamInstance, offset: i16) -> Value {
+    fn perform_lookup(&self, inst: &OutInstance, tar_inst: &StreamInstance, offset: i16) -> Option<Value> {
         let is = match tar_inst.reference {
-            StreamReference::InRef(_) => self.global_store.get_in_instance(tar_inst.reference),
+            StreamReference::InRef(_) => Some(self.global_store.get_in_instance(tar_inst.reference)),
             StreamReference::OutRef(i) => {
                 let args = tar_inst.arguments.iter().map(|a| self.get(*a, inst)).collect();
                 let target: OutInstance = (i, args);
                 self.global_store.get_out_instance(target)
             }
         };
-        is.get_value(offset)
+        is.and_then(|is| is.get_value(offset))
     }
 }

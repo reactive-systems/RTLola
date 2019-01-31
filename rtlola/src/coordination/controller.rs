@@ -3,6 +3,7 @@ use std::thread;
 use std::sync::mpsc;
 use lola_parser::*;
 use std::fmt;
+use std::time::Instant;
 
 use crate::basics::OutputHandler;
 use crate::basics::EvalConfig;
@@ -31,7 +32,7 @@ impl Controller {
 
     /// Starts the evaluation process, i.e. periodically computes outputs for time-driven streams
     /// and fetches/expects events from specified input source.
-    pub fn evaluate(ir: LolaIR, config: EvalConfig) -> ! {
+    pub fn evaluate(ir: LolaIR, config: EvalConfig, ts: Option<Instant>) -> ! {
 
         let (work_tx, work_rx) = mpsc::channel();
         let (eof_tx, eof_rx) = mpsc::channel();
@@ -53,7 +54,7 @@ impl Controller {
             time_manager.start(Some(start_time), work_tx, eof_rx)
         });
 
-        let e = Evaluator::new(&ir);
+        let e = Evaluator::new(&ir, ts.unwrap_or_else(Instant::now));
         let mut ctrl = Controller{
             output_handler: OutputHandler::new(&config),
             spec: ir,
