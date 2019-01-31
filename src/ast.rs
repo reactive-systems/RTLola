@@ -187,7 +187,7 @@ impl Parenthesis {
     pub fn new(span: Span) -> Parenthesis {
         Parenthesis {
             id: NodeId::DUMMY,
-            span: span,
+            span,
         }
     }
 }
@@ -204,7 +204,7 @@ impl Type {
         Type {
             id: NodeId::DUMMY,
             kind: TypeKind::Simple(name),
-            span: span,
+            span,
         }
     }
 
@@ -212,7 +212,7 @@ impl Type {
         Type {
             id: NodeId::DUMMY,
             kind: TypeKind::Tuple(tuple),
-            span: span,
+            span,
         }
     }
 
@@ -254,7 +254,7 @@ impl Expression {
         Expression {
             id: NodeId::DUMMY,
             kind,
-            span: span,
+            span,
         }
     }
 }
@@ -314,7 +314,7 @@ impl Literal {
         Literal {
             id: NodeId::DUMMY,
             kind: LitKind::Bool(val),
-            span: span,
+            span,
         }
     }
 
@@ -322,7 +322,7 @@ impl Literal {
         Literal {
             id: NodeId::DUMMY,
             kind: LitKind::Int(val),
-            span: span,
+            span,
         }
     }
 
@@ -330,7 +330,7 @@ impl Literal {
         Literal {
             id: NodeId::DUMMY,
             kind: LitKind::Float(val),
-            span: span,
+            span,
         }
     }
 
@@ -338,7 +338,7 @@ impl Literal {
         Literal {
             id: NodeId::DUMMY,
             kind: LitKind::Str(val.to_string()),
-            span: span,
+            span,
         }
     }
 
@@ -346,7 +346,7 @@ impl Literal {
         Literal {
             id: NodeId::DUMMY,
             kind: LitKind::RawStr(val.to_string()),
-            span: span,
+            span,
         }
     }
 }

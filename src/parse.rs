@@ -115,7 +115,7 @@ fn parse_constant(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> Constant {
         name,
         ty: Some(ty),
         literal,
-        span: span,
+        span,
     }
 }
 
@@ -205,7 +205,7 @@ fn parse_output(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> Output {
         params,
         template_spec: tspec,
         expression,
-        span: span,
+        span,
     }
 }
 
@@ -226,7 +226,7 @@ fn parse_parameter_list(spec: &mut LolaSpec, param_list: Pairs<'_, Rule>) -> Vec
             name,
             ty,
             id: NodeId::DUMMY,
-            span: span,
+            span,
         });
     }
     params
@@ -271,7 +271,7 @@ fn parse_template_spec(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> TemplateSpe
         ext: ext_spec,
         ter: ter_spec,
         id: NodeId::DUMMY,
-        span: span,
+        span,
     }
 }
 
@@ -336,7 +336,7 @@ pub(crate) fn build_time_spec(expr: Expression, unit_str: &str, span: Span) -> T
                     period,
                     signum,
                     id: NodeId::DUMMY,
-                    span: span,
+                    span,
                 }
             }
             LitKind::Float(f) => {
@@ -357,7 +357,7 @@ pub(crate) fn build_time_spec(expr: Expression, unit_str: &str, span: Span) -> T
                     period,
                     signum,
                     id: NodeId::DUMMY,
-                    span: span,
+                    span,
                 }
             }
             _ => panic!("Needs to be numeric!"),
@@ -489,7 +489,7 @@ fn parse_trigger(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> Trigger {
         name,
         expression,
         message,
-        span: span,
+        span,
     }
 }
 
@@ -529,7 +529,7 @@ fn parse_type_declaration(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> TypeDecl
 
     TypeDeclaration {
         name: Some(name),
-        span: span,
+        span,
         id: NodeId::DUMMY,
         fields,
     }
@@ -601,7 +601,7 @@ fn parse_stream_instance(spec: &mut LolaSpec, instance: Pair<'_, Rule>) -> Strea
         stream_identifier: stream_ident,
         arguments: args,
         id: NodeId::DUMMY,
-        span: span,
+        span,
     }
 }
 
