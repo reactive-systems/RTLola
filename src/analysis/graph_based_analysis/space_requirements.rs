@@ -193,7 +193,6 @@ mod tests {
     enum StreamIndex {
         Out(usize),
         In(usize),
-        Trig(usize),
     }
 
     fn check_buffer_size(
@@ -226,7 +225,6 @@ mod tests {
             let node_id = match index {
                 StreamIndex::Out(i) => spec.outputs[i].id,
                 StreamIndex::In(i) => spec.inputs[i].id,
-                StreamIndex::Trig(i) => spec.trigger[i].id,
             };
             let actual_buffer = space_requirements.get(&node_id).unwrap_or_else(|| {
                 panic!("There is no buffer size for this NodeId in the result",)
@@ -273,7 +271,6 @@ mod tests {
             let node_id = match index {
                 StreamIndex::In(i) => spec.inputs[i].id,
                 StreamIndex::Out(i) => spec.outputs[i].id,
-                StreamIndex::Trig(i) => spec.trigger[i].id,
             };
             let actual_tracking_info = tracking_requirements.get(&node_id).unwrap_or_else(|| {
                 panic!("There is no tracking info for this NodeId in the result",)

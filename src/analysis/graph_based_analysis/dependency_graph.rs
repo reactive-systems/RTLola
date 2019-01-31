@@ -297,40 +297,6 @@ impl<'a> DependencyAnalyser<'a> {
         }
     }
 
-    fn evaluate_float(
-        &self,
-        expr: &crate::ast::Expression,
-        naming_table: &'a DeclarationTable,
-    ) -> f64 {
-        // TODO need typing information
-        match &expr.kind {
-            ExpressionKind::Lit(lit) => match &lit.kind {
-                LitKind::Int(int) => *int as f64,
-                LitKind::Float(float) => *float as f64,
-                _ => unimplemented!(),
-            },
-            ExpressionKind::Ident(_) => match &naming_table[&expr.id] {
-                _ => unimplemented!(),
-            },
-            ExpressionKind::Default(_, _) => unreachable!(),
-            ExpressionKind::Lookup(_, _, _) => unreachable!(),
-            ExpressionKind::Binary(_, _, _) => unimplemented!(),
-            ExpressionKind::Unary(op, expr) => {
-                assert_eq!(UnOp::Neg, *op);
-                -self.evaluate_float(expr, naming_table)
-            }
-            ExpressionKind::Ite(_, _, _) => unreachable!(),
-            ExpressionKind::ParenthesizedExpression(_, expr, _) => {
-                self.evaluate_float(expr, naming_table)
-            }
-            ExpressionKind::MissingExpression() => unreachable!(),
-            ExpressionKind::Tuple(_) => unimplemented!(),
-            ExpressionKind::Function(_, _, _) => unimplemented!(),
-            ExpressionKind::Field(_, _) => unimplemented!(),
-            ExpressionKind::Method(_, _, _, _) => unimplemented!(),
-        }
-    }
-
     fn translate_offset(
         &self,
         offset: &crate::ast::Offset,
