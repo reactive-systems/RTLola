@@ -186,6 +186,13 @@ pub enum Op {
         instance: StreamInstance,
         offset: Offset,
     },
+    /// Accessing another stream under sample and hold semantics
+    /// 1st argument -> default
+    /// StreamInstance contains further arguments.
+    SampleAndHoldStreamLookup {
+        instance: StreamInstance,
+        offset: Offset,
+    },
     /// Accessing another stream synchronously
     /// No arguments; StreamInstance contains further arguments.
     SyncStreamLookup(StreamInstance),

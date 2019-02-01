@@ -368,13 +368,23 @@ impl<'a> Lowering<'a> {
                 Declaration::Param(_) | Declaration::Const(_) => unimplemented!(),
                 Declaration::Type(_) | Declaration::Func(_) => unreachable!("Bug in TypeChecker."),
             },
-            ExpressionKind::Default(e, dft) | ExpressionKind::Hold(e, dft) => {
+            ExpressionKind::Default(e, dft) => {
                 if let ExpressionKind::Lookup(_, _, _) = &e.kind {
-                    self.lower_lookup_expression(e, dft, state)
+                    self.lower_lookup_expression(e, dft, state, false)
                 } else {
                     // A "stray" default expression such as `5 ? 3` is valid, but a no-op.
                     // Thus, print a warning. Evaluating the expression is necessary, the dft can be skipped.
                     println!("WARNING: No-Op Default operation!");
+                    self.lower_subexpression(e, state)
+                }
+            }
+            ExpressionKind::Hold(e, dft) => {
+                if let ExpressionKind::Lookup(_, _, _) = &e.kind {
+                    self.lower_lookup_expression(e, dft, state, true)
+                } else {
+                    // A "stray" sample and hold expression such as `5 ! 3` is valid, but a no-op.
+                    // Thus, print a warning. Evaluating the expression is necessary, the dft can be skipped.
+                    println!("WARNING: No-Op Sample and Hold operation!");
                     self.lower_subexpression(e, state)
                 }
             }
@@ -604,6 +614,7 @@ impl<'a> Lowering<'a> {
         lookup_expr: &ast::Expression,
         dft: &ast::Expression,
         mut state: LoweringState,
+        is_hold: bool,
     ) -> LoweringState {
         let result_type = self.lower_value_type(lookup_expr.id);
 
@@ -625,6 +636,7 @@ impl<'a> Lowering<'a> {
             let (mut state, lookup_args) = self.lower_expression_list(&instance.arguments, state);
 
             let op = if op.is_some() {
+                assert!(!is_hold);
                 let window_ref = self.lower_window(&lookup_expr);
                 ir::Op::WindowLookup(window_ref)
             } else {
@@ -632,9 +644,16 @@ impl<'a> Lowering<'a> {
                     reference: target_ref,
                     arguments: lookup_args,
                 };
-                ir::Op::StreamLookup {
-                    instance: target_instance,
-                    offset: self.lower_offset(&offset),
+                if is_hold {
+                    ir::Op::SampleAndHoldStreamLookup {
+                        instance: target_instance,
+                        offset: self.lower_offset(&offset),
+                    }
+                } else {
+                    ir::Op::StreamLookup {
+                        instance: target_instance,
+                        offset: self.lower_offset(&offset),
+                    }
                 }
             };
 
