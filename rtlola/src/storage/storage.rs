@@ -61,6 +61,10 @@ impl GlobalStore {
         &self.inputs[sr.in_ix()]
     }
 
+    pub(crate) fn get_in_instance_mut(&mut self, sr: StreamReference) -> &mut InstanceStore {
+        &mut self.inputs[sr.in_ix()]
+    }
+
     pub(crate) fn get_out_instance(&self, inst: OutInstance) -> Option<&InstanceStore> {
         let (ix, p) = inst;
         if p.is_empty() {
@@ -70,8 +74,17 @@ impl GlobalStore {
         }
     }
 
+    pub(crate) fn get_out_instance_mut(&mut self, inst: OutInstance) -> Option<&mut InstanceStore> {
+        let (ix, p) = inst;
+        if p.is_empty() {
+            Some(&mut self.np_outputs[self.index_map[ix]])
+        } else {
+            self.p_outputs[self.index_map[ix]].get_mut(&p)
+        }
+    }
+
     pub(crate) fn get_window_mut(&mut self, window: Window) -> &mut SlidingWindow {
-        let (ix, p, op) = window;
+        let (ix, p, _) = window;
         assert!(p.is_empty());
         &mut self.np_windows[ix]
     }

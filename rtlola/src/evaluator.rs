@@ -29,10 +29,15 @@ impl Evaluator {
 
     pub(crate) fn eval_stream(&mut self, inst: OutInstance, ts: Option<Instant>) {
         let (ix, _) = inst;
-        for stmt in &self.exprs[ix].stmts.clone() {
-            self.eval_stmt(stmt, &inst, ts.unwrap_or_else(Instant::now));
+        for stmt in self.exprs[ix].stmts.clone() {
+            self.eval_stmt(&stmt, &inst, ts.unwrap_or_else(Instant::now));
         }
-        // TODO: Put value in global store.
+        let res = self.get(self.exprs[ix].stmts.last().unwrap().target, &inst);
+        self.global_store.get_out_instance_mut(inst).unwrap().push_value(res)
+    }
+
+    pub(crate) fn accept_input(&mut self, input: StreamReference, v: Value) {
+        self.global_store.get_in_instance_mut(input).push_value(v);
     }
 
     fn type_of(&self, temp: Temporary, inst: &OutInstance) -> &Type {
