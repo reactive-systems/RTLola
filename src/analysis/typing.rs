@@ -545,6 +545,7 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
                     StreamVarOrTy::Ty(StreamTy::new(TimingInfo::Event)),
                 )?
             }
+            Hold(left, right) => unimplemented!(),
             Function(_, types, params) => {
                 let decl = self.declarations[&expr.id];
                 let fun_decl = match decl {
@@ -675,7 +676,7 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
             ParenthesizedExpression(_, expr, _) => {
                 self.infer_expression(expr, target, stream_ty)?
             }
-            t => unimplemented!("expression `{:?}`", t),
+            MissingExpression() => panic!("Should be handles in preceding step."),
         }
         Ok(())
     }

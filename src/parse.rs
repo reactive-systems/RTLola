@@ -21,6 +21,7 @@ lazy_static! {
 
         PrecClimber::new(vec![
             Operator::new(Default, Left),
+            Operator::new(Hold, Left),
             Operator::new(Or, Left),
             Operator::new(And, Left),
             Operator::new(Equal, Left) | Operator::new(NotEqual, Left),
@@ -815,6 +816,9 @@ fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>, span: Span)
                 Rule::Default => {
                     return Expression::new(ExpressionKind::Default(Box::new(lhs), Box::new(rhs)), span)
                 },
+                Rule::Hold => {
+                    return Expression::new(ExpressionKind::Hold(Box::new(lhs), Box::new(rhs)), span)
+                },
                 _ => unreachable!(),
             };
             Expression::new(
@@ -1224,8 +1228,16 @@ mod tests {
     }
 
     #[test]
-    fn build_lookup_expression() {
+    fn build_lookup_expression_default() {
         let spec = "output s: Int := s[-1] ? (3 * 4)\n";
+        let throw = |e| panic!("{}", e);
+        let ast = parse(spec).unwrap_or_else(throw);
+        cmp_ast_spec(&ast, spec);
+    }
+
+    #[test]
+    fn build_lookup_expression_hold() {
+        let spec = "output s: Int := s[-1] ! (3 * 4)\n";
         let throw = |e| panic!("{}", e);
         let ast = parse(spec).unwrap_or_else(throw);
         cmp_ast_spec(&ast, spec);

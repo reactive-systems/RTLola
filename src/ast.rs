@@ -265,8 +265,10 @@ pub enum ExpressionKind {
     Lit(Literal),
     /// An identifier, e.g., `foo`
     Ident(Ident),
-    /// A default expression, e.g., ` a ? 0 `
+    /// A default expression, e.g., `a ? 0 `
     Default(Box<Expression>, Box<Expression>),
+    /// A sample and hold expression, e.g., `a ! 4`
+    Hold(Box<Expression>, Box<Expression>),
     /// A stream lookup with offset
     Lookup(StreamInstance, Offset, Option<WindowOperation>),
     /// A binary operation (For example: `a + b`, `a * b`)

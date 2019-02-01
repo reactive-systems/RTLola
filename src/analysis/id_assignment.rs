@@ -136,7 +136,9 @@ where
             assign_ids_literal(lit, next_id);
         }
         ExpressionKind::Ident(_) => {}
-        ExpressionKind::Default(lhs, rhs) => {
+        ExpressionKind::Default(lhs, rhs)
+        | ExpressionKind::Hold(lhs, rhs)
+        | ExpressionKind::Binary(_, lhs, rhs) => {
             assign_ids_expr(lhs, next_id);
             assign_ids_expr(rhs, next_id);
         }
@@ -149,10 +151,6 @@ where
                 Offset::DiscreteOffset(expr) => assign_ids_expr(expr, next_id),
                 Offset::RealTimeOffset(time_spec) => time_spec.id = next_id(),
             }
-        }
-        ExpressionKind::Binary(_, lhs, rhs) => {
-            assign_ids_expr(lhs, next_id);
-            assign_ids_expr(rhs, next_id)
         }
         ExpressionKind::Unary(_, operand) => assign_ids_expr(operand, next_id),
         ExpressionKind::Ite(cond, cons, alt) => {

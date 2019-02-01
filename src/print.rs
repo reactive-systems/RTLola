@@ -198,6 +198,7 @@ impl Display for Expression {
             ExpressionKind::Lit(l) => write!(f, "{}", l),
             ExpressionKind::Ident(ident) => write!(f, "{}", ident),
             ExpressionKind::Default(expr, val) => write!(f, "{} ? {}", expr, val),
+            ExpressionKind::Hold(expr, val) => write!(f, "{} ! {}", expr, val),
             ExpressionKind::Lookup(inst, offset, Some(aggr)) => {
                 write!(f, "{}[{}, {}]", inst, offset, aggr)
             }

@@ -51,6 +51,15 @@ fn analyse_expression(
                     Some((span, String::from("Real time offset – no ClassicLola")));
             }
         },
+        ExpressionKind::Hold(target, default) => {
+            let span = expr.span;
+            version_tracker.cannot_be_lola2 =
+                Some((span, String::from("Sample and hold – no Lola2")));
+            version_tracker.cannot_be_classic =
+                Some((span, String::from("Sample and hold – no ClassicLola")));
+            analyse_expression(version_tracker, target.as_ref(), false);
+            analyse_expression(version_tracker, default.as_ref(), false);
+        }
         ExpressionKind::Binary(_, left, right) => {
             analyse_expression(version_tracker, &*left, false);
             analyse_expression(version_tracker, &*right, false);

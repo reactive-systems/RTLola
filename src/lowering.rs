@@ -368,7 +368,7 @@ impl<'a> Lowering<'a> {
                 Declaration::Param(_) | Declaration::Const(_) => unimplemented!(),
                 Declaration::Type(_) | Declaration::Func(_) => unreachable!("Bug in TypeChecker."),
             },
-            ExpressionKind::Default(e, dft) => {
+            ExpressionKind::Default(e, dft) | ExpressionKind::Hold(e, dft) => {
                 if let ExpressionKind::Lookup(_, _, _) = &e.kind {
                     self.lower_lookup_expression(e, dft, state)
                 } else {

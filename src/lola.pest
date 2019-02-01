@@ -58,7 +58,7 @@ Trigger = { "trigger"~ (Ident ~ ":=")? ~ Expr~ StringLiteral?}
 //      < CompExpr < AddExpr < MultiExpr < ExpoExpr < UnaryExpr < DefaultExpr 
 //      < FunctionExpr < LookupExpr
 
-Operation = _{ Add | Subtract | Power | Multiply | Divide | Mod | And | Or | CompOp | Default }
+Operation = _{ Add | Subtract | Power | Multiply | Divide | Mod | And | Or | CompOp | Default | Hold }
     Add      = { "+"  }
     Subtract = { "-"  }
     Multiply = { "*"  }
@@ -69,6 +69,7 @@ Operation = _{ Add | Subtract | Power | Multiply | Divide | Mod | And | Or | Com
     Or       = { "∨" | "|"{1,2} | "or"  }
     Dot      = { "." }
     Default  = { "?" }
+    Hold     = { "!" }
 
 UnaryOperation = _{ Add | Subtract | Neg }
     Neg      = { "!" | "¬" }

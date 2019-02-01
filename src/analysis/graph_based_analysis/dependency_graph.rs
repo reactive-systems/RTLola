@@ -279,6 +279,7 @@ impl<'a> DependencyAnalyser<'a> {
                 _ => unimplemented!(),
             },
             ExpressionKind::Default(_, _) => unreachable!(),
+            ExpressionKind::Hold(_, _) => unreachable!(),
             ExpressionKind::Lookup(_, _, _) => unreachable!(),
             ExpressionKind::Binary(_, _, _) => unimplemented!(),
             ExpressionKind::Unary(op, expr) => {
@@ -332,7 +333,7 @@ impl<'a> DependencyAnalyser<'a> {
                 });
             }
             ExpressionKind::MissingExpression() | ExpressionKind::Lit(_) => {}
-            ExpressionKind::Default(stream, default) => {
+            ExpressionKind::Default(stream, default) | ExpressionKind::Hold(stream, default) => {
                 self.add_edges_for_expression(current_node, &*stream, location, mapping);
                 self.add_edges_for_expression(current_node, &*default, location, mapping);
             }
