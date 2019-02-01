@@ -545,7 +545,20 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
                     StreamVarOrTy::Ty(StreamTy::new(TimingInfo::Event)),
                 )?
             }
-            Hold(left, right) => unimplemented!(),
+            Hold(left, right) => {
+                let new_var = self.stream_unifier.new_var();
+                self.infer_expression(
+                    left,
+                    Some(ValueTy::Option(ValueTy::Infer(var).into())),
+                    StreamVarOrTy::Var(new_var),
+                )?;
+                // TODO: check if new_var != stream_var => warn that sample and hold is not needed.
+                self.infer_expression(
+                    right,
+                    Some(ValueTy::Infer(var)),
+                    StreamVarOrTy::Ty(StreamTy::new(TimingInfo::Event)),
+                )?
+            }
             Function(_, types, params) => {
                 let decl = self.declarations[&expr.id];
                 let fun_decl = match decl {
