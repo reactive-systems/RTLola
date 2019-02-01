@@ -18,7 +18,10 @@ use crate::reporting::Handler;
 use crate::reporting::LabeledSpan;
 use crate::stdlib::{FuncDecl, MethodLookup};
 use crate::ty::{Freq, StreamTy, TimingInfo, TypeConstraint, ValueTy};
-use ena::unify::{EqUnifyValue, InPlaceUnificationTable, UnificationTable, UnifyKey, UnifyValue};
+use ena::unify::{
+    EqUnifyValue, InPlace, InPlaceUnificationTable, Snapshot, UnificationStore, UnificationTable,
+    UnifyKey, UnifyValue,
+};
 use log::{debug, trace};
 use std::collections::HashMap;
 
@@ -1089,17 +1092,22 @@ impl<T: UnifiableTy> ValueUnifier<T> {
 pub trait Unifier {
     type Var: UnifyKey;
     type Ty;
+    type Store: UnificationStore;
 
     fn new_var(&mut self) -> Self::Var;
     fn get_type(&mut self, var: Self::Var) -> Option<Self::Ty>;
     fn unify_var_var(&mut self, left: Self::Var, right: Self::Var) -> InferResult;
     fn unify_var_ty(&mut self, var: Self::Var, ty: Self::Ty) -> InferResult;
     fn vars_equal(&mut self, l: Self::Var, r: Self::Var) -> bool;
+    fn snapshot(&mut self) -> Snapshot<Self::Store>;
+    fn commit(&mut self, ss: Snapshot<Self::Store>);
+    fn rollback_to(&mut self, ss: Snapshot<Self::Store>);
 }
 
 impl<T: UnifiableTy> Unifier for ValueUnifier<T> {
     type Var = T::V;
     type Ty = T;
+    type Store = InPlace<Self::Var>;
 
     fn new_var(&mut self) -> Self::Var {
         self.table.new_key(ValueVarVal::Unknown)
@@ -1173,6 +1181,16 @@ impl<T: UnifiableTy> Unifier for ValueUnifier<T> {
     fn vars_equal(&mut self, l: Self::Var, r: Self::Var) -> bool {
         self.table.unioned(l, r)
     }
+
+    fn snapshot(&mut self) -> Snapshot<Self::Store> {
+        self.table.snapshot()
+    }
+    fn commit(&mut self, ss: Snapshot<Self::Store>) {
+        self.table.commit(ss);
+    }
+    fn rollback_to(&mut self, ss: Snapshot<Self::Store>) {
+        self.table.rollback_to(ss);
+    }
 }
 
 pub trait UnifiableTy:
@@ -1228,7 +1246,19 @@ impl UnifiableTy for ValueTy {
     ) -> bool {
         debug!("coerce {} {}", self, right);
 
-        // bit-width increase is allowed
+        // Rule 1: Any type `T` can be coerced into `Option<T>`
+        if let ValueTy::Option(ty) = self {
+            // Take snapshot before checking equality to potentially rollback the side effects.
+            let ss = _unifier.snapshot();
+            if ty.equal_to(_unifier, right).is_some() {
+                _unifier.commit(ss);
+                return true;
+            } else {
+                _unifier.rollback_to(ss);
+            }
+        }
+
+        // Rule 2: Bit-width increase is allowed
         match right {
             ValueTy::Int(lower) => match self {
                 ValueTy::Int(upper) => lower <= upper,
@@ -1247,7 +1277,7 @@ impl UnifiableTy for ValueTy {
     }
 
     /// Checks recursively if types are equal. Tries to unify type parameters if possible.
-    /// Returns the unified, i.e., more conrete type if possible.
+    /// Returns the unified, i.e., more concrete type if possible.
     fn equal_to<U: Unifier<Var = Self::V, Ty = Self>>(
         &self,
         unifier: &mut U,
@@ -2012,4 +2042,23 @@ mod tests {
             "output a: Int8 { extend @2s } := 1\noutput b: Int8 { extend @1s } := a[-1s] ? 0";
         assert_eq!(1, num_type_errors(spec));
     }
+
+    #[test]
+    fn test_sample_and_hold_noop() {
+        let spec = "input x: UInt8\noutput y: UInt8 := 3 ! 0";
+        assert_eq!(0, num_type_errors(spec));
+    }
+
+    #[test]
+    fn test_sample_and_hold_sync() {
+        let spec = "input x: UInt8\noutput y: UInt8 := x ! 0";
+        assert_eq!(0, num_type_errors(spec));
+    }
+
+    #[test]
+    fn test_sample_and_hold_useful() {
+        let spec = "input x: UInt8\noutput y: UInt8 { extend @1Hz } := x ! 0";
+        assert_eq!(0, num_type_errors(spec));
+    }
+
 }
