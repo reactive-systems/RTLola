@@ -1,21 +1,20 @@
 use super::Value;
-use std::time::{Instant, Duration};
-use std::ops::Add;
-use std::collections::VecDeque;
 use lola_parser::WindowOperation;
+use std::collections::VecDeque;
+use std::ops::Add;
+use std::time::{Duration, Instant};
 
 const SIZE: usize = 256;
 
 pub(crate) enum SlidingWindow {
-    Sum(WindowInstance<SumIV>)
+    Sum(WindowInstance<SumIV>),
 }
 
 impl SlidingWindow {
-
     pub(crate) fn new(dur: Duration, op: WindowOperation, ts: Instant) -> SlidingWindow {
         match op {
             WindowOperation::Sum => SlidingWindow::Sum(WindowInstance::new(dur, ts)),
-            _ => unimplemented!()
+            _ => unimplemented!(),
         }
     }
 
@@ -32,7 +31,6 @@ impl SlidingWindow {
     }
 }
 
-
 pub(crate) trait WindowIV: Clone + From<Value> + Add<Output = Self> + Into<Value> + Sized + Default {}
 
 pub(crate) struct WindowInstance<IV: WindowIV> {
@@ -43,7 +41,6 @@ pub(crate) struct WindowInstance<IV: WindowIV> {
 }
 
 impl<IV: WindowIV> WindowInstance<IV> {
-
     fn new(dur: Duration, ts: Instant) -> WindowInstance<IV> {
         let time_per_bucket = dur / (SIZE as u32);
         let buckets = VecDeque::from(vec![IV::default(); SIZE]);
@@ -80,7 +77,7 @@ impl<IV: WindowIV> WindowInstance<IV> {
     }
 
     fn get_current_bucket(&self, ts: Instant) -> usize {
-//        let overall_ix = ts.duration_since(self.start_time).div_duration(self.time_per_bucket);
+        //        let overall_ix = ts.duration_since(self.start_time).div_duration(self.time_per_bucket);
         let overall_ix = Self::quickfix_duration_div(ts.duration_since(self.start_time), self.time_per_bucket);
         let overall_ix = overall_ix.floor() as usize;
         overall_ix % self.buckets.len()

@@ -1,17 +1,15 @@
-
-use crate::evaluator::{OutInstance, Window};
 use super::Value;
+use crate::evaluator::{OutInstance, Window};
 
-use lola_parser::{LolaIR, StreamReference, Type, WindowOperation, OutputStream};
-use std::time::Instant;
+use super::window::SlidingWindow;
+use lola_parser::{LolaIR, OutputStream, StreamReference, Type, WindowOperation};
 use std::collections::HashMap;
 use std::collections::VecDeque;
-use super::window::SlidingWindow;
+use std::time::Instant;
 
 pub(crate) type Parameter = Vec<Value>;
 
 pub(crate) struct GlobalStore {
-
     /// Access by stream reference.
     inputs: Vec<InstanceStore>,
 
@@ -26,7 +24,6 @@ pub(crate) struct GlobalStore {
 
     /// Non-parametrized windows, access by WindowReference.
     np_windows: Vec<SlidingWindow>,
-
 }
 
 impl GlobalStore {
@@ -37,15 +34,14 @@ impl GlobalStore {
             index_map[p.reference.out_ix()] = Some(p_cnt);
             p_cnt += 1;
         }
-        let nps: Vec<&OutputStream> = index_map.iter_mut()
+        let nps: Vec<&OutputStream> = index_map
+            .iter_mut()
             .enumerate()
             .flat_map(|(ix, v)| if v.is_some() { None } else { Some(ix) })
             .map(|ix| &ir.outputs[ix])
             .collect(); // Give it a type.
 
-        nps.iter().map(|o| o.reference.out_ix())
-            .enumerate()
-            .for_each(|(np_ix, ir_ix)| index_map[ir_ix] = Some(np_ix));
+        nps.iter().map(|o| o.reference.out_ix()).enumerate().for_each(|(np_ix, ir_ix)| index_map[ir_ix] = Some(np_ix));
         assert!(index_map.iter().all(Option::is_some));
 
         let index_map = index_map.into_iter().flatten().collect();
@@ -98,18 +94,20 @@ pub(crate) struct InstanceStore {
 const SIZE: usize = 256; // TODO!
 
 impl InstanceStore {
-
     // _for type might be used later.
     pub(crate) fn new(_for_type: &Type) -> InstanceStore {
-        InstanceStore {
-            buffer: VecDeque::with_capacity(SIZE),
-        }
+        InstanceStore { buffer: VecDeque::with_capacity(SIZE) }
     }
 
     pub(crate) fn get_value(&self, offset: i16) -> Option<Value> {
         assert!(offset <= 0);
-        let ix = self.buffer.len() - (offset as usize) - 1;
-        self.buffer.get(ix).cloned()
+        let offset = offset.abs() as usize;
+        if self.buffer.len() < (offset + 1) {
+            None
+        } else {
+            let ix = self.buffer.len() - offset - 1;
+            self.buffer.get(ix).cloned()
+        }
     }
 
     pub(crate) fn push_value(&mut self, v: Value) {

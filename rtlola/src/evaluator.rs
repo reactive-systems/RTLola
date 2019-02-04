@@ -128,16 +128,17 @@ impl Evaluator {
             Op::SyncStreamLookup(tar_inst) => {
                 let res = self.perform_lookup(inst, tar_inst, 0);
                 self.write(stmt.target, res.unwrap(), inst); // Unwrap sound in sync lookups.
-            },
-            Op::StreamLookup { instance: tar_inst, offset } => {
+            }
+            Op::StreamLookup { instance: tar_inst, offset }
+            | Op::SampleAndHoldStreamLookup { instance: tar_inst, offset } => {
                 let res = match offset {
                     Offset::FutureDiscreteOffset(_) | Offset::FutureRealTimeOffset(_) => unimplemented!(),
-                    Offset::PastDiscreteOffset(u) => self.perform_lookup(inst, tar_inst, *u as i16),
+                    Offset::PastDiscreteOffset(u) => self.perform_lookup(inst, tar_inst, -(*u as i16)),
                     Offset::PastRealTimeOffset(dur) => unimplemented!(),
                 };
                 let v = res.unwrap_or_else(|| self.get(stmt.args[0], inst));
                 self.write(stmt.target, v, inst);
-            },
+            }
             Op::WindowLookup(window_ref) => {
                 let window: Window = (window_ref.ix, Vec::new(), self.window_ops[window_ref.ix]);
                 let res = self.global_store.get_window_mut(window).get_value(ts);
@@ -172,5 +173,137 @@ impl Evaluator {
             }
         };
         is.and_then(|is| is.get_value(offset))
+    }
+
+    fn __peek_value(&self, sr: StreamReference, args: &[Value], offset: i16) -> Option<Value> {
+        match sr {
+            StreamReference::InRef(_) => {
+                assert!(args.is_empty());
+                self.global_store.get_in_instance(sr).get_value(offset)
+            }
+            StreamReference::OutRef(ix) => {
+                let inst = (ix, Vec::from(args));
+                self.global_store.get_out_instance(inst).and_then(|st| st.get_value(offset))
+            }
+        }
+    }
+}
+
+mod tests {
+
+    use super::*;
+
+    fn setup(spec: &str) -> (LolaIR, Evaluator) {
+        let ir = lola_parser::parse(spec);
+        let eval = Evaluator::new(&ir, Instant::now());
+        (ir, eval)
+    }
+
+    #[test]
+    fn test_empty_outputs() {
+        setup("input a: UInt8");
+    }
+
+    #[test]
+    fn test_const_output() {
+        let (ir, mut eval) = setup("output a: UInt8 := 3");
+        let inst = (0, Vec::new());
+        eval.eval_stream(inst.clone(), None);
+        assert_eq!(eval.__peek_value(StreamReference::OutRef(0), &Vec::new(), 0).unwrap(), Value::Unsigned(3))
+    }
+
+    #[test]
+    fn test_const_output_arith() {
+        let (ir, mut eval) = setup("output a: UInt8 := 3 + 5");
+        let inst = (0, Vec::new());
+        eval.eval_stream(inst.clone(), None);
+        assert_eq!(eval.__peek_value(StreamReference::OutRef(0), &Vec::new(), 0).unwrap(), Value::Unsigned(8))
+    }
+
+    #[test]
+    fn test_input_only() {
+        let (ir, mut eval) = setup("input a: UInt8");
+        let sr = StreamReference::InRef(0);
+        let v = Value::Unsigned(3);
+        eval.accept_input(sr, v.clone());
+        assert_eq!(eval.__peek_value(sr, &Vec::new(), 0).unwrap(), v)
+    }
+
+    #[test]
+    fn test_sync_lookup() {
+        let (ir, mut eval) = setup("input a: UInt8 output b: UInt8 := a");
+        let out_ref = StreamReference::OutRef(0);
+        let in_ref = StreamReference::InRef(0);
+        let v = Value::Unsigned(9);
+        eval.accept_input(in_ref, v.clone());
+        eval.eval_stream((0, Vec::new()), None);
+        assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), v)
+    }
+
+    #[test]
+    fn test_oob_lookup() {
+        let (ir, mut eval) = setup("input a: UInt8\noutput b: UInt8 { extend @5Hz }:= a[-1] ! 3");
+        let out_ref = StreamReference::OutRef(0);
+        let in_ref = StreamReference::InRef(0);
+        let v1 = Value::Unsigned(1);
+        eval.accept_input(in_ref, v1);
+        eval.eval_stream((0, Vec::new()), None);
+        assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), Value::Unsigned(3));
+    }
+
+    #[test]
+    fn test_output_lookup() {
+        let (ir, mut eval) =
+            setup("input a: UInt8\noutput mirror: UInt8 := a\noutput c: UInt8 { extend @5Hz }:= mirror[-1] ! 3");
+        let out_ref = StreamReference::OutRef(1);
+        let in_ref = StreamReference::InRef(0);
+        let v1 = Value::Unsigned(1);
+        let v2 = Value::Unsigned(2);
+        eval.accept_input(in_ref, v1.clone());
+        eval.eval_stream((0, Vec::new()), None);
+        eval.accept_input(in_ref, v2);
+        eval.eval_stream((0, Vec::new()), None);
+        eval.eval_stream((1, Vec::new()), None);
+        assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), v1);
+    }
+
+    #[test]
+    fn test_conversion_if() {
+        let (ir, mut eval) = setup("input a: UInt8\noutput b: UInt16 := if true then a else a[-1] ? 0");
+        let out_ref = StreamReference::OutRef(0);
+        let in_ref = StreamReference::InRef(0);
+        let v1 = Value::Unsigned(1);
+        eval.accept_input(in_ref, v1.clone());
+        eval.eval_stream((0, Vec::new()), None);
+        assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), v1);
+    }
+
+    #[test]
+    fn test_bin_op() {
+        let (ir, mut eval) = setup("input a: UInt16\n input b: UInt16\noutput c: UInt16 := a + b");
+        let out_ref = StreamReference::OutRef(0);
+        let a = StreamReference::InRef(0);
+        let b = StreamReference::InRef(1);
+        let v1 = Value::Unsigned(1);
+        let v2 = Value::Unsigned(2);
+        eval.accept_input(a, v1.clone());
+        eval.accept_input(b, v2.clone());
+        eval.eval_stream((0, Vec::new()), None);
+        assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), v1 + v2);
+    }
+
+    #[test]
+    fn test_regular_lookup() {
+        let (ir, mut eval) = setup("input a: UInt8 output b: UInt8 { extend @5Hz }:= a[-1] ! 3");
+        let out_ref = StreamReference::OutRef(0);
+        let in_ref = StreamReference::InRef(0);
+        let v1 = Value::Unsigned(1);
+        let v2 = Value::Unsigned(2);
+        let v3 = Value::Unsigned(3);
+        eval.accept_input(in_ref, v1);
+        eval.accept_input(in_ref, v2.clone());
+        eval.accept_input(in_ref, v3);
+        eval.eval_stream((0, Vec::new()), None);
+        assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), v2)
     }
 }
