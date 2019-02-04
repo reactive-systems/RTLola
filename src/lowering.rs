@@ -857,9 +857,12 @@ mod lowering_state {
             mut self,
             others: HashMap<ir::Temporary, ir::Type>,
         ) -> LoweringState {
-            others
-                .iter()
-                .for_each(|(temp, ty)| self.add_temp(*temp, ty));
+            for (temp, ty) in others {
+                if temp.0 > self.next_temp as usize {
+                    self.next_temp = (temp.0 + 1) as u32;
+                }
+                self.add_temp(temp, &ty);
+            }
             self
         }
 
@@ -871,7 +874,11 @@ mod lowering_state {
         }
 
         fn add_temp(&mut self, temp: ir::Temporary, ty: &ir::Type) {
-            assert!(self.temps.get(&temp).is_none());
+            if cfg!(debug_assertions) {
+                if let Some(other) = self.temps.get(&temp) {
+                    assert_eq!(other, ty);
+                }
+            }
             self.temps.insert(temp, ty.clone());
         }
 
