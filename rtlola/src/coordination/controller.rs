@@ -33,7 +33,7 @@ impl Controller {
     /// and fetches/expects events from specified input source.
     pub fn evaluate(ir: LolaIR, config: EvalConfig, ts: Option<Instant>) -> ! {
         let (work_tx, work_rx) = mpsc::channel();
-        let (eof_tx, eof_rx) = mpsc::channel();
+        let (_eof_tx, eof_rx) = mpsc::channel();
 
         let start_time = std::time::SystemTime::now();
 
@@ -43,11 +43,12 @@ impl Controller {
         let cfg_clone_2 = config.clone();
         let work_tx_clone = work_tx.clone();
 
-        let event = thread::spawn(move || {
+        // TODO: Wait until all events have been read.
+        let _event = thread::spawn(move || {
             let event_manager = EventDrivenManager::setup(ir_clone_1, cfg_clone_1);
             event_manager.start(work_tx_clone)
         });
-        let time = thread::spawn(move || {
+        thread::spawn(move || {
             let time_manager = TimeDrivenManager::setup(ir_clone_2, cfg_clone_2);
             time_manager.start(Some(start_time), work_tx, eof_rx)
         });
@@ -88,19 +89,6 @@ impl Controller {
         unimplemented!()
     }
 }
-
-#[derive(Debug)]
-pub(crate) enum EvaluationError {
-    UnknownError,
-}
-
-impl fmt::Display for EvaluationError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "")
-    }
-}
-
-impl std::error::Error for EvaluationError {}
 
 pub(crate) enum WorkItem {
     Event(EventEvaluation),

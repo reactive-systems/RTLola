@@ -1,8 +1,8 @@
 use super::Value;
 use crate::evaluator::{OutInstance, Window};
 
-use super::window::SlidingWindow;
-use lola_parser::{LolaIR, OutputStream, StreamReference, Type, WindowOperation};
+use crate::storage::SlidingWindow;
+use lola_parser::{LolaIR, OutputStream, StreamReference, Type};
 use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::time::Instant;

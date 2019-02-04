@@ -10,8 +10,6 @@ use std::sync::mpsc::Sender;
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
 struct EventDrivenCycleCount(u128);
 
-type EDCC = EventDrivenCycleCount;
-
 type EDM = EventDrivenManager;
 
 impl From<u128> for EventDrivenCycleCount {
@@ -85,7 +83,7 @@ impl EventDrivenManager {
             let item = EventEvaluation { event, layers };
             match work_queue.send(WorkItem::Event(item)) {
                 Ok(_) => {}
-                Err(e) => self.out_handler.runtime_warning(|| "Error when sending work item."),
+                Err(e) => self.out_handler.runtime_warning(|| format!("Error when sending work item. {}", e)),
             }
             self.current_cycle += 1;
         }

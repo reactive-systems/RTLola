@@ -313,10 +313,7 @@ impl TimeDrivenManager {
 
 mod tests {
     use super::*;
-    use crate::basics::{EvalConfig, OutputHandler};
     use lola_parser::LolaIR;
-    use std::rc::Rc;
-    use std::time::{Duration, SystemTime};
 
     fn to_ir(spec: &str) -> LolaIR {
         lola_parser::parse(spec)

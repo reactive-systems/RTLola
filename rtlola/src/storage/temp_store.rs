@@ -11,7 +11,7 @@ impl TempStore {
     pub(crate) fn new(expr: &Expression) -> TempStore {
         let mut offsets = Vec::new();
         let mut size = 0;
-        for (i, ty) in expr.temporaries.iter().enumerate() {
+        for ty in expr.temporaries.iter() {
             offsets.push(size as usize);
             let ty = match ty {
                 Type::Option(t) => t, // We don't store options but resolve during lookup.

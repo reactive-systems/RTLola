@@ -1,7 +1,7 @@
 use super::{EvalConfig, Verbosity};
 use csv::{Reader as CSVReader, Result as ReaderResult, StringRecord};
 use std::fs::File;
-use std::io::{stderr, stdin, stdout, Read, Write};
+use std::io::{stderr, stdin, stdout, Write};
 
 #[derive(Debug, Clone)]
 pub enum OutputChannel {
@@ -124,6 +124,7 @@ impl OutputHandler {
         self.emit(Verbosity::WarningsOnly, msg);
     }
 
+    #[allow(dead_code)]
     pub(crate) fn trigger<F, T: Into<String>>(&self, msg: F)
     where
         F: FnOnce() -> T,
@@ -131,6 +132,7 @@ impl OutputHandler {
         self.emit(Verbosity::Triggers, msg);
     }
 
+    #[allow(dead_code)]
     pub(crate) fn debug<F, T: Into<String>>(&self, msg: F)
     where
         F: FnOnce() -> T,
@@ -138,6 +140,7 @@ impl OutputHandler {
         self.emit(Verbosity::Debug, msg);
     }
 
+    #[allow(dead_code)]
     pub(crate) fn output<F, T: Into<String>>(&self, msg: F)
     where
         F: FnOnce() -> T,

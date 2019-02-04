@@ -25,15 +25,14 @@ pub(crate) fn lcm_all(v: &[u128]) -> u128 {
 }
 
 mod tests {
-    use super::gcd;
 
     #[test]
     fn test_gcd() {
-        assert_eq!(gcd(3, 18), 3);
-        assert_eq!(gcd(18, 3), 3);
-        assert_eq!(gcd(1, 25), 1);
-        assert_eq!(gcd(5, 13), 1);
-        assert_eq!(gcd(25, 40), 5);
-        assert_eq!(gcd(7, 7), 7);
+        assert_eq!(super::gcd(3, 18), 3);
+        assert_eq!(super::gcd(18, 3), 3);
+        assert_eq!(super::gcd(1, 25), 1);
+        assert_eq!(super::gcd(5, 13), 1);
+        assert_eq!(super::gcd(25, 40), 5);
+        assert_eq!(super::gcd(7, 7), 7);
     }
 }

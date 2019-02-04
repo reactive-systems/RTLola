@@ -1,6 +1,5 @@
 use lola_parser::Type;
 use ordered_float::NotNan;
-use std::hash::{Hash, Hasher};
 use std::ops;
 
 use self::Value::*;

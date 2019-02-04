@@ -129,7 +129,7 @@ impl Evaluator {
                 let res = match offset {
                     Offset::FutureDiscreteOffset(_) | Offset::FutureRealTimeOffset(_) => unimplemented!(),
                     Offset::PastDiscreteOffset(u) => self.perform_lookup(inst, tar_inst, -(*u as i16)),
-                    Offset::PastRealTimeOffset(dur) => unimplemented!(),
+                    Offset::PastRealTimeOffset(_dur) => unimplemented!(),
                 };
                 let v = res.unwrap_or_else(|| self.get(stmt.args[0], inst));
                 self.write(stmt.target, v, inst);
@@ -201,7 +201,7 @@ mod tests {
 
     #[test]
     fn test_const_output() {
-        let (ir, mut eval) = setup("output a: UInt8 := 3");
+        let (_, mut eval) = setup("output a: UInt8 := 3");
         let inst = (0, Vec::new());
         eval.eval_stream(inst.clone(), None);
         assert_eq!(eval.__peek_value(StreamReference::OutRef(0), &Vec::new(), 0).unwrap(), Value::Unsigned(3))
@@ -209,7 +209,7 @@ mod tests {
 
     #[test]
     fn test_const_output_arith() {
-        let (ir, mut eval) = setup("output a: UInt8 := 3 + 5");
+        let (_, mut eval) = setup("output a: UInt8 := 3 + 5");
         let inst = (0, Vec::new());
         eval.eval_stream(inst.clone(), None);
         assert_eq!(eval.__peek_value(StreamReference::OutRef(0), &Vec::new(), 0).unwrap(), Value::Unsigned(8))
@@ -217,7 +217,7 @@ mod tests {
 
     #[test]
     fn test_input_only() {
-        let (ir, mut eval) = setup("input a: UInt8");
+        let (_, mut eval) = setup("input a: UInt8");
         let sr = StreamReference::InRef(0);
         let v = Value::Unsigned(3);
         eval.accept_input(sr, v.clone());
@@ -226,7 +226,7 @@ mod tests {
 
     #[test]
     fn test_sync_lookup() {
-        let (ir, mut eval) = setup("input a: UInt8 output b: UInt8 := a");
+        let (_, mut eval) = setup("input a: UInt8 output b: UInt8 := a");
         let out_ref = StreamReference::OutRef(0);
         let in_ref = StreamReference::InRef(0);
         let v = Value::Unsigned(9);
@@ -237,7 +237,7 @@ mod tests {
 
     #[test]
     fn test_oob_lookup() {
-        let (ir, mut eval) = setup("input a: UInt8\noutput b: UInt8 { extend @5Hz }:= a[-1] ! 3");
+        let (_, mut eval) = setup("input a: UInt8\noutput b: UInt8 { extend @5Hz }:= a[-1] ! 3");
         let out_ref = StreamReference::OutRef(0);
         let in_ref = StreamReference::InRef(0);
         let v1 = Value::Unsigned(1);
@@ -248,7 +248,7 @@ mod tests {
 
     #[test]
     fn test_output_lookup() {
-        let (ir, mut eval) =
+        let (_, mut eval) =
             setup("input a: UInt8\noutput mirror: UInt8 := a\noutput c: UInt8 { extend @5Hz }:= mirror[-1] ! 3");
         let out_ref = StreamReference::OutRef(1);
         let in_ref = StreamReference::InRef(0);
@@ -264,7 +264,7 @@ mod tests {
 
     #[test]
     fn test_conversion_if() {
-        let (ir, mut eval) = setup("input a: UInt8\noutput b: UInt16 := if true then a else a[-1] ? 0");
+        let (_, mut eval) = setup("input a: UInt8\noutput b: UInt16 := if true then a else a[-1] ? 0");
         let out_ref = StreamReference::OutRef(0);
         let in_ref = StreamReference::InRef(0);
         let v1 = Value::Unsigned(1);
@@ -275,7 +275,7 @@ mod tests {
 
     #[test]
     fn test_bin_op() {
-        let (ir, mut eval) = setup("input a: UInt16\n input b: UInt16\noutput c: UInt16 := a + b");
+        let (_, mut eval) = setup("input a: UInt16\n input b: UInt16\noutput c: UInt16 := a + b");
         let out_ref = StreamReference::OutRef(0);
         let a = StreamReference::InRef(0);
         let b = StreamReference::InRef(1);
@@ -289,7 +289,7 @@ mod tests {
 
     #[test]
     fn test_regular_lookup() {
-        let (ir, mut eval) = setup("input a: UInt8 output b: UInt8 { extend @5Hz }:= a[-1] ! 3");
+        let (_, mut eval) = setup("input a: UInt8 output b: UInt8 { extend @5Hz }:= a[-1] ! 3");
         let out_ref = StreamReference::OutRef(0);
         let in_ref = StreamReference::InRef(0);
         let v1 = Value::Unsigned(1);
