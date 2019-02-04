@@ -1,9 +1,10 @@
 use lola_parser::*;
 
+use crate::basics::{EvalConfig, OutputHandler};
 use crate::storage::{GlobalStore, TempStore, Value};
 
 pub(crate) type OutInstance = (usize, Vec<Value>);
-pub(crate) type Window = (usize, Vec<Value>, WindowOperation);
+pub(crate) type Window = (usize, Vec<Value>);
 use ordered_float::NotNan;
 
 use std::time::Instant;
@@ -15,24 +16,40 @@ pub(crate) struct Evaluator {
     exprs: Vec<Expression>,
     global_store: GlobalStore,
     window_ops: Vec<WindowOperation>,
+    ir: LolaIR,
+    handler: OutputHandler,
 }
 
 impl Evaluator {
-    pub(crate) fn new(ir: &LolaIR, ts: Instant) -> Evaluator {
+    pub(crate) fn new(ir: LolaIR, ts: Instant, config: EvalConfig) -> Evaluator {
         let temp_stores = ir.outputs.iter().map(|o| TempStore::new(&o.expr)).collect();
         let global_store = GlobalStore::new(&ir, ts);
         let exprs = ir.outputs.iter().map(|o| o.expr.clone()).collect();
         let window_ops = ir.sliding_windows.iter().map(|w| w.op).collect();
-        Evaluator { temp_stores, exprs, global_store, window_ops }
+        let handler = OutputHandler::new(&config);
+        Evaluator { temp_stores, exprs, global_store, window_ops, ir, handler }
     }
 
     pub(crate) fn eval_stream(&mut self, inst: OutInstance, ts: Option<Instant>) {
+        self.handler.debug(|| format!("Evaluating OutputStream[{}].", inst.0));
+
         let (ix, _) = inst;
+        let ts = ts.unwrap_or_else(Instant::now);
         for stmt in self.exprs[ix].stmts.clone() {
-            self.eval_stmt(&stmt, &inst, ts.unwrap_or_else(Instant::now));
+            self.eval_stmt(&stmt, &inst, ts);
         }
         let res = self.get(self.exprs[ix].stmts.last().unwrap().target, &inst);
-        self.global_store.get_out_instance_mut(inst).unwrap().push_value(res)
+
+        // Register value in global store.
+        self.global_store.get_out_instance_mut(inst).unwrap().push_value(res.clone()); // TODO: unsafe unwrap.
+
+        // Check linked streams and inform them.
+        let extended = self.ir.get_out(StreamReference::OutRef(ix));
+        self.handler.debug(|| format!("Updating {} windows.", extended.dependent_windows.len()));
+        for win in &extended.dependent_windows {
+            self.global_store.get_window_mut((win.ix, Vec::new())).accept_value(res.clone(), ts)
+        }
+        // TODO: Dependent streams?
     }
 
     pub(crate) fn accept_input(&mut self, input: StreamReference, v: Value) {
@@ -135,7 +152,7 @@ impl Evaluator {
                 self.write(stmt.target, v, inst);
             }
             Op::WindowLookup(window_ref) => {
-                let window: Window = (window_ref.ix, Vec::new(), self.window_ops[window_ref.ix]);
+                let window: Window = (window_ref.ix, Vec::new() /*, self.window_ops[window_ref.ix]*/);
                 let res = self.global_store.get_window_mut(window).get_value(ts);
                 self.write(stmt.target, res, inst);
             }
@@ -190,7 +207,7 @@ mod tests {
 
     fn setup(spec: &str) -> (LolaIR, Evaluator) {
         let ir = lola_parser::parse(spec);
-        let eval = Evaluator::new(&ir, Instant::now());
+        let eval = Evaluator::new(ir.clone(), Instant::now(), EvalConfig::default());
         (ir, eval)
     }
 

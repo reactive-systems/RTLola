@@ -80,7 +80,7 @@ impl GlobalStore {
     }
 
     pub(crate) fn get_window_mut(&mut self, window: Window) -> &mut SlidingWindow {
-        let (ix, p, _) = window;
+        let (ix, p) = window;
         assert!(p.is_empty());
         &mut self.np_windows[ix]
     }

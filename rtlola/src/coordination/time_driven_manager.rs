@@ -5,8 +5,8 @@ use crate::basics::{EvalConfig, OutputHandler};
 use lola_parser::{LolaIR, StreamReference};
 use std::cmp::Ordering;
 use std::sync::mpsc::{Receiver, Sender};
-use std::time::{Duration, SystemTime};
 use std::thread::sleep;
+use std::time::{Duration, SystemTime};
 
 const NANOS_PER_SEC: u128 = 1_000_000_000;
 

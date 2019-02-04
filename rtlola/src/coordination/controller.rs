@@ -15,9 +15,7 @@ pub struct Controller {
     /// Handles all kind of output behavior according to config.
     output_handler: OutputHandler,
 
-    /// Intermediate representation of input Lola specification.
-    spec: LolaIR,
-
+    /// Handles evaluating stream expressions and storeage of values.
     evaluator: Evaluator,
 }
 
@@ -52,8 +50,8 @@ impl Controller {
             time_manager.start(Some(start_time), work_tx, eof_rx)
         });
 
-        let e = Evaluator::new(&ir, ts.unwrap_or_else(Instant::now));
-        let mut ctrl = Controller { output_handler: OutputHandler::new(&config), spec: ir, evaluator: e };
+        let e = Evaluator::new(ir, ts.unwrap_or_else(Instant::now), config.clone());
+        let mut ctrl = Controller { output_handler: OutputHandler::new(&config), evaluator: e };
 
         let _ = work_rx.iter().map(|wi| ctrl.eval_workitem(wi));
 
@@ -68,24 +66,27 @@ impl Controller {
     }
 
     fn evaluate_timed_item(&mut self, t: TimeEvaluation) {
-        t.into_iter().for_each(|s| self.evaluate_single(s));
+        self.output_handler.debug(|| format!("Evaluating timed at time {:?}.", Instant::now()));
+        t.into_iter().for_each(|s| self.evaluate_single_output(s));
     }
 
     fn evaluate_event_item(&mut self, ee: EventEvaluation) {
+        self.output_handler.debug(|| format!("Evaluating event at time {:?}.", Instant::now()));
         self.evaluate_event(ee.event);
-        ee.layers.into_iter().for_each(|layer| self.evaluate_all(layer));
+        ee.layers.into_iter().for_each(|layer| self.evaluate_all_outputs(layer));
     }
 
     fn evaluate_event(&mut self, event: Vec<(StreamReference, Value)>) {
-        unimplemented!()
+        event.into_iter().for_each(|(sr, v)| self.evaluator.accept_input(sr, v));
     }
 
-    fn evaluate_all(&mut self, streams: Vec<StreamReference>) {
-        streams.into_iter().for_each(|s| self.evaluate_single(s))
+    fn evaluate_all_outputs(&mut self, streams: Vec<StreamReference>) {
+        streams.into_iter().for_each(|s| self.evaluate_single_output(s))
     }
 
-    fn evaluate_single(&mut self, stream: StreamReference) {
-        unimplemented!()
+    fn evaluate_single_output(&mut self, stream: StreamReference) {
+        let inst = (stream.out_ix(), Vec::new());
+        self.evaluator.eval_stream(inst, None);
     }
 }
 
