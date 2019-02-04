@@ -1,7 +1,6 @@
-
 use lola_parser::*;
 
-use crate::storage::{Value, TempStore, GlobalStore};
+use crate::storage::{GlobalStore, TempStore, Value};
 
 pub(crate) type OutInstance = (usize, Vec<Value>);
 pub(crate) type Window = (usize, Vec<Value>, WindowOperation);
@@ -72,15 +71,11 @@ impl Evaluator {
                 self.write(stmt.target, v, inst);
             }
             Op::Ite { consequence, alternative } => {
-                let cont_with = if self.get_bool(stmt.args[0], inst) {
-                    consequence
-                } else {
-                    alternative
-                };
+                let cont_with = if self.get_bool(stmt.args[0], inst) { consequence } else { alternative };
                 for stmt in cont_with {
                     self.eval_stmt(stmt, inst, ts);
                 }
-            },
+            }
             Op::LoadConstant(c) => {
                 let val = match c {
                     Constant::Bool(b) => Value::Bool(*b),
@@ -151,7 +146,7 @@ impl Evaluator {
                         "sqrt" => f.sqrt(),
                         "sin" => f.sin(),
                         "cos" => f.cos(),
-                        _ => panic!("Unknown function!")
+                        _ => panic!("Unknown function!"),
                     };
                     let res = Value::Float(NotNan::new(res).expect("TODO: Handle"));
                     self.write(stmt.target, res, inst);

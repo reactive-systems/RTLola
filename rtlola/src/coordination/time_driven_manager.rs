@@ -1,11 +1,10 @@
-
 use super::WorkItem;
-use crate::basics::{ EvalConfig, OutputHandler };
 use crate::basics::util;
+use crate::basics::{EvalConfig, OutputHandler};
 
-use std::sync::mpsc::{Receiver, Sender};
 use lola_parser::{LolaIR, StreamReference};
 use std::cmp::Ordering;
+use std::sync::mpsc::{Receiver, Sender};
 use std::time::{Duration, SystemTime};
 
 const NANOS_PER_SEC: u128 = 1_000_000_000;
@@ -55,7 +54,6 @@ pub(crate) struct TimeDrivenManager {
 impl TimeDrivenManager {
     /// Creates a new TimeDrivenManager managing time-driven output streams.
     pub(crate) fn setup(ir: LolaIR, config: EvalConfig) -> TimeDrivenManager {
-
         let handler = OutputHandler::new(&config);
 
         if ir.time_driven.is_empty() {
@@ -102,7 +100,7 @@ impl TimeDrivenManager {
         TimeDrivenManager { last_state: None, deadlines, hyper_period, start_time: None, handler }
     }
 
-    pub fn start(mut self, time: Option<SystemTime>, work_chan: Sender<WorkItem>, stop_chan: Receiver<bool>) -> ! {
+    pub fn start(mut self, time: Option<SystemTime>, work_chan: Sender<WorkItem>, _stop_chan: Receiver<bool>) -> ! {
         self.start_time = time.or(Some(SystemTime::now()));
         unimplemented!()
     }
@@ -175,9 +173,8 @@ impl TimeDrivenManager {
             panic!("Called `TimeDrivenManager::wait_for` too early; no deadline has passed.");
         } else {
             // Otherwise, inform the output handler and carry on.
-            self.handler.debug(|| {
-                String::from("Warning: Called `TimeDrivenManager::wait_for` twice for the same deadline.")
-            })
+            self.handler
+                .debug(|| String::from("Warning: Called `TimeDrivenManager::wait_for` twice for the same deadline."))
         }
     }
 
@@ -318,8 +315,8 @@ mod tests {
     use super::*;
     use crate::basics::{EvalConfig, OutputHandler};
     use lola_parser::LolaIR;
-    use std::time::{Duration, SystemTime};
     use std::rc::Rc;
+    use std::time::{Duration, SystemTime};
 
     fn to_ir(spec: &str) -> LolaIR {
         lola_parser::parse(spec)

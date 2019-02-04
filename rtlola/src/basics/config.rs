@@ -1,5 +1,5 @@
-use std::cmp::Ordering;
 use super::{InputSource, OutputChannel};
+use std::cmp::Ordering;
 
 #[derive(Clone, Debug)]
 pub struct EvalConfig {
@@ -49,7 +49,6 @@ impl Ord for Verbosity {
 }
 
 impl EvalConfig {
-
     pub fn new(source: Option<String>, verbosity: Verbosity, output: OutputChannel) -> Self {
         EvalConfig {
             source: source.map(InputSource::File).unwrap_or(InputSource::StdIn),
@@ -67,15 +66,10 @@ impl EvalConfig {
     pub fn release(file: Option<String>, output: OutputChannel) -> Self {
         EvalConfig::new(file, Verbosity::Triggers, output)
     }
-
 }
 
 impl Default for EvalConfig {
     fn default() -> EvalConfig {
-        EvalConfig {
-            source: InputSource::StdIn,
-            verbosity: Verbosity::Triggers,
-            output_channel: OutputChannel::StdOut
-        }
+        EvalConfig { source: InputSource::StdIn, verbosity: Verbosity::Triggers, output_channel: OutputChannel::StdOut }
     }
 }
