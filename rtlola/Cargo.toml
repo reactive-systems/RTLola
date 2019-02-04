@@ -7,3 +7,4 @@ edition = "2018"
 [dependencies]
 lola-parser = {path = "../frontend/"}
 ordered-float = "1.0.1"
+csv = "1.0.5"

@@ -1,16 +1,16 @@
-
-use std::thread;
-use std::sync::mpsc;
 use lola_parser::*;
 use std::fmt;
+use std::sync::mpsc;
+use std::thread;
 use std::time::Instant;
 
-use crate::basics::OutputHandler;
 use crate::basics::EvalConfig;
+use crate::basics::OutputHandler;
 use crate::evaluator::Evaluator;
+use crate::storage::Value;
 
-use super::time_driven_manager::{ TimeDrivenManager, TimeEvaluation };
-use super::event_driven_manager::{ EventDrivenManager, EventEvaluation };
+use super::event_driven_manager::{EventDrivenManager, EventEvaluation};
+use super::time_driven_manager::{TimeDrivenManager, TimeEvaluation};
 
 pub struct Controller {
     /// Handles all kind of output behavior according to config.
@@ -29,11 +29,9 @@ impl lola_parser::LolaBackend for Controller {
 }
 
 impl Controller {
-
     /// Starts the evaluation process, i.e. periodically computes outputs for time-driven streams
     /// and fetches/expects events from specified input source.
     pub fn evaluate(ir: LolaIR, config: EvalConfig, ts: Option<Instant>) -> ! {
-
         let (work_tx, work_rx) = mpsc::channel();
         let (eof_tx, eof_rx) = mpsc::channel();
 
@@ -55,16 +53,11 @@ impl Controller {
         });
 
         let e = Evaluator::new(&ir, ts.unwrap_or_else(Instant::now));
-        let mut ctrl = Controller{
-            output_handler: OutputHandler::new(&config),
-            spec: ir,
-            evaluator: e,
-        };
+        let mut ctrl = Controller { output_handler: OutputHandler::new(&config), spec: ir, evaluator: e };
 
         let _ = work_rx.iter().map(|wi| ctrl.eval_workitem(wi));
 
         panic!("Both producers hung up!");
-
     }
 
     fn eval_workitem(&mut self, wi: WorkItem) {
@@ -83,7 +76,7 @@ impl Controller {
         ee.layers.into_iter().for_each(|layer| self.evaluate_all(layer));
     }
 
-    fn evaluate_event(&mut self, event: Vec<(StreamReference, String)>) {
+    fn evaluate_event(&mut self, event: Vec<(StreamReference, Value)>) {
         unimplemented!()
     }
 
@@ -94,7 +87,6 @@ impl Controller {
     fn evaluate_single(&mut self, stream: StreamReference) {
         unimplemented!()
     }
-
 }
 
 #[derive(Debug)]
@@ -112,5 +104,5 @@ impl std::error::Error for EvaluationError {}
 
 pub(crate) enum WorkItem {
     Event(EventEvaluation),
-    Time(TimeEvaluation)
+    Time(TimeEvaluation),
 }

@@ -1,7 +1,7 @@
-
-use std::ops;
-use std::hash::{Hash, Hasher};
+use lola_parser::Type;
 use ordered_float::NotNan;
+use std::hash::{Hash, Hasher};
+use std::ops;
 
 use self::Value::*;
 
@@ -14,6 +14,21 @@ pub(crate) enum Value {
     Str(String),
 }
 
+impl Value {
+    // TODO: -> Result<Option, ConversionError>
+    pub(crate) fn try_from(source: &str, ty: &Type) -> Option<Value> {
+        match ty {
+            Type::Option(_) => panic!("Cannot occur."),
+            Type::String => unimplemented!(),
+            Type::Tuple(_) => unimplemented!(),
+            Type::Float(_) => source.parse::<f64>().ok().map(|f| Float(NotNan::new(f).unwrap())),
+            Type::UInt(_) => source.parse::<u128>().map(|u| Unsigned(u)).ok(),
+            Type::Int(_) => source.parse::<i128>().map(|i| Signed(i)).ok(),
+            Type::Bool => source.parse::<bool>().map(|b| Bool(b)).ok(),
+        }
+    }
+}
+
 impl ops::Add for Value {
     type Output = Value;
     fn add(self, other: Value) -> Value {
@@ -21,7 +36,7 @@ impl ops::Add for Value {
             (Unsigned(v1), Unsigned(v2)) => Unsigned(v1 + v2),
             (Signed(v1), Signed(v2)) => Signed(v1 + v2),
             (Float(v1), Float(v2)) => Float(v1 + v2),
-            _ => panic!("Incompatible types.")
+            _ => panic!("Incompatible types."),
         }
     }
 }
@@ -33,7 +48,7 @@ impl ops::Sub for Value {
             (Unsigned(v1), Unsigned(v2)) => Unsigned(v1 - v2),
             (Signed(v1), Signed(v2)) => Signed(v1 - v2),
             (Float(v1), Float(v2)) => Float(v1 - v2),
-            _ => panic!("Incompatible types.")
+            _ => panic!("Incompatible types."),
         }
     }
 }
@@ -45,7 +60,7 @@ impl ops::Mul for Value {
             (Unsigned(v1), Unsigned(v2)) => Unsigned(v1 * v2),
             (Signed(v1), Signed(v2)) => Signed(v1 * v2),
             (Float(v1), Float(v2)) => Float(v1 * v2),
-            _ => panic!("Incompatible types.")
+            _ => panic!("Incompatible types."),
         }
     }
 }
@@ -57,7 +72,7 @@ impl ops::Div for Value {
             (Unsigned(v1), Unsigned(v2)) => Unsigned(v1 / v2),
             (Signed(v1), Signed(v2)) => Signed(v1 / v2),
             (Float(v1), Float(v2)) => Float(v1 / v2),
-            _ => panic!("Incompatible types.")
+            _ => panic!("Incompatible types."),
         }
     }
 }
@@ -69,7 +84,7 @@ impl ops::Rem for Value {
             (Unsigned(v1), Unsigned(v2)) => Unsigned(v1 % v2),
             (Signed(v1), Signed(v2)) => Signed(v1 % v2),
             (Float(v1), Float(v2)) => Float(v1 % v2),
-            _ => panic!("Incompatible types.")
+            _ => panic!("Incompatible types."),
         }
     }
 }
@@ -79,7 +94,7 @@ impl ops::BitOr for Value {
     fn bitor(self, other: Value) -> Value {
         match (self, other) {
             (Bool(v1), Bool(v2)) => Bool(v1 || v2),
-            _ => panic!("Incompatible types.")
+            _ => panic!("Incompatible types."),
         }
     }
 }
@@ -89,7 +104,7 @@ impl ops::BitAnd for Value {
     fn bitand(self, other: Value) -> Value {
         match (self, other) {
             (Bool(v1), Bool(v2)) => Bool(v1 && v2),
-            _ => panic!("Incompatible types.")
+            _ => panic!("Incompatible types."),
         }
     }
 }
@@ -101,7 +116,7 @@ impl ops::Not for Value {
             Signed(v) => Signed(-v), // TODO Check
             Float(v) => Float(-v),
             Bool(v) => Bool(!v),
-            _ => panic!("Incompatible types.")
+            _ => panic!("Incompatible types."),
         }
     }
 }
