@@ -22,9 +22,9 @@ impl Value {
             Type::String => unimplemented!(),
             Type::Tuple(_) => unimplemented!(),
             Type::Float(_) => source.parse::<f64>().ok().map(|f| Float(NotNan::new(f).unwrap())),
-            Type::UInt(_) => source.parse::<u128>().map(|u| Unsigned(u)).ok(),
-            Type::Int(_) => source.parse::<i128>().map(|i| Signed(i)).ok(),
-            Type::Bool => source.parse::<bool>().map(|b| Bool(b)).ok(),
+            Type::UInt(_) => source.parse::<u128>().map(Unsigned).ok(),
+            Type::Int(_) => source.parse::<i128>().map(Signed).ok(),
+            Type::Bool => source.parse::<bool>().map(Bool).ok(),
         }
     }
 }

@@ -55,7 +55,7 @@ impl EventDrivenManager {
         let max_layer = layered.iter().map(|(lay, _)| lay).max();
 
         if cfg!(debug_assertions) {
-            Self::check_layers(&layered.iter().map(|(ix, _)| *ix).collect());
+            Self::check_layers(&layered.iter().map(|(ix, _)| *ix).collect::<Vec<usize>>().as_slice());
         }
 
         // Create vec where each element represents one layer.
@@ -89,8 +89,8 @@ impl EventDrivenManager {
         }
     }
 
-    fn check_layers(vec: &Vec<usize>) {
-        let mut indices = vec.clone();
+    fn check_layers(vec: &[usize]) {
+        let mut indices = vec.to_owned();
         indices.sort();
         let successive = indices.iter().enumerate().all(|(ix, key)| ix == *key);
         debug_assert!(successive, "Evaluation order not minimal: Some layers do not have entries.");

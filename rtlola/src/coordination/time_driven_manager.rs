@@ -61,7 +61,7 @@ impl TimeDrivenManager {
             return TimeDrivenManager {
                 last_state: None,
                 deadlines: vec![Deadline { pause: Duration::from_secs(0), due: Vec::new() }],
-                hyper_period: Duration::from_secs(100000), // Actual value does not matter.
+                hyper_period: Duration::from_secs(100_000), // Actual value does not matter.
                 start_time: None,
                 handler,
             };
@@ -102,7 +102,7 @@ impl TimeDrivenManager {
     }
 
     pub fn start(mut self, time: Option<SystemTime>, work_chan: Sender<WorkItem>, _stop_chan: Receiver<bool>) -> ! {
-        self.start_time = time.or(Some(SystemTime::now()));
+        self.start_time = time.or_else(|| Some(SystemTime::now()));
         loop {
             let sleepy_time = self.wait_for(None);
             sleep(sleepy_time.0);
@@ -310,7 +310,7 @@ impl TimeDrivenManager {
     }
 
     fn dur_as_nanos(dur: Duration) -> u128 {
-        dur.as_secs() as u128 * NANOS_PER_SEC as u128 + dur.subsec_nanos() as u128
+        u128::from(dur.as_secs()) * NANOS_PER_SEC + u128::from(dur.subsec_nanos())
     }
 
     fn dur_from_nanos(dur: u128) -> Duration {

@@ -88,8 +88,8 @@ impl<IV: WindowIV> WindowInstance<IV> {
         let a_nanos = a.subsec_nanos();
         let b_secs = b.as_secs();
         let b_nanos = b.subsec_nanos();
-        let a = (a_secs as f64) + (a_nanos as f64) / (1_000_000_000 as f64);
-        let b = (b_secs as f64) + (b_nanos as f64) / (1_000_000_000 as f64);
+        let a = (a_secs as f64) + f64::from(a_nanos) / f64::from(1_000_000_000);
+        let b = (b_secs as f64) + f64::from(b_nanos) / f64::from(1_000_000_000);
         a / b
     }
 }

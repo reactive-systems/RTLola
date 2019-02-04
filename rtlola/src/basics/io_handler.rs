@@ -27,7 +27,7 @@ impl ColumnMapping {
                 names
                     .iter()
                     .position(|i| i == &name)
-                    .expect(&format!("CVS header does not contain an entry for stream {}.", name))
+                    .unwrap_or_else(|| panic!("CVS header does not contain an entry for stream {}.", name))
             })
             .collect();
         ColumnMapping(mapping)

@@ -59,7 +59,7 @@ impl TempStore {
         // TODO: The check is not required, just for safety.
         if let Type::UInt(_) = self.types[t.0 as usize] {
             let (lower, higher) = self.get_bounds(t);
-            Self::parse_bytes(&self.data[lower..higher]) as u128
+            u128::from(Self::parse_bytes(&self.data[lower..higher]))
         } else {
             panic!("Unexpected call to `TempStore::get_unsigned`.")
         }
@@ -69,7 +69,7 @@ impl TempStore {
         // TODO: The check is not required, just for safety.
         if let Type::Int(_) = self.types[t.0 as usize] {
             let (lower, higher) = self.get_bounds(t);
-            Self::parse_bytes(&self.data[lower..higher]) as i128
+            i128::from(Self::parse_bytes(&self.data[lower..higher]))
         } else {
             panic!("Unexpected call to `TempStore::get_unsigned`.")
         }
@@ -117,7 +117,7 @@ impl TempStore {
         // Write least significant byte first.
         for i in (0..data.len()).rev() {
             data[i] = v as u8;
-            v = v >> 8;
+            v >>= 8;
         }
     }
 
@@ -125,8 +125,8 @@ impl TempStore {
     fn parse_bytes(d: &[u8]) -> u64 {
         assert!(d.len().is_power_of_two());
         let mut res = 0u64;
-        for i in 0..d.len() {
-            res = (res << 8) | (d[i] as u64);
+        for byte in d {
+            res = (res << 8) | u64::from(*byte);
         }
         res
     }
