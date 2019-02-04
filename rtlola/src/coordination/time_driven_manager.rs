@@ -6,6 +6,7 @@ use lola_parser::{LolaIR, StreamReference};
 use std::cmp::Ordering;
 use std::sync::mpsc::{Receiver, Sender};
 use std::time::{Duration, SystemTime};
+use std::thread::sleep;
 
 const NANOS_PER_SEC: u128 = 1_000_000_000;
 
@@ -102,14 +103,23 @@ impl TimeDrivenManager {
 
     pub fn start(mut self, time: Option<SystemTime>, work_chan: Sender<WorkItem>, _stop_chan: Receiver<bool>) -> ! {
         self.start_time = time.or(Some(SystemTime::now()));
-        unimplemented!()
+        loop {
+            let sleepy_time = self.wait_for(None);
+            sleep(sleepy_time.0);
+            if let Some(due) = self.due_streams(None) {
+                let item = WorkItem::Time(due.clone());
+                if work_chan.send(item).is_err() {
+                    self.handler.runtime_warning(|| "TDM: Sending failed; evaluation cycle lost.");
+                }
+            }
+        }
     }
 
     /// Determines how long the current thread can wait until the next time-based evaluation cycle
     /// needs to be started. Calls are time-sensitive, i.e. successive calls do not necessarily
     /// yield identical results.
     ///
-    /// *Returns:* `WaitingTime` _t_ and `TimeDrivenCycleCount` _i_ where _i_ nanoseconds can pass
+    /// *Returns:* `WaitingTime` _t_ and `TimeDrivenCycleCount` _i_ where _t_ nanoseconds can pass
     /// until the _i_th time-driven evaluation cycle needs to be started.
     fn wait_for(&self, time: Option<SystemTime>) -> (Duration, TimeDrivenCycleCount) {
         let time = time.unwrap_or_else(SystemTime::now);
