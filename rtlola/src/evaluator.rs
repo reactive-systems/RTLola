@@ -15,7 +15,6 @@ pub(crate) struct Evaluator {
     // Indexed by stream reference.
     exprs: Vec<Expression>,
     global_store: GlobalStore,
-    window_ops: Vec<WindowOperation>,
     ir: LolaIR,
     handler: OutputHandler,
 }
@@ -25,9 +24,8 @@ impl Evaluator {
         let temp_stores = ir.outputs.iter().map(|o| TempStore::new(&o.expr)).collect();
         let global_store = GlobalStore::new(&ir, ts);
         let exprs = ir.outputs.iter().map(|o| o.expr.clone()).collect();
-        let window_ops = ir.sliding_windows.iter().map(|w| w.op).collect();
         let handler = OutputHandler::new(&config);
-        Evaluator { temp_stores, exprs, global_store, window_ops, ir, handler }
+        Evaluator { temp_stores, exprs, global_store, ir, handler }
     }
 
     pub(crate) fn eval_stream(&mut self, inst: OutInstance, ts: Option<Instant>) {
@@ -54,18 +52,6 @@ impl Evaluator {
 
     pub(crate) fn accept_input(&mut self, input: StreamReference, v: Value) {
         self.global_store.get_in_instance_mut(input).push_value(v);
-    }
-
-    fn type_of(&self, temp: Temporary, inst: &OutInstance) -> &Type {
-        &self.exprs[inst.0].temporaries[temp.0]
-    }
-
-    fn get_signed(&self, temp: Temporary, inst: &OutInstance) -> i128 {
-        self.temp_stores[inst.0].get_signed(temp)
-    }
-
-    fn get_unsigned(&self, temp: Temporary, inst: &OutInstance) -> u128 {
-        self.temp_stores[inst.0].get_unsigned(temp)
     }
 
     fn get_bool(&self, temp: Temporary, inst: &OutInstance) -> bool {
@@ -205,6 +191,7 @@ mod tests {
 
     use super::*;
 
+    #[allow(dead_code)]
     fn setup(spec: &str) -> (LolaIR, Evaluator) {
         let ir = lola_parser::parse(spec);
         let eval = Evaluator::new(ir.clone(), Instant::now(), EvalConfig::default());

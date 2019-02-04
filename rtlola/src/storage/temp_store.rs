@@ -112,19 +112,6 @@ impl TempStore {
         self.data[self.offsets[t.0 as usize]] = v as u8
     }
 
-    pub(crate) fn move_val(&mut self, src: Temporary, tar: Temporary) {
-        if src == tar {
-            return;
-        }
-        let (s_low, s_high) = self.get_bounds(src);
-        let (t_low, t_high) = self.get_bounds(tar);
-        assert_eq!(s_high - s_low, t_high - t_low);
-        assert!(s_high <= t_low && t_high <= s_low);
-        for i in 0..(s_high - s_low) {
-            self.data[t_low + i] = self.data[s_low + 1];
-        }
-    }
-
     #[inline]
     fn write_bytes(data: &mut [u8], mut v: u128) {
         // Write least significant byte first.

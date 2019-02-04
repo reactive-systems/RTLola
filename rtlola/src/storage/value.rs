@@ -10,6 +10,7 @@ pub(crate) enum Value {
     Signed(i128),
     Float(NotNan<f64>),
     Bool(bool),
+    #[allow(dead_code)]
     Str(String),
 }
 

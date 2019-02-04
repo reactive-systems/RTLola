@@ -322,9 +322,11 @@ impl TimeDrivenManager {
 }
 
 mod tests {
+    #[allow(unused_imports)]
     use super::*;
     use lola_parser::LolaIR;
 
+    #[allow(dead_code)]
     fn to_ir(spec: &str) -> LolaIR {
         lola_parser::parse(spec)
     }
