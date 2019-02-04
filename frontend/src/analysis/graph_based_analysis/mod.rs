@@ -95,7 +95,7 @@ pub(crate) enum StreamNode {
     RTTrigger(NodeId, StreamTy),
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub(crate) enum ComputeStep {
     Invoke(NodeId),
     Extend(NodeId),

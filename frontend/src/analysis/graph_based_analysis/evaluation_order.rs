@@ -233,3 +233,92 @@ fn get_compute_order(mut compute_graph: ComputationGraph) -> Vec<Vec<ComputeStep
     }
     compute_step_order
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::analysis::graph_based_analysis::dependency_graph::analyse_dependencies;
+    use crate::analysis::graph_based_analysis::evaluation_order::determine_evaluation_order;
+    use crate::analysis::graph_based_analysis::ComputeStep;
+    use crate::analysis::graph_based_analysis::StorageRequirement;
+    use crate::analysis::graph_based_analysis::TrackingRequirement;
+    use crate::analysis::lola_version::LolaVersionAnalysis;
+    use crate::analysis::naming::NamingAnalysis;
+    use crate::parse::parse;
+    use crate::parse::NodeId;
+    use crate::parse::SourceMapper;
+    use crate::reporting::Handler;
+    use crate::ty::check::TypeAnalysis;
+    use crate::FrontendConfig;
+    use std::path::PathBuf;
+    use StreamIndex::{In, Out};
+
+    #[derive(Debug, Clone, Copy)]
+    enum StreamIndex {
+        Out(usize),
+        In(usize),
+    }
+
+    fn check_eval_order(
+        content: &str,
+        expected_errors: usize,
+        expected_warning: usize,
+        expected_event_based_streams_order: Vec<Vec<(StreamIndex, ComputeStep)>>,
+    ) {
+        let handler = Handler::new(SourceMapper::new(PathBuf::new(), content));
+        let ast = parse(content, &handler, FrontendConfig::default()).unwrap_or_else(|e| panic!("{}", e));
+        let mut naming_analyzer = NamingAnalysis::new(&handler, FrontendConfig::default());
+        let mut decl_table = naming_analyzer.check(&ast);
+        let mut type_analysis = TypeAnalysis::new(&handler, &mut decl_table);
+        let type_table = type_analysis.check(&ast);
+        let type_table = type_table.as_ref().expect("We expect in these tests that the type analysis checks out.");
+        let mut version_analyzer = LolaVersionAnalysis::new(&handler, &type_table);
+        let version = version_analyzer.analyse(&ast);
+        assert!(!version.is_none(), "We only analyze dependencies for specifications that so far seem to be ok.");
+        let dependency_analysis =
+            analyse_dependencies(&ast, &version_analyzer.result, &decl_table, &handler, &type_table);
+
+        let (order, pruned_graph) = determine_evaluation_order(dependency_analysis.dependency_graph);
+        assert_eq!(expected_errors, handler.emitted_errors());
+        assert_eq!(expected_warning, handler.emitted_warnings());
+        assert_eq!(expected_event_based_streams_order.len(), order.event_based_streams_order.len());
+        let mut level_iter = order.event_based_streams_order.iter();
+        for level in expected_event_based_streams_order {
+            let result_level = level_iter.next().expect("we checked the length");
+            assert_eq!(level.len(), result_level.len());
+            for (index, step) in level {
+                let node_id = match index {
+                    StreamIndex::Out(i) => ast.outputs[i].id,
+                    StreamIndex::In(i) => ast.inputs[i].id,
+                };
+                let expected_step = match step {
+                    ComputeStep::Evaluate(_) => ComputeStep::Evaluate(node_id),
+                    ComputeStep::Invoke(_) => ComputeStep::Invoke(node_id),
+                    ComputeStep::Terminate(_) => ComputeStep::Terminate(node_id),
+                    ComputeStep::Extend(_) => ComputeStep::Extend(node_id),
+                };
+                assert!(result_level.contains(&expected_step));
+            }
+        }
+    }
+
+    #[test]
+    fn simple_spec() {
+        check_eval_order(
+            "input a: UInt8
+output b: UInt8 := a",
+            0,
+            0,
+            vec![
+                vec![(In(0), ComputeStep::Invoke(NodeId::new(0))), (Out(0), ComputeStep::Invoke(NodeId::new(0)))],
+                vec![
+                    (In(0), ComputeStep::Extend(NodeId::new(0))),
+                    (In(0), ComputeStep::Terminate(NodeId::new(0))),
+                    (Out(0), ComputeStep::Extend(NodeId::new(0))),
+                    (Out(0), ComputeStep::Terminate(NodeId::new(0))),
+                ],
+                vec![(In(0), ComputeStep::Evaluate(NodeId::new(0)))],
+                vec![(Out(0), ComputeStep::Evaluate(NodeId::new(0)))],
+            ],
+        )
+    }
+}
