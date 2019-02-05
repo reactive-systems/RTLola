@@ -55,16 +55,16 @@ impl Controller {
 
         loop {
             match work_rx.recv() {
-                Ok(wi) => ctrl.eval_workitem(wi),
+                Ok(wi) => ctrl.eval_workitem(wi, None),
                 Err(_) => panic!("Both producers hung up!"),
             }
         }
     }
 
-    fn eval_workitem(&mut self, wi: WorkItem) {
+    fn eval_workitem(&mut self, wi: WorkItem, ts: Option<Instant>) {
         self.output_handler.debug(|| format!("Received {:?}.", wi));
         match wi {
-            WorkItem::Event(e) => self.evaluate_event_item(e),
+            WorkItem::Event(e) => self.evaluate_event_item(e, ts),
             WorkItem::Time(t) => self.evaluate_timed_item(t),
             WorkItem::End => {
                 self.output_handler.debug(|| "Finished entire input. Terminating.");
@@ -78,13 +78,13 @@ impl Controller {
         t.into_iter().for_each(|s| self.evaluate_single_output(s));
     }
 
-    fn evaluate_event_item(&mut self, ee: EventEvaluation) {
-        self.evaluate_event(ee.event);
+    fn evaluate_event_item(&mut self, ee: EventEvaluation, ts: Option<Instant>) {
+        self.evaluate_event(ee.event, ts);
         ee.layers.into_iter().for_each(|layer| self.evaluate_all_outputs(layer));
     }
 
-    fn evaluate_event(&mut self, event: Vec<(StreamReference, Value)>) {
-        event.into_iter().for_each(|(sr, v)| self.evaluator.accept_input(sr, v));
+    fn evaluate_event(&mut self, event: Vec<(StreamReference, Value)>, ts: Option<Instant>) {
+        event.into_iter().for_each(|(sr, v)| self.evaluator.accept_input(sr, v, ts));
     }
 
     fn evaluate_all_outputs(&mut self, streams: Vec<StreamReference>) {

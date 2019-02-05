@@ -47,11 +47,8 @@ impl TempStore {
     fn get_bounds(&self, t: Temporary) -> (usize, usize) {
         let lower = self.offsets[t.0 as usize];
         let ty = &self.types[t.0 as usize];
-        let higher = lower
-            + match self.types[t.0 as usize] {
-                Type::UInt(_) => ty.size().unwrap().0 as usize,
-                _ => panic!("Unexpected call to `TempStore::get_unsigned`."),
-            };
+        let diff = ty.size().unwrap().0 as usize;
+        let higher = lower + diff;
         (lower, higher)
     }
 

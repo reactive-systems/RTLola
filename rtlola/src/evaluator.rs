@@ -49,8 +49,15 @@ impl Evaluator {
         // TODO: Dependent streams?
     }
 
-    pub(crate) fn accept_input(&mut self, input: StreamReference, v: Value) {
-        self.global_store.get_in_instance_mut(input).push_value(v);
+    pub(crate) fn accept_input(&mut self, input: StreamReference, v: Value, ts: Option<Instant>) {
+        self.global_store.get_in_instance_mut(input).push_value(v.clone());
+        self.handler.debug(|| format!("InputStream[{}] := {:?}.", input.in_ix(), v.clone()));
+        let extended = self.ir.get_in(input);
+        for win in &extended.dependent_windows {
+            self.global_store
+                .get_window_mut((win.ix, Vec::new()))
+                .accept_value(v.clone(), ts.unwrap_or_else(Instant::now))
+        }
     }
 
     fn get_bool(&self, temp: Temporary, inst: &OutInstance) -> bool {
@@ -189,11 +196,18 @@ impl Evaluator {
 mod tests {
 
     use super::*;
+    use lola_parser::LolaIR;
+    use std::time::{Duration, Instant};
 
     #[allow(dead_code)]
     fn setup(spec: &str) -> (LolaIR, Evaluator) {
+        setup_time(spec, Instant::now())
+    }
+
+    #[allow(dead_code)]
+    fn setup_time(spec: &str, ts: Instant) -> (LolaIR, Evaluator) {
         let ir = lola_parser::parse(spec);
-        let eval = Evaluator::new(ir.clone(), Instant::now(), EvalConfig::default());
+        let eval = Evaluator::new(ir.clone(), ts, EvalConfig::default());
         (ir, eval)
     }
 
@@ -223,7 +237,7 @@ mod tests {
         let (_, mut eval) = setup("input a: UInt8");
         let sr = StreamReference::InRef(0);
         let v = Value::Unsigned(3);
-        eval.accept_input(sr, v.clone());
+        eval.accept_input(sr, v.clone(), None);
         assert_eq!(eval.__peek_value(sr, &Vec::new(), 0).unwrap(), v)
     }
 
@@ -233,7 +247,7 @@ mod tests {
         let out_ref = StreamReference::OutRef(0);
         let in_ref = StreamReference::InRef(0);
         let v = Value::Unsigned(9);
-        eval.accept_input(in_ref, v.clone());
+        eval.accept_input(in_ref, v.clone(), None);
         eval.eval_stream((0, Vec::new()), None);
         assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), v)
     }
@@ -244,7 +258,7 @@ mod tests {
         let out_ref = StreamReference::OutRef(0);
         let in_ref = StreamReference::InRef(0);
         let v1 = Value::Unsigned(1);
-        eval.accept_input(in_ref, v1);
+        eval.accept_input(in_ref, v1, None);
         eval.eval_stream((0, Vec::new()), None);
         assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), Value::Unsigned(3));
     }
@@ -257,9 +271,9 @@ mod tests {
         let in_ref = StreamReference::InRef(0);
         let v1 = Value::Unsigned(1);
         let v2 = Value::Unsigned(2);
-        eval.accept_input(in_ref, v1.clone());
+        eval.accept_input(in_ref, v1.clone(), None);
         eval.eval_stream((0, Vec::new()), None);
-        eval.accept_input(in_ref, v2);
+        eval.accept_input(in_ref, v2, None);
         eval.eval_stream((0, Vec::new()), None);
         eval.eval_stream((1, Vec::new()), None);
         assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), v1);
@@ -271,9 +285,21 @@ mod tests {
         let out_ref = StreamReference::OutRef(0);
         let in_ref = StreamReference::InRef(0);
         let v1 = Value::Unsigned(1);
-        eval.accept_input(in_ref, v1.clone());
+        eval.accept_input(in_ref, v1.clone(), None);
         eval.eval_stream((0, Vec::new()), None);
         assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), v1);
+    }
+
+    #[test]
+    fn test_conversion_lookup() {
+        let (ir, mut eval) = setup("input a: UInt8\noutput b: UInt32 := a + 100000");
+        let out_ref = StreamReference::OutRef(0);
+        let in_ref = StreamReference::InRef(0);
+        let expected = Value::Unsigned(7 + 100000);
+        let v1 = Value::Unsigned(7);
+        eval.accept_input(in_ref, v1, None);
+        eval.eval_stream((0, Vec::new()), None);
+        assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), expected);
     }
 
     #[test]
@@ -284,8 +310,8 @@ mod tests {
         let b = StreamReference::InRef(1);
         let v1 = Value::Unsigned(1);
         let v2 = Value::Unsigned(2);
-        eval.accept_input(a, v1.clone());
-        eval.accept_input(b, v2.clone());
+        eval.accept_input(a, v1.clone(), None);
+        eval.accept_input(b, v2.clone(), None);
         eval.eval_stream((0, Vec::new()), None);
         assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), v1 + v2);
     }
@@ -298,10 +324,29 @@ mod tests {
         let v1 = Value::Unsigned(1);
         let v2 = Value::Unsigned(2);
         let v3 = Value::Unsigned(3);
-        eval.accept_input(in_ref, v1);
-        eval.accept_input(in_ref, v2.clone());
-        eval.accept_input(in_ref, v3);
+        eval.accept_input(in_ref, v1, None);
+        eval.accept_input(in_ref, v2.clone(), None);
+        eval.accept_input(in_ref, v3, None);
         eval.eval_stream((0, Vec::new()), None);
         assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), v2)
+    }
+
+    #[test]
+    fn test_sum_window() {
+        let mut time = Instant::now();
+        let (_, mut eval) = setup_time("input a: Int16\noutput b: Int16 { extend @0.25Hz } := a[40s, sum] ? -3", time);
+        time += Duration::from_secs(45);
+        let out_ref = StreamReference::OutRef(0);
+        let in_ref = StreamReference::InRef(0);
+        let n = 25;
+        for v in 1..=n {
+            eval.accept_input(in_ref, Value::Signed(v), Some(time));
+            time += Duration::from_secs(1);
+        }
+        time += Duration::from_secs(1);
+        // 71 secs have passed. All values should be within the window.
+        eval.eval_stream((0, Vec::new()), Some(time));
+        let expected = Value::Signed((n * n + n) / 2);
+        assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), expected);
     }
 }
