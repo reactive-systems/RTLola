@@ -4,7 +4,16 @@ version = "0.1.0"
 authors = ["Maximilian Schwenger <schwenger@react.uni-saarland.de>"]
 edition = "2018"
 
+[lib]
+name = "rtlola"
+path = "src/lib.rs"
+
+[[bin]]
+name = "rtlola"
+path = "src/bin/bin.rs"
+
 [dependencies]
 lola-parser = {path = "../frontend/"}
 ordered-float = "1.0.1"
 csv = "1.0.5"
+itertools = "0.8"

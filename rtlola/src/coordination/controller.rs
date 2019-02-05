@@ -32,7 +32,7 @@ impl Controller {
         let (work_tx, work_rx) = mpsc::channel();
         let (_eof_tx, eof_rx) = mpsc::channel();
 
-        let start_time = std::time::SystemTime::now();
+        let start_time = Instant::now();
 
         let ir_clone_1 = ir.clone();
         let ir_clone_2 = ir.clone();
@@ -41,11 +41,11 @@ impl Controller {
         let work_tx_clone = work_tx.clone();
 
         // TODO: Wait until all events have been read.
-        let _event = thread::spawn(move || {
+        let _event = thread::Builder::new().name("EventDrivenManager".to_string()).spawn(move || {
             let event_manager = EventDrivenManager::setup(ir_clone_1, cfg_clone_1);
             event_manager.start(work_tx_clone)
         });
-        thread::spawn(move || {
+        let _ = thread::Builder::new().name("TimeDrivenManager".to_string()).spawn(move || {
             let time_manager = TimeDrivenManager::setup(ir_clone_2, cfg_clone_2);
             time_manager.start(Some(start_time), work_tx, eof_rx)
         });
@@ -53,25 +53,32 @@ impl Controller {
         let e = Evaluator::new(ir, ts.unwrap_or_else(Instant::now), config.clone());
         let mut ctrl = Controller { output_handler: OutputHandler::new(&config), evaluator: e };
 
-        let _ = work_rx.iter().map(|wi| ctrl.eval_workitem(wi));
-
-        panic!("Both producers hung up!");
+        loop {
+            match work_rx.recv() {
+                Ok(wi) => ctrl.eval_workitem(wi),
+                Err(_) => panic!("Both producers hung up!"),
+            }
+        }
     }
 
     fn eval_workitem(&mut self, wi: WorkItem) {
+        self.output_handler.debug(|| format!("Received {:?}.", wi));
         match wi {
             WorkItem::Event(e) => self.evaluate_event_item(e),
             WorkItem::Time(t) => self.evaluate_timed_item(t),
+            WorkItem::End => {
+                self.output_handler.debug(|| "Finished entire input. Terminating.");
+                println!("Finished all work items. Terminating gracefully.");
+                std::process::exit(1);
+            }
         }
     }
 
     fn evaluate_timed_item(&mut self, t: TimeEvaluation) {
-        self.output_handler.debug(|| format!("Evaluating timed at time {:?}.", Instant::now()));
         t.into_iter().for_each(|s| self.evaluate_single_output(s));
     }
 
     fn evaluate_event_item(&mut self, ee: EventEvaluation) {
-        self.output_handler.debug(|| format!("Evaluating event at time {:?}.", Instant::now()));
         self.evaluate_event(ee.event);
         ee.layers.into_iter().for_each(|layer| self.evaluate_all_outputs(layer));
     }
@@ -90,7 +97,9 @@ impl Controller {
     }
 }
 
+#[derive(Debug)]
 pub(crate) enum WorkItem {
     Event(EventEvaluation),
     Time(TimeEvaluation),
+    End,
 }

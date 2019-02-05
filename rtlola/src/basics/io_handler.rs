@@ -2,6 +2,7 @@ use super::{EvalConfig, Verbosity};
 use csv::{Reader as CSVReader, Result as ReaderResult, StringRecord};
 use std::fs::File;
 use std::io::{stderr, stdin, stdout, Write};
+use std::time::Duration;
 
 #[derive(Debug, Clone)]
 pub enum OutputChannel {
@@ -13,7 +14,21 @@ pub enum OutputChannel {
 #[derive(Debug, Clone)]
 pub enum InputSource {
     StdIn,
-    File(String),
+    File { path: String, reading_delay: Option<Duration> },
+}
+
+impl InputSource {
+    pub fn for_file(path: String) -> InputSource {
+        InputSource::File { path, reading_delay: None }
+    }
+
+    pub fn with_delay(path: String, delay: Duration) -> InputSource {
+        InputSource::File { path, reading_delay: Some(delay) }
+    }
+
+    pub fn stdin() -> InputSource {
+        InputSource::StdIn
+    }
 }
 
 struct ColumnMapping(Vec<usize>);
@@ -67,24 +82,35 @@ pub(crate) struct InputReader {
     reader: ReaderWrapper,
     mapping: ColumnMapping,
     record: StringRecord,
+    reading_delay: Option<Duration>,
 }
 
 impl InputReader {
     pub(crate) fn from(src: InputSource, names: &[&str]) -> ReaderResult<InputReader> {
+        let mut delay = None;
         let mut wrapper = match src {
             InputSource::StdIn => ReaderWrapper::Std(CSVReader::from_reader(stdin())),
-            InputSource::File(path) => ReaderWrapper::File(CSVReader::from_path(path)?),
+            InputSource::File { path, reading_delay } => {
+                delay = reading_delay;
+                ReaderWrapper::File(CSVReader::from_path(path)?)
+            }
         };
 
         let mapping = ColumnMapping::from_header(names, wrapper.get_header()?);
 
-        Ok(InputReader { reader: wrapper, mapping, record: StringRecord::new() })
+        Ok(InputReader { reader: wrapper, mapping, record: StringRecord::new(), reading_delay: delay })
     }
 
-    pub(crate) fn read_blocking(&mut self, buffer: &mut [String]) -> ReaderResult<()> {
+    pub(crate) fn read_blocking(&mut self, buffer: &mut [String]) -> ReaderResult<bool> {
         assert_eq!(buffer.len(), self.mapping.num_streams());
 
-        assert!(self.reader.read_record(&mut self.record)?);
+        if let Some(delay) = self.reading_delay {
+            std::thread::sleep(delay);
+        }
+
+        if !self.reader.read_record(&mut self.record)? {
+            return Ok(false);
+        }
         if cfg!(debug_assertion) {
             // Reset all buffered strings.
             buffer.iter_mut().for_each(|v| *v = String::new());
@@ -102,7 +128,7 @@ impl InputReader {
             assert!(buffer.iter().all(|v| !v.is_empty())) // TODO Runtime Error.
         }
 
-        Ok(())
+        Ok(true)
     }
 }
 
@@ -154,7 +180,7 @@ impl OutputHandler {
     where
         F: FnOnce() -> T,
     {
-        if kind >= self.verbosity {
+        if kind <= self.verbosity {
             self.print(msg().into());
         }
     }
@@ -162,8 +188,8 @@ impl OutputHandler {
     fn print(&self, msg: String) {
         use crate::basics::OutputChannel;
         let _ = match self.channel {
-            OutputChannel::StdOut => stdout().write(msg.as_bytes()),
-            OutputChannel::StdErr => stderr().write(msg.as_bytes()),
+            OutputChannel::StdOut => stdout().write((msg + "\n").as_bytes()),
+            OutputChannel::StdErr => stderr().write((msg + "\n").as_bytes()),
             OutputChannel::File(_) => self.file.as_ref().unwrap().write(msg.as_bytes()),
         }; // TODO: Decide how to handle the result.
     }

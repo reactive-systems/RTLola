@@ -49,12 +49,8 @@ impl Ord for Verbosity {
 }
 
 impl EvalConfig {
-    pub fn new(source: Option<String>, verbosity: Verbosity, output: OutputChannel) -> Self {
-        EvalConfig {
-            source: source.map(InputSource::File).unwrap_or(InputSource::StdIn),
-            verbosity,
-            output_channel: output,
-        }
+    pub fn new(source: InputSource, verbosity: Verbosity, output: OutputChannel) -> Self {
+        EvalConfig { source, verbosity, output_channel: output }
     }
 
     pub fn debug() -> Self {
@@ -63,8 +59,8 @@ impl EvalConfig {
         cfg
     }
 
-    pub fn release(file: Option<String>, output: OutputChannel) -> Self {
-        EvalConfig::new(file, Verbosity::Triggers, output)
+    pub fn release(path: String, output: OutputChannel) -> Self {
+        EvalConfig::new(InputSource::for_file(path), Verbosity::Triggers, output)
     }
 }
 

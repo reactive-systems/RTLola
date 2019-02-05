@@ -29,8 +29,6 @@ impl Evaluator {
     }
 
     pub(crate) fn eval_stream(&mut self, inst: OutInstance, ts: Option<Instant>) {
-        self.handler.debug(|| format!("Evaluating OutputStream[{}].", inst.0));
-
         let (ix, _) = inst;
         let ts = ts.unwrap_or_else(Instant::now);
         for stmt in self.exprs[ix].stmts.clone() {
@@ -39,11 +37,12 @@ impl Evaluator {
         let res = self.get(self.exprs[ix].stmts.last().unwrap().target, &inst);
 
         // Register value in global store.
-        self.global_store.get_out_instance_mut(inst).unwrap().push_value(res.clone()); // TODO: unsafe unwrap.
+        self.global_store.get_out_instance_mut(inst.clone()).unwrap().push_value(res.clone()); // TODO: unsafe unwrap.
+
+        self.handler.output(|| format!("OutputStream[{}] := {:?}.", inst.0, res.clone()));
 
         // Check linked streams and inform them.
         let extended = self.ir.get_out(StreamReference::OutRef(ix));
-        self.handler.debug(|| format!("Updating {} windows.", extended.dependent_windows.len()));
         for win in &extended.dependent_windows {
             self.global_store.get_window_mut((win.ix, Vec::new())).accept_value(res.clone(), ts)
         }
