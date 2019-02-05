@@ -291,6 +291,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore] // See issue #32 in LolaParser.
     fn test_conversion_lookup() {
         let (ir, mut eval) = setup("input a: UInt8\noutput b: UInt32 := a + 100000");
         let out_ref = StreamReference::OutRef(0);
