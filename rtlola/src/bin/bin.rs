@@ -1,8 +1,8 @@
 const SPEC: &str = "\
-                    input in: UInt8 \
-                    output a: UInt8 { extend @ 2Hz } := (in[0] ! 0) + 1000 \
-                    output b: UInt8 { extend @ 1Hz } := (in[0] ! 0) + 10000 \
-                    output c: UInt8 { extend @ 0.5Hz } := (in[0] ! 0) + 100000 \
+                    input in: UInt32 \
+                    output a: UInt32 { extend @ 2Hz } := (in[0] ! 0) + 1000 \
+                    output b: UInt32 { extend @ 1Hz } := (in[0] ! 0) + 10000 \
+                    output c: UInt32 { extend @ 0.5Hz } := (in[0] ! 0) + 100000 \
                     ";
 
 const PATH: &str = "rtlola/src/bin/successive.csv";

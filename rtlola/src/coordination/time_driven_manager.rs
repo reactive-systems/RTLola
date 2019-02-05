@@ -72,14 +72,16 @@ impl TimeDrivenManager {
         let gcd = Self::find_extend_period(&rates);
         let hyper_period = Self::find_hyper_period(&rates);
 
-        let num_steps = TimeDrivenManager::divide_durations(hyper_period, gcd, false);
+        let extend_steps = TimeDrivenManager::build_extend_steps(ir, gcd, hyper_period);
+        let extend_steps = TimeDrivenManager::apply_periodicity(&extend_steps);
+        let deadlines = TimeDrivenManager::condense_deadlines(gcd, extend_steps);
 
-        let mut extend_steps = vec![Vec::new(); num_steps];
-        for s in ir.time_driven.iter() {
-            let ix = Self::divide_durations(s.extend_rate, gcd, false) - 1;
-            extend_steps[ix].push(s.reference);
-        }
+        // TODO: Sort by evaluation order!
 
+        TimeDrivenManager { last_state: None, deadlines, hyper_period, start_time: None, handler }
+    }
+
+    fn condense_deadlines(gcd: Duration, extend_steps: Vec<Vec<StreamReference>>) -> Vec<Deadline> {
         let init: (u32, Vec<Deadline>) = (0, Vec::new());
         let (remaining, mut deadlines) = extend_steps.iter().fold(init, |(empty_counter, mut deadlines), step| {
             if step.is_empty() {
@@ -96,12 +98,46 @@ impl TimeDrivenManager {
             // We cannot add them to the first because this would off-set the very first iteration.
             deadlines.push(Deadline { pause: remaining * gcd, due: Vec::new() });
         }
+        deadlines
+    }
 
-        dbg!(deadlines.clone());
+    /// Build extend steps for each gcd-sized time interval up to the hyper period.
+    /// Example:
+    /// Hyper period: 2 seconds, gcd: 100ms, streams: (c @ .5Hz), (b @ 1Hz), (a @ 2Hz)
+    /// Result: `[[a] [b] [] [c]]`
+    /// Meaning: `a` starts being scheduled after one gcd, `b` after two gcds, `c` after 4 gcds.
+    fn build_extend_steps(ir: LolaIR, gcd: Duration, hyper_period: Duration) -> Vec<Vec<StreamReference>> {
+        let num_steps = TimeDrivenManager::divide_durations(hyper_period, gcd, false);
+        let mut extend_steps = vec![Vec::new(); num_steps];
+        for s in ir.time_driven.iter() {
+            let ix = Self::divide_durations(s.extend_rate, gcd, false) - 1;
+            extend_steps[ix].push(s.reference);
+        }
+        extend_steps
+    }
 
-        // TODO: Sort by evaluation order!
-
-        TimeDrivenManager { last_state: None, deadlines, hyper_period, start_time: None, handler }
+    /// Takes a vec of gdc-sized intervals. In each interval, there is the streams that need
+    /// to be scheduled periodically at this point in time.
+    /// Example:
+    /// Hyper period: 2 seconds, gcd: 100ms, streams: (c @ .5Hz), (b @ 1Hz), (a @ 2Hz)
+    /// Input:  `[[a] [b]   []  [c]]`
+    /// Output: `[[a] [a,b] [a] [a,b,c]`
+    fn apply_periodicity(steps: &Vec<Vec<StreamReference>>) -> Vec<Vec<StreamReference>> {
+        // Whenever there are streams in a cell at index `i`,
+        // add them to every cell with index k*i within bounds, where k > 1.
+        // k = 0 would always schedule them initially, so this must be skipped.
+        // TODO: Skip last half of the array.
+        let mut res = vec![Vec::new(); steps.len()];
+        for (ix, streams) in steps.iter().enumerate() {
+            if !streams.is_empty() {
+                let mut k = 1;
+                while let Some(target) = res.get_mut(k * (ix + 1) - 1) {
+                    target.extend(streams);
+                    k += 1;
+                }
+            }
+        }
+        res
     }
 
     fn get_current_deadline(&self, ts: Option<Instant>) -> (Duration, Vec<StreamReference>) {
