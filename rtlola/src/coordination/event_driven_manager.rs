@@ -50,19 +50,34 @@ impl EventDrivenManager {
         }
 
         // Zip eval layer with stream reference.
-        let layered: Vec<(usize, StreamReference)> =
+        let streams_with_layers: Vec<(usize, StreamReference)> =
             ir.get_event_driven().into_iter().map(|s| (s.eval_layer() as usize, s.as_stream_ref())).collect();
-        let max_layer = layered.iter().map(|(lay, _)| lay).max();
 
-        if cfg!(debug_assertions) {
-            Self::check_layers(&layered.iter().map(|(ix, _)| *ix).collect::<Vec<usize>>().as_slice());
-        }
+        // Streams are annotated with an evaluation layer. The layer is not minimal, so there might be
+        // layers without entries and more layers than streams.
+        // Minimization works as follows:
+        // a) Find the greatest layer
+        // b) For each potential layer...
+        // c) Find streams that would be in it.
+        // d) If there is none, skip this layer
+        // e) If there are some, add them as layer.
 
-        // Create vec where each element represents one layer.
-        // `check_layers` guarantees that max_layer is defined.
-        let mut layers = vec![Vec::new(); *max_layer.unwrap()];
-        for (ix, stream) in layered {
-            layers[ix].push(stream)
+        // a) Find the greatest layer. Maximum must exist because vec cannot be empty.
+        let max_layer = streams_with_layers.iter().max_by_key(|(layer, _)| layer).unwrap().0;
+
+        let mut layers = Vec::new();
+        // b) For each potential layer
+        for i in 0..=max_layer {
+            // c) Find streams that would be in it.
+            let in_layer_i: Vec<StreamReference> =
+                streams_with_layers.iter().filter_map(|(l, r)| if *l == i { Some(*r) } else { None }).collect();
+            if in_layer_i.is_empty() {
+                // d) If there is none, skip this layer
+                continue;
+            } else {
+                // e) If there are some, add them as layer.
+                layers.push(in_layer_i);
+            }
         }
 
         EDM { current_cycle: 0.into(), layers, out_handler, input_reader, in_types }
@@ -72,7 +87,17 @@ impl EventDrivenManager {
         let mut buffer = vec![String::new(); self.in_types.len()];
         loop {
             // This whole function is awful.
-            let _ = self.input_reader.read_blocking(&mut buffer); // TODO: Handle error.
+            match self.input_reader.read_blocking(&mut buffer) {
+                Ok(true) => {}
+                Ok(false) => {
+                    let _ = work_queue.send(WorkItem::End); // Whether it fails or not, we really don't care.
+                                                            // Sleep until you slowly fade into non-existence...
+                    loop {
+                        std::thread::sleep(std::time::Duration::new(u64::max_value(), 0))
+                    }
+                }
+                Err(e) => panic!("Error reading data. {}", e),
+            }
             let layers = self.layers.clone(); // TODO: Sending repeatedly is unnecessary.
             let event = buffer.iter()
                 .zip(self.in_types.iter())
@@ -88,17 +113,9 @@ impl EventDrivenManager {
             self.current_cycle += 1;
         }
     }
-
-    fn check_layers(vec: &[usize]) {
-        let mut indices = vec.to_owned();
-        indices.sort();
-        let successive = indices.iter().enumerate().all(|(ix, key)| ix == *key);
-        debug_assert!(successive, "Evaluation order not minimal: Some layers do not have entries.");
-        let starts_at_0 = *indices.first().unwrap() == 0 as usize; // Fail for empty.
-        debug_assert!(starts_at_0, "Evaluation order not minimal: There are no streams in layer 0.");
-    }
 }
 
+#[derive(Debug)]
 pub(crate) struct EventEvaluation {
     pub(crate) event: Vec<(StreamReference, Value)>,
     pub(crate) layers: Vec<Vec<StreamReference>>,
