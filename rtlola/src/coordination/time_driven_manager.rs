@@ -3,10 +3,9 @@ use crate::basics::util;
 use crate::basics::{EvalConfig, OutputHandler};
 
 use lola_parser::{LolaIR, StreamReference};
-use std::cmp::Ordering;
 use std::sync::mpsc::{Receiver, Sender};
 use std::thread::sleep;
-use std::time::{Duration, SystemTime};
+use std::time::{Duration, Instant};
 
 const NANOS_PER_SEC: u128 = 1_000_000_000;
 
@@ -16,9 +15,10 @@ pub(crate) type TimeEvaluation = Vec<StreamReference>;
 struct TDMState {
     cycle: TimeDrivenCycleCount,
     deadline: usize,
-    time: SystemTime, // Debug/statistics information.
+    time: Instant, // Debug/statistics information.
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum StateCompare {
     Equal,
@@ -45,10 +45,11 @@ struct Deadline {
 }
 
 pub(crate) struct TimeDrivenManager {
+    #[allow(dead_code)]
     last_state: Option<TDMState>,
     deadlines: Vec<Deadline>,
     hyper_period: Duration,
-    start_time: Option<SystemTime>,
+    start_time: Option<Instant>,
     handler: OutputHandler,
 }
 
@@ -60,7 +61,7 @@ impl TimeDrivenManager {
         if ir.time_driven.is_empty() {
             return TimeDrivenManager {
                 last_state: None,
-                deadlines: vec![Deadline { pause: Duration::from_secs(0), due: Vec::new() }],
+                deadlines: Vec::new(),
                 hyper_period: Duration::from_secs(100_000), // Actual value does not matter.
                 start_time: None,
                 handler,
@@ -71,11 +72,11 @@ impl TimeDrivenManager {
         let gcd = Self::find_extend_period(&rates);
         let hyper_period = Self::find_hyper_period(&rates);
 
-        let num_steps = TimeDrivenManager::divide_durations(hyper_period, gcd, true);
+        let num_steps = TimeDrivenManager::divide_durations(hyper_period, gcd, false);
 
         let mut extend_steps = vec![Vec::new(); num_steps];
         for s in ir.time_driven.iter() {
-            let ix = Self::divide_durations(s.extend_rate, gcd, false) + 1;
+            let ix = Self::divide_durations(s.extend_rate, gcd, false) - 1;
             extend_steps[ix].push(s.reference);
         }
 
@@ -96,24 +97,119 @@ impl TimeDrivenManager {
             deadlines.push(Deadline { pause: remaining * gcd, due: Vec::new() });
         }
 
+        dbg!(deadlines.clone());
+
         // TODO: Sort by evaluation order!
 
         TimeDrivenManager { last_state: None, deadlines, hyper_period, start_time: None, handler }
     }
 
-    pub fn start(mut self, time: Option<SystemTime>, work_chan: Sender<WorkItem>, _stop_chan: Receiver<bool>) -> ! {
-        self.start_time = time.or_else(|| Some(SystemTime::now()));
+    fn get_current_deadline(&self, ts: Option<Instant>) -> (Duration, Vec<StreamReference>) {
+        let ts = ts.unwrap_or_else(Instant::now);
+        let earliest_deadline_state = self.earliest_deadline_state(ts);
+        let current_deadline = &self.deadlines[earliest_deadline_state.deadline];
+        let pause = earliest_deadline_state.time + current_deadline.pause - ts;
+        (pause, current_deadline.due.clone())
+    }
+
+    /// Compute the state for the deadline earliest deadline that is not missed yet.
+    /// Example: If this function is called immediately after setup, it returns
+    /// a state containing the start time and deadline 0.
+    fn earliest_deadline_state(&self, time: Instant) -> TDMState {
+        let start_time = self.start_time.unwrap();
+        assert!(start_time < time);
+        let hyper_nanos = Self::dur_as_nanos(self.hyper_period);
+        let time_since_start = Self::dur_as_nanos(time.duration_since(start_time));
+
+        let hyper = time_since_start / hyper_nanos;
+        let time_within_hyper = time_since_start % hyper_nanos;
+
+        // Determine the index of the current deadline.
+        let mut sum = 0u128;
+        for (ix, dl) in self.deadlines.iter().enumerate() {
+            let pause = Self::dur_as_nanos(dl.pause);
+            if sum + pause < time_within_hyper {
+                sum += pause
+            } else {
+                let offset_from_start = Self::dur_from_nanos(hyper_nanos * hyper + sum);
+                let dl_time = start_time + offset_from_start;
+                return TDMState { cycle: hyper.into(), deadline: ix, time: dl_time };
+            }
+        }
+        unreachable!()
+    }
+
+    fn dur_as_nanos(dur: Duration) -> u128 {
+        u128::from(dur.as_secs()) * NANOS_PER_SEC + u128::from(dur.subsec_nanos())
+    }
+
+    pub fn start(mut self, time: Option<Instant>, work_chan: Sender<WorkItem>, _stop_chan: Receiver<bool>) -> ! {
+        if self.deadlines.is_empty() {
+            // spec is not timed.
+            loop {
+                sleep(Duration::new(u64::max_value(), 0));
+            }
+        }
+        self.start_time = time.or_else(|| Some(Instant::now()));
         loop {
-            let sleepy_time = self.wait_for(None);
-            sleep(sleepy_time.0);
-            if let Some(due) = self.due_streams(None) {
-                let item = WorkItem::Time(due.clone());
-                if work_chan.send(item).is_err() {
-                    self.handler.runtime_warning(|| "TDM: Sending failed; evaluation cycle lost.");
-                }
+            let (sleepy_time, due_streams) = self.get_current_deadline(None);
+            sleep(sleepy_time);
+            // TODO: Check if overslept.
+            let item = WorkItem::Time(due_streams);
+            if work_chan.send(item).is_err() {
+                self.handler.runtime_warning(|| "TDM: Sending failed; evaluation cycle lost.");
             }
         }
     }
+
+    /// Determines the max amount of time the process can wait between successive checks for
+    /// due deadlines without missing one.
+    fn find_extend_period(rates: &[Duration]) -> Duration {
+        assert!(!rates.is_empty());
+        let rates: Vec<u128> = rates.iter().map(|r| Self::dur_as_nanos(*r)).collect();
+        let gcd = util::gcd_all(&rates);
+        Self::dur_from_nanos(gcd)
+    }
+
+    /// Determines the hyper period of the given `rates`.
+    fn find_hyper_period(rates: &[Duration]) -> Duration {
+        assert!(!rates.is_empty());
+        let rates: Vec<u128> = rates.iter().map(|r| Self::dur_as_nanos(*r)).collect();
+        let lcm = util::lcm_all(&rates);
+        Self::dur_from_nanos(lcm)
+    }
+
+    /// Divides two durations. If `rhs` is not a divider of `lhs`, a warning is emitted and the
+    /// rounding strategy `round_up` is applied.
+    fn divide_durations(lhs: Duration, rhs: Duration, round_up: bool) -> usize {
+        // The division of durations is currently unstable (feature duration_float) because
+        // it falls back to using floats which cannot necessarily represent the durations
+        // accurately. We, however, fall back to nanoseconds as u128. Regardless, some inaccuracies
+        // might occur, rendering this code TODO *not stable for real-time devices!*
+        let lhs = Self::dur_as_nanos(lhs);
+        let rhs = Self::dur_as_nanos(rhs);
+        let representable = lhs % rhs == 0;
+        let mut div = lhs / rhs;
+        if !representable {
+            println!("Warning: Spec unstable: Cannot accurately represent extend periods.");
+            // TODO: Introduce better mechanism for emitting such warnings.
+            if round_up {
+                div += 1;
+            }
+        }
+        div as usize
+    }
+
+    fn dur_from_nanos(dur: u128) -> Duration {
+        // TODO: Introduce sanity checks for `dur` s.t. cast is safe.
+        let secs = (dur / NANOS_PER_SEC) as u64; // safe cast for realistic values of `dur`.
+        let nanos = (dur % NANOS_PER_SEC) as u32; // safe case
+        Duration::new(secs, nanos)
+    }
+
+    //The following code is useful and should partly be used again for robustness.
+
+    /*
 
     /// Determines how long the current thread can wait until the next time-based evaluation cycle
     /// needs to be started. Calls are time-sensitive, i.e. successive calls do not necessarily
@@ -121,24 +217,19 @@ impl TimeDrivenManager {
     ///
     /// *Returns:* `WaitingTime` _t_ and `TimeDrivenCycleCount` _i_ where _t_ nanoseconds can pass
     /// until the _i_th time-driven evaluation cycle needs to be started.
-    fn wait_for(&self, time: Option<SystemTime>) -> (Duration, TimeDrivenCycleCount) {
-        let time = time.unwrap_or_else(SystemTime::now);
+    fn wait_for(&self, time: Option<Instant>) -> (Duration, TimeDrivenCycleCount) {
+        let time = time.unwrap_or_else(Instant::now);
         let current_state = self.current_state(time);
         if let Some(last_state) = self.last_state {
             match self.compare_states(last_state, current_state) {
                 StateCompare::TimeTravel => panic!("Bug: Traveled back in time!"),
-                StateCompare::Skipped { cycles, deadlines } => {
-                    self.skipped_deadline(cycles, deadlines);
-                    // Carry on.
-                }
+                StateCompare::Skipped { cycles, deadlines } => self.skipped_deadline(cycles, deadlines), // Carry on.
+                StateCompare::Next => self.skipped_deadline(0, 1), // Carry one.
                 StateCompare::Equal => {
-                    self.query_too_soon();
-                    // Carry on.
+                    // Nice, we did not miss a deadline!
                 }
-                StateCompare::Next => {} // Nice! Do nothing.
             }
         }
-
         let deadline = &self.deadlines[current_state.deadline];
         let offset = self.time_since_last_deadline(time);
         assert!(offset < deadline.pause);
@@ -147,8 +238,8 @@ impl TimeDrivenManager {
 
     /// Returns all time-driven streams that are due to be extended in time-driven evaluation
     /// cycle `c`. The returned collection is ordered according to the evaluation order.
-    fn due_streams(&mut self, time: Option<SystemTime>) -> Option<&Vec<StreamReference>> {
-        let time = time.unwrap_or_else(SystemTime::now);
+    fn due_streams(&mut self, time: Option<Instant>) -> Option<&Vec<StreamReference>> {
+        let time = time.unwrap_or_else(Instant::now);
         let state = self.current_state(time);
         if let Some(old_state) = self.last_state {
             match self.compare_states(old_state, state) {
@@ -188,9 +279,9 @@ impl TimeDrivenManager {
         }
     }
 
-    fn time_since_last_deadline(&self, time: SystemTime) -> Duration {
+    fn time_since_last_deadline(&self, time: Instant) -> Duration {
         let last_deadline = self.last_deadline_state(time);
-        time.duration_since(last_deadline.time).expect("Last deadline cannot lie in the past.")
+        time.duration_since(last_deadline.time)
     }
 
     /// Compares two given states in terms of their temporal relation.
@@ -244,11 +335,11 @@ impl TimeDrivenManager {
     /// The state's time is the earliest point in time where this state could have been the current
     /// one.
     /// Requires start_time to be non-none.
-    fn last_deadline_state(&self, time: SystemTime) -> TDMState {
+    fn last_deadline_state(&self, time: Instant) -> TDMState {
         let start_time = self.start_time.unwrap();
         assert!(start_time < time);
         let hyper_nanos = Self::dur_as_nanos(self.hyper_period);
-        let running = Self::dur_as_nanos(time.duration_since(start_time).unwrap());
+        let running = Self::dur_as_nanos(time.duration_since(start_time));
         let cycle = running / hyper_nanos;
         let in_cycle = running % hyper_nanos;
         let mut sum = 0u128;
@@ -266,59 +357,12 @@ impl TimeDrivenManager {
     }
 
     /// Computes the TDMState in which we should be right now given the supplied `time`.
-    fn current_state(&self, time: SystemTime) -> TDMState {
+    fn current_state(&self, time: Instant) -> TDMState {
         let state = self.last_deadline_state(time);
         TDMState { time, ..state }
     }
 
-    /// Divides two durations. If `rhs` is not a divider of `lhs`, a warning is emitted and the
-    /// rounding strategy `round_up` is applied.
-    fn divide_durations(lhs: Duration, rhs: Duration, round_up: bool) -> usize {
-        // The division of durations is currently unstable (feature duration_float) because
-        // it falls back to using floats which cannot necessarily represent the durations
-        // accurately. We, however, fall back to nanoseconds as u128. Regardless, some inaccuracies
-        // might occur, rendering this code TODO *not stable for real-time devices!*
-        let lhs = Self::dur_as_nanos(lhs);
-        let rhs = Self::dur_as_nanos(rhs);
-        let representable = lhs % rhs == 0;
-        let mut div = lhs / rhs;
-        if !representable {
-            println!("Warning: Spec unstable: Cannot accurately represent extend periods.");
-            // TODO: Introduce better mechanism for emitting such warnings.
-            if round_up {
-                div += 1;
-            }
-        }
-        div as usize
-    }
-
-    /// Determines the hyper period of the given `rates`.
-    fn find_hyper_period(rates: &[Duration]) -> Duration {
-        assert!(!rates.is_empty());
-        let rates: Vec<u128> = rates.iter().map(|r| Self::dur_as_nanos(*r)).collect();
-        let lcm = util::lcm_all(&rates);
-        Self::dur_from_nanos(lcm)
-    }
-
-    /// Determines the max amount of time the process can wait between successive checks for
-    /// due deadlines without missing one.
-    fn find_extend_period(rates: &[Duration]) -> Duration {
-        assert!(!rates.is_empty());
-        let rates: Vec<u128> = rates.iter().map(|r| Self::dur_as_nanos(*r)).collect();
-        let gcd = util::gcd_all(&rates);
-        Self::dur_from_nanos(gcd)
-    }
-
-    fn dur_as_nanos(dur: Duration) -> u128 {
-        u128::from(dur.as_secs()) * NANOS_PER_SEC + u128::from(dur.subsec_nanos())
-    }
-
-    fn dur_from_nanos(dur: u128) -> Duration {
-        // TODO: Introduce sanity checks for `dur` s.t. cast is safe.
-        let secs = (dur / NANOS_PER_SEC) as u64; // safe cast for realistic values of `dur`.
-        let nanos = (dur % NANOS_PER_SEC) as u32; // safe case
-        Duration::new(secs, nanos)
-    }
+    */
 }
 
 mod tests {
@@ -373,41 +417,41 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_compare_states() {
-        let handler = OutputHandler::default();
-        fn dl(s: u64, n: u32) -> Deadline {
-            Deadline { pause: Duration::new(s, n), due: Vec::new() }
-        }
-        fn dur(s: u64, n: u32) -> Duration {
-            Duration::new(s, n)
-        }
-        // 1s, 0.1s, 2.3s, 1.6s
-        let deadlines = vec![dl(1, 0), dl(0, 100_000_000), dl(2, 300_000_000), dl(1, 600_000_000)];
-        let tdm = TimeDrivenManager { last_state: None, deadlines, hyper_period: dur(1, 0), start_time: None, handler };
-        fn state(cy: u128, dl: usize) -> TDMState {
-            let time = SystemTime::now();
-            TDMState { cycle: cy.into(), deadline: dl, time }
-        }
-        type Case = (TDMState, TDMState, StateCompare);
-        let cases: Vec<Case> = vec![
-            (state(0, 0), state(0, 0), StateCompare::Equal),
-            (state(1, 0), state(0, 0), StateCompare::TimeTravel),
-            (state(1, 2), state(2, 1), StateCompare::Skipped { cycles: 0, deadlines: 2 }),
-            (state(1, 2), state(3, 1), StateCompare::Skipped { cycles: 1, deadlines: 2 }),
-            (state(1, 2), state(3, 0), StateCompare::Skipped { cycles: 1, deadlines: 1 }),
-            (state(0, 0), state(0, 1), StateCompare::Next),
-            (state(4, 3), state(5, 0), StateCompare::Next),
-        ];
-        for (old, new, expected) in &cases {
-            let was = tdm.compare_states(*old, *new);
-            assert_eq!(
-                was, *expected,
-                "Expected {:?}, but was {:?} for old: {:?} and new: {:?}.",
-                expected, was, old, new
-            )
-        }
-    }
+    //    #[test]
+    //    fn test_compare_states() {
+    //        let handler = OutputHandler::default();
+    //        fn dl(s: u64, n: u32) -> Deadline {
+    //            Deadline { pause: Duration::new(s, n), due: Vec::new() }
+    //        }
+    //        fn dur(s: u64, n: u32) -> Duration {
+    //            Duration::new(s, n)
+    //        }
+    //        // 1s, 0.1s, 2.3s, 1.6s
+    //        let deadlines = vec![dl(1, 0), dl(0, 100_000_000), dl(2, 300_000_000), dl(1, 600_000_000)];
+    //        let tdm = TimeDrivenManager { last_state: None, deadlines, hyper_period: dur(1, 0), start_time: None, handler };
+    //        fn state(cy: u128, dl: usize) -> TDMState {
+    //            let time = Instant::now();
+    //            TDMState { cycle: cy.into(), deadline: dl, time }
+    //        }
+    //        type Case = (TDMState, TDMState, StateCompare);
+    //        let cases: Vec<Case> = vec![
+    //            (state(0, 0), state(0, 0), StateCompare::Equal),
+    //            (state(1, 0), state(0, 0), StateCompare::TimeTravel),
+    //            (state(1, 2), state(2, 1), StateCompare::Skipped { cycles: 0, deadlines: 2 }),
+    //            (state(1, 2), state(3, 1), StateCompare::Skipped { cycles: 1, deadlines: 2 }),
+    //            (state(1, 2), state(3, 0), StateCompare::Skipped { cycles: 1, deadlines: 1 }),
+    //            (state(0, 0), state(0, 1), StateCompare::Next),
+    //            (state(4, 3), state(5, 0), StateCompare::Next),
+    //        ];
+    //        for (old, new, expected) in &cases {
+    //            let was = tdm.compare_states(*old, *new);
+    //            assert_eq!(
+    //                was, *expected,
+    //                "Expected {:?}, but was {:?} for old: {:?} and new: {:?}.",
+    //                expected, was, old, new
+    //            )
+    //        }
+    //    }
 
     #[test]
     fn test_divide_durations_round_up() {
