@@ -784,6 +784,7 @@ impl<'a> Lowering<'a> {
     }
 
     fn order_to_table(eo: &EvaluationOrderResult) -> EvalTable {
+        println!("Eval Order: \n{:?}", eo);
         fn extr_id(step: ComputeStep) -> NodeId {
             // TODO: Rework when parameters actually exist.
             use self::ComputeStep::*;

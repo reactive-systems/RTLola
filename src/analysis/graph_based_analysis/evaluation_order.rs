@@ -19,6 +19,7 @@ use std::collections::HashMap;
 
 pub(crate) type EvalOrder = Vec<Vec<ComputeStep>>;
 
+#[derive(Debug)]
 pub(crate) struct EvaluationOrderResult {
     pub event_based_streams_order: EvalOrder,
     pub periodic_streams_order: EvalOrder,
