@@ -784,7 +784,6 @@ impl<'a> Lowering<'a> {
     }
 
     fn order_to_table(eo: &EvaluationOrderResult) -> EvalTable {
-        println!("Eval Order: \n{:?}", eo);
         fn extr_id(step: ComputeStep) -> NodeId {
             // TODO: Rework when parameters actually exist.
             use self::ComputeStep::*;
@@ -1101,7 +1100,6 @@ mod tests {
 
         let load = &expr.stmts[0];
 
-        println!("{:?}", expr.stmts);
 
         match &load.op {
             Op::SyncStreamLookup(StreamInstance {
@@ -1141,8 +1139,6 @@ mod tests {
         assert_eq!(expr.stmts.len(), 3);
 
         let load = &expr.stmts[0];
-
-        println!("{:?}", expr.stmts);
 
         match &load.op {
             Op::SyncStreamLookup(StreamInstance {
