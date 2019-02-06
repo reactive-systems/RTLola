@@ -1,113 +1,110 @@
-use rtlola::EvalConfig;
-use rtlola::InputSource;
-use std::time::Duration;
-
 use clap::{value_t, App, Arg, ArgGroup, SubCommand};
 use lola_parser;
+use rtlola::EvalConfig;
+use rtlola::InputSource;
 use std::env;
 use std::error::Error;
 use std::fs::File;
 use std::io::Read;
 use std::process;
+use std::time::Duration;
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let _: Vec<String> = env::args().collect();
+    let args: Vec<String> = env::args().collect();
 
-    let matches = App::new("StreamLAB")
+    let matches = App::new("rtlola")
         .version(env!("CARGO_PKG_VERSION"))
-        .author(env!("CARGO_PKG_AUTHORS"))
-        .about("StreamLAB is a tool to analyze and monitor Lola specifications") // TODO description
+        .author(env!("CARGO_PKG_AUTHORS")) //TODO authors
+        .about("rtlola is a tool to analyze and monitor Lola specifications") // TODO description
         .subcommand(
-        SubCommand::with_name("analyze")
-                    .about("Analyze the specification")
-                    .arg(
-                        Arg::with_name("SPEC")
-                            .help("Sets the specification file to use")
-                            .required(true)
-                            .index(1),
-                    ),
+            SubCommand::with_name("analyze")
+                .about("Analyze the specification")
+                .arg(
+                    Arg::with_name("SPEC")
+                        .help("Sets the specification file to use")
+                        .required(true)
+                        .index(1),
+                ),
         )
         .subcommand(
-        SubCommand::with_name("monitor")
-            .about("Monitors the specification")
-            .arg(
-                Arg::with_name("SPEC")
-                    .help("Sets the specification file to use")
-                    .required(true)
-                    .index(1),
-            )
-            .arg(
-                Arg::with_name("STDIN")
-                    .help("Read CSV input from stdin [Default}")
-                    .long("stdin")
-            )
-            .arg(
-                Arg::with_name("CSV_INPUT_FILE")
-                    .help("Read CSV input from a file")
-                    .long("csv-in")
-                    .takes_value(true)
-                    .conflicts_with("STDIN")
-            )
-            .arg(
-                Arg::with_name("STDOUT")
-                    .help("Output to stdout")
-                    .long("stdout")
-            )
-            .arg(
-                Arg::with_name("STDERR")
-                    .help("Output to stderr")
-                    .long("stderr")
-                    .conflicts_with_all(&["STDOUT","OUTPUT_FILE"])
-            )
+            SubCommand::with_name("monitor")
+                .about("Monitors the specification")
+                .arg(
+                    Arg::with_name("SPEC")
+                        .help("Sets the specification file to use")
+                        .required(true)
+                        .index(1),
+                )
+                .arg(
+                    Arg::with_name("STDIN")
+                        .help("Read CSV input from stdin [Default}")
+                        .long("stdin")
+                )
+                .arg(
+                    Arg::with_name("CSV_INPUT_FILE")
+                        .help("Read CSV input from a file")
+                        .long("csv-in")
+                        .takes_value(true)
+                        .conflicts_with("STDIN")
+                )
+                .arg(
+                    Arg::with_name("STDOUT")
+                        .help("Output to stdout")
+                        .long("stdout")
+                )
+                .arg(
+                    Arg::with_name("STDERR")
+                        .help("Output to stderr")
+                        .long("stderr")
+                        .conflicts_with_all(&["STDOUT", "OUTPUT_FILE"])
+                )
 //            .arg(
 //                Arg::with_name("OUTPUT_FILE")
 //                    .help("Write output to a file")
 //                    .long("out")
 //                    .takes_value(true)
 //            )
-            .arg(
-                Arg::with_name("DELAY")
-                    .short("d")
-                    .long("delay")
-                    .help("Delay [ms] between reading in two lines from the input. Only used for file input.")
-                    .requires("CSV_INPUT_FILE")
-                    .conflicts_with("OFFLINE")
-                    .takes_value(true)
-            ).
-            arg(
-                Arg::with_name("VERBOSITY")
-                    .short("l")
-                    .long("verbosity")
-                    .possible_values(&["debug","outputs","triggers","warnings","silent"])
-                    .default_value("triggers")
-            )
-            .arg(
-                Arg::with_name("ONLINE")
-                    .long("online")
-                    .help("Use the current system time for timestamps")
-            )
-            .arg(
-                Arg::with_name("OFFLINE")
-                    .long("offline")
-                    .help("Use the timestamps from the input.\nThe column name must be one of [time,timestamp,ts].\nThe column must produce a monotonically increasing sequence of values.")
-            )
-            .group(
-                ArgGroup::with_name("MODE")
-                    .required(true)
-                    .args(&["ONLINE", "OFFLINE"])
-            )
+                .arg(
+                    Arg::with_name("DELAY")
+                        .short("d")
+                        .long("delay")
+                        .help("Delay [ms] between reading in two lines from the input. Only used for file input.")
+                        .requires("CSV_INPUT_FILE")
+                        .conflicts_with("OFFLINE")
+                        .takes_value(true)
+                ).
+                arg(
+                    Arg::with_name("VERBOSITY")
+                        .short("l")
+                        .long("verbosity")
+                        .possible_values(&["debug", "outputs", "triggers", "warnings", "silent"])
+                        .default_value("triggers")
+                )
+                .arg(
+                    Arg::with_name("ONLINE")
+                        .long("online")
+                        .help("Use the current system time for timestamps")
+                )
+                .arg(
+                    Arg::with_name("OFFLINE")
+                        .long("offline")
+                        .help("Use the timestamps from the input.\nThe column name must be one of [time,timestamp,ts].\nThe column must produce a monotonically increasing sequence of values.")
+                )
+                .group(
+                    ArgGroup::with_name("MODE")
+                        .required(true)
+                        .args(&["ONLINE", "OFFLINE"])
+                )
         )
-    .get_matches();
+        .get_matches();
 
     match matches.subcommand() {
         ("analyze", Some(parse_matches)) => {
             // Now we have a reference to clone's matches
             let filename = parse_matches.value_of("SPEC").map(|s| s.to_string()).unwrap();
-
             let mut file = File::open(&filename)?;
             let mut contents = String::new();
             file.read_to_string(&mut contents)?;
-
             let _ = lola_parser::parse(contents.as_str());
             Ok(())
         }
@@ -170,7 +167,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             println!("No subcommand was used");
             println!("{}", matches.usage());
 
-            process::exit(1);
+            process::exit(1)
         }
         _ => unreachable!(),
     }
