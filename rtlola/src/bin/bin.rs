@@ -2,15 +2,13 @@ use rtlola::EvalConfig;
 use rtlola::InputSource;
 use std::time::Duration;
 
+use clap::{value_t, App, Arg, ArgGroup, SubCommand};
 use lola_parser;
-use clap::{App, Arg, ArgGroup, SubCommand,value_t};
 use std::env;
-use std::process;
+use std::error::Error;
 use std::fs::File;
 use std::io::Read;
-use std::error::Error;
-
-
+use std::process;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let args: Vec<String> = env::args().collect();
@@ -88,10 +86,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     match matches.subcommand() {
         ("analyze", Some(parse_matches)) => {
             // Now we have a reference to clone's matches
-            let filename = parse_matches
-                .value_of("SPEC")
-                .map(|s| s.to_string())
-                .unwrap();
+            let filename = parse_matches.value_of("SPEC").map(|s| s.to_string()).unwrap();
 
             let mut file = File::open(&filename)?;
             let mut contents = String::new();
@@ -102,10 +97,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
         ("monitor", Some(parse_matches)) => {
             // Now we have a reference to clone's matches
-            let filename = parse_matches
-                .value_of("SPEC")
-                .map(|s| s.to_string())
-                .unwrap();
+            let filename = parse_matches.value_of("SPEC").map(|s| s.to_string()).unwrap();
 
             let mut file = File::open(&filename)?;
             let mut contents = String::new();
@@ -113,32 +105,35 @@ fn main() -> Result<(), Box<dyn Error>> {
 
             let ir = lola_parser::parse(contents.as_str());
             let delay = value_t!(parse_matches, "DELAY", u32).unwrap_or_else(|e| {
-                eprintln!("DELAY value `{}` is not a number.\nUsing 100ms", parse_matches.value_of("DELAY").expect("We set a default value."));
+                eprintln!(
+                    "DELAY value `{}` is not a number.\nUsing 100ms",
+                    parse_matches.value_of("DELAY").expect("We set a default value.")
+                );
                 return 100;
             });
             let delay = Duration::new(0, 1_000_000 * delay);
 
             let src = if let Some(file) = parse_matches.value_of("CSV_INPUT_FILE") {
-                InputSource::with_delay(String::from(file),delay)
-            }else{
+                InputSource::with_delay(String::from(file), delay)
+            } else {
                 InputSource::stdin()
             };
 
-            let out = if parse_matches.is_present("STDOUT"){
+            let out = if parse_matches.is_present("STDOUT") {
                 rtlola::OutputChannel::StdOut
-            }else if let Some(file) = parse_matches.value_of("OUTPUT_FILE") {
+            } else if let Some(file) = parse_matches.value_of("OUTPUT_FILE") {
                 rtlola::OutputChannel::File(String::from(file))
             } else {
                 rtlola::OutputChannel::StdErr
             };
 
-            let verbosity = match parse_matches.value_of("VERBOSITY").unwrap(){
+            let verbosity = match parse_matches.value_of("VERBOSITY").unwrap() {
                 "debug" => rtlola::Verbosity::Debug,
                 "outputs" => rtlola::Verbosity::Outputs,
                 "triggers" => rtlola::Verbosity::Triggers,
                 "warnings" => rtlola::Verbosity::WarningsOnly,
                 "silent" => rtlola::Verbosity::Silent,
-                _ => unreachable!()
+                _ => unreachable!(),
             };
 
             let cfg = EvalConfig::new(src, verbosity, out);
