@@ -1100,7 +1100,6 @@ mod tests {
 
         let load = &expr.stmts[0];
 
-
         match &load.op {
             Op::SyncStreamLookup(StreamInstance {
                 reference,
