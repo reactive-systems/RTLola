@@ -1,6 +1,7 @@
 pub mod dependency_graph;
 pub mod evaluation_order;
 pub mod future_dependency;
+mod memory_analysis;
 pub mod space_requirements;
 
 use super::lola_version::LolaVersionTable;
@@ -18,11 +19,17 @@ pub(crate) use self::future_dependency::FutureDependentStreams;
 pub(crate) use self::space_requirements::SpaceRequirements;
 use self::space_requirements::TrackingRequirements;
 
+pub(crate) enum MemoryBound {
+    Bounded(u128),
+    Unbounded,
+}
+
 pub(crate) struct GraphAnalysisResult {
     pub(crate) evaluation_order: EvaluationOrderResult,
     pub(crate) future_dependent_streams: FutureDependentStreams,
     pub(crate) space_requirements: SpaceRequirements,
     pub(crate) tracking_requirements: TrackingRequirements,
+    pub(crate) memory_requirement: MemoryBound,
 }
 
 pub(crate) fn analyze<'a>(
@@ -54,11 +61,19 @@ pub(crate) fn analyze<'a>(
         &future_dependent_streams,
     );
 
+    let memory_requirement = memory_analysis::determine_worst_case_memory_consumption(
+        spec,
+        &space_requirements,
+        &tracking_requirements,
+        type_table,
+    );
+
     Some(GraphAnalysisResult {
         evaluation_order: evaluation_order_result,
         future_dependent_streams,
         space_requirements,
         tracking_requirements,
+        memory_requirement,
     })
 }
 
