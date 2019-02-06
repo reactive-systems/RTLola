@@ -29,6 +29,7 @@ impl Controller {
     /// Starts the evaluation process, i.e. periodically computes outputs for time-driven streams
     /// and fetches/expects events from specified input source.
     pub fn evaluate(ir: LolaIR, config: EvalConfig, ts: Option<Instant>) -> ! {
+
         let (work_tx, work_rx) = mpsc::channel();
         let (_eof_tx, eof_rx) = mpsc::channel();
 

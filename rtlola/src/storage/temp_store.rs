@@ -1,5 +1,7 @@
 use super::Value;
 use lola_parser::*;
+use byteorder::{NativeEndian, WriteBytesExt, ReadBytesExt};
+use ordered_float::NotNan;
 
 pub(crate) struct TempStore {
     offsets: Vec<usize>,
@@ -40,6 +42,7 @@ impl TempStore {
             Type::UInt(_) => Value::Unsigned(self.get_unsigned(t)),
             Type::Int(_) => Value::Signed(self.get_signed(t)),
             Type::Bool => Value::Bool(self.get_bool(t)),
+            Type::Float(_) => Value::Float(NotNan::new(self.get_float(t)).unwrap()),
             _ => unimplemented!(),
         }
     }
@@ -62,6 +65,19 @@ impl TempStore {
         }
     }
 
+    pub(crate) fn get_float(&self, t: Temporary) -> f64 {
+        // TODO: The check is not required, just for safety.
+        if let Type::Float(_) = self.types[t.0 as usize] {
+            let (lower, higher) = self.get_bounds(t);
+            let mut seq = vec![0u8; std::mem::size_of::<f64>()];
+            Self::write_byte_seq(&mut seq, &self.data[lower..higher]);
+            let mut test = &seq[..];
+            test.read_f64::<NativeEndian>().unwrap()
+        } else {
+            panic!("Unexpected call to `TempStore::get_float`.")
+        }
+    }
+
     pub(crate) fn get_signed(&self, t: Temporary) -> i128 {
         // TODO: The check is not required, just for safety.
         if let Type::Int(_) = self.types[t.0 as usize] {
@@ -77,6 +93,7 @@ impl TempStore {
             (Type::UInt(_), Value::Unsigned(u)) => self.write_unsigned(t, u),
             (Type::Int(_), Value::Signed(i)) => self.write_signed(t, i),
             (Type::Bool, Value::Bool(b)) => self.write_bool(t, b),
+            (Type::Float(_), Value::Float(f)) => self.write_float(t, f.into()),
             _ => unimplemented!(),
         }
     }
@@ -86,6 +103,18 @@ impl TempStore {
         if let Type::UInt(_) = self.types[t.0 as usize] {
             let (lower, higher) = self.get_bounds(t);
             Self::write_bytes(&mut self.data[lower..higher], v)
+        } else {
+            panic!("Unexpected call to `TempStore::get_unsigned`.")
+        }
+    }
+
+    pub(crate) fn write_float(&mut self, t: Temporary, v: f64) {
+        // TODO: The check is not required, just for safety.
+        if let Type::Float(_) = self.types[t.0 as usize] {
+            let (lower, higher) = self.get_bounds(t);
+            let mut seq = [0u8; std::mem::size_of::<f64>()];
+            let _ = seq.as_mut().write_f64::<NativeEndian>(v); // TODO: Use `Result`?
+            Self::write_byte_seq(&mut self.data[lower..higher], &seq);
         } else {
             panic!("Unexpected call to `TempStore::get_unsigned`.")
         }
@@ -107,6 +136,14 @@ impl TempStore {
 
     pub(crate) fn write_bool(&mut self, t: Temporary, v: bool) {
         self.data[self.offsets[t.0 as usize]] = v as u8
+    }
+
+    #[inline]
+    fn write_byte_seq(dest: &mut [u8], source: &[u8]) {
+        assert_eq!(source.len(), dest.len());
+        for i in 0..dest.len() {
+            dest[i] = source[i];
+        }
     }
 
     #[inline]

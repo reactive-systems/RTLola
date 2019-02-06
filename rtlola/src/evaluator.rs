@@ -41,12 +41,20 @@ impl Evaluator {
 
         self.handler.output(|| format!("OutputStream[{}] := {:?}.", inst.0, res.clone()));
 
+        if let Some(trig) = self.is_trigger(inst.clone()) {
+            self.handler.trigger(|| format!("Trigger: {}", trig.message.as_ref().unwrap_or(&String::from("Warning!"))))
+        }
+
         // Check linked streams and inform them.
         let extended = self.ir.get_out(StreamReference::OutRef(ix));
         for win in &extended.dependent_windows {
             self.global_store.get_window_mut((win.ix, Vec::new())).accept_value(res.clone(), ts)
         }
         // TODO: Dependent streams?
+    }
+
+    fn is_trigger(&self, inst: OutInstance) -> Option<&Trigger> {
+        self.ir.triggers.iter().find(|t| t.reference.out_ix() == inst.0)
     }
 
     pub(crate) fn accept_input(&mut self, input: StreamReference, v: Value, ts: Option<Instant>) {
@@ -193,18 +201,17 @@ impl Evaluator {
     }
 }
 
+#[cfg(test)]
 mod tests {
 
     use super::*;
     use lola_parser::LolaIR;
     use std::time::{Duration, Instant};
 
-    #[allow(dead_code)]
     fn setup(spec: &str) -> (LolaIR, Evaluator) {
         setup_time(spec, Instant::now())
     }
 
-    #[allow(dead_code)]
     fn setup_time(spec: &str, ts: Instant) -> (LolaIR, Evaluator) {
         let ir = lola_parser::parse(spec);
         let eval = Evaluator::new(ir.clone(), ts, EvalConfig::default());
@@ -293,7 +300,7 @@ mod tests {
     #[test]
     #[ignore] // See issue #32 in LolaParser.
     fn test_conversion_lookup() {
-        let (ir, mut eval) = setup("input a: UInt8\noutput b: UInt32 := a + 100000");
+        let (_, mut eval) = setup("input a: UInt8\noutput b: UInt32 := a + 100000");
         let out_ref = StreamReference::OutRef(0);
         let in_ref = StreamReference::InRef(0);
         let expected = Value::Unsigned(7 + 100000);
@@ -311,10 +318,26 @@ mod tests {
         let b = StreamReference::InRef(1);
         let v1 = Value::Unsigned(1);
         let v2 = Value::Unsigned(2);
+        let expected = Value::Unsigned(1 + 2);
         eval.accept_input(a, v1.clone(), None);
         eval.accept_input(b, v2.clone(), None);
         eval.eval_stream((0, Vec::new()), None);
-        assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), v1 + v2);
+        assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), expected);
+    }
+
+    #[test]
+    fn test_bin_op_float() {
+        let (_, mut eval) = setup("input a: Float64\n input b: Float64\noutput c: Float64 := a + b");
+        let out_ref = StreamReference::OutRef(0);
+        let a = StreamReference::InRef(0);
+        let b = StreamReference::InRef(1);
+        let v1 = Value::Float(NotNan::new(3.5f64).unwrap());
+        let v2 = Value::Float(NotNan::new(39.347568f64).unwrap());
+        let expected = Value::Float(NotNan::new(3.5f64 + 39.347568f64).unwrap());
+        eval.accept_input(a, v1.clone(), None);
+        eval.accept_input(b, v2.clone(), None);
+        eval.eval_stream((0, Vec::new()), None);
+        assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), expected);
     }
 
     #[test]
@@ -330,6 +353,24 @@ mod tests {
         eval.accept_input(in_ref, v3, None);
         eval.eval_stream((0, Vec::new()), None);
         assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), v2)
+    }
+
+    #[test]
+    fn test_trigger() {
+        let (_, mut eval) = setup("input a: UInt8 output b: UInt8 { extend @5Hz }:= a[-1] ! 3\n trigger (b!3) > 4");
+        let out_ref = StreamReference::OutRef(0);
+        let trig_ref = StreamReference::OutRef(1);
+        let in_ref = StreamReference::InRef(0);
+        let v1 = Value::Unsigned(8);
+        eval.eval_stream((0, Vec::new()), None);
+        eval.eval_stream((1, Vec::new()), None);
+        assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), Value::Unsigned(3));
+        assert_eq!(eval.__peek_value(trig_ref, &Vec::new(), 0).unwrap(), Value::Bool(false));
+        eval.accept_input(in_ref, v1.clone(), None);
+        eval.eval_stream((0, Vec::new()), None);
+        eval.eval_stream((1, Vec::new()), None);
+        assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), v1);
+        assert_eq!(eval.__peek_value(trig_ref, &Vec::new(), 0).unwrap(), Value::Bool(true));
     }
 
     #[test]

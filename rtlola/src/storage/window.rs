@@ -82,7 +82,7 @@ impl BIx {
 
 impl<IV: WindowIV> WindowInstance<IV> {
     fn new(dur: Duration, ts: Instant) -> WindowInstance<IV> {
-        let time_per_bucket = dbg!(dur / (SIZE as u32));
+        let time_per_bucket = dur / (SIZE as u32);
         let buckets = VecDeque::from(vec![IV::default(); SIZE]);
         // last bucket_ix is 1, so we consider all buckets, i.e. from 1 to end and from start to 0,
         // as in use. Whenever we progress by n buckets, we invalidate the pseudo-used ones.
@@ -96,7 +96,6 @@ impl<IV: WindowIV> WindowInstance<IV> {
     }
 
     fn accept_value(&mut self, v: Value, ts: Instant) {
-        println!("Accepting {:?}", v);
         self.update_buckets(ts);
         let b = self.buckets.get_mut(0).expect("Bug!");
         *b = b.clone() + v.into(); // TODO: Require add_assign rather than add.
@@ -115,7 +114,6 @@ impl<IV: WindowIV> WindowInstance<IV> {
     }
 
     fn invalidate_n(&mut self, n: usize) {
-        println!("Invalidating {} buckets!", n);
         for _ in 0..n {
             self.buckets.pop_back();
             self.buckets.push_front(IV::default());
