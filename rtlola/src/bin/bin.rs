@@ -70,7 +70,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     .short("d")
                     .long("delay")
                     .help("Delay [ms] between reading in two lines from the input. Only used for file input.")
-                    .default_value("100")
+                    .default_value("0")
                     .requires("CSV_INPUT_FILE")
             ).
             arg(
@@ -106,10 +106,10 @@ fn main() -> Result<(), Box<dyn Error>> {
             let ir = lola_parser::parse(contents.as_str());
             let delay = value_t!(parse_matches, "DELAY", u32).unwrap_or_else(|e| {
                 eprintln!(
-                    "DELAY value `{}` is not a number.\nUsing 100ms",
+                    "DELAY value `{}` is not a number.\nUsing no delay.",
                     parse_matches.value_of("DELAY").expect("We set a default value.")
                 );
-                return 100;
+                return 0;
             });
             let delay = Duration::new(0, 1_000_000 * delay);
 
