@@ -392,6 +392,13 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
 
     fn infer_trigger_expression(&mut self, trigger: &'a Trigger) -> Result<(), ()> {
         trace!("infer type for {}", trigger);
+
+        // make sure that NodeId of trigger is assigned Bool
+        let var = self.new_value_var(trigger.id);
+        self.unifier
+            .unify_var_ty(var, ValueTy::Bool)
+            .expect("cannot fail as `var` is fresh");
+
         self.infer_expression(
             &trigger.expression,
             Some(ValueTy::Bool),
