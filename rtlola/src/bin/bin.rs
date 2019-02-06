@@ -58,12 +58,6 @@ fn main() -> Result<(), Box<dyn Error>> {
                         .long("stderr")
                         .conflicts_with_all(&["STDOUT", "OUTPUT_FILE"])
                 )
-//            .arg(
-//                Arg::with_name("OUTPUT_FILE")
-//                    .help("Write output to a file")
-//                    .long("out")
-//                    .takes_value(true)
-//            )
                 .arg(
                     Arg::with_name("DELAY")
                         .short("d")
