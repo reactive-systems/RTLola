@@ -69,7 +69,7 @@ impl Controller {
             WorkItem::End => {
                 self.output_handler.debug(|| "Finished entire input. Terminating.");
                 println!("Finished all work items. Terminating gracefully.");
-                std::process::exit(1);
+                std::process::exit(0);
             }
         }
     }

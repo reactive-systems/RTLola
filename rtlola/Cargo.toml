@@ -17,3 +17,4 @@ lola-parser = {path = "../frontend/"}
 ordered-float = "1.0.1"
 csv = "1.0.5"
 itertools = "0.8"
+clap = "2.32.0"  # command line parsing
