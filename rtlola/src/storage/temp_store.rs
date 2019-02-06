@@ -1,6 +1,6 @@
 use super::Value;
+use byteorder::{NativeEndian, ReadBytesExt, WriteBytesExt};
 use lola_parser::*;
-use byteorder::{NativeEndian, WriteBytesExt, ReadBytesExt};
 use ordered_float::NotNan;
 
 pub(crate) struct TempStore {

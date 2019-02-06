@@ -369,6 +369,11 @@ mod tests {
         eval.accept_input(in_ref, v1.clone(), None);
         eval.eval_stream((0, Vec::new()), None);
         eval.eval_stream((1, Vec::new()), None);
+        assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), Value::Unsigned(3));
+        assert_eq!(eval.__peek_value(trig_ref, &Vec::new(), 0).unwrap(), Value::Bool(false));
+        eval.accept_input(in_ref, Value::Unsigned(17), None);
+        eval.eval_stream((0, Vec::new()), None);
+        eval.eval_stream((1, Vec::new()), None);
         assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), v1);
         assert_eq!(eval.__peek_value(trig_ref, &Vec::new(), 0).unwrap(), Value::Bool(true));
     }
