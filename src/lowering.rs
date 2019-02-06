@@ -75,6 +75,7 @@ impl<'a> Lowering<'a> {
         self.ast.inputs.iter().for_each(|i| self.lower_input(i));
         self.ast.outputs.iter().for_each(|o| self.lower_output(o));
         self.link_windows();
+        self.ast.trigger.iter().for_each(|t| self.lower_trigger(t));
     }
 
     fn link_windows(&mut self) {
@@ -123,6 +124,34 @@ impl<'a> Lowering<'a> {
         self.ir.inputs.push(input);
 
         assert_eq!(self.ir.get_in(reference), &debug_clone, "Bug in implementation: Output vector in IR changed between creation of reference and insertion of stream.");
+    }
+
+    fn lower_trigger(&mut self, trigger: &ast::Trigger) {
+        let name = if let Some(msg) = trigger.message.as_ref() {
+            format!("trigger_{}", msg.clone().replace(" ", "_"))
+        } else {
+            String::from("trigger")
+        };
+
+        let ty = ir::Type::Bool;
+        let expr = self.lower_expression(&trigger.expression, &ty);
+        let reference = StreamReference::OutRef(self.ir.outputs.len());
+        let output = ir::OutputStream {
+            name,
+            ty,
+            expr,
+            dependent_streams: Vec::new(),
+            dependent_windows: Vec::new(),
+            memory_bound: MemorizationBound::Bounded(1),
+            layer: self.get_layer(trigger.id),
+            reference,
+        };
+        self.ir.outputs.push(output);
+        let trig = ir::Trigger {
+            message: trigger.message.clone(),
+            reference,
+        };
+        self.ir.triggers.push(trig);
     }
 
     fn collect_tracking_info(
@@ -948,6 +977,13 @@ mod tests {
     fn lower_one_input() {
         let ir = spec_to_ir("input a: Int32");
         check_stream_number(&ir, 1, 0, 0, 0, 0, 0, 0);
+    }
+
+    #[test]
+    fn lower_triggers() {
+        let ir = spec_to_ir("input a: Int32\ntrigger a > 50\ntrigger a < 30 \"So low...\"");
+        // Note: Each trigger needs to be accounted for as an output stream.
+        check_stream_number(&ir, 1, 2, 0, 0, 0, 0, 2);
     }
 
     #[test]
