@@ -10,7 +10,6 @@ use crate::parse::NodeId;
 use crate::ty::TimingInfo;
 use num::{BigInt, BigRational, FromPrimitive, Integer, Zero};
 use petgraph::visit::IntoNodeReferences;
-use std::str::FromStr;
 
 #[derive(Clone, Debug)]
 pub(crate) struct Cut(Vec<NodeId>);
@@ -40,7 +39,9 @@ impl Cut {
                                         .message
                                         .clone()
                                         .map(|message| format!("trigger with message: {}", message))
-                                        .unwrap_or(String::from("unnamed trigger without message"))
+                                        .unwrap_or_else(|| {
+                                            String::from("unnamed trigger without message")
+                                        })
                                 })
                         })
                         .expect("We only have outputs and triggers in the cut!")
@@ -67,9 +68,9 @@ pub(crate) fn determine_bandwith_requirements(
     let non_input_stream_ids: Vec<NodeId> = dependency_graph
         .node_references()
         .filter_map(|(_node_index, node)| match node {
-            ClassicInput(id) => None,
+            ClassicInput(_id) => None,
             ClassicOutput(id) => Some(*id),
-            ParameterizedInput(id) => None,
+            ParameterizedInput(_id) => None,
             ParameterizedOutput(_id) => unimplemented!(),
             RTOutput(id) => Some(*id),
             Trigger(id) => Some(*id),
@@ -88,14 +89,14 @@ pub(crate) fn determine_bandwith_requirements(
         type_table,
     );
 
-    return result;
+    result
 }
 
 fn bandwith_helper(
     result: &mut Bandwith,
     cut: &mut Cut,
     current_index: usize,
-    non_input_stream_ids: &Vec<NodeId>,
+    non_input_stream_ids: &[NodeId],
     dependency_graph: &DependencyGraph,
     type_table: &TypeTable,
 ) {
@@ -133,7 +134,7 @@ fn bandwith_helper(
             // check that all dependent streams are also in the cut
             dependency_graph.neighbors(index).all(|other| {
                 let other_id = get_ast_id(*dependency_graph.node_weight(other).unwrap());
-                cut.0.iter().find(|entry| **entry == other_id).is_some()
+                cut.0.iter().any(|entry| *entry == other_id)
             })
         });
 
@@ -164,11 +165,14 @@ fn bandwith_helper(
                     match type_table.get_stream_type(*node_id).timing {
                         TimingInfo::Event => {
                             // check that none of my neighbors is in the cut
-                            if dependency_graph.neighbors(*node_index).any(|other_index| {
-                                let other_id =
-                                    get_ast_id(*dependency_graph.node_weight(other_index).unwrap());
-                                cut.0.contains(&other_id)
-                            }) {
+                            let some_dependent_streans_is_in_the_cut =
+                                dependency_graph.neighbors(*node_index).any(|other_index| {
+                                    let other_id = get_ast_id(
+                                        *dependency_graph.node_weight(other_index).unwrap(),
+                                    );
+                                    cut.0.contains(&other_id)
+                                });
+                            if some_dependent_streans_is_in_the_cut {
                                 // unknown amount of events
                                 BytesPerSecond::Unbounded
                             } else {

@@ -20,6 +20,7 @@ pub(crate) use self::future_dependency::FutureDependentStreams;
 pub(crate) use self::space_requirements::SpaceRequirements;
 use self::space_requirements::TrackingRequirements;
 use crate::analysis::graph_based_analysis::bandwith::BytesPerSecond;
+use crate::analysis::graph_based_analysis::bandwith::Cut;
 use crate::ty::ValueTy;
 use crate::FloatTy;
 use crate::IntTy;
@@ -76,13 +77,21 @@ pub(crate) fn analyze<'a>(
     );
 
     let bandwith_result = bandwith::determine_bandwith_requirements(type_table, &pruned_graph);
-    let bandwith_result = bandwith_result.iter().filter(|(_cut, bandwith)| {
-        if let BytesPerSecond::Unbounded = bandwith {
-            false
-        } else {
-            true
-        }
-    });
+    let bandwith_result: Vec<(Cut, BytesPerSecond)> = bandwith_result
+        .iter()
+        .filter(|(_cut, bandwith)| {
+            if let BytesPerSecond::Unbounded = bandwith {
+                false
+            } else {
+                true
+            }
+        })
+        .cloned()
+        .collect();
+
+    if bandwith_result.is_empty() {
+        println!("There is no way of evaluating some streams at a different location while guaranteeing bounded bandwith");
+    }
 
     for (cut, bandwith) in bandwith_result {
         println!(
@@ -97,7 +106,7 @@ pub(crate) fn analyze<'a>(
             }
         );
         cut.print(spec);
-        println!("");
+        println!();
     }
 
     Some(GraphAnalysisResult {
@@ -219,9 +228,8 @@ fn get_byte_size(value_ty: &ValueTy) -> MemoryBound {
         //ValueTy::Adt(AdtDef),
         ValueTy::String => MemoryBound::Unbounded,
         ValueTy::Tuple(elements) => {
-            let mut elements = elements.iter().map(get_byte_size);
             let mut accu = 0u128;
-            while let Some(element) = elements.next() {
+            for element in elements.iter().map(get_byte_size) {
                 match element {
                     MemoryBound::Bounded(i) => accu += i,
                     MemoryBound::Unbounded => return MemoryBound::Unbounded,

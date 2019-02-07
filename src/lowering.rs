@@ -24,7 +24,7 @@ use crate::analysis::graph_based_analysis::{ComputeStep, StorageRequirement, Tra
 use self::lowering_state::*;
 use crate::analysis::AnalysisResult;
 
-use num::{One, Signed, ToPrimitive};
+use num::ToPrimitive;
 
 type EvalTable = HashMap<NodeId, u32>;
 

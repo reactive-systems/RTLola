@@ -23,7 +23,6 @@ use ena::unify::{
     UnifyKey, UnifyValue,
 };
 use log::{debug, trace};
-use num::BigRational;
 use num::Signed;
 use std::collections::HashMap;
 

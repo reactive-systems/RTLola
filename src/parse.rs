@@ -375,7 +375,7 @@ pub(crate) fn build_time_spec(expr: Expression, unit_str: &str, span: Span) -> T
                             _ => -1,
                         },
                         id: NodeId::DUMMY,
-                        span: span,
+                        span,
                     }
                 } else {
                     let rounded_period: Duration = Duration::from_nanos(
@@ -392,7 +392,7 @@ pub(crate) fn build_time_spec(expr: Expression, unit_str: &str, span: Span) -> T
                             _ => 1,
                         },
                         id: NodeId::DUMMY,
-                        span: span,
+                        span,
                     }
                 }
             }

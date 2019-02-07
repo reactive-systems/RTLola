@@ -18,7 +18,7 @@ pub(crate) fn determine_worst_case_memory_consumption(
         if input.params.is_empty() {
             if let Some(storage_requirement) = buffer_requirements.get(&input.id) {
                 let buffer_size_per_instance = match storage_requirement {
-                    StorageRequirement::Finite(size) => *size as u128,
+                    StorageRequirement::Finite(size) => u128::from(*size),
                     StorageRequirement::FutureRef(_) => unreachable!(),
                     StorageRequirement::Unbounded => unimplemented!(),
                 };
@@ -40,7 +40,7 @@ pub(crate) fn determine_worst_case_memory_consumption(
         if output.params.is_empty() {
             if let Some(storage_requirement) = buffer_requirements.get(&output.id) {
                 let buffer_size_per_instance = match storage_requirement {
-                    StorageRequirement::Finite(size) => *size as u128,
+                    StorageRequirement::Finite(size) => u128::from(*size),
                     StorageRequirement::FutureRef(_) => unimplemented!(),
                     StorageRequirement::Unbounded => unimplemented!(),
                 };
@@ -71,7 +71,7 @@ pub(crate) fn determine_worst_case_memory_consumption(
 
                     match tracking {
                         TrackingRequirement::Finite(size) => {
-                            tracking_per_instance += (*size as u128) * value_type_size
+                            tracking_per_instance += u128::from(*size) * value_type_size
                         }
                         // TODO What about accessing a future dependent stream?
                         TrackingRequirement::Future => unimplemented!(),
@@ -102,7 +102,7 @@ pub(crate) fn determine_worst_case_memory_consumption(
 
                 match tracking {
                     TrackingRequirement::Finite(size) => {
-                        tracking_per_instance += (*size as u128) * value_type_size
+                        tracking_per_instance += u128::from(*size) * value_type_size
                     }
                     // TODO What about accessing a future dependent stream?
                     TrackingRequirement::Future => unimplemented!(),
@@ -114,5 +114,5 @@ pub(crate) fn determine_worst_case_memory_consumption(
         }
     }
 
-    return MemoryBound::Bounded(required_memory);
+    MemoryBound::Bounded(required_memory)
 }

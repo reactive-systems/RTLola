@@ -4,10 +4,7 @@ use super::parse::Ident;
 use crate::convert_to_f64;
 use crate::parse::NodeId;
 use crate::parse::Span;
-use num::BigInt;
 use num::BigRational;
-use num::FromPrimitive;
-use num::One;
 use std::time::Duration;
 
 /// The root Lola specification

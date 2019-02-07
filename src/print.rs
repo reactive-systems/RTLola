@@ -4,7 +4,7 @@ use super::ast::*;
 use super::parse::Ident;
 use num::{BigInt, Signed, ToPrimitive, Zero};
 use std::fmt::{Display, Formatter, Result};
-use std::ops::{Div, Rem};
+use std::ops::Rem;
 
 /// Writes out the joined vector `v`, enclosed by the given strings `pref` and `suff`.
 pub(crate) fn write_delim_list<T: Display>(
