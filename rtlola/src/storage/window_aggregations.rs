@@ -167,7 +167,7 @@ impl From<(Value, SystemTime)> for IntegralIV {
 pub(crate) struct CountIV(u64);
 
 impl WindowIV for CountIV {
-    fn default(time: SystemTime) -> CountIV {
+    fn default(_time: SystemTime) -> CountIV {
         CountIV(0)
     }
 }
@@ -186,7 +186,7 @@ impl Add for CountIV {
 }
 
 impl From<(Value, SystemTime)> for CountIV {
-    fn from(v: (Value, SystemTime)) -> CountIV {
+    fn from(_v: (Value, SystemTime)) -> CountIV {
         CountIV(1)
     }
 }

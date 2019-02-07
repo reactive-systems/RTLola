@@ -160,17 +160,27 @@ impl Evaluator {
             }
             Op::Function(name) => {
                 let arg = self.get(stmt.args[0], inst);
-                if let Value::Float(f) = arg {
-                    let res = match name.as_ref() {
-                        "sqrt" => f.sqrt(),
-                        "sin" => f.sin(),
-                        "cos" => f.cos(),
-                        _ => panic!("Unknown function!"),
-                    };
-                    let res = Value::Float(NotNan::new(res).expect("TODO: Handle"));
-                    self.write(stmt.target, res, inst);
-                } else {
-                    panic!();
+                match arg {
+                    Value::Float(f) => {
+                        let res = match name.as_ref() {
+                            "sqrt" => f.sqrt(),
+                            "sin" => f.sin(),
+                            "cos" => f.cos(),
+                            "arctan" => f.atan(),
+                            "abs" => f.abs(),
+                            _ => panic!("Unknown function."),
+                        };
+                        let res = Value::Float(NotNan::new(res).expect("TODO: Handle"));
+                        self.write(stmt.target, res, inst);
+                    }
+                    Value::Signed(i) => {
+                        let res = match name.as_ref() {
+                            "abs" => i.abs(),
+                            _ => panic!("Unknown function."),
+                        };
+                        self.write(stmt.target, Value::Signed(res), inst);
+                    }
+                    _ => panic!("Unknown function."),
                 }
             }
             Op::Tuple => unimplemented!("Who needs tuples, anyway?"),
