@@ -557,6 +557,15 @@ impl<'a> Lowering<'a> {
                 };
                 state.with_stmt(stmt)
             }
+            ExpressionKind::Function(name, _, args) if name.name == "cast" => {
+                // Special case for cast function.
+                assert_eq!(args.len(), 1);
+                let arg = &args[0];
+                let mut state = self.lower_subexpression(arg, state);
+                let conv_target = state.temp_for_type(&result_type);
+                let conv_source = state.get_target();
+                self.convert_temp(state, conv_source, conv_target)
+            }
             ExpressionKind::Function(name, _, args) => {
                 use crate::ty::ValueTy;
                 let ir_kind = name.name.clone();
@@ -1181,6 +1190,42 @@ mod tests {
         match &sqrt.op {
             Op::Function(s) => assert_eq!("sqrt", s),
             _ => panic!("Need to apply the function!"),
+        }
+    }
+
+    #[test]
+    fn lower_cast_expression() {
+        let ir = spec_to_ir("input a: Float64 output v: Float32 := cast(a)");
+        let stream: &OutputStream = &ir.outputs[0];
+
+        let ty = Type::Float(crate::ty::FloatTy::F32);
+
+        assert_eq!(stream.ty, ty);
+
+        let expr = &stream.expr;
+        assert_eq!(expr.stmts.len(), 2);
+
+        let load = &expr.stmts[0];
+
+        match &load.op {
+            Op::SyncStreamLookup(StreamInstance {
+                reference,
+                arguments,
+            }) => {
+                assert!(arguments.is_empty(), "Lookup does not have arguments.");
+                match reference {
+                    StreamReference::InRef(0) => {}
+                    _ => panic!("Incorrect StreamReference"),
+                }
+            }
+            _ => panic!("Need to load the constant first."),
+        };
+
+        let cast = &expr.stmts[1];
+
+        match &cast.op {
+            Op::Convert => {}
+            _ => panic!("Need to convert the value!"),
         }
     }
 
