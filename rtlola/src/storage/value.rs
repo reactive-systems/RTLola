@@ -34,6 +34,10 @@ impl Value {
             Type::Bool => source.parse::<bool>().map(Bool).ok(),
         }
     }
+
+    pub(crate) fn new_float(f: f64) -> Value {
+        Value::Float(NotNan::new(f).unwrap())
+    }
 }
 
 impl ops::Add for Value {

@@ -1,5 +1,6 @@
 use super::{EvalConfig, Verbosity};
 use csv::{Reader as CSVReader, Result as ReaderResult, StringRecord};
+use itertools::Itertools;
 use std::fs::File;
 use std::io::{stderr, stdin, stdout, Write};
 use std::time::Duration;
@@ -31,7 +32,10 @@ impl InputSource {
     }
 }
 
-struct ColumnMapping(Vec<usize>);
+struct ColumnMapping {
+    mapping: Vec<usize>,
+    time: Option<usize>,
+}
 
 impl ColumnMapping {
     fn from_header(names: &[&str], header: &StringRecord) -> ColumnMapping {
@@ -45,15 +49,17 @@ impl ColumnMapping {
                     .unwrap_or_else(|| panic!("CVS header does not contain an entry for stream {}.", name))
             })
             .collect();
-        ColumnMapping(mapping)
+        let time_pos = header.iter().find_position(|name| name == &"time" || name == &"ts" || name == &"timestamp");
+        let time = time_pos.map(|(ix, _)| ix);
+        ColumnMapping { mapping, time }
     }
 
     fn stream_ix_for_col_id(&self, col_id: usize) -> usize {
-        self.0[col_id]
+        self.mapping[col_id]
     }
 
     fn num_streams(&self) -> usize {
-        self.0.len()
+        self.mapping.len()
     }
 }
 
@@ -129,6 +135,10 @@ impl InputReader {
         }
 
         Ok(true)
+    }
+
+    pub(crate) fn time_index(&self) -> Option<usize> {
+        self.mapping.time
     }
 }
 

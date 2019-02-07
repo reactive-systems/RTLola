@@ -5,7 +5,7 @@ use crate::basics::{EvalConfig, OutputHandler};
 use lola_parser::{LolaIR, StreamReference};
 use std::sync::mpsc::{Receiver, Sender};
 use std::thread::sleep;
-use std::time::{Duration, Instant};
+use std::time::{Duration, SystemTime};
 
 const NANOS_PER_SEC: u128 = 1_000_000_000;
 
@@ -15,7 +15,7 @@ pub(crate) type TimeEvaluation = Vec<StreamReference>;
 struct TDMState {
     cycle: TimeDrivenCycleCount,
     deadline: usize,
-    time: Instant, // Debug/statistics information.
+    time: SystemTime, // Debug/statistics information.
 }
 
 #[allow(dead_code)]
@@ -49,7 +49,7 @@ pub(crate) struct TimeDrivenManager {
     last_state: Option<TDMState>,
     deadlines: Vec<Deadline>,
     hyper_period: Duration,
-    start_time: Option<Instant>,
+    start_time: Option<SystemTime>,
     handler: OutputHandler,
 }
 
@@ -140,22 +140,24 @@ impl TimeDrivenManager {
         res
     }
 
-    fn get_current_deadline(&self, ts: Option<Instant>) -> (Duration, Vec<StreamReference>) {
-        let ts = ts.unwrap_or_else(Instant::now);
+    fn get_current_deadline(&self, ts: Option<SystemTime>) -> (Duration, Vec<StreamReference>) {
+        let ts = ts.unwrap_or_else(SystemTime::now);
         let earliest_deadline_state = self.earliest_deadline_state(ts);
         let current_deadline = &self.deadlines[earliest_deadline_state.deadline];
-        let pause = earliest_deadline_state.time + current_deadline.pause - ts;
+        let time_of_deadline = earliest_deadline_state.time + current_deadline.pause;
+        let pause = time_of_deadline.duration_since(ts).expect("Time did not behave monotonically!");
         (pause, current_deadline.due.clone())
     }
 
     /// Compute the state for the deadline earliest deadline that is not missed yet.
     /// Example: If this function is called immediately after setup, it returns
     /// a state containing the start time and deadline 0.
-    fn earliest_deadline_state(&self, time: Instant) -> TDMState {
+    fn earliest_deadline_state(&self, time: SystemTime) -> TDMState {
         let start_time = self.start_time.unwrap();
         assert!(start_time < time);
         let hyper_nanos = Self::dur_as_nanos(self.hyper_period);
-        let time_since_start = Self::dur_as_nanos(time.duration_since(start_time));
+        let time_since_start =
+            Self::dur_as_nanos(time.duration_since(start_time).expect("Time did not behave monotonically!"));
 
         let hyper = time_since_start / hyper_nanos;
         let time_within_hyper = time_since_start % hyper_nanos;
@@ -179,19 +181,66 @@ impl TimeDrivenManager {
         u128::from(dur.as_secs()) * NANOS_PER_SEC + u128::from(dur.subsec_nanos())
     }
 
-    pub fn start(mut self, time: Option<Instant>, work_chan: Sender<WorkItem>, _stop_chan: Receiver<bool>) -> ! {
+    pub fn start_offline(
+        mut self,
+        work_chan: Sender<WorkItem>,
+        time_chan: Receiver<SystemTime>,
+        time_ack_chan: Sender<()>,
+    ) -> ! {
         if self.deadlines.is_empty() {
             // spec is not timed.
             loop {
                 sleep(Duration::new(u64::max_value(), 0));
             }
         }
-        self.start_time = time.or_else(|| Some(Instant::now()));
+
+        match time_chan.recv() {
+            Err(e) => panic!("TDM crashed. {}", e),
+            Ok(time) => {
+                self.start_time = Some(time);
+            }
+        }
+
+        assert!(self.start_time.is_some());
+        let (sleepy_time, due) = self.get_current_deadline(self.start_time);
+        let mut due_streams: Vec<StreamReference> = due;
+        let mut next_deadline: SystemTime = self.start_time.unwrap() + sleepy_time;
+
+        loop {
+            match time_chan.recv() {
+                Err(e) => panic!("TDM crashed. {}", e),
+                Ok(time) => {
+                    if time > next_deadline {
+                        // Go back in time, evaluate, acknowledge other thread.
+                        let item = WorkItem::Time(due_streams, next_deadline);
+                        if work_chan.send(item).is_err() {
+                            self.handler.runtime_warning(|| "TDM: Sending failed; evaluation cycle lost.");
+                        }
+                        let (sleepy_time, due) = self.get_current_deadline(Some(next_deadline));
+                        next_deadline += sleepy_time;
+                        due_streams = due;
+                        let _ = time_ack_chan.send(()); // Should be fine...
+                    } else {
+                        // Receive next timestamp.
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn start_online(mut self, time: Option<SystemTime>, work_chan: Sender<WorkItem>) -> ! {
+        if self.deadlines.is_empty() {
+            // spec is not timed.
+            loop {
+                sleep(Duration::new(u64::max_value(), 0));
+            }
+        }
+        self.start_time = time.or_else(|| Some(SystemTime::now()));
         loop {
             let (sleepy_time, due_streams) = self.get_current_deadline(None);
             sleep(sleepy_time);
             // TODO: Check if overslept.
-            let item = WorkItem::Time(due_streams);
+            let item = WorkItem::Time(due_streams, SystemTime::now());
             if work_chan.send(item).is_err() {
                 self.handler.runtime_warning(|| "TDM: Sending failed; evaluation cycle lost.");
             }
@@ -253,8 +302,8 @@ impl TimeDrivenManager {
     ///
     /// *Returns:* `WaitingTime` _t_ and `TimeDrivenCycleCount` _i_ where _t_ nanoseconds can pass
     /// until the _i_th time-driven evaluation cycle needs to be started.
-    fn wait_for(&self, time: Option<Instant>) -> (Duration, TimeDrivenCycleCount) {
-        let time = time.unwrap_or_else(Instant::now);
+    fn wait_for(&self, time: Option<SystemTime>) -> (Duration, TimeDrivenCycleCount) {
+        let time = time.unwrap_or_else(SystemTime::now);
         let current_state = self.current_state(time);
         if let Some(last_state) = self.last_state {
             match self.compare_states(last_state, current_state) {
@@ -274,8 +323,8 @@ impl TimeDrivenManager {
 
     /// Returns all time-driven streams that are due to be extended in time-driven evaluation
     /// cycle `c`. The returned collection is ordered according to the evaluation order.
-    fn due_streams(&mut self, time: Option<Instant>) -> Option<&Vec<StreamReference>> {
-        let time = time.unwrap_or_else(Instant::now);
+    fn due_streams(&mut self, time: Option<SystemTime>) -> Option<&Vec<StreamReference>> {
+        let time = time.unwrap_or_else(SystemTime::now);
         let state = self.current_state(time);
         if let Some(old_state) = self.last_state {
             match self.compare_states(old_state, state) {
@@ -315,7 +364,7 @@ impl TimeDrivenManager {
         }
     }
 
-    fn time_since_last_deadline(&self, time: Instant) -> Duration {
+    fn time_since_last_deadline(&self, time: SystemTime) -> Duration {
         let last_deadline = self.last_deadline_state(time);
         time.duration_since(last_deadline.time)
     }
@@ -371,7 +420,7 @@ impl TimeDrivenManager {
     /// The state's time is the earliest point in time where this state could have been the current
     /// one.
     /// Requires start_time to be non-none.
-    fn last_deadline_state(&self, time: Instant) -> TDMState {
+    fn last_deadline_state(&self, time: SystemTime) -> TDMState {
         let start_time = self.start_time.unwrap();
         assert!(start_time < time);
         let hyper_nanos = Self::dur_as_nanos(self.hyper_period);
@@ -393,7 +442,7 @@ impl TimeDrivenManager {
     }
 
     /// Computes the TDMState in which we should be right now given the supplied `time`.
-    fn current_state(&self, time: Instant) -> TDMState {
+    fn current_state(&self, time: SystemTime) -> TDMState {
         let state = self.last_deadline_state(time);
         TDMState { time, ..state }
     }
@@ -466,7 +515,7 @@ mod tests {
     //        let deadlines = vec![dl(1, 0), dl(0, 100_000_000), dl(2, 300_000_000), dl(1, 600_000_000)];
     //        let tdm = TimeDrivenManager { last_state: None, deadlines, hyper_period: dur(1, 0), start_time: None, handler };
     //        fn state(cy: u128, dl: usize) -> TDMState {
-    //            let time = Instant::now();
+    //            let time = SystemTime::now();
     //            TDMState { cycle: cy.into(), deadline: dl, time }
     //        }
     //        type Case = (TDMState, TDMState, StateCompare);

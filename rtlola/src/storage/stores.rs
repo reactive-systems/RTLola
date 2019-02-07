@@ -5,7 +5,7 @@ use crate::storage::SlidingWindow;
 use lola_parser::{LolaIR, OutputStream, StreamReference, Type};
 use std::collections::HashMap;
 use std::collections::VecDeque;
-use std::time::Instant;
+use std::time::SystemTime;
 
 pub(crate) type Parameter = Vec<Value>;
 
@@ -27,7 +27,7 @@ pub(crate) struct GlobalStore {
 }
 
 impl GlobalStore {
-    pub(crate) fn new(ir: &LolaIR, ts: Instant) -> GlobalStore {
+    pub(crate) fn new(ir: &LolaIR, ts: SystemTime) -> GlobalStore {
         let mut index_map: Vec<Option<usize>> = vec![None; ir.outputs.len()];
         let mut p_cnt = 0usize;
         for p in &ir.parametrized {

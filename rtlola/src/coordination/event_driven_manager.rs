@@ -4,7 +4,8 @@ use crate::storage::Value;
 
 use lola_parser::{LolaIR, Stream, StreamReference, Type};
 use std::ops::AddAssign;
-use std::sync::mpsc::Sender;
+use std::sync::mpsc::{Receiver, Sender};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 /// Represents the current cycle count for event-driven events.
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
@@ -85,30 +86,82 @@ impl EventDrivenManager {
         EDM { current_cycle: 0.into(), layers, out_handler, input_reader, in_types }
     }
 
-    pub(crate) fn start(mut self, work_queue: Sender<WorkItem>) -> ! {
-        let mut buffer = vec![String::new(); self.in_types.len()];
+    pub(crate) fn start_online(mut self, work_queue: Sender<WorkItem>) -> ! {
         loop {
-            // This whole function is awful.
-            match self.input_reader.read_blocking(&mut buffer) {
-                Ok(true) => {}
-                Ok(false) => {
+            let event = match self.read_event() {
+                None => {
                     let _ = work_queue.send(WorkItem::End); // Whether it fails or not, we really don't care.
-                                                            // Sleep until you slowly fade into non-existence...
+                                                            // Sleep until you slowly fade into nothingness...
                     loop {
                         std::thread::sleep(std::time::Duration::new(u64::max_value(), 0))
                     }
                 }
-                Err(e) => panic!("Error reading data. {}", e),
-            }
+                Some(e) => e,
+            };
+
             let layers = self.layers.clone(); // TODO: Sending repeatedly is unnecessary.
-            let event = buffer.iter()
-                .zip(self.in_types.iter())
-                .map(|(s, t)| Value::try_from(s, t).expect(format!("Failed to parse {} as value of type {:?}.", s, t).as_str())) // TODO: Handle parse error.
-                .enumerate()
-                .map(|(ix, v)| (StreamReference::InRef(ix), v))
-                .collect();
             let item = EventEvaluation { event, layers };
-            match work_queue.send(WorkItem::Event(item)) {
+            match work_queue.send(WorkItem::Event(item, SystemTime::now())) {
+                Ok(_) => {}
+                Err(e) => self.out_handler.runtime_warning(|| format!("Error when sending work item. {}", e)),
+            }
+            self.current_cycle += 1;
+        }
+    }
+
+    fn read_event(&mut self) -> Option<Vec<(StreamReference, Value)>> {
+        let mut buffer = vec![String::new(); self.in_types.len()];
+        match self.input_reader.read_blocking(&mut buffer) {
+            Ok(true) => {}
+            Ok(false) => return None,
+            Err(e) => panic!("Error reading data. {}", e),
+        }
+
+        Some(
+            buffer.iter()
+            .zip(self.in_types.iter())
+            .map(|(s, t)| Value::try_from(s, t).expect(format!("Failed to parse {} as value of type {:?}.", s, t).as_str())) // TODO: Handle parse error, don't write SystemTime::now
+            .enumerate()
+            .map(|(ix, v)| (StreamReference::InRef(ix), v))
+            .collect(),
+        )
+    }
+
+    pub(crate) fn start_offline(
+        mut self,
+        work_queue: Sender<WorkItem>,
+        time_chan: Sender<SystemTime>,
+        ack_chan: Receiver<()>,
+    ) -> ! {
+        let time_ix = self.input_reader.time_index().unwrap();
+        let mut start_time: Option<SystemTime> = None;
+        loop {
+            let event = match self.read_event() {
+                None => {
+                    let _ = work_queue.send(WorkItem::End); // Whether it fails or not, we really don't care.
+                                                            // Sleep until you slowly fade into nothingness...
+                    loop {
+                        std::thread::sleep(std::time::Duration::new(u64::max_value(), 0))
+                    }
+                }
+                Some(e) => e,
+            };
+            let now = match &event[time_ix].1 {
+                Value::Unsigned(u) => UNIX_EPOCH + Duration::from_secs(*u as u64),
+                _ => panic!("Time stamps need to be unsigned integers."),
+            };
+
+            if start_time.is_none() {
+                start_time = Some(now);
+            }
+
+            // Inform the time driven manager first.
+            let _ = time_chan.send(now);
+            let _ = ack_chan.recv(); // Wait until be get the acknowledgement.
+
+            let layers = self.layers.clone(); // TODO: Sending repeatedly is unnecessary.
+            let item = EventEvaluation { event, layers };
+            match work_queue.send(WorkItem::Event(item, now)) {
                 Ok(_) => {}
                 Err(e) => self.out_handler.runtime_warning(|| format!("Error when sending work item. {}", e)),
             }

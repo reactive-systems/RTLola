@@ -7,10 +7,14 @@ mod storage;
 
 use crate::coordination::Controller;
 use lola_parser::LolaIR;
-use std::time::Instant;
+use std::time::SystemTime;
 
-pub fn start_evaluation(ir: LolaIR, cfg: EvalConfig, ts: Option<Instant>) -> ! {
-    Controller::evaluate(ir, cfg, ts);
+pub fn start_evaluation_online(ir: LolaIR, cfg: EvalConfig, ts: Option<SystemTime>) -> ! {
+    Controller::evaluate(ir, cfg, ts, true);
+}
+
+pub fn start_evaluation_offline(ir: LolaIR, cfg: EvalConfig, ts: Option<SystemTime>) -> ! {
+    Controller::evaluate(ir, cfg, ts, false);
 }
 
 // Public export.

@@ -2,7 +2,7 @@ use rtlola::EvalConfig;
 use rtlola::InputSource;
 use std::time::Duration;
 
-use clap::{value_t, App, Arg, ArgGroup, SubCommand};
+use clap::{value_t, App, Arg, SubCommand};
 use lola_parser;
 use std::env;
 use std::error::Error;
@@ -11,7 +11,7 @@ use std::io::Read;
 use std::process;
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let args: Vec<String> = env::args().collect();
+    let _: Vec<String> = env::args().collect();
 
     let matches = App::new("rtlola")
         .version(env!("CARGO_PKG_VERSION"))
@@ -92,7 +92,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             let mut contents = String::new();
             file.read_to_string(&mut contents)?;
 
-            let ir = lola_parser::parse(contents.as_str());
+            let _ = lola_parser::parse(contents.as_str());
             Ok(())
         }
         ("monitor", Some(parse_matches)) => {
@@ -104,7 +104,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             file.read_to_string(&mut contents)?;
 
             let ir = lola_parser::parse(contents.as_str());
-            let delay = value_t!(parse_matches, "DELAY", u32).unwrap_or_else(|e| {
+            let delay = value_t!(parse_matches, "DELAY", u32).unwrap_or_else(|_| {
                 eprintln!(
                     "DELAY value `{}` is not a number.\nUsing no delay.",
                     parse_matches.value_of("DELAY").expect("We set a default value.")
@@ -137,9 +137,9 @@ fn main() -> Result<(), Box<dyn Error>> {
             };
 
             let cfg = EvalConfig::new(src, verbosity, out);
-            rtlola::start_evaluation(ir, cfg, None);
+            rtlola::start_evaluation_online(ir, cfg, None); // TODO: Malte
 
-            Ok(())
+            //            Ok(())
         }
         ("", None) => {
             println!("No subcommand was used");
