@@ -37,7 +37,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 )
                 .arg(
                     Arg::with_name("STDIN")
-                        .help("Read CSV input from stdin [Default}")
+                        .help("Read CSV input from stdin [Default]")
                         .long("stdin")
                 )
                 .arg(
@@ -149,6 +149,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             };
 
             let cfg = EvalConfig::new(src, verbosity, out);
+
             if parse_matches.is_present("OFFLINE") {
                 rtlola::start_evaluation_offline(ir, cfg);
             } else {
