@@ -37,7 +37,6 @@ pub(crate) struct GraphAnalysisResult {
     pub(crate) future_dependent_streams: FutureDependentStreams,
     pub(crate) space_requirements: SpaceRequirements,
     pub(crate) tracking_requirements: TrackingRequirements,
-    pub(crate) memory_requirement: MemoryBound,
 }
 
 pub(crate) fn analyze<'a>(
@@ -75,6 +74,12 @@ pub(crate) fn analyze<'a>(
         &tracking_requirements,
         type_table,
     );
+    match memory_requirement {
+        MemoryBound::Unbounded => {
+            println!("The specification has no bound on the memory consumption.")
+        }
+        MemoryBound::Bounded(bytes) => println!("The specification uses at most {} bytes.", bytes),
+    };
 
     let bandwith_result = bandwith::determine_bandwith_requirements(type_table, &pruned_graph);
     let bandwith_result: Vec<(Cut, BytesPerSecond)> = bandwith_result
@@ -95,7 +100,7 @@ pub(crate) fn analyze<'a>(
 
     for (cut, bandwith) in bandwith_result {
         println!(
-            "{} B/s are needed if the following streams are evaluated at a different location",
+            "{} B/s are needed if the following streams are evaluated at a different location.",
             match bandwith {
                 BytesPerSecond::Unbounded => unreachable!(),
                 BytesPerSecond::Bounded(i) => i
@@ -114,7 +119,6 @@ pub(crate) fn analyze<'a>(
         future_dependent_streams,
         space_requirements,
         tracking_requirements,
-        memory_requirement,
     })
 }
 
