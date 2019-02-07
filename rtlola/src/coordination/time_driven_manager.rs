@@ -154,7 +154,7 @@ impl TimeDrivenManager {
     /// a state containing the start time and deadline 0.
     fn earliest_deadline_state(&self, time: SystemTime) -> TDMState {
         let start_time = self.start_time.unwrap();
-        assert!(start_time < time);
+        assert!(start_time <= time);
         let hyper_nanos = Self::dur_as_nanos(self.hyper_period);
         let time_since_start =
             Self::dur_as_nanos(time.duration_since(start_time).expect("Time did not behave monotonically!"));

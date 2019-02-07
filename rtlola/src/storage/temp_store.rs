@@ -106,6 +106,22 @@ impl TempStore {
         }
     }
 
+    pub(crate) fn write_value_forcefully(&mut self, t: Temporary, v: Value) {
+        match (&self.types[t.0], v) {
+            (Type::UInt(_), Value::Unsigned(u)) => self.write_unsigned(t, u),
+            (Type::UInt(_), Value::Signed(i)) => self.write_unsigned(t, i as u128),
+            (Type::UInt(_), Value::Float(f)) => { let f: f64 = f.into(); self.write_unsigned(t, f as u128) }
+            (Type::Int(_), Value::Unsigned(u)) => self.write_signed(t, u as i128),
+            (Type::Int(_), Value::Signed(i)) => self.write_signed(t, i),
+            (Type::Int(_), Value::Float(f)) => { let f: f64 = f.into(); self.write_signed(t, f as i128) }
+            (Type::Float(_), Value::Unsigned(u)) => self.write_float(t, u as f64),
+            (Type::Float(_), Value::Signed(i)) => self.write_float(t, i as f64),
+            (Type::Float(_), Value::Float(f)) => self.write_float(t, f.into()),
+            (Type::Bool, Value::Bool(b)) => self.write_bool(t, b),
+            _ => unimplemented!(),
+        }
+    }
+
     pub(crate) fn write_unsigned(&mut self, t: Temporary, v: u128) {
         // TODO: The check is not required, just for safety.
         if let Type::UInt(_) = self.types[t.0 as usize] {

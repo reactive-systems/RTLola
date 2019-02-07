@@ -40,6 +40,8 @@ struct ColumnMapping {
 impl ColumnMapping {
     fn from_header(names: &[&str], header: &StringRecord) -> ColumnMapping {
         assert_eq!(names.len(), header.len()); // TODO: Handle better.
+        dbg!(names);
+        dbg!(header);
         let mapping: Vec<usize> = header
             .iter()
             .map(|name| {

@@ -29,6 +29,7 @@ impl Evaluator {
     }
 
     pub(crate) fn eval_stream(&mut self, inst: OutInstance, ts: SystemTime) {
+        self.handler.debug(|| format!("Evaluating stream {}.", self.ir.get_out(StreamReference::OutRef(inst.0)).name));
         let (ix, _) = inst;
         for stmt in self.exprs[ix].stmts.clone() {
             self.eval_stmt(&stmt, &inst, ts);
@@ -81,9 +82,18 @@ impl Evaluator {
         self.temp_stores[inst.0].write_value(temp, value);
     }
 
+    fn write_forcefully(&mut self, temp: Temporary, value: Value, inst: &OutInstance) {
+        self.temp_stores[inst.0].write_value_forcefully(temp, value);
+    }
+
     fn eval_stmt(&mut self, stmt: &Statement, inst: &OutInstance, ts: SystemTime) {
         match &stmt.op {
-            Op::Convert | Op::Move => {
+            Op::Convert => {
+                let arg = stmt.args[0];
+                let v = self.get(arg, inst);
+                self.write_forcefully(stmt.target, v, inst);
+            }
+            Op::Move => {
                 let arg = stmt.args[0];
                 let v = self.get(arg, inst);
                 self.write(stmt.target, v, inst);

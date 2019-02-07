@@ -100,6 +100,7 @@ impl EventDrivenManager {
             };
 
             let layers = self.layers.clone(); // TODO: Sending repeatedly is unnecessary.
+            let event = event.into_iter().flatten().collect(); // Remove non-existing values.
             let item = EventEvaluation { event, layers };
             match work_queue.send(WorkItem::Event(item, SystemTime::now())) {
                 Ok(_) => {}
@@ -109,7 +110,7 @@ impl EventDrivenManager {
         }
     }
 
-    fn read_event(&mut self) -> Option<Vec<(StreamReference, Value)>> {
+    fn read_event(&mut self) -> Option<Vec<Option<(StreamReference, Value)>>> {
         let mut buffer = vec![String::new(); self.in_types.len()];
         match self.input_reader.read_blocking(&mut buffer) {
             Ok(true) => {}
@@ -119,11 +120,18 @@ impl EventDrivenManager {
 
         Some(
             buffer.iter()
-            .zip(self.in_types.iter())
-            .map(|(s, t)| Value::try_from(s, t).expect(format!("Failed to parse {} as value of type {:?}.", s, t).as_str())) // TODO: Handle parse error, don't write SystemTime::now
-            .enumerate()
-            .map(|(ix, v)| (StreamReference::InRef(ix), v))
-            .collect(),
+                .zip(self.in_types.iter())
+                .enumerate()
+                .map(|(ix, (s, t))| {
+                    if s == "#" {
+                        None
+                    } else {
+                        let v = Value::try_from(s, t).expect(format!("Failed to parse {} as value of type {:?}.", s, t).as_str());
+                        Some((ix, v))
+                    }
+                })
+                .map(|opt| opt.map(|(ix, v)| (StreamReference::InRef(ix), v)))
+                .collect(),
         )
     }
 
@@ -146,7 +154,8 @@ impl EventDrivenManager {
                 }
                 Some(e) => e,
             };
-            let now = match &event[time_ix].1 {
+            let time_value = event[time_ix].as_ref().map(|s| &s.1).expect("Timestamp needs to be present.");
+            let now = match time_value {
                 Value::Unsigned(u) => UNIX_EPOCH + Duration::from_secs(*u as u64),
                 _ => panic!("Time stamps need to be unsigned integers."),
             };
@@ -159,6 +168,7 @@ impl EventDrivenManager {
             let _ = time_chan.send(now);
             let _ = ack_chan.recv(); // Wait until be get the acknowledgement.
 
+            let event = event.into_iter().flatten().collect(); // Remove non-existing entries.
             let layers = self.layers.clone(); // TODO: Sending repeatedly is unnecessary.
             let item = EventEvaluation { event, layers };
             match work_queue.send(WorkItem::Event(item, now)) {
