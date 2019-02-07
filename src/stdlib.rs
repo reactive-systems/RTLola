@@ -116,6 +116,15 @@ lazy_static! {
         parameters: vec![ValueTy::Param(0, "T".to_string())],
         return_type: ValueTy::Param(0, "T".to_string()),
     };
+    // fn abs<T: Numeric>(T) -> T
+    static ref ABS: FuncDecl = FuncDecl {
+        name: "abs".to_string(),
+        generics: vec![Generic {
+            constraint: ValueTy::Constr(TypeConstraint::Numeric),
+        }],
+        parameters: vec![ValueTy::Param(0, "T".to_string())],
+        return_type: ValueTy::Param(0, "T".to_string()),
+    };
 
     // fn matches_regexp(String, String) -> Bool
     static ref MATCHES_REGEX: FuncDecl = FuncDecl {
@@ -130,6 +139,7 @@ pub(crate) fn import_math_module<'a>(scope: &mut ScopedDecl<'a>) {
     scope.add_decl_for(&SQRT.name, Declaration::Func(&SQRT));
     scope.add_decl_for(&COS.name, Declaration::Func(&COS));
     scope.add_decl_for(&SIN.name, Declaration::Func(&SIN));
+    scope.add_decl_for(&ABS.name, Declaration::Func(&ABS));
 }
 
 pub(crate) fn import_regex_module<'a>(scope: &mut ScopedDecl<'a>) {
