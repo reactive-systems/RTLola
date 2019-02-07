@@ -179,7 +179,7 @@ fn build_compute_graph(mut dependency_graph: DependencyGraph) -> ComputationGrap
                         // no need to add dependency for positive edges
                     }
                     Offset::Time(offset) => {
-                        if let TimeOffset::UpToNow(_,_) = offset {
+                        if let TimeOffset::UpToNow(_, _) = offset {
                             computation_graph.add_edge(
                                 mapping[&source_id].evaluate,
                                 mapping[&target_id].evaluate,

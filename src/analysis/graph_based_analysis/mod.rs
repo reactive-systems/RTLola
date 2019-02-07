@@ -1,3 +1,4 @@
+mod bandwith;
 pub mod dependency_graph;
 pub mod evaluation_order;
 pub mod future_dependency;
@@ -18,7 +19,12 @@ pub(crate) use self::evaluation_order::EvaluationOrderResult;
 pub(crate) use self::future_dependency::FutureDependentStreams;
 pub(crate) use self::space_requirements::SpaceRequirements;
 use self::space_requirements::TrackingRequirements;
-use num::BigRational;
+use crate::analysis::graph_based_analysis::bandwith::BytesPerSecond;
+use crate::ty::ValueTy;
+use crate::FloatTy;
+use crate::IntTy;
+use crate::UIntTy;
+use num::{BigRational, ToPrimitive};
 
 pub(crate) enum MemoryBound {
     Bounded(u128),
@@ -68,6 +74,31 @@ pub(crate) fn analyze<'a>(
         &tracking_requirements,
         type_table,
     );
+
+    let bandwith_result = bandwith::determine_bandwith_requirements(type_table, &pruned_graph);
+    let bandwith_result = bandwith_result.iter().filter(|(_cut, bandwith)| {
+        if let BytesPerSecond::Unbounded = bandwith {
+            false
+        } else {
+            true
+        }
+    });
+
+    for (cut, bandwith) in bandwith_result {
+        println!(
+            "{} B/s are needed if the following streams are evaluated at a different location",
+            match bandwith {
+                BytesPerSecond::Unbounded => unreachable!(),
+                BytesPerSecond::Bounded(i) => i
+                    .ceil()
+                    .to_integer()
+                    .to_i128()
+                    .expect("Bytes/Second too large for i128!"),
+            }
+        );
+        cut.print(spec);
+        println!("");
+    }
 
     Some(GraphAnalysisResult {
         evaluation_order: evaluation_order_result,
@@ -162,5 +193,49 @@ fn get_ast_id(dependent_node: StreamNode) -> NodeId {
         | StreamNode::ParameterizedInput(id)
         | StreamNode::Trigger(id)
         | StreamNode::RTTrigger(id) => id,
+    }
+}
+
+fn get_byte_size(value_ty: &ValueTy) -> MemoryBound {
+    match value_ty {
+        ValueTy::Bool => MemoryBound::Bounded(1),
+        ValueTy::Int(int_ty) => MemoryBound::Bounded(match int_ty {
+            IntTy::I8 => 1,
+            IntTy::I16 => 2,
+            IntTy::I32 => 4,
+            IntTy::I64 => 8,
+        }),
+        ValueTy::UInt(uint_ty) => MemoryBound::Bounded(match uint_ty {
+            UIntTy::U8 => 1,
+            UIntTy::U16 => 2,
+            UIntTy::U32 => 4,
+            UIntTy::U64 => 8,
+        }),
+        ValueTy::Float(float_ty) => MemoryBound::Bounded(match float_ty {
+            FloatTy::F32 => 4,
+            FloatTy::F64 => 8,
+        }),
+        // an abstract data type, e.g., structs, enums, etc.
+        //ValueTy::Adt(AdtDef),
+        ValueTy::String => MemoryBound::Unbounded,
+        ValueTy::Tuple(elements) => {
+            let mut elements = elements.iter().map(get_byte_size);
+            let mut accu = 0u128;
+            while let Some(element) = elements.next() {
+                match element {
+                    MemoryBound::Bounded(i) => accu += i,
+                    MemoryBound::Unbounded => return MemoryBound::Unbounded,
+                };
+            }
+            MemoryBound::Bounded(accu)
+        }
+        // an optional value type, e.g., resulting from accessing a stream with offset -1
+        ValueTy::Option(inner) => get_byte_size(inner),
+        // Used during type inference
+        ValueTy::Infer(_value_var) => unreachable!(),
+        ValueTy::Constr(_type_constraint) => unreachable!(),
+        // A reference to a generic parameter in a function declaration, e.g. `T` in `a<T>(x:T) -> T`
+        ValueTy::Param(_, _) => MemoryBound::Bounded(0),
+        ValueTy::Error => unreachable!(),
     }
 }

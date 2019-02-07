@@ -1,55 +1,10 @@
+use crate::analysis::graph_based_analysis::get_byte_size;
 use crate::analysis::graph_based_analysis::space_requirements::TrackingRequirements;
 use crate::analysis::graph_based_analysis::MemoryBound;
 use crate::analysis::graph_based_analysis::TrackingRequirement;
 use crate::analysis::graph_based_analysis::{SpaceRequirements, StorageRequirement};
 use crate::analysis::TypeTable;
 use crate::ast::LolaSpec;
-use crate::ty::ValueTy;
-use crate::{FloatTy, IntTy, UIntTy};
-
-fn get_byte_size(value_ty: &ValueTy) -> MemoryBound {
-    match value_ty {
-        ValueTy::Bool => MemoryBound::Bounded(1),
-        ValueTy::Int(int_ty) => MemoryBound::Bounded(match int_ty {
-            IntTy::I8 => 1,
-            IntTy::I16 => 2,
-            IntTy::I32 => 4,
-            IntTy::I64 => 8,
-        }),
-        ValueTy::UInt(uint_ty) => MemoryBound::Bounded(match uint_ty {
-            UIntTy::U8 => 1,
-            UIntTy::U16 => 2,
-            UIntTy::U32 => 4,
-            UIntTy::U64 => 8,
-        }),
-        ValueTy::Float(float_ty) => MemoryBound::Bounded(match float_ty {
-            FloatTy::F32 => 4,
-            FloatTy::F64 => 8,
-        }),
-        // an abstract data type, e.g., structs, enums, etc.
-        //ValueTy::Adt(AdtDef),
-        ValueTy::String => MemoryBound::Unbounded,
-        ValueTy::Tuple(elements) => {
-            let mut elements = elements.iter().map(get_byte_size);
-            let mut accu = 0u128;
-            while let Some(element) = elements.next() {
-                match element {
-                    MemoryBound::Bounded(i) => accu += i,
-                    MemoryBound::Unbounded => return MemoryBound::Unbounded,
-                };
-            }
-            MemoryBound::Bounded(accu)
-        }
-        // an optional value type, e.g., resulting from accessing a stream with offset -1
-        ValueTy::Option(inner) => get_byte_size(inner),
-        // Used during type inference
-        ValueTy::Infer(_value_var) => unreachable!(),
-        ValueTy::Constr(_type_constraint) => unreachable!(),
-        // A reference to a generic parameter in a function declaration, e.g. `T` in `a<T>(x:T) -> T`
-        ValueTy::Param(_, _) => MemoryBound::Bounded(0),
-        ValueTy::Error => unreachable!(),
-    }
-}
 
 pub(crate) fn determine_worst_case_memory_consumption(
     spec: &LolaSpec,
@@ -115,7 +70,9 @@ pub(crate) fn determine_worst_case_memory_consumption(
                     };
 
                     match tracking {
-                        TrackingRequirement::Finite(size) => tracking_per_instance += (*size as u128)*value_type_size,
+                        TrackingRequirement::Finite(size) => {
+                            tracking_per_instance += (*size as u128) * value_type_size
+                        }
                         // TODO What about accessing a future dependent stream?
                         TrackingRequirement::Future => unimplemented!(),
                         TrackingRequirement::Unbounded => unimplemented!(),
@@ -144,7 +101,9 @@ pub(crate) fn determine_worst_case_memory_consumption(
                 };
 
                 match tracking {
-                    TrackingRequirement::Finite(size) => tracking_per_instance += (*size as u128)*value_type_size,
+                    TrackingRequirement::Finite(size) => {
+                        tracking_per_instance += (*size as u128) * value_type_size
+                    }
                     // TODO What about accessing a future dependent stream?
                     TrackingRequirement::Future => unimplemented!(),
                     TrackingRequirement::Unbounded => unimplemented!(),
