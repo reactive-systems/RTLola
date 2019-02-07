@@ -12,7 +12,7 @@ output lat_cast: UInt64 := cast(lat)
 
 output gps_freq_off: Bool { extend @ 1Hz } := (lat_cast[1s, count] ? 9) < 9
 
-trigger (gps_freq_off ! false) "GPS sensor frequency < 9Hz"
+trigger gps_freq_off "GPS sensor frequency < 9Hz"
 
 output lon_diff: Float64 := (lon - (lon[-1]?lon) 
 output lat_diff: Float64 := (lat - (lat[-1]?lat) 
@@ -25,7 +25,7 @@ trigger abs(gps_velo - velo) > 0.1 "Deviation in sensed velocity and computed ve
 output yaw: Float64 := arctan(lat_diff / lon_diff)
 output head_wind: Bool { extend @ 1Hz } := ((w_dir ! 0.0) - (yaw ! 0.0)) < 0.2
 output hovering: Bool { extend @ 1Hz } := (velo[5s, integral] ? 5.0) < 0.5 ∧ ¬head_wind
-trigger (hovering ! false) "Little movement in the last 5 seconds. Path planning hung up?"
+trigger hovering "Little movement in the last 5 seconds. Path planning hung up?"
 
 output fast: Bool := velo > 7.0
 output slowing_down := (fast[-1] ? false) & !fast
