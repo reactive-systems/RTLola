@@ -562,6 +562,15 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
                 )?
             }
             Hold(left, right) => {
+                // verify that `var` is infered
+                if self.stream_unifier.get_type(stream_var).is_none() {
+                    self.handler.error_with_span(
+                        "Cannot use `!` operator when stream type (event or real-time) is unknown",
+                        LabeledSpan::new(expr.span, "Consider removing `!` operator", true),
+                    );
+                    return Err(());
+                }
+
                 let new_var = self.stream_unifier.new_var();
                 self.infer_expression(
                     left,
