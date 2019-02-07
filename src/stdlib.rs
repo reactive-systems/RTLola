@@ -116,6 +116,15 @@ lazy_static! {
         parameters: vec![ValueTy::Param(0, "T".to_string())],
         return_type: ValueTy::Param(0, "T".to_string()),
     };
+     // fn arctan<T: FloatingPoint>(T) -> T
+    static ref ARCTAN: FuncDecl = FuncDecl {
+        name: "arctan".to_string(),
+        generics: vec![Generic {
+            constraint: ValueTy::Constr(TypeConstraint::FloatingPoint),
+        }],
+        parameters: vec![ValueTy::Param(0, "T".to_string())],
+        return_type: ValueTy::Param(0, "T".to_string()),
+    };
     // fn abs<T: Numeric>(T) -> T
     static ref ABS: FuncDecl = FuncDecl {
         name: "abs".to_string(),
@@ -140,6 +149,7 @@ pub(crate) fn import_math_module<'a>(scope: &mut ScopedDecl<'a>) {
     scope.add_decl_for(&COS.name, Declaration::Func(&COS));
     scope.add_decl_for(&SIN.name, Declaration::Func(&SIN));
     scope.add_decl_for(&ABS.name, Declaration::Func(&ABS));
+    scope.add_decl_for(&ARCTAN.name, Declaration::Func(&ARCTAN));
 }
 
 pub(crate) fn import_regex_module<'a>(scope: &mut ScopedDecl<'a>) {
