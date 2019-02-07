@@ -74,7 +74,8 @@ pub(crate) fn analyze<'a, 'b>(spec: &'a LolaSpec, handler: &'b Handler) -> Analy
         result.type_table = type_table;
     }
 
-    let mut version_analyzer = LolaVersionAnalysis::new(&handler);
+    let mut version_analyzer =
+        LolaVersionAnalysis::new(&handler, result.type_table.as_ref().unwrap());
     let version_result = version_analyzer.analyse(spec);
     if version_result.is_none() {
         print!("error");

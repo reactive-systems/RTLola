@@ -80,6 +80,7 @@ mod tests {
     use crate::analysis::graph_based_analysis::future_dependency::future_dependent_stream;
     use crate::analysis::lola_version::LolaVersionAnalysis;
     use crate::analysis::naming::NamingAnalysis;
+    use crate::analysis::typing::TypeAnalysis;
     use crate::parse::parse;
     use crate::parse::SourceMapper;
     use crate::reporting::Handler;
@@ -97,7 +98,9 @@ mod tests {
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), content));
         let mut naming_analyzer = NamingAnalysis::new(&handler);
         let decl_table = naming_analyzer.check(&spec);
-        let mut version_analyzer = LolaVersionAnalysis::new(&handler);
+        let mut type_analysis = TypeAnalysis::new(&handler, &decl_table);
+        let type_table = type_analysis.check(&spec);
+        let mut version_analyzer = LolaVersionAnalysis::new(&handler, type_table.as_ref().unwrap());
         let _version = version_analyzer.analyse(&spec);
 
         let dependency_analysis =

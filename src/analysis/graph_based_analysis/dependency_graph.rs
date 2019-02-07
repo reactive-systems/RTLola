@@ -881,6 +881,7 @@ mod tests {
     use super::*;
     use crate::analysis::lola_version::LolaVersionAnalysis;
     use crate::analysis::naming::NamingAnalysis;
+    use crate::analysis::typing::TypeAnalysis;
     use crate::parse::parse;
     use crate::parse::SourceMapper;
     use crate::reporting::Handler;
@@ -892,7 +893,9 @@ mod tests {
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), content));
         let mut naming_analyzer = NamingAnalysis::new(&handler);
         let decl_table = naming_analyzer.check(&ast);
-        let mut version_analyzer = LolaVersionAnalysis::new(&handler);
+        let mut type_analysis = TypeAnalysis::new(&handler, &decl_table);
+        let type_table = type_analysis.check(&ast);
+        let mut version_analyzer = LolaVersionAnalysis::new(&handler, type_table.as_ref().unwrap());
         let version = version_analyzer.analyse(&ast);
         assert!(
             !version.is_none(),
