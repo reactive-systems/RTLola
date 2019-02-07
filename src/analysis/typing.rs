@@ -2078,4 +2078,15 @@ mod tests {
         assert_eq!(0, num_type_errors(spec));
     }
 
+    #[test]
+    fn test_casting_implicit_types() {
+        let spec = "input x: UInt8\noutput y: Float32 := cast(x)";
+        assert_eq!(0, num_type_errors(spec));
+    }
+
+    #[test]
+    fn test_casting_explicit_types() {
+        let spec = "input x: Int32\noutput y: UInt32 := cast<Int32,UInt32>(x)";
+        assert_eq!(0, num_type_errors(spec));
+    }
 }

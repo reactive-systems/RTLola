@@ -142,6 +142,23 @@ lazy_static! {
         parameters: vec![ValueTy::String, ValueTy::String],
         return_type: ValueTy::Bool,
     };
+
+    /// fn cast<T: Numeric, U: Numeric>(T) -> U
+    /// allows for arbitrary conversion of numeric types T -> U
+    static ref CAST: FuncDecl = FuncDecl {
+        name: "cast".to_string(),
+        generics: vec![Generic {
+            constraint: ValueTy::Constr(TypeConstraint::Numeric),
+        }, Generic {
+            constraint: ValueTy::Constr(TypeConstraint::Numeric),
+        }],
+        parameters: vec![ValueTy::Param(0, "T".to_string())],
+        return_type: ValueTy::Param(1, "U".to_string()),
+    };
+}
+
+pub(crate) fn import_implicit_module<'a>(scope: &mut ScopedDecl<'a>) {
+    scope.add_decl_for(&CAST.name, Declaration::Func(&CAST));
 }
 
 pub(crate) fn import_math_module<'a>(scope: &mut ScopedDecl<'a>) {

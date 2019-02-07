@@ -174,6 +174,7 @@ impl<'a, 'b> NamingAnalysis<'a, 'b> {
 
     /// Entry method, checks that every identifier in the given spec is bound.
     pub(crate) fn check(&mut self, spec: &'a LolaSpec) -> DeclarationTable<'a> {
+        stdlib::import_implicit_module(&mut self.declarations);
         for import in &spec.imports {
             match import.name.name.as_str() {
                 "math" => stdlib::import_math_module(&mut self.declarations),
