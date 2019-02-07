@@ -40,7 +40,7 @@ pub(crate) fn determine_buffer_size(
         let this_stream_is_future_dependent = future_dependent_streams.contains(&id);
 
         // normal event based stream
-        let mut storage_required = 0_u16;
+        let mut storage_required = 1_u16;
         for edge in dependency_graph.edges_directed(node_index, Direction::Incoming) {
             match edge.weight() {
                 Access(location, offset, _) => {
@@ -307,7 +307,7 @@ mod tests {
             0,
             2,
             vec![
-                (StreamIndex::Out(0), StorageRequirement::Finite(0)),
+                (StreamIndex::Out(0), StorageRequirement::Finite(1)),
                 (StreamIndex::In(0), StorageRequirement::Finite(2)),
             ],
         )
@@ -321,7 +321,7 @@ mod tests {
             0,
             2,
             vec![
-                (StreamIndex::Out(0), StorageRequirement::Finite(0)),
+                (StreamIndex::Out(0), StorageRequirement::Finite(1)),
                 (StreamIndex::In(0), StorageRequirement::Finite(1)),
             ],
         )
@@ -335,7 +335,7 @@ mod tests {
             0,
             2,
             vec![
-                (StreamIndex::Out(0), StorageRequirement::FutureRef(0)),
+                (StreamIndex::Out(0), StorageRequirement::FutureRef(1)),
                 (StreamIndex::In(0), StorageRequirement::Finite(1)),
             ],
         )
