@@ -18,6 +18,7 @@ pub(crate) enum SlidingWindow {
     AvgSigned(WindowInstance<AvgIV<WindowSigned>>),
     AvgFloat(WindowInstance<AvgIV<WindowFloat>>),
     Integral(WindowInstance<IntegralIV>),
+    Count(WindowInstance<CountIV>),
 }
 
 impl SlidingWindow {
@@ -30,6 +31,7 @@ impl SlidingWindow {
             (WinOp::Average, Type::Int(_)) => SlidingWindow::AvgSigned(WindowInstance::new(dur, ts)),
             (WinOp::Average, Type::Float(_)) => SlidingWindow::AvgFloat(WindowInstance::new(dur, ts)),
             (WinOp::Integral, _) => SlidingWindow::Integral(WindowInstance::new(dur, ts)),
+            (WinOp::Count, _) => SlidingWindow::Count(WindowInstance::new(dur, ts)),
             (_, Type::Option(t)) => SlidingWindow::new(dur, op, ts, t),
             _ => unimplemented!(),
         }
@@ -41,6 +43,7 @@ impl SlidingWindow {
             SlidingWindow::SumSigned(wi) => wi.get_value(ts),
             SlidingWindow::SumFloat(wi) => wi.get_value(ts),
             SlidingWindow::Integral(wi) => wi.get_value(ts),
+            SlidingWindow::Count(wi) => wi.get_value(ts),
             SlidingWindow::AvgUnsigned(wi) => wi.get_value(ts),
             SlidingWindow::AvgSigned(wi) => wi.get_value(ts),
             SlidingWindow::AvgFloat(wi) => wi.get_value(ts),
@@ -53,6 +56,7 @@ impl SlidingWindow {
             SlidingWindow::SumSigned(wi) => wi.accept_value(v, ts),
             SlidingWindow::SumFloat(wi) => wi.accept_value(v, ts),
             SlidingWindow::Integral(wi) => wi.accept_value(v, ts),
+            SlidingWindow::Count(wi) => wi.accept_value(v, ts),
             SlidingWindow::AvgUnsigned(wi) => wi.accept_value(v, ts),
             SlidingWindow::AvgSigned(wi) => wi.accept_value(v, ts),
             SlidingWindow::AvgFloat(wi) => wi.accept_value(v, ts),

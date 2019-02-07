@@ -400,6 +400,25 @@ mod tests {
     }
 
     #[test]
+    fn test_count_window() {
+        let mut time = SystemTime::now();
+        let (_, mut eval) = setup_time("input a: UInt16\noutput b: UInt16 { extend @0.25Hz } := a[40s, #] ? 3", time);
+        time += Duration::from_secs(45);
+        let out_ref = StreamReference::OutRef(0);
+        let in_ref = StreamReference::InRef(0);
+        let n = 25;
+        for v in 1..=n {
+            eval.accept_input(in_ref, Value::Unsigned(v), time);
+            time += Duration::from_secs(1);
+        }
+        time += Duration::from_secs(1);
+        // 71 secs have passed. All values should be within the window.
+        eval.eval_stream((0, Vec::new()), time);
+        let expected = Value::Unsigned(n);
+        assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), expected);
+    }
+
+    #[test]
     fn test_integral_window() {
         let mut time = SystemTime::now();
         let (_, mut eval) =

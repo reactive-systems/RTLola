@@ -162,3 +162,31 @@ impl From<(Value, SystemTime)> for IntegralIV {
         }
     }
 }
+
+#[derive(Clone, Debug)]
+pub(crate) struct CountIV(u64);
+
+impl WindowIV for CountIV {
+    fn default(time: SystemTime) -> CountIV {
+        CountIV(0)
+    }
+}
+
+impl Into<Value> for CountIV {
+    fn into(self) -> Value {
+        Value::Unsigned(self.0 as u128)
+    }
+}
+
+impl Add for CountIV {
+    type Output = CountIV;
+    fn add(self, other: CountIV) -> CountIV {
+        CountIV(self.0 + other.0)
+    }
+}
+
+impl From<(Value, SystemTime)> for CountIV {
+    fn from(v: (Value, SystemTime)) -> CountIV {
+        CountIV(1)
+    }
+}
