@@ -11,11 +11,12 @@ use std::io::Read;
 use std::process;
 
 fn main() -> Result<(), Box<dyn Error>> {
+
     let args: Vec<String> = env::args().collect();
 
     let matches = App::new("rtlola")
         .version(env!("CARGO_PKG_VERSION"))
-        .author(env!("CARGO_PKG_AUTHORS")) //TODO authors
+        .author(env!("CARGO_PKG_AUTHORS"))
         .about("rtlola is a tool to analyze and monitor Lola specifications") // TODO description
         .subcommand(
         SubCommand::with_name("analyze")

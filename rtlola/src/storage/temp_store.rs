@@ -67,12 +67,20 @@ impl TempStore {
 
     pub(crate) fn get_float(&self, t: Temporary) -> f64 {
         // TODO: The check is not required, just for safety.
-        if let Type::Float(_) = self.types[t.0 as usize] {
+        if let Type::Float(f_size) = self.types[t.0 as usize] {
             let (lower, higher) = self.get_bounds(t);
-            let mut seq = vec![0u8; std::mem::size_of::<f64>()];
-            Self::write_byte_seq(&mut seq, &self.data[lower..higher]);
-            let mut test = &seq[..];
-            test.read_f64::<NativeEndian>().unwrap()
+            match f_size {
+                FloatTy::F32 => {
+                    let mut seq = vec![0u8; std::mem::size_of::<f32>()];
+                    Self::write_byte_seq(&mut seq, &self.data[lower..higher]);
+                    (&seq[..]).read_f32::<NativeEndian>().unwrap() as f64
+                }
+                FloatTy::F64 => {
+                    let mut seq = vec![0u8; std::mem::size_of::<f64>()];
+                    Self::write_byte_seq(&mut seq, &self.data[lower..higher]);
+                    (&seq[..]).read_f64::<NativeEndian>().unwrap()
+                }
+            }
         } else {
             panic!("Unexpected call to `TempStore::get_float`.")
         }
@@ -110,11 +118,20 @@ impl TempStore {
 
     pub(crate) fn write_float(&mut self, t: Temporary, v: f64) {
         // TODO: The check is not required, just for safety.
-        if let Type::Float(_) = self.types[t.0 as usize] {
+        if let Type::Float(f_size) = self.types[t.0 as usize] {
             let (lower, higher) = self.get_bounds(t);
-            let mut seq = [0u8; std::mem::size_of::<f64>()];
-            let _ = seq.as_mut().write_f64::<NativeEndian>(v); // TODO: Use `Result`?
-            Self::write_byte_seq(&mut self.data[lower..higher], &seq);
+            match f_size {
+                FloatTy::F32 => {
+                    let mut seq = [0u8; std::mem::size_of::<f32>()];
+                    let _ = seq.as_mut().write_f32::<NativeEndian>(v as f32); // TODO: Use `Result`?
+                    Self::write_byte_seq(&mut self.data[lower..higher], &seq);
+                },
+                FloatTy::F64 => {
+                    let mut seq = [0u8; std::mem::size_of::<f64>()];
+                    let _ = seq.as_mut().write_f64::<NativeEndian>(v); // TODO: Use `Result`?
+                    Self::write_byte_seq(&mut self.data[lower..higher], &seq);
+                },
+            };
         } else {
             panic!("Unexpected call to `TempStore::get_unsigned`.")
         }

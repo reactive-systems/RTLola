@@ -80,6 +80,8 @@ impl EventDrivenManager {
             }
         }
 
+        out_handler.debug(|| format!("Evaluation layers: {:?}", layers));
+
         EDM { current_cycle: 0.into(), layers, out_handler, input_reader, in_types }
     }
 
@@ -101,7 +103,7 @@ impl EventDrivenManager {
             let layers = self.layers.clone(); // TODO: Sending repeatedly is unnecessary.
             let event = buffer.iter()
                 .zip(self.in_types.iter())
-                .map(|(s, t)| Value::try_from(s, t).unwrap()) // TODO: Handle parse error.
+                .map(|(s, t)| Value::try_from(s, t).expect(format!("Failed to parse {} as value of type {:?}.", s, t).as_str())) // TODO: Handle parse error.
                 .enumerate()
                 .map(|(ix, v)| (StreamReference::InRef(ix), v))
                 .collect();

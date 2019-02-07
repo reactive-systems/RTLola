@@ -22,7 +22,14 @@ impl Value {
             Type::String => unimplemented!(),
             Type::Tuple(_) => unimplemented!(),
             Type::Float(_) => source.parse::<f64>().ok().map(|f| Float(NotNan::new(f).unwrap())),
-            Type::UInt(_) => source.parse::<u128>().map(Unsigned).ok(),
+            Type::UInt(_) => {
+                // TODO: This is just a quickfix!! Think of something more general.
+                if source == "0.0" {
+                    Some(Unsigned(0))
+                } else {
+                    source.parse::<u128>().map(Unsigned).ok()
+                }
+            },
             Type::Int(_) => source.parse::<i128>().map(Signed).ok(),
             Type::Bool => source.parse::<bool>().map(Bool).ok(),
         }

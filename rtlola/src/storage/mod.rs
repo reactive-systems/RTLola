@@ -2,6 +2,7 @@ mod stores;
 mod temp_store;
 mod value;
 mod window;
+mod window_aggregations;
 
 pub(crate) use self::stores::GlobalStore;
 pub(crate) use self::temp_store::TempStore;

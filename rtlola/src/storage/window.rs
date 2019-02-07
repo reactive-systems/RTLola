@@ -1,34 +1,40 @@
 use super::Value;
-use lola_parser::WindowOperation;
+use lola_parser::{WindowOperation as WinOp, Type};
 use std::cmp::Ordering;
 use std::collections::VecDeque;
 use std::fmt::Debug;
 use std::ops::Add;
 use std::time::{Duration, Instant};
+use super::window_aggregations::*;
 
 const SIZE: usize = 4;
 
 pub(crate) enum SlidingWindow {
-    Sum(WindowInstance<SumIV>),
+    SumUnsigned(WindowInstance<SumIV<WindowUnsigned>>),
+    SumSigned(WindowInstance<SumIV<WindowSigned>>),
 }
 
 impl SlidingWindow {
-    pub(crate) fn new(dur: Duration, op: WindowOperation, ts: Instant) -> SlidingWindow {
-        match op {
-            WindowOperation::Sum => SlidingWindow::Sum(WindowInstance::new(dur, ts)),
+    pub(crate) fn new(dur: Duration, op: WinOp, ts: Instant, ty: &Type) -> SlidingWindow {
+        match (op, ty) {
+            (WinOp::Sum, Type::Int(_)) => SlidingWindow::SumSigned(WindowInstance::new(dur, ts)),
+            (WinOp::Sum, Type::UInt(_)) => SlidingWindow::SumUnsigned(WindowInstance::new(dur, ts)),
+            (_, Type::Option(t)) => SlidingWindow::new(dur, op, ts, t),
             _ => unimplemented!(),
         }
     }
 
     pub(crate) fn get_value(&mut self, ts: Instant) -> Value {
         match self {
-            SlidingWindow::Sum(wi) => wi.get_value(ts),
+            SlidingWindow::SumSigned(wi) => wi.get_value(ts),
+            SlidingWindow::SumUnsigned(wi) => wi.get_value(ts),
         }
     }
 
     pub(crate) fn accept_value(&mut self, v: Value, ts: Instant) {
         match self {
-            SlidingWindow::Sum(wi) => wi.accept_value(v, ts),
+            SlidingWindow::SumSigned(wi) => wi.accept_value(v, ts),
+            SlidingWindow::SumUnsigned(wi) => wi.accept_value(v, ts),
         }
     }
 }
@@ -140,36 +146,29 @@ impl<IV: WindowIV> WindowInstance<IV> {
     }
 }
 
-#[derive(Clone, Debug)]
-pub(crate) struct SumIV(Value);
-
-impl WindowIV for SumIV {}
-
-impl Add for SumIV {
-    type Output = SumIV;
-    fn add(self, other: SumIV) -> SumIV {
-        (self.0 + other.0).into()
-    }
+pub(crate) trait WindowGeneric: Debug + Clone {
+    fn from(v: Value) -> Value;
 }
 
-impl Default for SumIV {
-    fn default() -> SumIV {
-        SumIV(Value::Signed(0i128))
-    }
-}
-
-impl From<Value> for SumIV {
-    fn from(v: Value) -> SumIV {
+#[derive(Debug, Clone)]
+pub(crate) struct WindowSigned {}
+impl WindowGeneric for WindowSigned {
+    fn from(v: Value) -> Value {
         match v {
-            Value::Unsigned(u) => SumIV(Value::Signed(u as i128)),
-            Value::Signed(_) => SumIV(v),
+            Value::Signed(_) => v,
+            Value::Unsigned(u) => Value::Signed(u as i128),
             _ => panic!("Type error."),
         }
     }
 }
 
-impl Into<Value> for SumIV {
-    fn into(self) -> Value {
-        self.0.clone()
+#[derive(Debug, Clone)]
+pub(crate) struct WindowUnsigned {}
+impl WindowGeneric for WindowUnsigned {
+    fn from(v: Value) -> Value {
+        match v {
+            Value::Unsigned(_) => v,
+            _ => panic!("Type error."),
+        }
     }
 }

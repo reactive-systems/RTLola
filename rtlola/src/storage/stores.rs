@@ -48,7 +48,7 @@ impl GlobalStore {
         let np_outputs = nps.iter().map(|o| &o.ty).map(InstanceStore::new).collect();
         let p_outputs = vec![HashMap::new(); p_cnt];
         let inputs = ir.inputs.iter().map(|i| &i.ty).map(InstanceStore::new).collect();
-        let np_windows = ir.sliding_windows.iter().map(|w| SlidingWindow::new(w.duration, w.op, ts)).collect();
+        let np_windows = ir.sliding_windows.iter().map(|w| SlidingWindow::new(w.duration, w.op, ts, &w.ty)).collect();
 
         GlobalStore { inputs, index_map, np_outputs, p_outputs, np_windows }
     }

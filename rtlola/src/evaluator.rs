@@ -41,8 +41,11 @@ impl Evaluator {
 
         self.handler.output(|| format!("OutputStream[{}] := {:?}.", inst.0, res.clone()));
 
-        if let Some(trig) = self.is_trigger(inst.clone()) {
-            self.handler.trigger(|| format!("Trigger: {}", trig.message.as_ref().unwrap_or(&String::from("Warning!"))))
+        // Check if we have to emit a warning.
+        if Value::Bool(true) == res {
+            if let Some(trig) = self.is_trigger(inst.clone()) {
+                self.handler.trigger(|| format!("Trigger: {}", trig.message.as_ref().unwrap_or(&String::from("Warning!"))))
+            }
         }
 
         // Check linked streams and inform them.
@@ -98,7 +101,8 @@ impl Evaluator {
                     Constant::Bool(b) => Value::Bool(*b),
                     Constant::Int(i) if *i >= 0 => Value::Unsigned(*i as u128),
                     Constant::Int(i) => Value::Signed(*i),
-                    Constant::Float(_) | Constant::Str(_) => unimplemented!(),
+                    Constant::Float(f) => Value::Float((*f).into()),
+                    Constant::Str(_) => unimplemented!(),
                 };
                 self.write(stmt.target, val, inst);
             }

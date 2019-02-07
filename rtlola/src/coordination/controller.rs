@@ -67,8 +67,7 @@ impl Controller {
             WorkItem::Event(e) => self.evaluate_event_item(e, ts),
             WorkItem::Time(t) => self.evaluate_timed_item(t),
             WorkItem::End => {
-                self.output_handler.debug(|| "Finished entire input. Terminating.");
-                println!("Finished all work items. Terminating gracefully.");
+                self.output_handler.trigger(|| "Finished entire input. Terminating.");
                 std::process::exit(0);
             }
         }
