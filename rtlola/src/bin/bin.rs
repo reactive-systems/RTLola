@@ -2,7 +2,7 @@ use rtlola::EvalConfig;
 use rtlola::InputSource;
 use std::time::Duration;
 
-use clap::{value_t, App, Arg, SubCommand};
+use clap::{value_t, App, Arg, ArgGroup, SubCommand};
 use lola_parser;
 use std::env;
 use std::error::Error;
@@ -80,6 +80,19 @@ fn main() -> Result<(), Box<dyn Error>> {
                     .possible_values(&["debug","outputs","triggers","warnings","silent"])
                     .default_value("triggers")
             )
+            .arg(
+                Arg::with_name("ONLINE")
+                    .long("online")
+            )
+            .arg(
+                Arg::with_name("OFFLINE")
+                    .long("offline")
+            )
+            .group(
+                ArgGroup::with_name("MODE")
+                    .required(true)
+                    .args(&["ONLINE", "OFFLINE"])
+            )
         )
     .get_matches();
 
@@ -137,7 +150,12 @@ fn main() -> Result<(), Box<dyn Error>> {
             };
 
             let cfg = EvalConfig::new(src, verbosity, out);
-            rtlola::start_evaluation_online(ir, cfg, None); // TODO: Malte
+            if parse_matches.is_present("OFFLINE"){
+                rtlola::start_evaluation_offline(ir, cfg, None);
+
+            }else{
+                rtlola::start_evaluation_online(ir, cfg, None);
+            }
 
             //            Ok(())
         }
