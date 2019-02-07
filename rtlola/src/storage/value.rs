@@ -29,7 +29,7 @@ impl Value {
                 } else {
                     source.parse::<u128>().map(Unsigned).ok()
                 }
-            },
+            }
             Type::Int(_) => source.parse::<i128>().map(Signed).ok(),
             Type::Bool => source.parse::<bool>().map(Bool).ok(),
         }

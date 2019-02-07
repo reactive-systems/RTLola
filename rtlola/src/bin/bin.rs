@@ -11,7 +11,6 @@ use std::io::Read;
 use std::process;
 
 fn main() -> Result<(), Box<dyn Error>> {
-
     let args: Vec<String> = env::args().collect();
 
     let matches = App::new("rtlola")

@@ -1,6 +1,9 @@
-use crate::storage::{Value, window::{WindowGeneric, WindowIV}};
-use std::ops::Add;
+use crate::storage::{
+    window::{WindowGeneric, WindowIV},
+    Value,
+};
 use std::marker::PhantomData;
+use std::ops::Add;
 
 #[derive(Clone, Debug)]
 pub(crate) struct SumIV<G: WindowGeneric> {
@@ -25,7 +28,7 @@ impl<G: WindowGeneric> Default for SumIV<G> {
 
 impl<G: WindowGeneric> From<Value> for SumIV<G> {
     fn from(v: Value) -> SumIV<G> {
-        SumIV{ v: G::from(v), _marker: PhantomData }
+        SumIV { v: G::from(v), _marker: PhantomData }
     }
 }
 

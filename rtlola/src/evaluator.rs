@@ -44,7 +44,8 @@ impl Evaluator {
         // Check if we have to emit a warning.
         if Value::Bool(true) == res {
             if let Some(trig) = self.is_trigger(inst.clone()) {
-                self.handler.trigger(|| format!("Trigger: {}", trig.message.as_ref().unwrap_or(&String::from("Warning!"))))
+                self.handler
+                    .trigger(|| format!("Trigger: {}", trig.message.as_ref().unwrap_or(&String::from("Warning!"))))
             }
         }
 

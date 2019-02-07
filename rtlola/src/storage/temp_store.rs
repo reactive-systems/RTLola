@@ -125,12 +125,12 @@ impl TempStore {
                     let mut seq = [0u8; std::mem::size_of::<f32>()];
                     let _ = seq.as_mut().write_f32::<NativeEndian>(v as f32); // TODO: Use `Result`?
                     Self::write_byte_seq(&mut self.data[lower..higher], &seq);
-                },
+                }
                 FloatTy::F64 => {
                     let mut seq = [0u8; std::mem::size_of::<f64>()];
                     let _ = seq.as_mut().write_f64::<NativeEndian>(v); // TODO: Use `Result`?
                     Self::write_byte_seq(&mut self.data[lower..higher], &seq);
-                },
+                }
             };
         } else {
             panic!("Unexpected call to `TempStore::get_unsigned`.")

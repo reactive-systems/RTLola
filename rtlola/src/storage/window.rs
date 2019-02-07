@@ -1,11 +1,11 @@
+use super::window_aggregations::*;
 use super::Value;
-use lola_parser::{WindowOperation as WinOp, Type};
+use lola_parser::{Type, WindowOperation as WinOp};
 use std::cmp::Ordering;
 use std::collections::VecDeque;
 use std::fmt::Debug;
 use std::ops::Add;
 use std::time::{Duration, Instant};
-use super::window_aggregations::*;
 
 const SIZE: usize = 4;
 
