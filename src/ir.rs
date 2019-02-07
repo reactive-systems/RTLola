@@ -306,12 +306,13 @@ pub enum ArithLogOp {
 }
 
 /// Represents an instance of a sliding window.
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct SlidingWindow {
     pub target: StreamReference,
     pub duration: Duration,
     pub op: WindowOperation,
     pub reference: WindowReference,
+    pub ty: Type,
 }
 
 /// Each flag represents a certain feature of Lola not necessarily available in all version of the

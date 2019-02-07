@@ -151,6 +151,7 @@ impl<'a> Lowering<'a> {
             message: trigger.message.clone(),
             reference,
         };
+        self.ir.event_driven.push(EventDrivenStream { reference });
         self.ir.triggers.push(trig);
     }
 
@@ -246,15 +247,18 @@ impl<'a> Lowering<'a> {
                 }
                 ir::Offset::FutureRealTimeOffset(dur) => dur,
             };
+            let ty = self.lower_value_type(expr.id);
             let target = self.extract_target_from_lookup(&expr.kind);
             let reference = WindowReference {
                 ix: self.ir.sliding_windows.len(),
             };
+            let op = self.lower_window_op(*op);
             let window = ir::SlidingWindow {
                 target,
                 duration,
-                op: self.lower_window_op(*op),
+                op,
                 reference,
+                ty,
             };
             self.ir.sliding_windows.push(window);
             reference
@@ -424,8 +428,18 @@ impl<'a> Lowering<'a> {
             }
             ExpressionKind::Binary(ast_op, lhs, rhs) => {
                 let req_arg_types = self.tt.get_func_arg_types(expr.id);
-                assert_eq!(req_arg_types.len(), 1);
-                let req_arg_type = (&req_arg_types[0]).into();
+                use ast::BinOp::*;
+                let req_arg_type = if req_arg_types.is_empty() {
+                    match ast_op {
+                        Add | Sub | Mul | Div | Rem | Pow | Eq | Lt | Le | Ne | Ge | Gt => {
+                            panic!("Generic operator not recognized as such.")
+                        }
+                        And | Or => ir::Type::Bool,
+                    }
+                } else {
+                    assert_eq!(req_arg_types.len(), 1);
+                    (&req_arg_types[0]).into()
+                };
 
                 state = self.lower_subexpression(lhs, state);
                 let lhs_type = state.result_type();
@@ -983,7 +997,7 @@ mod tests {
     fn lower_triggers() {
         let ir = spec_to_ir("input a: Int32\ntrigger a > 50\ntrigger a < 30 \"So low...\"");
         // Note: Each trigger needs to be accounted for as an output stream.
-        check_stream_number(&ir, 1, 2, 0, 0, 0, 0, 2);
+        check_stream_number(&ir, 1, 2, 0, 2, 0, 0, 2);
     }
 
     #[test]

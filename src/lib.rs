@@ -32,7 +32,6 @@ pub fn parse(spec_str: &str) -> LolaIR {
         Result::Ok(spec) => spec,
         Result::Err(e) => panic!("{}", e),
     };
-    println!("Parsed the following spec: \n{}", spec);
     let mapper = crate::parse::SourceMapper::new(std::path::PathBuf::new(), spec_str);
     let handler = reporting::Handler::new(mapper);
     let analysis_result = analysis::analyze(&spec, &handler);
