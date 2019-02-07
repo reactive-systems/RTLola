@@ -404,9 +404,6 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
             .expect("cannot fail as `var` is fresh");
 
         let stream_var = self.new_stream_var(trigger.id);
-        self.stream_unifier
-            .unify_var_ty(stream_var, StreamTy::new(TimingInfo::Event))
-            .expect("cannot fail as `var` is fresh");
 
         self.infer_expression(
             &trigger.expression,
