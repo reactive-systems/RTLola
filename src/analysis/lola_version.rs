@@ -17,7 +17,7 @@ struct VersionTracker {
 impl VersionTracker {
     fn from_stream(is_not_parameterized: Option<WhyNot>, is_timed: Option<WhyNot>) -> Self {
         VersionTracker {
-            cannot_be_classic: is_not_parameterized.or(is_timed.clone()),
+            cannot_be_classic: is_not_parameterized.or_else(|| is_timed.clone()),
             cannot_be_lola2: is_timed.clone(),
         }
     }

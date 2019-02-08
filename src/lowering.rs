@@ -412,7 +412,7 @@ impl<'a> Lowering<'a> {
                 } else {
                     // A "stray" default expression such as `5 ? 3` is valid, but a no-op.
                     // Thus, print a warning. Evaluating the expression is necessary, the dft can be skipped.
-                    println!("WARNING: No-Op Default operation!");
+                    //                    println!("WARNING: No-Op Default operation!");
                     self.lower_subexpression(e, state)
                 }
             }
@@ -422,7 +422,7 @@ impl<'a> Lowering<'a> {
                 } else {
                     // A "stray" sample and hold expression such as `5 ! 3` is valid, but a no-op.
                     // Thus, print a warning. Evaluating the expression is necessary, the dft can be skipped.
-                    println!("WARNING: No-Op Sample and Hold operation!");
+                    //                    println!("WARNING: No-Op Sample and Hold operation!");
                     self.lower_subexpression(e, state)
                 }
             }

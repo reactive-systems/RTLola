@@ -607,7 +607,7 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
                 }
                 assert_eq!(params.len(), fun_decl.parameters.len());
 
-                println!("{:?}", fun_decl);
+                //                println!("{:?}", fun_decl);
 
                 for ty in types {
                     self.infer_type(ty)?;

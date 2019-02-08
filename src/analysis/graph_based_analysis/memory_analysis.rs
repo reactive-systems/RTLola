@@ -15,7 +15,7 @@ use crate::ty::TimingInfo;
 use num::{BigRational, ToPrimitive};
 use std::cmp::min;
 
-fn is_efficient_operator(op: &WindowOperation) -> bool {
+fn is_efficient_operator(op: WindowOperation) -> bool {
     match op {
         WindowOperation::Average
         | WindowOperation::Count
@@ -142,7 +142,7 @@ fn add_sliding_windows<'a>(
                 } else {
                     return MemoryBound::Unbounded;
                 };
-                let efficient_operator: bool = is_efficient_operator(wop);
+                let efficient_operator: bool = is_efficient_operator(*wop);
                 match (timing, efficient_operator) {
                     (TimingInfo::Event, false) => {
                         return MemoryBound::Unbounded;
