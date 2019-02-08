@@ -119,14 +119,16 @@ impl EventDrivenManager {
         }
 
         Some(
-            buffer.iter()
+            buffer
+                .iter()
                 .zip(self.in_types.iter())
                 .enumerate()
                 .map(|(ix, (s, t))| {
                     if s == "#" {
                         None
                     } else {
-                        let v = Value::try_from(s, t).expect(format!("Failed to parse {} as value of type {:?}.", s, t).as_str());
+                        let v = Value::try_from(s, t)
+                            .expect(format!("Failed to parse {} as value of type {:?}.", s, t).as_str());
                         Some((ix, v))
                     }
                 })
@@ -160,8 +162,8 @@ impl EventDrivenManager {
                 Value::Float(f) => {
                     let f: f64 = (*f).into();
                     let nanos_per_sec: u32 = 1_000_000_000;
-                    let nanos =  f * (nanos_per_sec as f64);
-                    let nanos =  nanos as u128;
+                    let nanos = f * (nanos_per_sec as f64);
+                    let nanos = nanos as u128;
                     let secs = (nanos / (nanos_per_sec as u128)) as u64;
                     let nanos = (nanos % (nanos_per_sec as u128)) as u32;
                     UNIX_EPOCH + Duration::new(secs, nanos)

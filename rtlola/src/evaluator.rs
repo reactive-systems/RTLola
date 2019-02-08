@@ -29,7 +29,9 @@ impl Evaluator {
     }
 
     pub(crate) fn eval_stream(&mut self, inst: OutInstance, ts: SystemTime) {
-        self.handler.debug(|| format!("Evaluating stream {}: {}.", inst.0, self.ir.get_out(StreamReference::OutRef(inst.0)).name));
+        self.handler.debug(|| {
+            format!("Evaluating stream {}: {}.", inst.0, self.ir.get_out(StreamReference::OutRef(inst.0)).name)
+        });
         let (ix, _) = inst;
         for stmt in self.exprs[ix].stmts.clone() {
             self.eval_stmt(&stmt, &inst, ts);

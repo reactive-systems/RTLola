@@ -38,3 +38,4 @@ You must specify either --stdin or --csv-in=./path/to/inputs.csv to determine wh
 You can choose either --stderr or --stdout to determine where the output should go.
 You can specify the verbosity.
 You must specify the ./path/to/specification containing a RTLola specification.
+If you use --csv-in=<CSV_INPUT_FILE> and --online, you can add --delay=<DELAY> to add an artificial delay between reading in the lines.

@@ -62,12 +62,10 @@ impl Controller {
         } else {
             match work_rx.recv() {
                 Err(_) => panic!("Both producers hung up!"),
-                Ok(wi) => {
-                    match wi {
-                        WorkItem::Start(ts) => Evaluator::new(ir, ts, config.clone()),
-                        _ => panic!("Did not receive a start event in offline mode!"),
-                    }
-                }
+                Ok(wi) => match wi {
+                    WorkItem::Start(ts) => Evaluator::new(ir, ts, config.clone()),
+                    _ => panic!("Did not receive a start event in offline mode!"),
+                },
             }
         };
 

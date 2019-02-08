@@ -70,7 +70,6 @@ fn main() -> Result<(), Box<dyn Error>> {
                     .short("d")
                     .long("delay")
                     .help("Delay [ms] between reading in two lines from the input. Only used for file input.")
-                    .default_value("0")
                     .requires("CSV_INPUT_FILE")
             ).
             arg(
@@ -89,6 +88,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 Arg::with_name("OFFLINE")
                     .long("offline")
                     .help("Use the timestamps from the input.\nThe column name must be one of [time,timestamp,ts].\nThe column must produce a monotonically increasing sequence of values.")
+                    .conflicts_with("DELAY")
             )
             .group(
                 ArgGroup::with_name("MODE")
@@ -119,13 +119,18 @@ fn main() -> Result<(), Box<dyn Error>> {
             file.read_to_string(&mut contents)?;
 
             let ir = lola_parser::parse(contents.as_str());
-            let delay = value_t!(parse_matches, "DELAY", u32).unwrap_or_else(|_| {
-                eprintln!(
-                    "DELAY value `{}` is not a number.\nUsing no delay.",
-                    parse_matches.value_of("DELAY").expect("We set a default value.")
-                );
-                return 0;
-            });
+
+            let delay = if parse_matches.is_present("DELAY") {
+                value_t!(parse_matches, "DELAY", u32).unwrap_or_else(|_| {
+                    eprintln!(
+                        "DELAY value `{}` is not a number.\nUsing no delay.",
+                        parse_matches.value_of("DELAY").expect("We set a default value.")
+                    );
+                    return 0;
+                })
+            } else {
+                0
+            };
             let delay = Duration::new(0, 1_000_000 * delay);
 
             let src = if let Some(file) = parse_matches.value_of("CSV_INPUT_FILE") {
@@ -152,10 +157,9 @@ fn main() -> Result<(), Box<dyn Error>> {
             };
 
             let cfg = EvalConfig::new(src, verbosity, out);
-            if parse_matches.is_present("OFFLINE"){
+            if parse_matches.is_present("OFFLINE") {
                 rtlola::start_evaluation_offline(ir, cfg, None);
-
-            }else{
+            } else {
                 rtlola::start_evaluation_online(ir, cfg, None);
             }
 
