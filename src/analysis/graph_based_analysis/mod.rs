@@ -1,4 +1,3 @@
-mod bandwith;
 pub mod dependency_graph;
 pub mod evaluation_order;
 pub mod future_dependency;
@@ -19,13 +18,11 @@ pub(crate) use self::evaluation_order::EvaluationOrderResult;
 pub(crate) use self::future_dependency::FutureDependentStreams;
 pub(crate) use self::space_requirements::SpaceRequirements;
 use self::space_requirements::TrackingRequirements;
-use crate::analysis::graph_based_analysis::bandwith::BytesPerSecond;
-use crate::analysis::graph_based_analysis::bandwith::Cut;
 use crate::ty::ValueTy;
 use crate::FloatTy;
 use crate::IntTy;
 use crate::UIntTy;
-use num::{BigRational, ToPrimitive};
+use num::BigRational;
 
 #[derive(Debug, Copy, Clone)]
 pub(crate) enum MemoryBound {
@@ -82,39 +79,6 @@ pub(crate) fn analyze<'a>(
         }
         MemoryBound::Bounded(bytes) => println!("The specification uses at most {} bytes.", bytes),
     };
-
-    let bandwith_result = bandwith::determine_bandwith_requirements(type_table, &pruned_graph);
-    let bandwith_result: Vec<(Cut, BytesPerSecond)> = bandwith_result
-        .iter()
-        .filter(|(_cut, bandwith)| {
-            if let BytesPerSecond::Unbounded = bandwith {
-                false
-            } else {
-                true
-            }
-        })
-        .cloned()
-        .collect();
-
-    if bandwith_result.is_empty() {
-        println!("There is no way of evaluating some streams at a different location while guaranteeing bounded bandwith");
-    }
-
-    for (cut, bandwith) in bandwith_result {
-        println!(
-            "{} B/s are needed if the following streams are evaluated at a different location.",
-            match bandwith {
-                BytesPerSecond::Unbounded => unreachable!(),
-                BytesPerSecond::Bounded(i) => i
-                    .ceil()
-                    .to_integer()
-                    .to_i128()
-                    .expect("Bytes/Second too large for i128!"),
-            }
-        );
-        cut.print(spec);
-        println!();
-    }
 
     Some(GraphAnalysisResult {
         evaluation_order: evaluation_order_result,
