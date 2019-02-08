@@ -12,10 +12,10 @@ use std::time::Duration;
 fn main() -> Result<(), Box<dyn Error>> {
     let args: Vec<String> = env::args().collect();
 
-    let matches = App::new("rtlola")
+    let matches = App::new("StreamLAB")
         .version(env!("CARGO_PKG_VERSION"))
-        .author(env!("CARGO_PKG_AUTHORS")) //TODO authors
-        .about("rtlola is a tool to analyze and monitor Lola specifications") // TODO description
+        .author(env!("CARGO_PKG_AUTHORS"))
+        .about("StreamLAB is a tool to analyze and monitor Lola specifications") // TODO description
         .subcommand(
             SubCommand::with_name("analyze")
                 .about("Analyze the specification")

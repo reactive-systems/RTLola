@@ -8,7 +8,6 @@ We provide the following shell scripts, covering the different scenarios describ
 - run_offline_triggers.sh is the verbose version of run_offline_silent.sh that shows the triggers that fire
 
 
-
 USAGE
 
 You can run
