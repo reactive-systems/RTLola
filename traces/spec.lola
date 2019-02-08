@@ -18,11 +18,11 @@ output lon_diff: Float64 := (lon - (lon[-1]?lon)
 output lat_diff: Float64 := (lat - (lat[-1]?lat) 
 
 output gps_dist: Float64 := sqrt(lon_diff * lon_diff + lat_diff * lat_diff)
-output gps_velo: Float64 := gps_dist / cast((time - (time[-1] ? time)))
+output gps_velo: Float64 := gps_dist / cast((time - (time[-1] ? 0)))
 
 trigger abs(gps_velo - velo) > 0.1 "Deviation in sensed velocity and computed velocity."
 
-output yaw: Float64 := arctan(lat_diff / lon_diff)
+output yaw: Float64 := if lon_diff = 0.0 then 0.0 else arctan(lat_diff / lon_diff)
 output head_wind: Bool { extend @ 1Hz } := ((w_dir ! 0.0) - (yaw ! 0.0)) < 0.2
 output hovering: Bool { extend @ 1Hz } := (velo[5s, integral] ? 5.0) < 0.5 ∧ ¬head_wind
 trigger hovering "Little movement in the last 5 seconds. Path planning hung up?"
