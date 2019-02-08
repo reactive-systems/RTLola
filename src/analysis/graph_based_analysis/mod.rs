@@ -27,6 +27,7 @@ use crate::IntTy;
 use crate::UIntTy;
 use num::{BigRational, ToPrimitive};
 
+#[derive(Debug, Copy, Clone)]
 pub(crate) enum MemoryBound {
     Bounded(u128),
     Unbounded,
@@ -73,6 +74,7 @@ pub(crate) fn analyze<'a>(
         &space_requirements,
         &tracking_requirements,
         type_table,
+        declaration_table,
     );
     match memory_requirement {
         MemoryBound::Unbounded => {
