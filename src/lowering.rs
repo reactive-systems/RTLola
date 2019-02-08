@@ -153,7 +153,10 @@ impl<'a> Lowering<'a> {
             message: trigger.message.clone(),
             reference,
         };
-        self.ir.event_driven.push(EventDrivenStream { reference });
+        match self.check_time_driven(trigger.id, reference) {
+            None => self.ir.event_driven.push(EventDrivenStream { reference }),
+            Some(tds) => self.ir.time_driven.push(tds),
+        }
         self.ir.triggers.push(trig);
     }
 
@@ -184,7 +187,7 @@ impl<'a> Lowering<'a> {
         let memory_bound = self.lower_storage_req(ast_req);
         let layer = self.get_layer(nid);
         let reference = self.get_ref(nid);
-        let time_driven = self.check_time_driven(&ast_output, reference);
+        let time_driven = self.check_time_driven(ast_output.id, reference);
         let parametrized = self.check_parametrized(&ast_output, reference);
 
         let trackings = self.collect_tracking_info(nid, time_driven);
@@ -798,10 +801,10 @@ impl<'a> Lowering<'a> {
 
     fn check_time_driven(
         &mut self,
-        output: &ast::Output,
+        stream_id: NodeId,
         reference: StreamReference,
     ) -> Option<TimeDrivenStream> {
-        match &self.tt.get_stream_type(output.id).timing {
+        match &self.tt.get_stream_type(stream_id).timing {
             TimingInfo::RealTime(f) => Some(TimeDrivenStream {
                 reference,
                 extend_rate: Duration::from_nanos(
