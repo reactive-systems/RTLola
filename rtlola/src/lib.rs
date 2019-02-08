@@ -10,11 +10,11 @@ use lola_parser::LolaIR;
 use std::time::SystemTime;
 
 pub fn start_evaluation_online(ir: LolaIR, cfg: EvalConfig, ts: Option<SystemTime>) -> ! {
-    Controller::evaluate(ir, cfg, ts, true);
+    Controller::evaluate(ir, cfg, true);
 }
 
 pub fn start_evaluation_offline(ir: LolaIR, cfg: EvalConfig, ts: Option<SystemTime>) -> ! {
-    Controller::evaluate(ir, cfg, ts, false);
+    Controller::evaluate(ir, cfg, false);
 }
 
 // Public export.

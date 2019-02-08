@@ -6,7 +6,7 @@ input velo: Float64
 input w_dir: Float64
 input w_spd: Float64
 input gps: UInt8
-input time: UInt64
+input time: Float64
 
 output lat_cast: UInt64 := cast(lat)
 
@@ -18,7 +18,7 @@ output lon_diff: Float64 := (lon - (lon[-1]?lon)
 output lat_diff: Float64 := (lat - (lat[-1]?lat) 
 
 output gps_dist: Float64 := sqrt(lon_diff * lon_diff + lat_diff * lat_diff)
-output gps_velo: Float64 := gps_dist / cast((time - (time[-1] ? 0)))
+output gps_velo: Float64 := gps_dist / cast((time - (time[-1] ? 0.0)))
 
 trigger abs(gps_velo - velo) > 0.1 "Deviation in sensed velocity and computed velocity."
 

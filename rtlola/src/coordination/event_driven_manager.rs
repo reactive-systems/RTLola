@@ -157,15 +157,28 @@ impl EventDrivenManager {
             let time_value = event[time_ix].as_ref().map(|s| &s.1).expect("Timestamp needs to be present.");
             let now = match time_value {
                 Value::Unsigned(u) => UNIX_EPOCH + Duration::from_secs(*u as u64),
+                Value::Float(f) => {
+                    let f: f64 = (*f).into();
+                    let nanos_per_sec: u32 = 1_000_000_000;
+                    let nanos =  f * (nanos_per_sec as f64);
+                    let nanos =  nanos as u128;
+                    let secs = (nanos / (nanos_per_sec as u128)) as u64;
+                    let nanos = (nanos % (nanos_per_sec as u128)) as u32;
+                    UNIX_EPOCH + Duration::new(secs, nanos)
+                }
                 _ => panic!("Time stamps need to be unsigned integers."),
             };
 
             if start_time.is_none() {
                 start_time = Some(now);
+                let _ = work_queue.send(WorkItem::Start(now));
             }
 
             // Inform the time driven manager first.
-            let _ = time_chan.send(now);
+            match time_chan.send(now) {
+                Err(e) => panic!("Problem with TDM! {:?}", e),
+                Ok(_) => {}
+            }
             let _ = ack_chan.recv(); // Wait until be get the acknowledgement.
 
             let event = event.into_iter().flatten().collect(); // Remove non-existing entries.

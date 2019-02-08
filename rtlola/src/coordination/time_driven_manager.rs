@@ -200,6 +200,7 @@ impl TimeDrivenManager {
                 self.start_time = Some(time);
             }
         }
+        let _ = time_ack_chan.send(()); // Should be fine...
 
         assert!(self.start_time.is_some());
         let (sleepy_time, due) = self.get_current_deadline(self.start_time);
@@ -219,12 +220,12 @@ impl TimeDrivenManager {
                         let (sleepy_time, due) = self.get_current_deadline(Some(next_deadline));
                         next_deadline += sleepy_time;
                         due_streams = due;
-                        let _ = time_ack_chan.send(()); // Should be fine...
                     } else {
                         // Receive next timestamp.
                     }
                 }
             }
+            let _ = time_ack_chan.send(()); // Should be fine...
         }
     }
 

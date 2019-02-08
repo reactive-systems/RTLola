@@ -8,7 +8,7 @@ use std::fmt::Debug;
 use std::ops::Add;
 use std::time::{Duration, SystemTime};
 
-const SIZE: usize = 1;
+const SIZE: usize = 64;
 
 pub(crate) enum SlidingWindow {
     SumUnsigned(WindowInstance<SumIV<WindowUnsigned>>),
@@ -157,7 +157,7 @@ impl<IV: WindowIV> WindowInstance<IV> {
     fn get_current_bucket(&self, ts: SystemTime) -> BIx {
         //        let overall_ix = ts.duration_since(self.start_time).div_duration(self.time_per_bucket);
         let overall_ix = Self::quickfix_duration_div(
-            ts.duration_since(self.start_time).expect("Time does not behave monitonically!"),
+            ts.duration_since(self.start_time).expect("Time does not behave monotonically!"),
             self.time_per_bucket,
         );
         let overall_ix = overall_ix.floor() as usize;

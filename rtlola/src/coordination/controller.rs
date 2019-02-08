@@ -28,7 +28,7 @@ impl lola_parser::LolaBackend for Controller {
 impl Controller {
     /// Starts the evaluation process, i.e. periodically computes outputs for time-driven streams
     /// and fetches/expects events from specified input source.
-    pub fn evaluate(ir: LolaIR, config: EvalConfig, ts: Option<SystemTime>, online: bool) -> ! {
+    pub fn evaluate(ir: LolaIR, config: EvalConfig, online: bool) -> ! {
         let (work_tx, work_rx) = mpsc::channel();
         let (time_tx, time_rx) = mpsc::channel();
         let (ack_tx, ack_rx) = mpsc::channel();
@@ -57,7 +57,20 @@ impl Controller {
             }
         });
 
-        let e = Evaluator::new(ir, ts.unwrap_or_else(SystemTime::now), config.clone());
+        let e = if online {
+            Evaluator::new(ir, SystemTime::now(), config.clone())
+        } else {
+            match work_rx.recv() {
+                Err(_) => panic!("Both producers hung up!"),
+                Ok(wi) => {
+                    match wi {
+                        WorkItem::Start(ts) => Evaluator::new(ir, ts, config.clone()),
+                        _ => panic!("Did not receive a start event in offline mode!"),
+                    }
+                }
+            }
+        };
+
         let mut ctrl = Controller { output_handler: OutputHandler::new(&config), evaluator: e };
 
         loop {
@@ -73,6 +86,7 @@ impl Controller {
         match wi {
             WorkItem::Event(e, ts) => self.evaluate_event_item(e, ts),
             WorkItem::Time(t, ts) => self.evaluate_timed_item(t, ts),
+            WorkItem::Start(_) => panic!("Received spurious start command."),
             WorkItem::End => {
                 self.output_handler.trigger(|| "Finished entire input. Terminating.");
                 std::process::exit(0);
@@ -107,5 +121,6 @@ impl Controller {
 pub(crate) enum WorkItem {
     Event(EventEvaluation, SystemTime),
     Time(TimeEvaluation, SystemTime),
+    Start(SystemTime),
     End,
 }
