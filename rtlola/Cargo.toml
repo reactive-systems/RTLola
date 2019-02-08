@@ -13,7 +13,7 @@ name = "rtlola"
 path = "src/lib.rs"
 
 [[bin]]
-name = "rtlola"
+name = "stream_lab"
 path = "src/bin/bin.rs"
 
 [dependencies]

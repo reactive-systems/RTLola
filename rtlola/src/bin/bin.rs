@@ -13,10 +13,10 @@ use std::process;
 fn main() -> Result<(), Box<dyn Error>> {
     let _: Vec<String> = env::args().collect();
 
-    let matches = App::new("rtlola")
+    let matches = App::new("StreamLAB")
         .version(env!("CARGO_PKG_VERSION"))
         .author(env!("CARGO_PKG_AUTHORS"))
-        .about("rtlola is a tool to analyze and monitor Lola specifications") // TODO description
+        .about("StreamLAB is a tool to analyze and monitor Lola specifications") // TODO description
         .subcommand(
         SubCommand::with_name("analyze")
                     .about("Analyze the specification")
@@ -83,10 +83,12 @@ fn main() -> Result<(), Box<dyn Error>> {
             .arg(
                 Arg::with_name("ONLINE")
                     .long("online")
+                    .help("Use the current system time for timestamps")
             )
             .arg(
                 Arg::with_name("OFFLINE")
                     .long("offline")
+                    .help("Use the timestamps from the input.\nThe column name must be one of [time,timestamp,ts].\nThe column must produce a monotonically increasing sequence of values.")
             )
             .group(
                 ArgGroup::with_name("MODE")
