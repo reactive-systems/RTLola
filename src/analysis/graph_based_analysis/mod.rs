@@ -18,10 +18,7 @@ pub(crate) use self::evaluation_order::EvaluationOrderResult;
 pub(crate) use self::future_dependency::FutureDependentStreams;
 pub(crate) use self::space_requirements::SpaceRequirements;
 use self::space_requirements::TrackingRequirements;
-use crate::ty::ValueTy;
-use crate::FloatTy;
-use crate::IntTy;
-use crate::UIntTy;
+use crate::ty::{FloatTy, IntTy, UIntTy, ValueTy};
 use num::BigRational;
 
 #[derive(Debug, Copy, Clone)]

@@ -1,4 +1,5 @@
-use crate::ty::{FloatTy, IntTy, UIntTy, ValueTy};
+use crate::ty::ValueTy;
+pub use crate::ty::{FloatTy, IntTy, UIntTy}; // Re-export needed for IR
 use std::time::Duration;
 
 #[derive(Debug, Clone, PartialEq)]

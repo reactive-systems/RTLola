@@ -5,7 +5,7 @@
 
 mod analysis;
 mod ast;
-mod ir;
+pub mod ir;
 mod lowering;
 mod parse;
 mod print;
@@ -17,6 +17,8 @@ mod ty;
 pub mod app {
     pub mod analyze;
 }
+
+use crate::ir::{FeatureFlag, LolaIR};
 
 pub trait LolaBackend {
     /// Returns collection of feature flags supported by the `LolaBackend`.
@@ -38,7 +40,3 @@ pub fn parse(spec_str: &str) -> LolaIR {
         panic!("Error in analysis.")
     }
 }
-
-// Re-export on the root level
-pub use crate::ir::*;
-pub use crate::ty::{FloatTy, IntTy, UIntTy};
