@@ -392,7 +392,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore] // TODO literal are not unified
+    #[ignore] // TODO literals are not unified
     fn simple_trigger_causes_lola() {
         check_version(
             "trigger test := false",

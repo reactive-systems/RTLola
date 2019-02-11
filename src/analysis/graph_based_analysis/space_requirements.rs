@@ -346,7 +346,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
+    #[ignore] // fix spec
     fn tracking_the_future() {
         check_tracking_size(
             "output a :Int8 := b[+1s]?0 input b: Int8",
@@ -364,7 +364,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
+    #[ignore] // fix spec
     fn tracking_the_event_based_past() {
         check_tracking_size(
             "output a :Int8 := b[-1s]?0 input b: Int8",
@@ -382,7 +382,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
+    #[ignore] // fix spec
     fn tracking_the_time_based_past() {
         check_tracking_size(
             "output a :Int8 := c[-1s]?0 input b: Int8 output c: Int8 {extend @ 1 s} := b[0]?0",
@@ -401,7 +401,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
+    #[ignore] // fix spec
     fn time_based_tracking_the_past() {
         check_tracking_size(
             "output a :Int8 {extend @ 1s} := b[-2.5s]?0 input b: Int8",

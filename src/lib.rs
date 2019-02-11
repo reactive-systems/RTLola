@@ -126,7 +126,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
+    #[ignore] // handling values larger than the largest finite value is unimplemented
     fn too_large_numbers_convert_to_inf_f64() {
         unimplemented!()
     }
