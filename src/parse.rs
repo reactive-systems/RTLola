@@ -2,11 +2,13 @@
 
 use super::ast::*;
 use crate::analysis::graph_based_analysis::space_requirements::dur_as_nanos;
+use lazy_static::lazy_static;
 use num::{BigInt, BigRational, FromPrimitive, One, Signed, ToPrimitive};
 use pest;
 use pest::iterators::{Pair, Pairs};
 use pest::prec_climber::{Assoc, Operator, PrecClimber};
 use pest::Parser;
+use pest_derive::Parser;
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -591,6 +593,235 @@ fn parse_type(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> Type {
     Type::new_tuple(tuple, span.into())
 }
 
+fn parse_rational(repr: &str) -> BigRational {
+    // precondition: repr is a valid floating point literal
+    assert!(repr.parse::<f64>().is_ok());
+
+    let mut value: BigRational = num::Zero::zero();
+    let mut char_indices = repr.char_indices();
+    let mut negated = false;
+
+    let ten = num::BigRational::from_i64(10).unwrap();
+    let zero: BigRational = num::Zero::zero();
+    let one = num::BigRational::from_i64(1).unwrap();
+    let two = num::BigRational::from_i64(2).unwrap();
+    let three = num::BigRational::from_i64(3).unwrap();
+    let four = num::BigRational::from_i64(4).unwrap();
+    let five = num::BigRational::from_i64(5).unwrap();
+    let six = num::BigRational::from_i64(6).unwrap();
+    let seven = num::BigRational::from_i64(7).unwrap();
+    let eight = num::BigRational::from_i64(8).unwrap();
+    let nine = num::BigRational::from_i64(9).unwrap();
+
+    let mut contains_fractional = false;
+    let mut contains_exponent = false;
+
+    //parse the before the point/exponent
+
+    loop {
+        match char_indices.next() {
+            Some((_, '+')) => {}
+            Some((_, '-')) => {
+                negated = true;
+            }
+            Some((_, '.')) => {
+                contains_fractional = true;
+                break;
+            }
+            Some((_, 'e')) => {
+                contains_exponent = true;
+                break;
+            }
+            Some((_, '0')) => {
+                value *= &ten;
+            }
+            Some((_, '1')) => {
+                value *= &ten;
+                value += &one;
+            }
+            Some((_, '2')) => {
+                value *= &ten;
+                value += &two;
+            }
+            Some((_, '3')) => {
+                value *= &ten;
+                value += &three;
+            }
+            Some((_, '4')) => {
+                value *= &ten;
+                value += &four;
+            }
+            Some((_, '5')) => {
+                value *= &ten;
+                value += &five;
+            }
+            Some((_, '6')) => {
+                value *= &ten;
+                value += &six;
+            }
+            Some((_, '7')) => {
+                value *= &ten;
+                value += &seven;
+            }
+            Some((_, '8')) => {
+                value *= &ten;
+                value += &eight;
+            }
+            Some((_, '9')) => {
+                value *= &ten;
+                value += &nine;
+            }
+            Some((_, _)) => unreachable!(),
+            None => {
+                break;
+            }
+        }
+    }
+
+    if contains_fractional {
+        let mut number_of_fractional_positions: BigRational = zero.clone();
+        loop {
+            match char_indices.next() {
+                Some((_, 'e')) => {
+                    contains_exponent = true;
+                    break;
+                }
+                Some((_, '0')) => {
+                    value *= &ten;
+                    number_of_fractional_positions += &one;
+                }
+                Some((_, '1')) => {
+                    value *= &ten;
+                    value += &one;
+                    number_of_fractional_positions += &one;
+                }
+                Some((_, '2')) => {
+                    value *= &ten;
+                    value += &two;
+                    number_of_fractional_positions += &one;
+                }
+                Some((_, '3')) => {
+                    value *= &ten;
+                    value += &three;
+                    number_of_fractional_positions += &one;
+                }
+                Some((_, '4')) => {
+                    value *= &ten;
+                    value += &four;
+                    number_of_fractional_positions += &one;
+                }
+                Some((_, '5')) => {
+                    value *= &ten;
+                    value += &five;
+                    number_of_fractional_positions += &one;
+                }
+                Some((_, '6')) => {
+                    value *= &ten;
+                    value += &six;
+                    number_of_fractional_positions += &one;
+                }
+                Some((_, '7')) => {
+                    value *= &ten;
+                    value += &seven;
+                    number_of_fractional_positions += &one;
+                }
+                Some((_, '8')) => {
+                    value *= &ten;
+                    value += &eight;
+                    number_of_fractional_positions += &one;
+                }
+                Some((_, '9')) => {
+                    value *= &ten;
+                    value += &nine;
+                    number_of_fractional_positions += &one;
+                }
+                Some((_, _)) => unreachable!(),
+                None => {
+                    break;
+                }
+            }
+        }
+        while number_of_fractional_positions > zero {
+            value /= &ten;
+            number_of_fractional_positions -= &one;
+        }
+    }
+
+    if contains_exponent {
+        let mut negated_exponent = false;
+        let mut exponent: BigRational = zero.clone();
+        loop {
+            match char_indices.next() {
+                Some((_, '+')) => {}
+                Some((_, '-')) => {
+                    negated_exponent = true;
+                }
+                Some((_, '0')) => {
+                    exponent *= &ten;
+                }
+                Some((_, '1')) => {
+                    exponent *= &ten;
+                    exponent += &one;
+                }
+                Some((_, '2')) => {
+                    exponent *= &ten;
+                    exponent += &two;
+                }
+                Some((_, '3')) => {
+                    exponent *= &ten;
+                    exponent += &three;
+                }
+                Some((_, '4')) => {
+                    exponent *= &ten;
+                    exponent += &four;
+                }
+                Some((_, '5')) => {
+                    exponent *= &ten;
+                    exponent += &five;
+                }
+                Some((_, '6')) => {
+                    exponent *= &ten;
+                    exponent += &six;
+                }
+                Some((_, '7')) => {
+                    exponent *= &ten;
+                    exponent += &seven;
+                }
+                Some((_, '8')) => {
+                    exponent *= &ten;
+                    exponent += &eight;
+                }
+                Some((_, '9')) => {
+                    exponent *= &ten;
+                    exponent += &nine;
+                }
+                Some((_, _)) => unreachable!(),
+                None => {
+                    break;
+                }
+            }
+        }
+        let mut new_value = value.clone();
+        if negated_exponent {
+            while exponent > zero {
+                new_value /= &ten;
+                exponent -= &one;
+            }
+        } else {
+            while exponent > zero {
+                new_value *= &ten;
+                exponent -= &one;
+            }
+        }
+        value = new_value;
+    }
+    if negated {
+        value = -value;
+    }
+
+    value
+}
+
 /**
  * Transforms a `Rule::Literal` into `Literal` AST node.
  * Panics if input is not `Rule::Literal`.
@@ -612,238 +843,14 @@ fn parse_literal(pair: Pair<'_, Rule>) -> Literal {
         }
         Rule::NumberLiteral => {
             let str_rep: &str = inner.as_str();
-            let mut value: BigRational = num::Zero::zero();
-            let mut char_indices = str_rep.char_indices();
-            let mut negated = false;
 
-            let ten = num::BigRational::from_i64(10).unwrap();
-            let zero: BigRational = num::Zero::zero();
-            let one = num::BigRational::from_i64(1).unwrap();
-            let two = num::BigRational::from_i64(2).unwrap();
-            let three = num::BigRational::from_i64(3).unwrap();
-            let four = num::BigRational::from_i64(4).unwrap();
-            let five = num::BigRational::from_i64(5).unwrap();
-            let six = num::BigRational::from_i64(6).unwrap();
-            let seven = num::BigRational::from_i64(7).unwrap();
-            let eight = num::BigRational::from_i64(8).unwrap();
-            let nine = num::BigRational::from_i64(9).unwrap();
-
-            let mut contains_fractional = false;
-            let mut contains_exponent = false;
-
-            //parse the before the point/exponent
-
-            loop {
-                match char_indices.next() {
-                    Some((_, '+')) => {}
-                    Some((_, '-')) => {
-                        negated = true;
-                    }
-                    Some((_, '.')) => {
-                        contains_fractional = true;
-                        break;
-                    }
-                    Some((_, 'e')) => {
-                        contains_exponent = true;
-                        break;
-                    }
-                    Some((_, '0')) => {
-                        value *= &ten;
-                    }
-                    Some((_, '1')) => {
-                        value *= &ten;
-                        value += &one;
-                    }
-                    Some((_, '2')) => {
-                        value *= &ten;
-                        value += &two;
-                    }
-                    Some((_, '3')) => {
-                        value *= &ten;
-                        value += &three;
-                    }
-                    Some((_, '4')) => {
-                        value *= &ten;
-                        value += &four;
-                    }
-                    Some((_, '5')) => {
-                        value *= &ten;
-                        value += &five;
-                    }
-                    Some((_, '6')) => {
-                        value *= &ten;
-                        value += &six;
-                    }
-                    Some((_, '7')) => {
-                        value *= &ten;
-                        value += &seven;
-                    }
-                    Some((_, '8')) => {
-                        value *= &ten;
-                        value += &eight;
-                    }
-                    Some((_, '9')) => {
-                        value *= &ten;
-                        value += &nine;
-                    }
-                    Some((_, _)) => unreachable!(),
-                    None => {
-                        break;
-                    }
-                }
-            }
-
-            if contains_fractional {
-                let mut number_of_fractional_positions: BigRational = zero.clone();
-                loop {
-                    match char_indices.next() {
-                        Some((_, 'e')) => {
-                            contains_exponent = true;
-                            break;
-                        }
-                        Some((_, '0')) => {
-                            value *= &ten;
-                            number_of_fractional_positions += &one;
-                        }
-                        Some((_, '1')) => {
-                            value *= &ten;
-                            value += &one;
-                            number_of_fractional_positions += &one;
-                        }
-                        Some((_, '2')) => {
-                            value *= &ten;
-                            value += &two;
-                            number_of_fractional_positions += &one;
-                        }
-                        Some((_, '3')) => {
-                            value *= &ten;
-                            value += &three;
-                            number_of_fractional_positions += &one;
-                        }
-                        Some((_, '4')) => {
-                            value *= &ten;
-                            value += &four;
-                            number_of_fractional_positions += &one;
-                        }
-                        Some((_, '5')) => {
-                            value *= &ten;
-                            value += &five;
-                            number_of_fractional_positions += &one;
-                        }
-                        Some((_, '6')) => {
-                            value *= &ten;
-                            value += &six;
-                            number_of_fractional_positions += &one;
-                        }
-                        Some((_, '7')) => {
-                            value *= &ten;
-                            value += &seven;
-                            number_of_fractional_positions += &one;
-                        }
-                        Some((_, '8')) => {
-                            value *= &ten;
-                            value += &eight;
-                            number_of_fractional_positions += &one;
-                        }
-                        Some((_, '9')) => {
-                            value *= &ten;
-                            value += &nine;
-                            number_of_fractional_positions += &one;
-                        }
-                        Some((_, _)) => unreachable!(),
-                        None => {
-                            break;
-                        }
-                    }
-                }
-                while number_of_fractional_positions > zero {
-                    value /= &ten;
-                    number_of_fractional_positions -= &one;
-                }
-            }
-
-            if contains_exponent {
-                let mut negated_exponent = false;
-                let mut exponent: BigRational = zero.clone();
-                loop {
-                    match char_indices.next() {
-                        Some((_, '+')) => {}
-                        Some((_, '-')) => {
-                            negated_exponent = true;
-                        }
-                        Some((_, '0')) => {
-                            exponent *= &ten;
-                        }
-                        Some((_, '1')) => {
-                            exponent *= &ten;
-                            exponent += &one;
-                        }
-                        Some((_, '2')) => {
-                            exponent *= &ten;
-                            exponent += &two;
-                        }
-                        Some((_, '3')) => {
-                            exponent *= &ten;
-                            exponent += &three;
-                        }
-                        Some((_, '4')) => {
-                            exponent *= &ten;
-                            exponent += &four;
-                        }
-                        Some((_, '5')) => {
-                            exponent *= &ten;
-                            exponent += &five;
-                        }
-                        Some((_, '6')) => {
-                            exponent *= &ten;
-                            exponent += &six;
-                        }
-                        Some((_, '7')) => {
-                            exponent *= &ten;
-                            exponent += &seven;
-                        }
-                        Some((_, '8')) => {
-                            exponent *= &ten;
-                            exponent += &eight;
-                        }
-                        Some((_, '9')) => {
-                            exponent *= &ten;
-                            exponent += &nine;
-                        }
-                        Some((_, _)) => unreachable!(),
-                        None => {
-                            break;
-                        }
-                    }
-                }
-                let mut new_value = value.clone();
-                if negated_exponent {
-                    while exponent > zero {
-                        new_value /= &ten;
-                        exponent -= &one;
-                    }
-                } else {
-                    while exponent > zero {
-                        new_value *= &ten;
-                        exponent -= &one;
-                    }
-                }
-                value = new_value;
-            }
-            if negated {
-                value = -value;
-            }
-
-            if value.is_integer() && !contains_fractional {
-                Literal::new_int(
-                    value
-                        .to_integer()
-                        .to_i128()
-                        .expect("Literal does not fit in i128"),
-                    inner.as_span().into(),
-                )
+            if let Result::Ok(i) = str_rep.parse::<i128>() {
+                return Literal::new_int(i, inner.as_span().into());
+            } else if let Result::Ok(f) = str_rep.parse::<f64>() {
+                let ratio = parse_rational(str_rep);
+                return Literal::new_float(f, ratio, inner.as_span().into());
             } else {
-                Literal::new_float(value, inner.as_span().into())
+                unreachable!();
             }
         }
         Rule::True => Literal::new_bool(true, inner.as_span().into()),

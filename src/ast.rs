@@ -1,7 +1,6 @@
 //! This module contains the AST data structures for the Lola Language.
 
 use super::parse::Ident;
-use crate::convert_to_f64;
 use crate::parse::NodeId;
 use crate::parse::Span;
 use num::BigRational;
@@ -331,10 +330,10 @@ impl Literal {
         }
     }
 
-    pub fn new_float(val: BigRational, span: Span) -> Literal {
+    pub fn new_float(float: f64, val: BigRational, span: Span) -> Literal {
         Literal {
             id: NodeId::DUMMY,
-            kind: LitKind::Float(convert_to_f64(&val), val),
+            kind: LitKind::Float(float, val),
             span,
         }
     }

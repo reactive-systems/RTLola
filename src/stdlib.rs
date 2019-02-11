@@ -2,6 +2,7 @@
 
 use crate::ast::{BinOp, UnOp};
 use crate::ty::{TypeConstraint, ValueTy};
+use lazy_static::lazy_static;
 
 #[derive(Debug)]
 pub struct Generic {

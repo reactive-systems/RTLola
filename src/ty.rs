@@ -3,6 +3,8 @@
 //! It is inspired by https://doc.rust-lang.org/nightly/nightly-rustc/rustc/ty/index.html
 
 use crate::analysis::typing::ValueVar;
+use lazy_static::lazy_static;
+use num::{BigRational, Zero};
 
 /// The `stream` type, storing information about timing of a stream (event-based, real-time).
 #[derive(Debug, PartialEq, Eq, PartialOrd, Clone, Hash)]
@@ -64,8 +66,6 @@ pub enum FloatTy {
     F64,
 }
 use self::FloatTy::*;
-use num::BigRational;
-use num::Zero;
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Hash)]
 pub struct Freq {
