@@ -71,6 +71,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                     .long("delay")
                     .help("Delay [ms] between reading in two lines from the input. Only used for file input.")
                     .requires("CSV_INPUT_FILE")
+                    .conflicts_with("OFFLINE")
+                    .takes_value(true)
             ).
             arg(
                 Arg::with_name("VERBOSITY")
@@ -88,7 +90,6 @@ fn main() -> Result<(), Box<dyn Error>> {
                 Arg::with_name("OFFLINE")
                     .long("offline")
                     .help("Use the timestamps from the input.\nThe column name must be one of [time,timestamp,ts].\nThe column must produce a monotonically increasing sequence of values.")
-                    .conflicts_with("DELAY")
             )
             .group(
                 ArgGroup::with_name("MODE")

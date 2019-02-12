@@ -1,5 +1,16 @@
 StreamLAB
 
+The provided binary was tested on Ubuntu 16.10.
+
+We provide the following shell scripts, covering the different scenarios described in the paper:
+- run_online.sh uses the short input file traces/trimmed/trace_0.cs with the spec_online.lola and simulates a delay of 1ms between inputs
+- run_offline_silent.sh uses the long input file (400k events) traces/timed/trace_0.csv with the spec_offline.lola -- took around 15 seconds on our machine
+- run_offline_triggers.sh is the verbose version of run_offline_silent.sh that shows the triggers that fire
+
+
+
+USAGE
+
 You can run
 $ stream_lab monitor --help
 to get an overview of all possible options and flags:
@@ -30,7 +41,7 @@ ARGS:
 
 
 The typical invocation looks like this:
-$ stream_lab monitor --offline --csv-in=./path/to/inputs.csv -verbosity=triggers --stdout ./path/to/specification
+$ stream_lab monitor --offline --csv-in=./path/to/inputs.csv --verbosity=triggers --stdout ./path/to/specification
 
 Constraints:
 You must specify either --offline or --online to determine where the timestamps come from.
