@@ -98,7 +98,10 @@ impl<'a> CycleFinder<'a> {
             })
             .collect();
         for component in strongly_connected_components.iter() {
-            let starting_node: NIx = *component.iter().min().unwrap();
+            let starting_node: NIx = *component
+                .iter()
+                .min()
+                .expect("Each strongly connected component must have at least one node.");
             self.get_elementary_circuits_for_component(starting_node, starting_node, component);
         }
         // check for self-loops
@@ -117,7 +120,9 @@ impl<'a> CycleFinder<'a> {
     fn unblock(&mut self, node: NIx) {
         self.blocked[node.index()] = false;
         while !self.b_lists[node.index()].is_empty() {
-            let w = self.b_lists[node.index()].pop().unwrap();
+            let w = self.b_lists[node.index()]
+                .pop()
+                .expect("We checked that the list is not empty.");
             if self.blocked[w.index()] {
                 self.unblock(w);
             }
@@ -416,17 +421,20 @@ impl<'a> DependencyAnalyser<'a> {
     }
 
     fn get_cycle_weight(&self, cycle_path: &[EIx]) -> Option<CycleWeight> {
-        let any_rt =
-            cycle_path.iter().any(
-                |&edge| match self.dependency_graph.edge_weight(edge).unwrap() {
-                    StreamDependency::Access(_, offset, _) => match offset {
-                        Offset::Time(_, ..) => true,
-                        Offset::SlidingWindow => true,
-                        Offset::Discrete(_) => false,
-                    },
-                    _ => false,
+        let any_rt = cycle_path.iter().any(|&edge| {
+            match self
+                .dependency_graph
+                .edge_weight(edge)
+                .expect("We do not modify the graph so every EdgeIndex should still be valid.")
+            {
+                StreamDependency::Access(_, offset, _) => match offset {
+                    Offset::Time(_, ..) => true,
+                    Offset::SlidingWindow => true,
+                    Offset::Discrete(_) => false,
                 },
-            );
+                _ => false,
+            }
+        });
 
         if any_rt {
             // TODO Max
@@ -436,7 +444,10 @@ impl<'a> DependencyAnalyser<'a> {
         let mut total_weight = 0;
 
         for edge_index in cycle_path {
-            let edge_info = self.dependency_graph.edge_weight(*edge_index).unwrap();
+            let edge_info = self
+                .dependency_graph
+                .edge_weight(*edge_index)
+                .expect("We do not modify the graph so every EdgeIndex should still be valid.");
             match edge_info {
                 StreamDependency::InvokeByName(_) => {}
                 StreamDependency::Access(_, offset, _) => match offset {
@@ -677,7 +688,10 @@ impl<'a> DependencyAnalyser<'a> {
     }
 
     fn get_stream_name(&self, node_index: NIx) -> &String {
-        let node = self.dependency_graph.node_weight(node_index).unwrap();
+        let node = self
+            .dependency_graph
+            .node_weight(node_index)
+            .expect("We do not modify the graph so every NodeIndex should still be valid.");
         let stream_id = match node {
             StreamNode::ClassicOutput(id)
             | StreamNode::ParameterizedOutput(id)
@@ -694,10 +708,17 @@ impl<'a> DependencyAnalyser<'a> {
     }
 
     fn build_zero_weight_cycle_error(&self, cyclic_path: &[EIx]) {
+        debug_assert!(!cyclic_path.is_empty(), "A cycle cannot be empty");
         let mut builder: Option<DiagnosticBuilder> = None;
         for edge_index in cyclic_path {
-            let edge_weight = self.dependency_graph.edge_weight(*edge_index).unwrap();
-            let (start_node, end_node) = self.dependency_graph.edge_endpoints(*edge_index).unwrap();
+            let edge_weight = self
+                .dependency_graph
+                .edge_weight(*edge_index)
+                .expect("We do not modify the graph so every EdgeIndex should still be valid.");
+            let (start_node, end_node) = self
+                .dependency_graph
+                .edge_endpoints(*edge_index)
+                .expect("We do not modify the graph so every EdgeIndex should still be valid.");
             let (span, label): (Span, String) = match edge_weight {
                 StreamDependency::InvokeByName(span) => (
                     *span,
@@ -753,14 +774,20 @@ impl<'a> DependencyAnalyser<'a> {
                 builder = Some(diagnostic_builder);
             }
         }
-        builder.unwrap().emit();
+        builder.expect("The cycle is not empty so we will construct a builder on the first loop iteration.").emit();
     }
 
     fn build_positive_weight_cycle_warning(&self, cyclic_path: &[EIx]) {
         let mut builder: Option<DiagnosticBuilder> = None;
         for edge_index in cyclic_path {
-            let edge_weight = self.dependency_graph.edge_weight(*edge_index).unwrap();
-            let (start_node, end_node) = self.dependency_graph.edge_endpoints(*edge_index).unwrap();
+            let edge_weight = self
+                .dependency_graph
+                .edge_weight(*edge_index)
+                .expect("We do not modify the graph so every EdgeIndex should still be valid.");
+            let (start_node, end_node) = self
+                .dependency_graph
+                .edge_endpoints(*edge_index)
+                .expect("We do not modify the graph so every EdgeIndex should still be valid.");
             let (span, label): (Span, String) = match edge_weight {
                 StreamDependency::InvokeByName(span) => (
                     *span,
@@ -817,7 +844,7 @@ impl<'a> DependencyAnalyser<'a> {
                 builder = Some(diagnostic_builder);
             }
         }
-        builder.unwrap().emit();
+        builder.expect("The cycle is not empty so we will construct a builder on the first loop iteration.").emit();
     }
 
     fn add_path_index_for_all_nodes(
@@ -830,21 +857,32 @@ impl<'a> DependencyAnalyser<'a> {
         if let CycleWeight::Positive = weight {
             for edge_index in cyclic_path {
                 let stream_id = self.get_stream_id_from_start_node(*edge_index);
-                let node_entry = cycles_per_stream.get_mut(stream_id).unwrap();
+                let node_entry = cycles_per_stream
+                    .get_mut(stream_id)
+                    .expect("We added all outputs to the map");
                 node_entry.positive.push(path_index);
             }
         } else {
             for edge_index in cyclic_path {
                 let stream_id = self.get_stream_id_from_start_node(*edge_index);
-                let node_entry = cycles_per_stream.get_mut(stream_id).unwrap();
+                let node_entry = cycles_per_stream
+                    .get_mut(stream_id)
+                    .expect("We added all outputs to the map");
                 node_entry.negative.push(path_index);
             }
         }
     }
 
     fn get_stream_id_from_start_node(&mut self, edge_index: EIx) -> &NodeId {
-        let edge_start_index = self.dependency_graph.edge_endpoints(edge_index).unwrap().0;
-        let start_node_info = self.dependency_graph.node_weight(edge_start_index).unwrap();
+        let edge_start_index = self
+            .dependency_graph
+            .edge_endpoints(edge_index)
+            .expect("We only accept a valid EdgeIndex")
+            .0;
+        let start_node_info = self
+            .dependency_graph
+            .node_weight(edge_start_index)
+            .expect("The graph library just us this NodeIndex");
         match start_node_info {
             StreamNode::ClassicOutput(id)
             | StreamNode::ParameterizedOutput(id)
@@ -895,7 +933,12 @@ mod tests {
         let decl_table = naming_analyzer.check(&ast);
         let mut type_analysis = TypeAnalysis::new(&handler, &decl_table);
         let type_table = type_analysis.check(&ast);
-        let mut version_analyzer = LolaVersionAnalysis::new(&handler, type_table.as_ref().unwrap());
+        let mut version_analyzer = LolaVersionAnalysis::new(
+            &handler,
+            type_table
+                .as_ref()
+                .expect("We expect in these tests that the type analysis checks out."),
+        );
         let version = version_analyzer.analyse(&ast);
         assert!(
             !version.is_none(),

@@ -129,7 +129,9 @@ fn add_sliding_windows<'a>(
         ExpressionKind::Lookup(instance, offset, op) => match op {
             None => {}
             Some(wop) => {
-                let node_id = match declaration_table.get(&instance.id).unwrap() {
+                let node_id = match declaration_table.get(&instance.id).expect(
+                    "We expect the the type-table to contain information about every stream",
+                ) {
                     Declaration::In(input) => input.id,
                     Declaration::Out(output) => output.id,
                     _ => unimplemented!(),
@@ -156,7 +158,7 @@ fn add_sliding_windows<'a>(
                         required_memory += number_of_full_periods_in_window
                             .to_integer()
                             .to_u128()
-                            .unwrap()
+                            .expect("Number of complete periods does not fit in u128")
                             * value_type_size;
                     }
                     (TimingInfo::Event, true) => {
@@ -175,7 +177,7 @@ fn add_sliding_windows<'a>(
                             number_of_full_periods_in_window
                                 .to_integer()
                                 .to_u128()
-                                .unwrap(),
+                                .expect("Number of complete periods does not fit in u128"),
                             number_of_panes,
                         );
                         required_memory += determine_needed_window_memory(

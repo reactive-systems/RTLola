@@ -110,10 +110,22 @@ fn build_compute_graph(mut dependency_graph: DependencyGraph) -> ComputationGrap
     }
 
     for edge_idx in dependency_graph.edge_indices() {
-        let edge_weight = dependency_graph.edge_weight(edge_idx).unwrap();
-        let (source, target) = dependency_graph.edge_endpoints(edge_idx).unwrap();
-        let source_id = get_ast_id(*dependency_graph.node_weight(source).unwrap());
-        let target_id = get_ast_id(*dependency_graph.node_weight(target).unwrap());
+        let edge_weight = dependency_graph
+            .edge_weight(edge_idx)
+            .expect("We iterate over all existing EdgeIndices");
+        let (source, target) = dependency_graph
+            .edge_endpoints(edge_idx)
+            .expect("We iterate over all existing EdgeIndices");
+        let source_id = get_ast_id(
+            *dependency_graph
+                .node_weight(source)
+                .expect("We just git this NodeIndex from the graph"),
+        );
+        let target_id = get_ast_id(
+            *dependency_graph
+                .node_weight(target)
+                .expect("We just git this NodeIndex from the graph"),
+        );
 
         match edge_weight {
             StreamDependency::InvokeByName(_) => {
@@ -216,8 +228,12 @@ fn get_compute_order(mut compute_graph: ComputationGraph) -> Vec<Vec<ComputeStep
                 pruned_nodes.push(index); // mark this node for pruning
                 compute_step_order
                     .last_mut()
-                    .unwrap()
-                    .push(*compute_graph.node_weight(index).unwrap());
+                    .expect("We always push a new vector at the beginning of the iteration.")
+                    .push(
+                        *compute_graph
+                            .node_weight(index)
+                            .expect("The indices are provided by the graph."),
+                    );
             }
         }
 
@@ -228,7 +244,12 @@ fn get_compute_order(mut compute_graph: ComputationGraph) -> Vec<Vec<ComputeStep
     }
 
     // now prune empty steps ones from the back
-    while !compute_step_order.is_empty() && compute_step_order.last().unwrap().is_empty() {
+    while !compute_step_order.is_empty()
+        && compute_step_order
+            .last()
+            .expect("We just checked that the vector is not empty.")
+            .is_empty()
+    {
         compute_step_order.pop();
     }
     compute_step_order

@@ -36,7 +36,11 @@ pub(crate) fn determine_buffer_size(
     let mut store_all_inputs = false;
     let mut storage_requirements: HashMap<NodeId, StorageRequirement> = HashMap::new();
     for node_index in dependency_graph.node_indices() {
-        let id = get_ast_id(*dependency_graph.node_weight(node_index).unwrap());
+        let id = get_ast_id(
+            *dependency_graph
+                .node_weight(node_index)
+                .expect("We iterate over all node indices"),
+        );
         let this_stream_is_future_dependent = future_dependent_streams.contains(&id);
 
         // normal event based stream
@@ -75,7 +79,9 @@ pub(crate) fn determine_buffer_size(
     // we have a future reference in
     if store_all_inputs {
         for node_index in dependency_graph.node_indices() {
-            let node_weight = dependency_graph.node_weight(node_index).unwrap();
+            let node_weight = dependency_graph
+                .node_weight(node_index)
+                .expect("We iterate over all node indices");
             match node_weight {
                 ClassicInput(id) | ParameterizedInput(id) => {
                     storage_requirements.insert(*id, StorageRequirement::Unbounded);
@@ -97,7 +103,11 @@ pub(crate) fn determine_tracking_size(
 ) -> TrackingRequirements {
     let mut tracking: HashMap<NodeId, Vec<(NodeId, TrackingRequirement)>> = HashMap::new();
     for node_index in dependency_graph.node_indices() {
-        let id = get_ast_id(*dependency_graph.node_weight(node_index).unwrap());
+        let id = get_ast_id(
+            *dependency_graph
+                .node_weight(node_index)
+                .expect("We iterate over all node indices"),
+        );
         let mut tracking_requirements: Vec<(NodeId, TrackingRequirement)> = Vec::new();
 
         let this_is_time_based = is_it_time_based(dependency_graph, node_index, type_table);
@@ -105,7 +115,9 @@ pub(crate) fn determine_tracking_size(
         for edge in dependency_graph.edges_directed(node_index, Direction::Outgoing) {
             // TODO What about the invoke expression (if we allow one)?
             if let Access(Location::Expression, Time(offset), _) = edge.weight() {
-                let src_node = *dependency_graph.node_weight(edge.target()).unwrap();
+                let src_node = *dependency_graph
+                    .node_weight(edge.target())
+                    .expect("We iterate over edges so their target should exist");
                 let src_id = get_ast_id(src_node);
                 assert!(
                     !future_dependent_stream.contains(&src_id),
@@ -178,7 +190,10 @@ fn is_it_time_based(
     node_index: NIx,
     type_table: &TypeTable,
 ) -> bool {
-    let id = get_ast_id(*dependency_graph.node_weight(node_index).unwrap());
+    let id =
+        get_ast_id(*dependency_graph.node_weight(node_index).expect(
+            "We assume that the type-table has information about every stream and trigger",
+        ));
     match type_table.get_stream_type(id).timing {
         TimingInfo::Event => false,
         TimingInfo::RealTime(_) => true,
@@ -221,7 +236,12 @@ mod tests {
         let decl_table = naming_analyzer.check(&spec);
         let mut type_analysis = TypeAnalysis::new(&handler, &decl_table);
         let type_table = type_analysis.check(&spec);
-        let mut version_analyzer = LolaVersionAnalysis::new(&handler, type_table.as_ref().unwrap());
+        let mut version_analyzer = LolaVersionAnalysis::new(
+            &handler,
+            type_table
+                .as_ref()
+                .expect("We expect that the version analysis found no error"),
+        );
         let _version = version_analyzer.analyse(&spec);
 
         let dependency_analysis =
@@ -264,22 +284,26 @@ mod tests {
         let decl_table = naming_analyzer.check(&spec);
         let mut type_analysis = TypeAnalysis::new(&handler, &decl_table);
         let type_table = type_analysis.check(&spec);
-        let mut version_analyzer = LolaVersionAnalysis::new(&handler, type_table.as_ref().unwrap());
+        let mut version_analyzer = LolaVersionAnalysis::new(
+            &handler,
+            type_table
+                .as_ref()
+                .expect("We expect that the version analysis found no erro"),
+        );
         let _version = version_analyzer.analyse(&spec);
 
         let dependency_analysis =
             analyse_dependencies(&spec, &version_analyzer.result, &decl_table, &handler);
         let mut type_analysis = TypeAnalysis::new(&handler, &decl_table);
-        let type_table = type_analysis.check(&spec);
+        let type_table = type_analysis
+            .check(&spec)
+            .expect("We expect that the spec is well typed");
         let (_, pruned_graph) = determine_evaluation_order(dependency_analysis.dependency_graph);
 
         let future_dependent_stream = future_dependent_stream(&pruned_graph);
 
-        let tracking_requirements = determine_tracking_size(
-            &pruned_graph,
-            type_table.as_ref().unwrap(),
-            &future_dependent_stream,
-        );
+        let tracking_requirements =
+            determine_tracking_size(&pruned_graph, &type_table, &future_dependent_stream);
 
         assert_eq!(expected_errors, handler.emitted_errors());
         assert_eq!(expected_warning, handler.emitted_warnings());

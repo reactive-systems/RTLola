@@ -21,7 +21,9 @@ pub(crate) fn future_dependent_stream(
     for node_index in dependency_graph.node_indices() {
         // check if this node is already in the future_dependent_set
         if future_dependent_streams.contains(&get_ast_id(
-            *(dependency_graph.node_weight(node_index).unwrap()),
+            *(dependency_graph
+                .node_weight(node_index)
+                .expect("The closure is only called for each node")),
         )) {
             continue;
         }
@@ -61,12 +63,16 @@ fn propagate_future_dependence(
     node_index: NIx,
 ) {
     future_dependent_streams.insert(get_ast_id(
-        *(dependency_graph.node_weight(node_index).unwrap()),
+        *(dependency_graph
+            .node_weight(node_index)
+            .expect("We expect the node index to be valid")),
     ));
 
     for neighbor in dependency_graph.neighbors_directed(node_index, Direction::Incoming) {
         if !future_dependent_streams.contains(&get_ast_id(
-            *(dependency_graph.node_weight(neighbor).unwrap()),
+            *(dependency_graph
+                .node_weight(neighbor)
+                .expect("We iterate over all neighbors")),
         )) {
             propagate_future_dependence(future_dependent_streams, dependency_graph, neighbor);
         }
@@ -100,7 +106,12 @@ mod tests {
         let decl_table = naming_analyzer.check(&spec);
         let mut type_analysis = TypeAnalysis::new(&handler, &decl_table);
         let type_table = type_analysis.check(&spec);
-        let mut version_analyzer = LolaVersionAnalysis::new(&handler, type_table.as_ref().unwrap());
+        let mut version_analyzer = LolaVersionAnalysis::new(
+            &handler,
+            type_table.as_ref().expect(
+                "We expect in the tests, that the version analysis returned without an error",
+            ),
+        );
         let _version = version_analyzer.analyse(&spec);
 
         let dependency_analysis =

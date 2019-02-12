@@ -449,7 +449,12 @@ impl<'a> ScopedDecl<'a> {
     }
 
     fn get_decl_in_current_scope_for(&self, name: &str) -> Option<Declaration<'a>> {
-        match self.scopes.last().unwrap().get(name) {
+        match self
+            .scopes
+            .last()
+            .expect("It appears that we popped the global context.")
+            .get(name)
+        {
             Some(&decl) => Some(decl),
             None => None,
         }
@@ -457,7 +462,10 @@ impl<'a> ScopedDecl<'a> {
 
     pub(crate) fn add_decl_for(&mut self, name: &'a str, decl: Declaration<'a>) {
         assert!(self.scopes.last().is_some());
-        self.scopes.last_mut().unwrap().insert(name, decl);
+        self.scopes
+            .last_mut()
+            .expect("It appears that we popped the global context.")
+            .insert(name, decl);
     }
 }
 

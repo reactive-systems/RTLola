@@ -63,7 +63,13 @@ pub(crate) fn analyze<'a, 'b>(spec: &'a LolaSpec, handler: &'b Handler) -> Analy
         result.declaration_table = Some(decl_table);
     }
 
-    let mut type_analysis = TypeAnalysis::new(&handler, result.declaration_table.as_ref().unwrap());
+    let mut type_analysis = TypeAnalysis::new(
+        &handler,
+        result
+            .declaration_table
+            .as_ref()
+            .expect("We already checked for naming errors"),
+    );
     let type_table = type_analysis.check(&spec);
     assert_eq!(type_table.is_none(), handler.contains_error());
 
@@ -74,8 +80,13 @@ pub(crate) fn analyze<'a, 'b>(spec: &'a LolaSpec, handler: &'b Handler) -> Analy
         result.type_table = type_table;
     }
 
-    let mut version_analyzer =
-        LolaVersionAnalysis::new(&handler, result.type_table.as_ref().unwrap());
+    let mut version_analyzer = LolaVersionAnalysis::new(
+        &handler,
+        result
+            .type_table
+            .as_ref()
+            .expect("We already checked for type errors"),
+    );
     let version_result = version_analyzer.analyse(spec);
     if version_result.is_none() {
         print!("error");
@@ -87,8 +98,14 @@ pub(crate) fn analyze<'a, 'b>(spec: &'a LolaSpec, handler: &'b Handler) -> Analy
     let graph_result = graph_based_analysis::analyze(
         spec,
         &version_analyzer.result,
-        result.declaration_table.as_ref().unwrap(),
-        result.type_table.as_mut().unwrap(),
+        result
+            .declaration_table
+            .as_ref()
+            .expect("We already checked for naming errors"),
+        result
+            .type_table
+            .as_mut()
+            .expect("We already checked for type errors"),
         &handler,
     );
 
