@@ -412,7 +412,7 @@ impl<'a> Lowering<'a> {
                 } else {
                     // A "stray" default expression such as `5 ? 3` is valid, but a no-op.
                     // Thus, print a warning. Evaluating the expression is necessary, the dft can be skipped.
-                    //                    println!("WARNING: No-Op Default operation!");
+                    println!("WARNING: No-Op Default operation!");
                     self.lower_subexpression(e, state)
                 }
             }
@@ -422,7 +422,7 @@ impl<'a> Lowering<'a> {
                 } else {
                     // A "stray" sample and hold expression such as `5 ! 3` is valid, but a no-op.
                     // Thus, print a warning. Evaluating the expression is necessary, the dft can be skipped.
-                    //                    println!("WARNING: No-Op Sample and Hold operation!");
+                    println!("WARNING: No-Op Sample and Hold operation!");
                     self.lower_subexpression(e, state)
                 }
             }
@@ -1043,7 +1043,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
+    #[ignore] // Trigger needs to be periodic, and if it were event based, the type checker needs to reject the access w/o s&h or default.
     fn lower_multiple_streams_with_windows() {
         let ir = spec_to_ir(
             "\
@@ -1052,12 +1052,12 @@ mod tests {
              output c: Int32 := a \n\
              output d: Int64 { extend @1Hz } := a[3s, sum] ? 19 \n\
              output e: Bool := a > 4 && b \n\
-             output f: Int64 { extend @1Hz } := if e[0] then c[0] else 0 \n\
-             output g: Float64 { extend @0.1Hz } :=  f[10s, avg] \n\
+             output f: Int64 { extend @1Hz } := if (e ! true) then (c ! 0) else 0 \n\
+             output g: Float64 { extend @0.1Hz } :=  cast(f[10s, avg] ? 0) \n\
              trigger g > 17.0 \
              ",
         );
-        check_stream_number(&ir, 2, 5, 4, 1, 0, 2, 1);
+        check_stream_number(&ir, 2, 6, 5, 1, 0, 2, 1);
     }
 
     #[test]
