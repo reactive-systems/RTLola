@@ -1,4 +1,4 @@
-use lola_parser::*;
+use lola_parser::ir::*;
 
 use crate::basics::{EvalConfig, OutputHandler};
 use crate::storage::{GlobalStore, TempStore, Value};
@@ -117,7 +117,7 @@ impl Evaluator {
                 self.write(stmt.target, val, inst);
             }
             Op::ArithLog(op) => {
-                use lola_parser::ArithLogOp::*;
+                use lola_parser::ir::ArithLogOp::*;
                 // The explicit match here enables a compiler warning when a case was missed.
                 // Useful when the list in the parser is extended.
                 let arity = match op {
@@ -229,7 +229,7 @@ impl Evaluator {
 mod tests {
 
     use super::*;
-    use lola_parser::LolaIR;
+    use lola_parser::ir::LolaIR;
     use std::time::{Duration, SystemTime};
 
     fn setup(spec: &str) -> (LolaIR, Evaluator) {
@@ -381,7 +381,7 @@ mod tests {
 
     #[test]
     fn test_trigger() {
-        let (_, mut eval) = setup("input a: UInt8 output b: UInt8 { extend @5Hz }:= a[-1] ! 3\n trigger (b!3) > 4");
+        let (_, mut eval) = setup("input a: UInt8 output b: UInt8 { extend @5Hz }:= a[-1] ! 3\n trigger b > 4");
         let out_ref = StreamReference::OutRef(0);
         let trig_ref = StreamReference::OutRef(1);
         let in_ref = StreamReference::InRef(0);

@@ -2,7 +2,7 @@ use super::WorkItem;
 use crate::basics::util;
 use crate::basics::{EvalConfig, OutputHandler};
 
-use lola_parser::{LolaIR, StreamReference};
+use lola_parser::ir::{LolaIR, StreamReference};
 use std::sync::mpsc::{Receiver, Sender};
 use std::thread::sleep;
 use std::time::{Duration, SystemTime};
@@ -454,7 +454,7 @@ impl TimeDrivenManager {
 mod tests {
     #[allow(unused_imports)]
     use super::*;
-    use lola_parser::LolaIR;
+    use lola_parser::ir::LolaIR;
 
     #[allow(dead_code)]
     fn to_ir(spec: &str) -> LolaIR {

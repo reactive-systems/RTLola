@@ -2,7 +2,7 @@ use super::Value;
 use crate::evaluator::{OutInstance, Window};
 
 use crate::storage::SlidingWindow;
-use lola_parser::{LolaIR, OutputStream, StreamReference, Type};
+use lola_parser::ir::{LolaIR, OutputStream, StreamReference, Type};
 use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::time::SystemTime;

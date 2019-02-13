@@ -159,7 +159,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
             let cfg = EvalConfig::new(src, verbosity, out);
             if parse_matches.is_present("OFFLINE") {
-                rtlola::start_evaluation_offline(ir, cfg, None);
+                rtlola::start_evaluation_offline(ir, cfg);
             } else {
                 rtlola::start_evaluation_online(ir, cfg, None);
             }

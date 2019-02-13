@@ -2,7 +2,7 @@ use crate::basics::{EvalConfig, InputReader, OutputHandler};
 use crate::coordination::WorkItem;
 use crate::storage::Value;
 
-use lola_parser::{LolaIR, Stream, StreamReference, Type};
+use lola_parser::ir::{LolaIR, Stream, StreamReference, Type};
 use std::ops::AddAssign;
 use std::sync::mpsc::{Receiver, Sender};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};

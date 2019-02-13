@@ -1,6 +1,6 @@
 use super::window_aggregations::*;
 use super::Value;
-use lola_parser::{Type, WindowOperation as WinOp};
+use lola_parser::ir::{Type, WindowOperation as WinOp};
 use ordered_float::NotNan;
 use std::cmp::Ordering;
 use std::collections::VecDeque;

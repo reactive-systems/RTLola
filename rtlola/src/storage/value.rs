@@ -1,4 +1,4 @@
-use lola_parser::Type;
+use lola_parser::ir::Type;
 use ordered_float::NotNan;
 use std::ops;
 

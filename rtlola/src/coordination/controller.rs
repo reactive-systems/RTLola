@@ -1,4 +1,4 @@
-use lola_parser::*;
+use lola_parser::ir::{LolaIR, StreamReference};
 use std::sync::mpsc;
 use std::thread;
 use std::time::SystemTime;
@@ -20,7 +20,7 @@ pub struct Controller {
 }
 
 impl lola_parser::LolaBackend for Controller {
-    fn supported_feature_flags() -> Vec<lola_parser::FeatureFlag> {
+    fn supported_feature_flags() -> Vec<lola_parser::ir::FeatureFlag> {
         unimplemented!()
     }
 }
