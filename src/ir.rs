@@ -102,6 +102,7 @@ pub struct OutputStream {
     pub name: String,
     pub ty: Type,
     pub expr: Expression,
+    pub outgoing_dependencies: Vec<Dependency>,
     pub dependent_streams: Vec<Tracking>,
     pub dependent_windows: Vec<WindowReference>,
     pub(crate) memory_bound: MemorizationBound,
@@ -234,6 +235,13 @@ pub enum Constant {
 pub struct StreamInstance {
     pub reference: StreamReference,
     pub arguments: Vec<Temporary>,
+}
+
+///TODO
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct Dependency {
+    pub stream: StreamReference,
+    pub offsets: Vec<Offset>,
 }
 
 /// Offset used in the lookup expression

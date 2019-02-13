@@ -138,6 +138,7 @@ impl<'a> Lowering<'a> {
         let ty = ir::Type::Bool;
         let expr = self.lower_expression(&trigger.expression, &ty);
         let reference = StreamReference::OutRef(self.ir.outputs.len());
+        let outgoing_dependencies = self.find_dependencies(&trigger.expression);
         let output = ir::OutputStream {
             name,
             ty,
@@ -147,6 +148,7 @@ impl<'a> Lowering<'a> {
             memory_bound: MemorizationBound::Bounded(1),
             layer: self.get_layer(trigger.id),
             reference,
+            outgoing_dependencies,
         };
         self.ir.outputs.push(output);
         let trig = ir::Trigger {
@@ -191,12 +193,29 @@ impl<'a> Lowering<'a> {
         let parametrized = self.check_parametrized(&ast_output, reference);
 
         let trackings = self.collect_tracking_info(nid, time_driven);
+        let outgoing_dependencies = self.find_dependencies(&ast_output.expression);
+        let mut dep_map: HashMap<StreamReference, Vec<ir::Offset>> = HashMap::new();
+        outgoing_dependencies.into_iter().for_each(|dep| {
+            dep_map
+                .entry(dep.stream)
+                .or_insert(Vec::new())
+                .extend_from_slice(dep.offsets.as_slice())
+        });
+
+        let outgoing_dependencies = dep_map
+            .into_iter()
+            .map(|(sr, offsets)| ir::Dependency {
+                stream: sr,
+                offsets,
+            })
+            .collect();
 
         let output_type = self.lower_value_type(nid);
         let output = ir::OutputStream {
             name: ast_output.name.name.clone(),
             ty: output_type.clone(),
             expr: self.lower_expression(&ast_output.expression, &output_type),
+            outgoing_dependencies,
             dependent_streams: trackings,
             dependent_windows: Vec::new(),
             memory_bound,
@@ -217,6 +236,94 @@ impl<'a> Lowering<'a> {
         if let Some(param_ref) = parametrized {
             self.ir.parametrized.push(param_ref);
         }
+    }
+
+    /// Returns the flattened result of calling f on each node recursively in `pre_order` or post_order.
+    fn collect_expression<T, F>(expr: &'a ast::Expression, f: &F, pre_order: bool) -> Vec<T>
+    where
+        F: Fn(&'a ast::Expression) -> Vec<T>,
+    {
+        let recursion = |e| Lowering::collect_expression(e, f, pre_order);
+        let pre = if pre_order {
+            f(expr).into_iter()
+        } else {
+            Vec::new().into_iter()
+        };
+        let post = || {
+            if pre_order {
+                Vec::new().into_iter()
+            } else {
+                f(expr).into_iter()
+            }
+        };
+        match &expr.kind {
+            ExpressionKind::Lit(_) => pre.chain(post()).collect(),
+            ExpressionKind::Ident(_) => pre.chain(post()).collect(),
+            ExpressionKind::Default(e, dft) => pre
+                .chain(recursion(e))
+                .chain(recursion(dft))
+                .chain(post())
+                .collect(),
+            ExpressionKind::Lookup(inst, _, _) => {
+                let args = inst.arguments.iter().flat_map(|a| recursion(a));
+                pre.chain(args).chain(post()).collect()
+            }
+            ExpressionKind::Binary(_, lhs, rhs) => pre
+                .chain(recursion(lhs))
+                .chain(recursion(rhs))
+                .chain(post())
+                .collect(),
+            ExpressionKind::Unary(_, operand) => {
+                pre.chain(recursion(operand)).chain(post()).collect()
+            }
+            ExpressionKind::Ite(cond, cons, alt) => pre
+                .chain(recursion(cond))
+                .chain(recursion(cons))
+                .chain(recursion(alt))
+                .chain(post())
+                .collect(),
+            ExpressionKind::ParenthesizedExpression(_, e, _) => pre
+                .chain(Lowering::collect_expression(e, f, pre_order))
+                .chain(post())
+                .collect(),
+            ExpressionKind::MissingExpression() => panic!(), // TODO: Eradicate in preceding step.
+            ExpressionKind::Tuple(exprs) => {
+                let elems = exprs.iter().flat_map(|a| recursion(a));
+                pre.chain(elems).chain(post()).collect()
+            }
+            ExpressionKind::Function(_, _, args) => {
+                let args = args.iter().flat_map(|a| recursion(a));
+                pre.chain(args).chain(post()).collect()
+            }
+            ExpressionKind::Field(e, _) => pre.chain(recursion(e)).chain(post()).collect(),
+            ExpressionKind::Method(_, _, _, _) => unimplemented!(),
+            _ => unimplemented!(),
+        }
+    }
+
+    fn find_dependencies(&self, expr: &ast::Expression) -> Vec<ir::Dependency> {
+        let f = |e: &ast::Expression| -> Vec<ir::Dependency> {
+            match &e.kind {
+                ExpressionKind::Lookup(target, offset, None) => {
+                    let sr = self.extract_target_from_lookup(&e.kind);
+                    let offset = self.lower_offset(offset);
+                    vec![ir::Dependency {
+                        stream: sr,
+                        offsets: vec![offset],
+                    }]
+                }
+                ExpressionKind::Ident(ident) => {
+                    let sr = self.get_ref_for_ident(e.id);
+                    let offset = ir::Offset::PastDiscreteOffset(0);
+                    vec![ir::Dependency {
+                        stream: sr,
+                        offsets: vec![offset],
+                    }]
+                }
+                _ => Vec::new(),
+            }
+        };
+        Lowering::collect_expression(expr, &f, true)
     }
 
     fn lower_tracking_req(
@@ -425,7 +532,7 @@ impl<'a> Lowering<'a> {
             }
             ExpressionKind::Binary(ast_op, lhs, rhs) => {
                 let req_arg_types = self.tt.get_func_arg_types(expr.id);
-                use ast::BinOp::*;
+                use crate::ast::BinOp::*;
                 let req_arg_type = if req_arg_types.is_empty() {
                     match ast_op {
                         Add | Sub | Mul | Div | Rem | Pow | Eq | Lt | Le | Ne | Ge | Gt => {
@@ -1315,5 +1422,48 @@ mod tests {
         let ir = spec_to_ir("input a: Int32");
         let r = StreamReference::InRef(24);
         ir.get_in(r);
+    }
+
+    #[test]
+    fn dependency_test() {
+        let ir = spec_to_ir("input a: Int32\ninput b: Int32\ninput c: Int32\noutput d: Int32 := a + b + (b[-1]?0) + (a[-2]?0) + c");
+        let mut in_refs: [StreamReference; 3] = [
+            StreamReference::InRef(5),
+            StreamReference::InRef(5),
+            StreamReference::InRef(5),
+        ];
+        for i in ir.inputs {
+            if i.name == "a" {
+                in_refs[0] = i.reference;
+            }
+            if i.name == "b" {
+                in_refs[1] = i.reference;
+            }
+            if i.name == "c" {
+                in_refs[2] = i.reference;
+            }
+        }
+        let out_dep = &ir.outputs[0].outgoing_dependencies;
+        assert_eq!(out_dep.len(), 3);
+        let a_dep = out_dep
+            .into_iter()
+            .find(|&x| x.stream == in_refs[0])
+            .expect("a dependencies not found");
+        let b_dep = out_dep
+            .into_iter()
+            .find(|&x| x.stream == in_refs[1])
+            .expect("b dependencies not found");
+        let c_dep = out_dep
+            .into_iter()
+            .find(|&x| x.stream == in_refs[2])
+            .expect("c dependencies not found");
+        assert_eq!(a_dep.offsets.len(), 2);
+        assert_eq!(b_dep.offsets.len(), 2);
+        assert_eq!(c_dep.offsets.len(), 1);
+        assert!(a_dep.offsets.contains(&Offset::PastDiscreteOffset(0)));
+        assert!(a_dep.offsets.contains(&Offset::PastDiscreteOffset(2)));
+        assert!(b_dep.offsets.contains(&Offset::PastDiscreteOffset(0)));
+        assert!(b_dep.offsets.contains(&Offset::PastDiscreteOffset(1)));
+        assert!(c_dep.offsets.contains(&Offset::PastDiscreteOffset(0)));
     }
 }
