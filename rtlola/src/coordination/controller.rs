@@ -61,7 +61,7 @@ impl Controller {
             Evaluator::new(ir, SystemTime::now(), config.clone())
         } else {
             match work_rx.recv() {
-                Err(_) => panic!("Both producers hung up!"),
+                Err(e) => panic!("Both producers hung up! {}", e),
                 Ok(wi) => match wi {
                     WorkItem::Start(ts) => Evaluator::new(ir, ts, config.clone()),
                     _ => panic!("Did not receive a start event in offline mode!"),
@@ -74,7 +74,7 @@ impl Controller {
         loop {
             match work_rx.recv() {
                 Ok(wi) => ctrl.eval_workitem(wi),
-                Err(_) => panic!("Both producers hung up!"),
+                Err(e) => panic!("Both producers hung up! {}", e),
             }
         }
     }

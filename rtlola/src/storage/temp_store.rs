@@ -73,7 +73,7 @@ impl TempStore {
                 FloatTy::F32 => {
                     let mut seq = vec![0u8; std::mem::size_of::<f32>()];
                     Self::write_byte_seq(&mut seq, &self.data[lower..higher]);
-                    (&seq[..]).read_f32::<NativeEndian>().unwrap() as f64
+                    f64::from((&seq[..]).read_f32::<NativeEndian>().unwrap())
                 }
                 FloatTy::F64 => {
                     let mut seq = vec![0u8; std::mem::size_of::<f64>()];
@@ -180,9 +180,7 @@ impl TempStore {
     #[inline]
     fn write_byte_seq(dest: &mut [u8], source: &[u8]) {
         assert_eq!(source.len(), dest.len());
-        for i in 0..dest.len() {
-            dest[i] = source[i];
-        }
+        dest.clone_from_slice(&source[..dest.len()]);
     }
 
     #[inline]

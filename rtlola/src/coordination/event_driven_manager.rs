@@ -128,7 +128,7 @@ impl EventDrivenManager {
                         None
                     } else {
                         let v = Value::try_from(s, t)
-                            .expect(format!("Failed to parse {} as value of type {:?}.", s, t).as_str());
+                            .unwrap_or_else(|| panic!("Failed to parse {} as value of type {:?}.", s, t));
                         Some((ix, v))
                     }
                 })
@@ -162,10 +162,10 @@ impl EventDrivenManager {
                 Value::Float(f) => {
                     let f: f64 = (*f).into();
                     let nanos_per_sec: u32 = 1_000_000_000;
-                    let nanos = f * (nanos_per_sec as f64);
+                    let nanos = f * (f64::from(nanos_per_sec));
                     let nanos = nanos as u128;
-                    let secs = (nanos / (nanos_per_sec as u128)) as u64;
-                    let nanos = (nanos % (nanos_per_sec as u128)) as u32;
+                    let secs = (nanos / (u128::from(nanos_per_sec))) as u64;
+                    let nanos = (nanos % (u128::from(nanos_per_sec))) as u32;
                     UNIX_EPOCH + Duration::new(secs, nanos)
                 }
                 _ => panic!("Time stamps need to be unsigned integers."),
@@ -177,9 +177,8 @@ impl EventDrivenManager {
             }
 
             // Inform the time driven manager first.
-            match time_chan.send(now) {
-                Err(e) => panic!("Problem with TDM! {:?}", e),
-                Ok(_) => {}
+            if let Err(e) = time_chan.send(now) {
+                panic!("Problem with TDM! {:?}", e)
             }
             let _ = ack_chan.recv(); // Wait until be get the acknowledgement.
 

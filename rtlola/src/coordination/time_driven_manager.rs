@@ -122,7 +122,7 @@ impl TimeDrivenManager {
     /// Hyper period: 2 seconds, gcd: 100ms, streams: (c @ .5Hz), (b @ 1Hz), (a @ 2Hz)
     /// Input:  `[[a] [b]   []  [c]]`
     /// Output: `[[a] [a,b] [a] [a,b,c]`
-    fn apply_periodicity(steps: &Vec<Vec<StreamReference>>) -> Vec<Vec<StreamReference>> {
+    fn apply_periodicity(steps: &[Vec<StreamReference>]) -> Vec<Vec<StreamReference>> {
         // Whenever there are streams in a cell at index `i`,
         // add them to every cell with index k*i within bounds, where k > 1.
         // k = 0 would always schedule them initially, so this must be skipped.

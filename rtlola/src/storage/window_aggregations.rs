@@ -63,8 +63,8 @@ impl<G: WindowGeneric> Default for AvgIV<G> {
 impl<G: WindowGeneric> Into<Value> for AvgIV<G> {
     fn into(self) -> Value {
         match self.sum {
-            Value::Unsigned(u) => Value::Unsigned(u / self.num as u128),
-            Value::Signed(u) => Value::Signed(u / self.num as i128),
+            Value::Unsigned(u) => Value::Unsigned(u / u128::from(self.num)),
+            Value::Signed(u) => Value::Signed(u / i128::from(self.num)),
             Value::Float(u) => Value::Float(u / self.num as f64),
             _ => panic!("Type error."),
         }
@@ -130,7 +130,7 @@ impl Add for IntegralIV {
         let ts2 = other.start_time;
         let ts1 = self.end_time;
         let time_diff = ts2.duration_since(ts1).expect("Time does not behave monotonically!");
-        let time_diff_secs = (time_diff.as_secs() as f64) + (time_diff.subsec_nanos() as f64) / (100_000_000f64);
+        let time_diff_secs = (time_diff.as_secs() as f64) + (f64::from(time_diff.subsec_nanos())) / (100_000_000f64);
         let time_diff = Value::new_float(time_diff_secs);
         let value_sum = other.start_value.clone() + self.end_value.clone();
 
@@ -174,7 +174,7 @@ impl WindowIV for CountIV {
 
 impl Into<Value> for CountIV {
     fn into(self) -> Value {
-        Value::Unsigned(self.0 as u128)
+        Value::Unsigned(u128::from(self.0))
     }
 }
 

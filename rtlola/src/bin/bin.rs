@@ -127,7 +127,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                         "DELAY value `{}` is not a number.\nUsing no delay.",
                         parse_matches.value_of("DELAY").expect("We set a default value.")
                     );
-                    return 0;
+                    0
                 })
             } else {
                 0
@@ -161,7 +161,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             if parse_matches.is_present("OFFLINE") {
                 rtlola::start_evaluation_offline(ir, cfg);
             } else {
-                rtlola::start_evaluation_online(ir, cfg, None);
+                rtlola::start_evaluation_online(ir, cfg);
             }
 
             //            Ok(())
