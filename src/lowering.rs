@@ -304,7 +304,7 @@ impl<'a> Lowering<'a> {
     fn find_dependencies(&self, expr: &ast::Expression) -> Vec<ir::Dependency> {
         let f = |e: &ast::Expression| -> Vec<ir::Dependency> {
             match &e.kind {
-                ExpressionKind::Lookup(target, offset, None) => {
+                ExpressionKind::Lookup(_target, offset, None) => {
                     let sr = self.extract_target_from_lookup(&e.kind);
                     let offset = self.lower_offset(offset);
                     vec![ir::Dependency {
@@ -312,7 +312,7 @@ impl<'a> Lowering<'a> {
                         offsets: vec![offset],
                     }]
                 }
-                ExpressionKind::Ident(ident) => {
+                ExpressionKind::Ident(_ident) => {
                     let sr = self.get_ref_for_ident(e.id);
                     let offset = ir::Offset::PastDiscreteOffset(0);
                     vec![ir::Dependency {
