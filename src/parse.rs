@@ -31,9 +31,9 @@ lazy_static! {
             Operator::new(Add, Left) | Operator::new(Subtract, Left),
             Operator::new(Multiply, Left) | Operator::new(Divide, Left) | Operator::new(Mod, Left),
             Operator::new(Power, Right),
-            Operator::new(Dot, Left),
             Operator::new(Hold, Left),
             Operator::new(Default, Left),
+            Operator::new(Dot, Left),
         ])
     };
 }
