@@ -107,7 +107,7 @@ impl<'a> Lowering<'a> {
         let nid = input.id;
         let ast_req = self.get_memory(nid);
         let memory_bound = self.lower_storage_req(ast_req);
-        let reference = self.get_ref(nid);
+        let reference = self.get_ref_for_stream(nid);
         let layer = self.get_layer(nid);
 
         let trackings = self.collect_tracking_info(nid, None);
@@ -186,7 +186,7 @@ impl<'a> Lowering<'a> {
         let ast_req = self.get_memory(nid);
         let memory_bound = self.lower_storage_req(ast_req);
         let layer = self.get_layer(nid);
-        let reference = self.get_ref(nid);
+        let reference = self.get_ref_for_stream(nid);
         let time_driven = self.check_time_driven(ast_output.id, reference);
         let parametrized = self.check_parametrized(&ast_output, reference);
 
@@ -225,7 +225,7 @@ impl<'a> Lowering<'a> {
         trackee: NodeId,
         req: TrackingRequirement,
     ) -> ir::Tracking {
-        let trackee = self.get_ref(trackee);
+        let trackee = self.get_ref_for_stream(trackee);
         match req {
             TrackingRequirement::Unbounded => ir::Tracking::All(trackee),
             TrackingRequirement::Finite(num) => {
@@ -394,18 +394,10 @@ impl<'a> Lowering<'a> {
                 };
                 state.with_stmt(stmt)
             }
-            ExpressionKind::Ident(_) => match self.get_decl(expr.id) {
-                Declaration::In(inp) => {
-                    let lu_target_ref = self.get_ref(inp.id);
-                    self.lower_sync_lookup(state, lu_target_ref)
-                }
-                Declaration::Out(out) => {
-                    let lu_target_ref = self.get_ref(out.id);
-                    self.lower_sync_lookup(state, lu_target_ref)
-                }
-                Declaration::Param(_) | Declaration::Const(_) => unimplemented!(),
-                Declaration::Type(_) | Declaration::Func(_) => unreachable!("Bug in TypeChecker."),
-            },
+            ExpressionKind::Ident(_) => {
+                let sr = self.get_ref_for_ident(expr.id);
+                self.lower_sync_lookup(state, sr)
+            }
             ExpressionKind::Default(e, dft) => {
                 if let ExpressionKind::Lookup(_, _, _) = &e.kind {
                     self.lower_lookup_expression(e, dft, state, false)
@@ -877,8 +869,19 @@ impl<'a> Lowering<'a> {
         *self.mt.get(&nid).expect("Bug in MemoryTable.")
     }
 
-    fn get_ref(&self, nid: NodeId) -> StreamReference {
+    fn get_ref_for_stream(&self, nid: NodeId) -> StreamReference {
         *self.ref_lookup.get(&nid).expect("Bug in ReferenceLookup.")
+    }
+
+    fn get_ref_for_ident(&self, nid: NodeId) -> StreamReference {
+        match self.get_decl(nid) {
+            Declaration::In(inp) => self.get_ref_for_stream(inp.id),
+            Declaration::Out(out) => self.get_ref_for_stream(out.id),
+            Declaration::Param(_) | Declaration::Const(_) => unimplemented!(),
+            Declaration::Type(_) | Declaration::Func(_) => {
+                panic!("Types and functions are not streams.")
+            }
+        }
     }
 }
 
