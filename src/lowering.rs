@@ -198,7 +198,7 @@ impl<'a> Lowering<'a> {
         outgoing_dependencies.into_iter().for_each(|dep| {
             dep_map
                 .entry(dep.stream)
-                .or_insert(Vec::new())
+                .or_insert_with(Vec::new)
                 .extend_from_slice(dep.offsets.as_slice())
         });
 
