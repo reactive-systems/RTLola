@@ -140,10 +140,10 @@ impl Display for TimeSpec {
 
         if !value.is_zero() {
             if (&abs_value)
-                .rem(10u64.pow(9) * 60 * 60 * 24 * 365)
+                .rem(10_u64.pow(9) * 60 * 60 * 24 * 365)
                 .is_zero()
             {
-                let x: BigInt = abs_value / (10u64.pow(9) * 60 * 60 * 24 * 365);
+                let x: BigInt = abs_value / (10_u64.pow(9) * 60 * 60 * 24 * 365);
                 return write!(
                     f,
                     "{}{:?}a",
@@ -151,8 +151,8 @@ impl Display for TimeSpec {
                     x.to_u128().unwrap()
                 );
             }
-            if (&abs_value).rem(10u64.pow(9) * 60 * 60 * 24 * 7).is_zero() {
-                let x: BigInt = abs_value / (10u64.pow(9) * 60 * 60 * 24 * 7);
+            if (&abs_value).rem(10_u64.pow(9) * 60 * 60 * 24 * 7).is_zero() {
+                let x: BigInt = abs_value / (10_u64.pow(9) * 60 * 60 * 24 * 7);
                 return write!(
                     f,
                     "{}{:?}w",
@@ -160,8 +160,8 @@ impl Display for TimeSpec {
                     x.to_u128().unwrap()
                 );
             }
-            if (&abs_value).rem(10u64.pow(9) * 60 * 60 * 24).is_zero() {
-                let x: BigInt = abs_value / (10u64.pow(9) * 60 * 60 * 24);
+            if (&abs_value).rem(10_u64.pow(9) * 60 * 60 * 24).is_zero() {
+                let x: BigInt = abs_value / (10_u64.pow(9) * 60 * 60 * 24);
                 return write!(
                     f,
                     "{}{:?}d",
@@ -169,8 +169,8 @@ impl Display for TimeSpec {
                     x.to_u128().unwrap()
                 );
             }
-            if (&abs_value).rem(10u64.pow(9) * 60 * 60).is_zero() {
-                let x: BigInt = abs_value / (10u64.pow(9) * 60 * 60);
+            if (&abs_value).rem(10_u64.pow(9) * 60 * 60).is_zero() {
+                let x: BigInt = abs_value / (10_u64.pow(9) * 60 * 60);
                 return write!(
                     f,
                     "{}{:?}h",
@@ -178,8 +178,8 @@ impl Display for TimeSpec {
                     x.to_u128().unwrap()
                 );
             }
-            if (&abs_value).rem(10u64.pow(9) * 60).is_zero() {
-                let x: BigInt = abs_value / (10u64.pow(9) * 60);
+            if (&abs_value).rem(10_u64.pow(9) * 60).is_zero() {
+                let x: BigInt = abs_value / (10_u64.pow(9) * 60);
                 return write!(
                     f,
                     "{}{:?}min",
@@ -187,8 +187,8 @@ impl Display for TimeSpec {
                     x.to_u128().unwrap()
                 );
             }
-            if (&abs_value).rem(10u64.pow(9)).is_zero() {
-                let x: BigInt = abs_value / (10u64.pow(9));
+            if (&abs_value).rem(10_u64.pow(9)).is_zero() {
+                let x: BigInt = abs_value / (10_u64.pow(9));
                 return write!(
                     f,
                     "{}{:?}s",
@@ -196,8 +196,8 @@ impl Display for TimeSpec {
                     x.to_u128().unwrap()
                 );
             }
-            if (&abs_value).rem(10u64.pow(6)).is_zero() {
-                let x: BigInt = abs_value / (10u64.pow(6));
+            if (&abs_value).rem(10_u64.pow(6)).is_zero() {
+                let x: BigInt = abs_value / (10_u64.pow(6));
                 return write!(
                     f,
                     "{}{:?}ms",
@@ -205,8 +205,8 @@ impl Display for TimeSpec {
                     x.to_u128().unwrap()
                 );
             }
-            if (&abs_value).rem(10u64.pow(3)).is_zero() {
-                let x: BigInt = abs_value / (10u64.pow(3));
+            if (&abs_value).rem(10_u64.pow(3)).is_zero() {
+                let x: BigInt = abs_value / (10_u64.pow(3));
                 return write!(
                     f,
                     "{}{:?}μs",
@@ -320,10 +320,10 @@ impl Display for Expression {
 impl Display for StreamInstance {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         write!(f, "{}", self.stream_identifier)?;
-        if !self.arguments.is_empty() {
-            write_delim_list(f, &self.arguments, "(", ")", ", ")
-        } else {
+        if self.arguments.is_empty() {
             Ok(())
+        } else {
+            write_delim_list(f, &self.arguments, "(", ")", ", ")
         }
     }
 }

@@ -29,7 +29,7 @@ pub(crate) fn assign_ids(spec: &mut LolaSpec) {
         assert_eq!(i.id, NodeId::DUMMY, "Ids already assigned.");
         i.id = next_id();
         assign_ids_type(&mut i.ty, &mut next_id);
-        for param in i.params.iter_mut() {
+        for param in &mut i.params {
             assign_ids_parameter(param, &mut next_id);
         }
     }
@@ -38,7 +38,7 @@ pub(crate) fn assign_ids(spec: &mut LolaSpec) {
         o.id = next_id();
         assign_ids_type(&mut o.ty, &mut next_id);
 
-        for param in o.params.iter_mut() {
+        for param in &mut o.params {
             assign_ids_parameter(param, &mut next_id);
         }
         if let Some(ref mut ts) = o.template_spec {
@@ -135,7 +135,7 @@ where
         ExpressionKind::Lit(lit) => {
             assign_ids_literal(lit, next_id);
         }
-        ExpressionKind::Ident(_) => {}
+        ExpressionKind::Ident(_) | ExpressionKind::MissingExpression() => {}
         ExpressionKind::Default(lhs, rhs)
         | ExpressionKind::Hold(lhs, rhs)
         | ExpressionKind::Binary(_, lhs, rhs) => {
@@ -167,7 +167,6 @@ where
                 paren.id = next_id();
             }
         }
-        ExpressionKind::MissingExpression() => {}
         ExpressionKind::Tuple(exprs) => exprs.iter_mut().for_each(|e| assign_ids_expr(e, next_id)),
         ExpressionKind::Function(_, types, args) => {
             types.iter_mut().for_each(|ty| assign_ids_type(ty, next_id));

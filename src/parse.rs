@@ -101,9 +101,9 @@ fn parse_import(_spec: &mut LolaSpec, pair: Pair<Rule>) -> Import {
  * Transforms a `Rule::ConstantStrean` into `Constant` AST node.
  * Panics if input is not `Rule::ConstantStrean`.
  * The constant rule consists of the following tokens:
- * - Rule::Ident
- * - Rule::Type
- * - Rule::Literal
+ * - `Rule::Ident`
+ * - `Rule::Type`
+ * - `Rule::Literal`
  */
 fn parse_constant(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> Constant {
     assert_eq!(pair.as_rule(), Rule::ConstantStream);
@@ -128,9 +128,9 @@ fn parse_constant(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> Constant {
  * Transforms a `Rule::InputStrean` into `Input` AST node.
  * Panics if input is not `Rule::InputStrean`.
  * The input rule consists of non-empty sequences of following tokens:
- * - Rule::Ident
- * - (Rule::ParamList)?
- * - Rule::Type
+ * - `Rule::Ident`
+ * - (`Rule::ParamList`)?
+ * - `Rule::Type`
  */
 fn parse_inputs(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> Vec<Input> {
     assert_eq!(pair.as_rule(), Rule::InputStream);
@@ -167,9 +167,9 @@ fn parse_inputs(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> Vec<Input> {
  * Transforms a `Rule::OutputStream` into `Output` AST node.
  * Panics if input is not `Rule::OutputStream`.
  * The output rule consists of the following tokens:
- * - Rule::Ident
- * - Rule::Type
- * - Rule::Expr
+ * - `Rule::Ident`
+ * - `Rule::Type`
+ * - `Rule::Expr`
  */
 fn parse_output(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> Output {
     assert_eq!(pair.as_rule(), Rule::OutputStream);
@@ -282,32 +282,32 @@ fn parse_template_spec(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> TemplateSpe
 
 pub(crate) fn build_time_spec(expr: Expression, unit_str: &str, span: Span) -> TimeSpec {
     let (factor, invert): (BigRational, bool) = match unit_str {
-        "ns" => (BigRational::from_u64(1u64).unwrap(), false),
-        "μs" | "us" => (BigRational::from_u64(10u64.pow(3)).unwrap(), false),
-        "ms" => (BigRational::from_u64(10u64.pow(6)).unwrap(), false),
-        "s" => (BigRational::from_u64(10u64.pow(9)).unwrap(), false),
-        "min" => (BigRational::from_u64(10u64.pow(9) * 60).unwrap(), false),
+        "ns" => (BigRational::from_u64(1_u64).unwrap(), false),
+        "μs" | "us" => (BigRational::from_u64(10_u64.pow(3)).unwrap(), false),
+        "ms" => (BigRational::from_u64(10_u64.pow(6)).unwrap(), false),
+        "s" => (BigRational::from_u64(10_u64.pow(9)).unwrap(), false),
+        "min" => (BigRational::from_u64(10_u64.pow(9) * 60).unwrap(), false),
         "h" => (
-            BigRational::from_u64(10u64.pow(9) * 60 * 60).unwrap(),
+            BigRational::from_u64(10_u64.pow(9) * 60 * 60).unwrap(),
             false,
         ),
         "d" => (
-            BigRational::from_u64(10u64.pow(9) * 60 * 60 * 24).unwrap(),
+            BigRational::from_u64(10_u64.pow(9) * 60 * 60 * 24).unwrap(),
             false,
         ),
         "w" => (
-            BigRational::from_u64(10u64.pow(9) * 60 * 60 * 24 * 7).unwrap(),
+            BigRational::from_u64(10_u64.pow(9) * 60 * 60 * 24 * 7).unwrap(),
             false,
         ),
         "a" => (
-            BigRational::from_u64(10u64.pow(9) * 60 * 60 * 24 * 365).unwrap(),
+            BigRational::from_u64(10_u64.pow(9) * 60 * 60 * 24 * 365).unwrap(),
             false,
         ),
-        "μHz" | "uHz" => (BigRational::from_u64(10u64.pow(15)).unwrap(), true),
-        "mHz" => (BigRational::from_u64(10u64.pow(12)).unwrap(), true),
-        "Hz" => (BigRational::from_u64(10u64.pow(9)).unwrap(), true),
-        "kHz" => (BigRational::from_u64(10u64.pow(6)).unwrap(), true),
-        "MHz" => (BigRational::from_u64(10u64.pow(3)).unwrap(), true),
+        "μHz" | "uHz" => (BigRational::from_u64(10_u64.pow(15)).unwrap(), true),
+        "mHz" => (BigRational::from_u64(10_u64.pow(12)).unwrap(), true),
+        "Hz" => (BigRational::from_u64(10_u64.pow(9)).unwrap(), true),
+        "kHz" => (BigRational::from_u64(10_u64.pow(6)).unwrap(), true),
+        "MHz" => (BigRational::from_u64(10_u64.pow(3)).unwrap(), true),
         "GHz" => (BigRational::from_u64(1).unwrap(), true),
         _ => unreachable!(),
     };
@@ -496,9 +496,9 @@ fn parse_inv_spec(spec: &mut LolaSpec, inv_pair: Pair<'_, Rule>) -> InvokeSpec {
  * Transforms a `Rule::Trigger` into `Trigger` AST node.
  * Panics if input is not `Rule::Trigger`.
  * The output rule consists of the following tokens:
- * - (Rule::Ident)?
- * - Rule::Expr
- * - (Rule::StringLiteral)?
+ * - (`Rule::Ident`)?
+ * - `Rule::Expr`
+ * - (`Rule::StringLiteral`)?
  */
 fn parse_trigger(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> Trigger {
     assert_eq!(pair.as_rule(), Rule::Trigger);
@@ -1066,7 +1066,7 @@ fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>, span: Span)
                         ExpressionKind::Lit(l) => {
                             let ident = match l.kind {
                                 LitKind::Int(i) => {
-                                    assert!(i >= 0);
+                                    assert!(i >= 0); // TODO check this and otherwise give an error
                                     Ident::new(format!("{}", i), l.span)
                                 }
                                 _ => {
@@ -1116,7 +1116,7 @@ pub struct NodeId(u32);
 
 impl NodeId {
     pub fn new(x: usize) -> NodeId {
-        assert!(x < (std::u32::MAX as usize));
+        assert!(x < (u32::max_value() as usize));
         NodeId(x as u32)
     }
 
@@ -1151,8 +1151,8 @@ impl Span {
     pub fn unknown() -> Span {
         use std::usize;
         Span {
-            start: usize::MAX,
-            end: usize::MAX,
+            start: usize::max_value(),
+            end: usize::max_value(),
         }
     }
 }

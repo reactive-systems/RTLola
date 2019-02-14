@@ -195,7 +195,7 @@ fn get_byte_size(value_ty: &ValueTy) -> MemoryBound {
         //ValueTy::Adt(AdtDef),
         ValueTy::String => MemoryBound::Unbounded,
         ValueTy::Tuple(elements) => {
-            let mut accu = 0u128;
+            let mut accu = 0_u128;
             for element in elements.iter().map(get_byte_size) {
                 match element {
                     MemoryBound::Bounded(i) => accu += i,

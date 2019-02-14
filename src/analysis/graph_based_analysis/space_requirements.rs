@@ -7,7 +7,7 @@ use crate::analysis::graph_based_analysis::Offset::Time;
 use crate::analysis::graph_based_analysis::StorageRequirement;
 use crate::analysis::graph_based_analysis::StreamDependency::Access;
 use crate::analysis::graph_based_analysis::StreamDependency::InvokeByName;
-use crate::analysis::graph_based_analysis::StreamNode::*;
+use crate::analysis::graph_based_analysis::StreamNode;
 use crate::analysis::graph_based_analysis::TimeOffset;
 use crate::analysis::graph_based_analysis::TrackingRequirement;
 use crate::analysis::typing::TypeTable;
@@ -83,7 +83,7 @@ pub(crate) fn determine_buffer_size(
                 .node_weight(node_index)
                 .expect("We iterate over all node indices");
             match node_weight {
-                ClassicInput(id) | ParameterizedInput(id) => {
+                StreamNode::ClassicInput(id) | StreamNode::ParameterizedInput(id) => {
                     storage_requirements.insert(*id, StorageRequirement::Unbounded);
                 }
                 _ => {}

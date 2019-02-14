@@ -1,6 +1,6 @@
 //! This module contains the basic definition of types
 //!
-//! It is inspired by https://doc.rust-lang.org/nightly/nightly-rustc/rustc/ty/index.html
+//! It is inspired by <https://doc.rust-lang.org/nightly/nightly-rustc/rustc/ty/index.html>
 
 use crate::analysis::typing::ValueVar;
 use lazy_static::lazy_static;
@@ -139,8 +139,7 @@ impl ValueTy {
         use self::ValueTy::*;
         match constraint {
             Unconstrained => true,
-            Comparable => self.is_primitive(),
-            Equatable => self.is_primitive(),
+            Comparable | Equatable => self.is_primitive(),
             Numeric => self.satisfies(&Integer) || self.satisfies(&FloatingPoint),
             FloatingPoint => match self {
                 Float(_) => true,
@@ -182,8 +181,7 @@ impl ValueTy {
         match self {
             &ValueTy::Param(id, _) => ValueTy::Infer(infer_vars[id as usize]),
             ValueTy::Option(t) => ValueTy::Option(t.replace_params(infer_vars).into()),
-            ValueTy::Infer(_) => self.clone(),
-            ValueTy::Constr(_) => self.clone(),
+            ValueTy::Infer(_) | ValueTy::Constr(_) => self.clone(),
             _ if self.is_primitive() => self.clone(),
             _ => unreachable!("replace_param for {}", self),
         }
@@ -295,17 +293,12 @@ impl TypeConstraint {
         }
         assert!(self < other);
         match other {
-            Unconstrained => Some(self),
-            Comparable => Some(self),
-            Equatable => Some(self),
-            Numeric => Some(self),
+            Unconstrained | Comparable | Equatable | Numeric => Some(self),
             Integer => match self {
                 FloatingPoint => None,
                 _ => Some(self),
             },
-            FloatingPoint => None,
-            SignedInteger => None,
-            UnsignedInteger => None,
+            FloatingPoint | SignedInteger | UnsignedInteger => None,
         }
     }
 }

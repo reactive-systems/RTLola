@@ -3,7 +3,7 @@ use crate::analysis::graph_based_analysis::DependencyGraph;
 use crate::analysis::graph_based_analysis::NIx;
 use crate::analysis::graph_based_analysis::Offset;
 use crate::analysis::graph_based_analysis::StreamDependency::Access;
-use crate::analysis::graph_based_analysis::StreamNode::*;
+use crate::analysis::graph_based_analysis::StreamNode;
 use crate::analysis::graph_based_analysis::TimeOffset;
 use crate::parse::NodeId;
 use petgraph::Direction;
@@ -11,7 +11,7 @@ use std::collections::HashSet;
 
 pub(crate) type FutureDependentStreams = HashSet<NodeId>;
 
-/// Computes the set of streams and triggers (represented by their NodeId)
+/// Computes the set of streams and triggers (represented by their `NodeId`)
 /// that (transitively) depend on future values.
 pub(crate) fn future_dependent_stream(
     dependency_graph: &DependencyGraph,

@@ -253,7 +253,7 @@ pub(crate) fn determine_worst_case_memory_consumption<'a>(
                 let tracking_requirement = tracking_requirements.get(&output.id)
                     .expect("We should have determined the tracking requirements for all streams that did not get pruned!");
                 let mut it = tracking_requirement.iter();
-                let mut tracking_per_instance: u128 = 0u128;
+                let mut tracking_per_instance: u128 = 0_u128;
                 while let Some((node_id, tracking)) = it.next() {
                     let value_type = type_table.get_value_type(*node_id);
                     let value_type_size = if let MemoryBound::Bounded(i) = get_byte_size(value_type)
@@ -300,7 +300,7 @@ pub(crate) fn determine_worst_case_memory_consumption<'a>(
         // tracking
         if let Some(tracking_requirement) = tracking_requirements.get(&trigger.id) {
             let mut it = tracking_requirement.iter();
-            let mut tracking_per_instance: u128 = 0u128;
+            let mut tracking_per_instance: u128 = 0_u128;
             while let Some((node_id, tracking)) = it.next() {
                 let value_type = type_table.get_value_type(*node_id);
                 let value_type_size = if let MemoryBound::Bounded(i) = get_byte_size(value_type) {

@@ -336,9 +336,7 @@ impl<'a> Lowering<'a> {
         match req {
             TrackingRequirement::Unbounded => ir::Tracking::All(trackee),
             TrackingRequirement::Finite(num) => {
-                let rate = tracker
-                    .map(|tds| tds.extend_rate)
-                    .unwrap_or(Duration::from_secs(0));
+                let rate = tracker.map_or(Duration::from_secs(0), |tds| tds.extend_rate);
                 ir::Tracking::Bounded {
                     trackee,
                     num: u128::from(num),
@@ -417,8 +415,7 @@ impl<'a> Lowering<'a> {
             if temp_spec
                 .ext
                 .as_ref()
-                .map(|e| e.target.is_none() && e.freq.is_some())
-                .unwrap_or(false)
+                .map_or(false, |e| e.target.is_none() && e.freq.is_some())
                 && temp_spec.inv.is_none()
                 && temp_spec.ter.is_none()
             {
@@ -531,8 +528,8 @@ impl<'a> Lowering<'a> {
                 unimplemented!("Assert offset is 0, transform into sync access.")
             }
             ExpressionKind::Binary(ast_op, lhs, rhs) => {
-                let req_arg_types = self.tt.get_func_arg_types(expr.id);
                 use crate::ast::BinOp::*;
+                let req_arg_types = self.tt.get_func_arg_types(expr.id);
                 let req_arg_type = if req_arg_types.is_empty() {
                     match ast_op {
                         Add | Sub | Mul | Div | Rem | Pow | Eq | Lt | Le | Ne | Ge | Gt => {

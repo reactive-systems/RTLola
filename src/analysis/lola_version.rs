@@ -16,7 +16,7 @@ struct VersionTracker {
 
 impl VersionTracker {
     fn from_stream(is_not_parameterized: Option<WhyNot>, is_timed: Option<WhyNot>) -> Self {
-        VersionTracker {
+        Self {
             cannot_be_classic: is_not_parameterized.or_else(|| is_timed.clone()),
             cannot_be_lola2: is_timed.clone(),
         }
@@ -29,8 +29,7 @@ fn analyse_expression(
     toplevel_in_trigger: bool,
 ) {
     match &expr.kind {
-        ExpressionKind::Lit(_) => {}
-        ExpressionKind::Ident(_) => {}
+        ExpressionKind::Lit(_) | ExpressionKind::Ident(_) => {}
         ExpressionKind::Default(target, default) => {
             analyse_expression(version_tracker, &*target, false);
             analyse_expression(version_tracker, &*default, false);

@@ -1,10 +1,10 @@
 //! Implementation of the Hindley-Milner type inference through unification
 //!
 //! Relevant references:
-//! * Introduction to Hindley-Milner type inference https://eli.thegreenplace.net/2018/type-inference/
-//! * Unification algorithm https://eli.thegreenplace.net/2018/unification/
-//! * Unification in Rust http://smallcultfollowing.com/babysteps/blog/2017/03/25/unification-in-chalk-part-1/
-//! * Ena (union-find package) https://crates.io/crates/ena
+//! * [Introduction to Hindley-Milner type inference](https://eli.thegreenplace.net/2018/type-inference/)
+//! * [Unification algorithm](https://eli.thegreenplace.net/2018/unification/)
+//! * [Unification in Rust](http://smallcultfollowing.com/babysteps/blog/2017/03/25/unification-in-chalk-part-1/)
+//! * [Ena (union-find package)](https://crates.io/crates/ena)
 
 use super::naming::{Declaration, DeclarationTable};
 use crate::ast::LolaSpec;
@@ -432,6 +432,7 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
         target: Option<ValueTy>,
         stream_ty: StreamVarOrTy,
     ) -> Result<(), ()> {
+        use crate::ast::ExpressionKind::*;
         trace!("infer expression {}", expr);
 
         let var = self.new_value_var(expr.id);
@@ -453,7 +454,6 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
                 .expect("unification cannot fail as `var` is fresh"),
         }
 
-        use crate::ast::ExpressionKind::*;
         match &expr.kind {
             Lit(l) => {
                 // generate constraint from literal
@@ -782,10 +782,10 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
                     )?;
                     params.push(target);
                 }
-                let target = if !params.is_empty() {
-                    StreamTy::new_parametric(params, TimingInfo::Event)
-                } else {
+                let target = if params.is_empty() {
                     StreamTy::new(TimingInfo::Event)
+                } else {
+                    StreamTy::new_parametric(params, TimingInfo::Event)
                 };
 
                 // stream type
@@ -1263,7 +1263,7 @@ impl UnifiableTy for ValueTy {
     /// Checks recursively if the `right` type can be transformed to match `self`.
     fn coerces_with<U: Unifier<Var = Self::V, Ty = Self>>(
         &self,
-        _unifier: &mut U,
+        unifier: &mut U,
         right: &ValueTy,
     ) -> bool {
         debug!("coerce {} {}", self, right);
@@ -1271,12 +1271,12 @@ impl UnifiableTy for ValueTy {
         // Rule 1: Any type `T` can be coerced into `Option<T>`
         if let ValueTy::Option(ty) = self {
             // Take snapshot before checking equality to potentially rollback the side effects.
-            let ss = _unifier.snapshot();
-            if ty.equal_to(_unifier, right).is_some() {
-                _unifier.commit(ss);
+            let ss = unifier.snapshot();
+            if ty.equal_to(unifier, right).is_some() {
+                unifier.commit(ss);
                 return true;
             } else {
-                _unifier.rollback_to(ss);
+                unifier.rollback_to(ss);
             }
         }
 
@@ -1319,15 +1319,7 @@ impl UnifiableTy for ValueTy {
                     }
                 }
             }
-            (&ValueTy::Infer(var), ty) => {
-                // try to unify
-                if unifier.unify_var_ty(var, ty.clone()).is_ok() {
-                    Some(ValueTy::Infer(var))
-                } else {
-                    None
-                }
-            }
-            (ty, &ValueTy::Infer(var)) => {
+            (&ValueTy::Infer(var), ty) | (ty, &ValueTy::Infer(var)) => {
                 // try to unify
                 if unifier.unify_var_ty(var, ty.clone()).is_ok() {
                     Some(ValueTy::Infer(var))

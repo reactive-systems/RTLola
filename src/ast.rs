@@ -243,7 +243,7 @@ pub enum TypeKind {
 
 /// An expression
 ///
-/// inspired by https://doc.rust-lang.org/nightly/nightly-rustc/src/syntax/ast.rs.html
+/// inspired by <https://doc.rust-lang.org/nightly/nightly-rustc/src/syntax/ast.rs.html>
 #[derive(Debug, Clone)]
 pub struct Expression {
     pub(crate) kind: ExpressionKind,

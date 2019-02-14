@@ -1,6 +1,5 @@
 use super::{
-    DependencyGraph, EIx, Location, NIx, Offset, StreamDependency, StreamNode, StreamNode::*,
-    TimeOffset,
+    DependencyGraph, EIx, Location, NIx, Offset, StreamDependency, StreamNode, TimeOffset,
 };
 use crate::analysis::lola_version::LolaVersionTable;
 use crate::analysis::naming::{Declaration, DeclarationTable};
@@ -35,7 +34,7 @@ struct CycleTracker {
 
 impl Default for CycleTracker {
     fn default() -> Self {
-        CycleTracker {
+        Self {
             positive: Vec::new(),
             negative: Vec::new(),
         }
@@ -87,7 +86,7 @@ impl<'a> CycleFinder<'a> {
 
     fn get_elementary_cycles(mut self) -> Vec<Vec<NIx>> {
         let strongly_connected_components: Vec<Vec<NIx>> = tarjan_scc(self.dependency_graph);
-        for component in strongly_connected_components.iter() {
+        for component in &strongly_connected_components {
             let starting_node: NIx = *component
                 .iter()
                 .min()
@@ -132,7 +131,7 @@ impl<'a> CycleFinder<'a> {
         neighbors.sort();
         neighbors.dedup();
 
-        for w in neighbors.iter() {
+        for w in &neighbors {
             //check for self-loops -- we will add them later.
             if *w != node && nodes_in_scc.contains(w) {
                 if *w == starting_node {
@@ -208,11 +207,12 @@ impl<'a> DependencyAnalyser<'a> {
             let id = trigger.id;
             match self.version_table[&id] {
                 LanguageSpec::RTLola => {
-                    let normal_time_index = self.dependency_graph.add_node(RTTrigger(id));
+                    let normal_time_index =
+                        self.dependency_graph.add_node(StreamNode::RTTrigger(id));
                     mapping.insert(id, StreamMappingInfo { normal_time_index });
                 }
                 LanguageSpec::Classic | LanguageSpec::Lola2 => {
-                    let normal_time_index = self.dependency_graph.add_node(Trigger(id));
+                    let normal_time_index = self.dependency_graph.add_node(StreamNode::Trigger(id));
                     mapping.insert(id, StreamMappingInfo { normal_time_index });
                 }
             }
@@ -226,15 +226,20 @@ impl<'a> DependencyAnalyser<'a> {
             self.stream_names.insert(id, output.name.name.clone());
             match self.version_table[&id] {
                 LanguageSpec::Classic => {
-                    let normal_time_index = self.dependency_graph.add_node(ClassicOutput(id));
+                    let normal_time_index = self
+                        .dependency_graph
+                        .add_node(StreamNode::ClassicOutput(id));
                     mapping.insert(id, StreamMappingInfo { normal_time_index });
                 }
                 LanguageSpec::Lola2 => {
-                    let normal_time_index = self.dependency_graph.add_node(ParameterizedOutput(id));
+                    let normal_time_index = self
+                        .dependency_graph
+                        .add_node(StreamNode::ParameterizedOutput(id));
                     mapping.insert(id, StreamMappingInfo { normal_time_index });
                 }
                 LanguageSpec::RTLola => {
-                    let normal_time_index = self.dependency_graph.add_node(RTOutput(id));
+                    let normal_time_index =
+                        self.dependency_graph.add_node(StreamNode::RTOutput(id));
                     mapping.insert(id, StreamMappingInfo { normal_time_index });
                 }
             }
@@ -248,11 +253,14 @@ impl<'a> DependencyAnalyser<'a> {
             self.stream_names.insert(id, input.name.name.clone());
             match self.version_table[&id] {
                 LanguageSpec::Classic => {
-                    let normal_time_index = self.dependency_graph.add_node(ClassicInput(id));
+                    let normal_time_index =
+                        self.dependency_graph.add_node(StreamNode::ClassicInput(id));
                     mapping.insert(id, StreamMappingInfo { normal_time_index });
                 }
                 LanguageSpec::Lola2 => {
-                    let normal_time_index = self.dependency_graph.add_node(ParameterizedInput(id));
+                    let normal_time_index = self
+                        .dependency_graph
+                        .add_node(StreamNode::ParameterizedInput(id));
                     mapping.insert(id, StreamMappingInfo { normal_time_index });
                 }
                 LanguageSpec::RTLola => unreachable!(),
@@ -418,8 +426,7 @@ impl<'a> DependencyAnalyser<'a> {
                 .expect("We do not modify the graph so every EdgeIndex should still be valid.")
             {
                 StreamDependency::Access(_, offset, _) => match offset {
-                    Offset::Time(_, ..) => true,
-                    Offset::SlidingWindow => true,
+                    Offset::Time(_, ..) | Offset::SlidingWindow => true,
                     Offset::Discrete(_) => false,
                 },
                 _ => false,
@@ -645,19 +652,14 @@ impl<'a> DependencyAnalyser<'a> {
             let weight = self.get_cycle_weight(&cyclic_path);
             if let Some(weight) = weight {
                 match weight {
-                    CycleWeight::Negative => self.add_path_index_for_all_nodes(
-                        &mut cycles_per_stream,
-                        path_index,
-                        cyclic_path,
-                        weight,
-                    ),
+                    CycleWeight::Negative | CycleWeight::Positive => self
+                        .add_path_index_for_all_nodes(
+                            &mut cycles_per_stream,
+                            path_index,
+                            cyclic_path,
+                            weight,
+                        ),
                     CycleWeight::Zero => self.build_zero_weight_cycle_error(cyclic_path),
-                    CycleWeight::Positive => self.add_path_index_for_all_nodes(
-                        &mut cycles_per_stream,
-                        path_index,
-                        cyclic_path,
-                        weight,
-                    ),
                 }
             }
         }

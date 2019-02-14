@@ -200,11 +200,6 @@ impl StderrEmitter {
             let mut prev_line_number = None;
 
             for (snippet, label, primary) in snippets {
-                assert_eq!(
-                    path, snippet.path,
-                    "assume snippets to be in same source file, use `SubDiagnostic` if not"
-                );
-
                 fn render_source_line(snippet: &CodeLine) -> ColoredLine {
                     let mut rendered_line = ColoredLine::new();
                     rendered_line.push(
@@ -214,6 +209,11 @@ impl StderrEmitter {
                     rendered_line.push(&snippet.line, ColorSpec::new());
                     rendered_line
                 }
+
+                assert_eq!(
+                    path, snippet.path,
+                    "assume snippets to be in same source file, use `SubDiagnostic` if not"
+                );
 
                 // source code snippet
                 if prev_line_number.is_none() {

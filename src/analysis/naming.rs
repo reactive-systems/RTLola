@@ -1,6 +1,6 @@
 //! This module provides naming analysis for a given Lola AST.
 
-use crate::ast::Offset::*;
+use crate::ast::Offset;
 use crate::ast::*;
 use crate::parse::{Ident, NodeId, Span};
 use crate::reporting::{Handler, LabeledSpan};
@@ -128,8 +128,7 @@ impl<'a, 'b> NamingAnalysis<'a, 'b> {
             TypeKind::Tuple(ref elements) => elements.iter().for_each(|ty| {
                 self.check_type(ty);
             }),
-            TypeKind::Duration(_) => {}
-            TypeKind::Inferred => {}
+            TypeKind::Duration(_) | TypeKind::Inferred => {}
         }
     }
 
@@ -242,7 +241,7 @@ impl<'a, 'b> NamingAnalysis<'a, 'b> {
                     builder.emit();
                 }
                 let mut found = false;
-                for previous_entry in trigger_names.iter() {
+                for previous_entry in &trigger_names {
                     match previous_entry {
                         (ref name, ref previous_trigger) => {
                             if ident.name == **name {
@@ -316,7 +315,9 @@ impl<'a, 'b> NamingAnalysis<'a, 'b> {
             .declarations
             .get_decl_for(&instance.stream_identifier.name)
         {
-            if !decl.is_lookup_target() {
+            if decl.is_lookup_target() {
+                self.result.insert(instance.id, decl);
+            } else {
                 // not a stream
                 let mut builder = self.handler.build_error_with_span(
                     &format!(
@@ -333,8 +334,6 @@ impl<'a, 'b> NamingAnalysis<'a, 'b> {
                     );
                 }
                 builder.emit();
-            } else {
-                self.result.insert(instance.id, decl);
             }
         } else {
             // it does not exist
@@ -351,8 +350,8 @@ impl<'a, 'b> NamingAnalysis<'a, 'b> {
 
     fn check_offset(&mut self, offset: &'a Offset) {
         match offset {
-            DiscreteOffset(off) => self.check_expression(off),
-            RealTimeOffset(_) => {}
+            Offset::DiscreteOffset(off) => self.check_expression(off),
+            Offset::RealTimeOffset(_) => {}
         }
     }
 
@@ -370,9 +369,9 @@ impl<'a, 'b> NamingAnalysis<'a, 'b> {
     }
 
     fn check_expression(&mut self, expression: &'a Expression) {
-        assert!(expression.id != NodeId::DUMMY);
-
         use self::ExpressionKind::*;
+        assert_ne!(expression.id, NodeId::DUMMY);
+
         match &expression.kind {
             Ident(ident) => {
                 self.check_ident(expression, ident);
@@ -387,7 +386,7 @@ impl<'a, 'b> NamingAnalysis<'a, 'b> {
                 self.check_expression(if_case);
                 self.check_expression(else_case);
             }
-            ParenthesizedExpression(_, expr, _) | Unary(_, expr) => {
+            ParenthesizedExpression(_, expr, _) | Unary(_, expr) | Field(expr, _) => {
                 self.check_expression(expr);
             }
             Tuple(exprs) => {
@@ -405,9 +404,6 @@ impl<'a, 'b> NamingAnalysis<'a, 'b> {
             Lookup(instance, offset, _) => {
                 self.check_stream_instance(instance);
                 self.check_offset(offset);
-            }
-            Field(expr, _) => {
-                self.check_expression(expr);
             }
             Method(expr, _, types, args) => {
                 self.check_expression(expr);
