@@ -10,10 +10,8 @@ use crate::reporting::{DiagnosticBuilder, Handler, LabeledSpan, Level};
 use num::Signed;
 use petgraph::algo::tarjan_scc;
 use petgraph::graph::edge_index;
-use petgraph::graph::node_index;
 use petgraph::graph::NodeIndex;
 use petgraph::visit::EdgeRef;
-use petgraph::visit::NodeIndexable;
 use std::collections::HashMap;
 
 #[derive(Debug, Copy, Clone)]
@@ -88,15 +86,7 @@ impl<'a> CycleFinder<'a> {
     }
 
     fn get_elementary_cycles(mut self) -> Vec<Vec<NIx>> {
-        let strongly_connected_components: Vec<Vec<NIx>> = tarjan_scc(self.dependency_graph)
-            .iter()
-            .map(|component| {
-                component
-                    .iter()
-                    .map(|id| node_index(self.dependency_graph.to_index(*id)))
-                    .collect()
-            })
-            .collect();
+        let strongly_connected_components: Vec<Vec<NIx>> = tarjan_scc(self.dependency_graph);
         for component in strongly_connected_components.iter() {
             let starting_node: NIx = *component
                 .iter()
