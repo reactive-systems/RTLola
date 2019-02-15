@@ -259,7 +259,7 @@ impl<'a> Lowering<'a> {
         match &expr.kind {
             ExpressionKind::Lit(_) => pre.chain(post()).collect(),
             ExpressionKind::Ident(_) => pre.chain(post()).collect(),
-            ExpressionKind::Default(e, dft) => pre
+            ExpressionKind::Default(e, dft) | ExpressionKind::Hold(e, dft) => pre
                 .chain(recursion(e))
                 .chain(recursion(dft))
                 .chain(post())
@@ -297,7 +297,6 @@ impl<'a> Lowering<'a> {
             }
             ExpressionKind::Field(e, _) => pre.chain(recursion(e)).chain(post()).collect(),
             ExpressionKind::Method(_, _, _, _) => unimplemented!(),
-            _ => unimplemented!(),
         }
     }
 
