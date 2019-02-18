@@ -8,13 +8,16 @@
 pub(crate) mod graph_based_analysis;
 pub(crate) mod id_assignment;
 mod lola_version;
+mod missing_expression_check;
 pub(crate) mod naming;
+mod parenthesis_check;
 pub(crate) mod typing;
 
+use self::lola_version::LolaVersionAnalysis;
 use self::naming::NamingAnalysis;
+use self::parenthesis_check::warn_about_missing_parenthesis;
 use self::typing::TypeAnalysis;
 use super::ast::LolaSpec;
-use crate::analysis::lola_version::LolaVersionAnalysis;
 use crate::reporting::Handler;
 
 pub trait AnalysisError<'a>: std::fmt::Debug {}
@@ -51,6 +54,7 @@ impl<'a> AnalysisResult<'a> {
 }
 
 pub(crate) fn analyze<'a, 'b>(spec: &'a LolaSpec, handler: &'b Handler) -> AnalysisResult<'a> {
+    warn_about_missing_parenthesis(spec, handler);
     let mut result = AnalysisResult::new();
 
     let mut naming_analyzer = NamingAnalysis::new(&handler);
@@ -63,6 +67,13 @@ pub(crate) fn analyze<'a, 'b>(spec: &'a LolaSpec, handler: &'b Handler) -> Analy
         result.declaration_table = Some(decl_table);
     }
 
+    // TODO move this check
+    let some_expression_is_missing =
+        missing_expression_check::any_expression_missing(spec, handler);
+    if some_expression_is_missing {
+        handler.error("aborting due to previous error");
+        return AnalysisResult::new();
+    }
     let mut type_analysis = TypeAnalysis::new(
         &handler,
         result
@@ -115,6 +126,5 @@ pub(crate) fn analyze<'a, 'b>(spec: &'a LolaSpec, handler: &'b Handler) -> Analy
     } else {
         result.graph_analysis_result = graph_result;
     }
-
     result
 }

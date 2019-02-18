@@ -1040,7 +1040,11 @@ fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>, span: Span)
                 Rule::IntegerLiteral => {
                     let span = span.into();
                     Expression::new(ExpressionKind::Lit(Literal::new_int(pair.as_str().parse().unwrap(), span)), span)
-                }
+                },
+                Rule::MissingExpression => {
+                    let span = span.into();
+                    Expression::new(ExpressionKind::MissingExpression, span)
+                },
                 _ => panic!("Unexpected rule when parsing expression ast: {:?}", pair.as_rule()),
             }
         },
@@ -1246,7 +1250,7 @@ impl SourceMapper {
                         }
                     }
                     let (start, end) = (
-                        start.expect("start value cannot be empty"),
+                        start.unwrap_or(i), // we might hit the end of the line/EOI
                         end.unwrap_or(i + 1),
                     );
 

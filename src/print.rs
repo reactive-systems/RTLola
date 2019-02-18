@@ -296,7 +296,7 @@ impl Display for Expression {
                 expr,
                 if right.is_some() { ")" } else { "" }
             ),
-            ExpressionKind::MissingExpression() => Ok(()),
+            ExpressionKind::MissingExpression => Ok(()),
             ExpressionKind::Tuple(exprs) => write_delim_list(f, exprs, "(", ")", ", "),
             ExpressionKind::Function(kind, types, args) => {
                 write!(f, "{}", kind)?;

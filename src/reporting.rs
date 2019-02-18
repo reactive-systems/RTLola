@@ -63,6 +63,16 @@ impl Handler {
         });
     }
 
+    pub(crate) fn warn_with_span(&self, message: &str, span: LabeledSpan) {
+        self.emit(&Diagnostic {
+            level: Warning,
+            message: message.to_owned(),
+            span: vec![span],
+            children: vec![],
+            sort_spans: true,
+        });
+    }
+
     pub(crate) fn error(&self, message: &str) {
         self.emit(&Diagnostic {
             level: Error,

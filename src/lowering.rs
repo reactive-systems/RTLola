@@ -286,7 +286,7 @@ impl<'a> Lowering<'a> {
                 .chain(Lowering::collect_expression(e, f, pre_order))
                 .chain(post())
                 .collect(),
-            ExpressionKind::MissingExpression() => panic!(), // TODO: Eradicate in preceding step.
+            ExpressionKind::MissingExpression => panic!(), // TODO: Eradicate in preceding step.
             ExpressionKind::Tuple(exprs) => {
                 let elems = exprs.iter().flat_map(|a| recursion(a));
                 pre.chain(elems).chain(post()).collect()
@@ -642,7 +642,7 @@ impl<'a> Lowering<'a> {
                 state.with_stmt(ite_stmt)
             }
             ExpressionKind::ParenthesizedExpression(_, e, _) => self.lower_subexpression(e, state),
-            ExpressionKind::MissingExpression() => {
+            ExpressionKind::MissingExpression => {
                 panic!("How wasn't this caught in a preceding step?!")
             }
             ExpressionKind::Tuple(exprs) => {

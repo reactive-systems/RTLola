@@ -70,7 +70,7 @@ fn analyse_expression(
         ExpressionKind::ParenthesizedExpression(_, nested, _) => {
             analyse_expression(version_tracker, &*nested, false);
         }
-        ExpressionKind::MissingExpression() => {}
+        ExpressionKind::MissingExpression => {}
         ExpressionKind::Tuple(nested_exprs) => {
             nested_exprs.iter().for_each(|nested| {
                 analyse_expression(version_tracker, &*nested, false);

@@ -135,7 +135,7 @@ where
         ExpressionKind::Lit(lit) => {
             assign_ids_literal(lit, next_id);
         }
-        ExpressionKind::Ident(_) | ExpressionKind::MissingExpression() => {}
+        ExpressionKind::Ident(_) | ExpressionKind::MissingExpression => {}
         ExpressionKind::Default(lhs, rhs)
         | ExpressionKind::Hold(lhs, rhs)
         | ExpressionKind::Binary(_, lhs, rhs) => {

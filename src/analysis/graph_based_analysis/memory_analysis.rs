@@ -57,7 +57,7 @@ fn add_sliding_windows<'a>(
                 MemoryBound::Unbounded => return MemoryBound::Unbounded,
             };
         }
-        ExpressionKind::MissingExpression() => unreachable!(),
+        ExpressionKind::MissingExpression => unreachable!(),
         ExpressionKind::Hold(e, dft) => {
             if let ExpressionKind::Lookup(_, _, _) = &e.kind {
                 match add_sliding_windows(&*e, type_table, declaration_table) {

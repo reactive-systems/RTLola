@@ -380,7 +380,7 @@ impl<'a, 'b> NamingAnalysis<'a, 'b> {
                 self.check_expression(left);
                 self.check_expression(right);
             }
-            Lit(_) | MissingExpression() => {}
+            Lit(_) | MissingExpression => {}
             Ite(condition, if_case, else_case) => {
                 self.check_expression(condition);
                 self.check_expression(if_case);

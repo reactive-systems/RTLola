@@ -286,7 +286,7 @@ pub enum ExpressionKind {
         Option<Box<Parenthesis>>,
     ),
     /// An expression was expected, e.g., after an operator like `*`
-    MissingExpression(),
+    MissingExpression,
     /// A tuple expression
     Tuple(Vec<Box<Expression>>),
     /// Access of a named (`obj.foo`) or unnamed (`obj.0`) struct field

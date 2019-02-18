@@ -714,7 +714,7 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
             ParenthesizedExpression(_, expr, _) => {
                 self.infer_expression(expr, target, stream_ty)?
             }
-            MissingExpression() => panic!("Should be handles in preceding step."),
+            MissingExpression => panic!("Should be handles in preceding step."),
         }
         Ok(())
     }

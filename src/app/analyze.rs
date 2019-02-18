@@ -216,6 +216,9 @@ impl Config {
 
                 let handler = Handler::new(mapper);
                 let analysis_result = crate::analysis::analyze(&spec, &handler);
+                if !analysis_result.is_success() {
+                    return Ok(()); // TODO throw a good `Error`
+                }
                 assert!(analysis_result.is_success());
                 let ir = Lowering::new(&spec, &analysis_result).lower();
                 println!("{:#?}", ir);

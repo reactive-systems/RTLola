@@ -294,7 +294,7 @@ impl<'a> DependencyAnalyser<'a> {
             ExpressionKind::ParenthesizedExpression(_, expr, _) => {
                 self.evaluate_discrete(expr, naming_table)
             }
-            ExpressionKind::MissingExpression() => unreachable!(),
+            ExpressionKind::MissingExpression => unreachable!(),
             ExpressionKind::Tuple(_) => unimplemented!(),
             ExpressionKind::Function(_, _, _) => unimplemented!(),
             ExpressionKind::Field(_, _) => unimplemented!(),
@@ -342,7 +342,7 @@ impl<'a> DependencyAnalyser<'a> {
                     self.add_edges_for_expression(current_node, &*element, location, mapping)
                 });
             }
-            ExpressionKind::MissingExpression() | ExpressionKind::Lit(_) => {}
+            ExpressionKind::MissingExpression | ExpressionKind::Lit(_) => {}
             ExpressionKind::Default(stream, default) | ExpressionKind::Hold(stream, default) => {
                 self.add_edges_for_expression(current_node, &*stream, location, mapping);
                 self.add_edges_for_expression(current_node, &*default, location, mapping);
