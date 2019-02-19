@@ -76,7 +76,7 @@ UnaryOperation = _{ Add | Subtract | Neg }
 
 Expr = { (Term ~ ( (Operation ~ Term) | (Dot ~ (IntegerLiteral | FunctionExpr | Ident)) )*) }
 // TODO Do we need Term to exist for the precedence climber?
-Term = _{ Literal | ParenthesizedExpression | LookupExpr | UnaryExpr | TernaryExpr | FunctionExpr | MissingExpression | Ident | Tuple}
+Term = _{ MissingExpression | Literal | ParenthesizedExpression | LookupExpr | UnaryExpr | TernaryExpr | FunctionExpr | Ident | Tuple}
 
 ParenthesizedExpression = {OpeningParenthesis ~ Expr ~ ClosingParenthesis | OpeningParenthesis ~ Expr ~ MissingClosingParenthesis}
 OpeningParenthesis = {"("}
