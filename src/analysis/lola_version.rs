@@ -15,9 +15,9 @@ struct VersionTracker {
 }
 
 impl VersionTracker {
-    fn from_stream(is_not_parameterized: Option<WhyNot>, is_timed: Option<WhyNot>) -> Self {
+    fn from_stream(is_parameterized: Option<WhyNot>, is_timed: Option<WhyNot>) -> Self {
         Self {
-            cannot_be_classic: is_not_parameterized.or_else(|| is_timed.clone()),
+            cannot_be_classic: is_parameterized.or_else(|| is_timed.clone()),
             cannot_be_lola2: is_timed.clone(),
         }
     }
@@ -115,7 +115,7 @@ impl<'a> LolaVersionAnalysis<'a> {
     }
 
     fn analyse_output(&mut self, output: &'a Output) {
-        let is_not_parameterized = if output.params.is_empty() {
+        let is_parameterized = if output.params.is_empty() {
             None
         } else {
             Some((output.name.span, String::from("Parameterized stream")))
@@ -128,7 +128,7 @@ impl<'a> LolaVersionAnalysis<'a> {
             }
         };
 
-        let mut version_tracker = VersionTracker::from_stream(is_not_parameterized, is_timed);
+        let mut version_tracker = VersionTracker::from_stream(is_parameterized, is_timed);
         analyse_expression(&mut version_tracker, &output.expression, false);
 
         // TODO check parameters for InvocationType
