@@ -44,6 +44,7 @@ fn add_sliding_windows<'a>(
     declaration_table: &DeclarationTable<'a>,
 ) -> MemoryBound {
     let mut required_memory: u128 = 0;
+    let mut unknown_size = false;
 
     match &expr.kind {
         ExpressionKind::Lit(_) | ExpressionKind::Ident(_) => {}
@@ -51,22 +52,26 @@ fn add_sliding_windows<'a>(
             match add_sliding_windows(&*left, type_table, declaration_table) {
                 MemoryBound::Bounded(u) => required_memory += u,
                 MemoryBound::Unbounded => return MemoryBound::Unbounded,
+                MemoryBound::Unknown => unknown_size = true,
             };
             match add_sliding_windows(&*right, type_table, declaration_table) {
                 MemoryBound::Bounded(u) => required_memory += u,
                 MemoryBound::Unbounded => return MemoryBound::Unbounded,
+                MemoryBound::Unknown => unknown_size = true,
             };
         }
-        ExpressionKind::MissingExpression => unreachable!(),
+        ExpressionKind::MissingExpression => return MemoryBound::Unknown,
         ExpressionKind::Hold(e, dft) => {
             if let ExpressionKind::Lookup(_, _, _) = &e.kind {
                 match add_sliding_windows(&*e, type_table, declaration_table) {
                     MemoryBound::Bounded(u) => required_memory += u,
                     MemoryBound::Unbounded => return MemoryBound::Unbounded,
+                    MemoryBound::Unknown => unknown_size = true,
                 };
                 match add_sliding_windows(&*dft, type_table, declaration_table) {
                     MemoryBound::Bounded(u) => required_memory += u,
                     MemoryBound::Unbounded => return MemoryBound::Unbounded,
+                    MemoryBound::Unknown => unknown_size = true,
                 };
             } else {
                 // A "stray" sample and hold expression such as `5 ! 3` is valid, but a no-op.
@@ -74,6 +79,7 @@ fn add_sliding_windows<'a>(
                 match add_sliding_windows(&*e, type_table, declaration_table) {
                     MemoryBound::Bounded(u) => required_memory += u,
                     MemoryBound::Unbounded => return MemoryBound::Unbounded,
+                    MemoryBound::Unknown => unknown_size = true,
                 };
             }
         }
@@ -82,10 +88,12 @@ fn add_sliding_windows<'a>(
                 match add_sliding_windows(&*e, type_table, declaration_table) {
                     MemoryBound::Bounded(u) => required_memory += u,
                     MemoryBound::Unbounded => return MemoryBound::Unbounded,
+                    MemoryBound::Unknown => unknown_size = true,
                 };
                 match add_sliding_windows(&*dft, type_table, declaration_table) {
                     MemoryBound::Bounded(u) => required_memory += u,
                     MemoryBound::Unbounded => return MemoryBound::Unbounded,
+                    MemoryBound::Unknown => unknown_size = true,
                 };
             } else {
                 // A "stray" sample and hold expression such as `5 ! 3` is valid, but a no-op.
@@ -93,6 +101,7 @@ fn add_sliding_windows<'a>(
                 match add_sliding_windows(&*e, type_table, declaration_table) {
                     MemoryBound::Bounded(u) => required_memory += u,
                     MemoryBound::Unbounded => return MemoryBound::Unbounded,
+                    MemoryBound::Unknown => unknown_size = true,
                 };
             }
         }
@@ -100,20 +109,24 @@ fn add_sliding_windows<'a>(
             match add_sliding_windows(&*inner, type_table, declaration_table) {
                 MemoryBound::Bounded(u) => required_memory += u,
                 MemoryBound::Unbounded => return MemoryBound::Unbounded,
+                MemoryBound::Unknown => unknown_size = true,
             };
         }
         ExpressionKind::Ite(condition, ifcase, elsecase) => {
             match add_sliding_windows(&*condition, type_table, declaration_table) {
                 MemoryBound::Bounded(u) => required_memory += u,
                 MemoryBound::Unbounded => return MemoryBound::Unbounded,
+                MemoryBound::Unknown => unknown_size = true,
             };
             match add_sliding_windows(&*ifcase, type_table, declaration_table) {
                 MemoryBound::Bounded(u) => required_memory += u,
                 MemoryBound::Unbounded => return MemoryBound::Unbounded,
+                MemoryBound::Unknown => unknown_size = true,
             };
             match add_sliding_windows(&*elsecase, type_table, declaration_table) {
                 MemoryBound::Bounded(u) => required_memory += u,
                 MemoryBound::Unbounded => return MemoryBound::Unbounded,
+                MemoryBound::Unknown => unknown_size = true,
             };
         }
         ExpressionKind::Function(_, _, elements) | ExpressionKind::Tuple(elements) => {
@@ -121,6 +134,7 @@ fn add_sliding_windows<'a>(
                 match add_sliding_windows(&*expr, type_table, declaration_table) {
                     MemoryBound::Bounded(u) => required_memory += u,
                     MemoryBound::Unbounded => return MemoryBound::Unbounded,
+                    MemoryBound::Unknown => unknown_size = true,
                 };
             }
         }
@@ -130,7 +144,7 @@ fn add_sliding_windows<'a>(
             None => {}
             Some(wop) => {
                 let node_id = match declaration_table.get(&instance.id).expect(
-                    "We expect the the type-table to contain information about every stream",
+                    "We expect the the declaration-table to contain information about every stream access",
                 ) {
                     Declaration::In(input) => input.id,
                     Declaration::Out(output) => output.id,
@@ -139,10 +153,13 @@ fn add_sliding_windows<'a>(
 
                 let timing = &type_table.get_stream_type(node_id).timing;
                 let value_type = type_table.get_value_type(node_id);
-                let value_type_size = if let MemoryBound::Bounded(i) = get_byte_size(value_type) {
-                    i
-                } else {
-                    return MemoryBound::Unbounded;
+                let value_type_size = match get_byte_size(value_type) {
+                    MemoryBound::Bounded(i) => i,
+                    MemoryBound::Unbounded => return MemoryBound::Unbounded,
+                    MemoryBound::Unknown => {
+                        unknown_size = true;
+                        0
+                    }
                 };
                 let efficient_operator: bool = is_efficient_operator(*wop);
                 match (timing, efficient_operator) {
@@ -190,7 +207,11 @@ fn add_sliding_windows<'a>(
             }
         },
     }
-    MemoryBound::Bounded(required_memory)
+    if unknown_size {
+        MemoryBound::Unknown
+    } else {
+        MemoryBound::Bounded(required_memory)
+    }
 }
 
 pub(crate) fn determine_worst_case_memory_consumption<'a>(
@@ -203,6 +224,7 @@ pub(crate) fn determine_worst_case_memory_consumption<'a>(
     //----------------------
     // fixed shared overhead
     let mut required_memory: u128 = 10_000;
+    let mut unknown_size = false;
 
     for input in &spec.inputs {
         if input.params.is_empty() {
@@ -213,10 +235,13 @@ pub(crate) fn determine_worst_case_memory_consumption<'a>(
                     StorageRequirement::Unbounded => unimplemented!(),
                 };
                 let value_type = type_table.get_value_type(input.id);
-                let value_type_size = if let MemoryBound::Bounded(i) = get_byte_size(value_type) {
-                    i
-                } else {
-                    return MemoryBound::Unbounded;
+                let value_type_size = match get_byte_size(value_type) {
+                    MemoryBound::Bounded(i) => i,
+                    MemoryBound::Unbounded => return MemoryBound::Unbounded,
+                    MemoryBound::Unknown => {
+                        unknown_size = true;
+                        0
+                    }
                 };
 
                 required_memory += value_type_size * buffer_size_per_instance;
@@ -239,10 +264,13 @@ pub(crate) fn determine_worst_case_memory_consumption<'a>(
                     StorageRequirement::Unbounded => unimplemented!(),
                 };
                 let value_type = type_table.get_value_type(output.id);
-                let value_type_size = if let MemoryBound::Bounded(i) = get_byte_size(value_type) {
-                    i
-                } else {
-                    return MemoryBound::Unbounded;
+                let value_type_size = match get_byte_size(value_type) {
+                    MemoryBound::Bounded(i) => i,
+                    MemoryBound::Unbounded => return MemoryBound::Unbounded,
+                    MemoryBound::Unknown => {
+                        unknown_size = true;
+                        0
+                    }
                 };
 
                 required_memory += value_type_size * buffer_size_per_instance;
@@ -277,13 +305,15 @@ pub(crate) fn determine_worst_case_memory_consumption<'a>(
 
                 //----------------------
                 // windows
-                let windows_space = if let MemoryBound::Bounded(i) =
-                    add_sliding_windows(&output.expression, type_table, declaration_table)
-                {
-                    i
-                } else {
-                    return MemoryBound::Unbounded;
-                };
+                let windows_space =
+                    match add_sliding_windows(&output.expression, type_table, declaration_table) {
+                        MemoryBound::Bounded(i) => i,
+                        MemoryBound::Unknown => {
+                            unknown_size = true;
+                            0
+                        }
+                        MemoryBound::Unbounded => return MemoryBound::Unbounded,
+                    };
                 required_memory += windows_space;
 
                 //----------------------
@@ -303,10 +333,13 @@ pub(crate) fn determine_worst_case_memory_consumption<'a>(
             let mut tracking_per_instance: u128 = 0_u128;
             while let Some((node_id, tracking)) = it.next() {
                 let value_type = type_table.get_value_type(*node_id);
-                let value_type_size = if let MemoryBound::Bounded(i) = get_byte_size(value_type) {
-                    i
-                } else {
-                    return MemoryBound::Unbounded;
+                let value_type_size = match get_byte_size(value_type) {
+                    MemoryBound::Bounded(i) => i,
+                    MemoryBound::Unbounded => return MemoryBound::Unbounded,
+                    MemoryBound::Unknown => {
+                        unknown_size = true;
+                        0
+                    }
                 };
 
                 match tracking {
@@ -323,13 +356,15 @@ pub(crate) fn determine_worst_case_memory_consumption<'a>(
 
             //----------------------
             // windows
-            let windows_space = if let MemoryBound::Bounded(i) =
-                add_sliding_windows(&trigger.expression, type_table, declaration_table)
-            {
-                i
-            } else {
-                return MemoryBound::Unbounded;
-            };
+            let windows_space =
+                match add_sliding_windows(&trigger.expression, type_table, declaration_table) {
+                    MemoryBound::Bounded(i) => i,
+                    MemoryBound::Unknown => {
+                        unknown_size = true;
+                        0
+                    }
+                    MemoryBound::Unbounded => return MemoryBound::Unbounded,
+                };
             required_memory += windows_space;
 
             //----------------------
@@ -337,6 +372,9 @@ pub(crate) fn determine_worst_case_memory_consumption<'a>(
             required_memory += 500;
         }
     }
-
-    MemoryBound::Bounded(required_memory)
+    if unknown_size {
+        MemoryBound::Unknown
+    } else {
+        MemoryBound::Bounded(required_memory)
+    }
 }

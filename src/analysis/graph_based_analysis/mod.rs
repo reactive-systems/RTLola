@@ -25,6 +25,7 @@ use num::BigRational;
 pub(crate) enum MemoryBound {
     Bounded(u128),
     Unbounded,
+    Unknown,
 }
 
 pub(crate) struct GraphAnalysisResult {
@@ -75,6 +76,9 @@ pub(crate) fn analyze<'a>(
             println!("The specification has no bound on the memory consumption.")
         }
         MemoryBound::Bounded(bytes) => println!("The specification uses at most {} bytes.", bytes),
+        MemoryBound::Unknown => {
+            println!("Incomplete specification: we cannot determine the memory consumption.")
+        }
     };
 
     Some(GraphAnalysisResult {
@@ -200,6 +204,7 @@ fn get_byte_size(value_ty: &ValueTy) -> MemoryBound {
                 match element {
                     MemoryBound::Bounded(i) => accu += i,
                     MemoryBound::Unbounded => return MemoryBound::Unbounded,
+                    MemoryBound::Unknown => return MemoryBound::Unknown,
                 };
             }
             MemoryBound::Bounded(accu)
@@ -211,6 +216,6 @@ fn get_byte_size(value_ty: &ValueTy) -> MemoryBound {
         ValueTy::Constr(_type_constraint) => unreachable!(),
         // A reference to a generic parameter in a function declaration, e.g. `T` in `a<T>(x:T) -> T`
         ValueTy::Param(_, _) => MemoryBound::Bounded(0),
-        ValueTy::Error => unreachable!(),
+        ValueTy::Error => MemoryBound::Unknown,
     }
 }

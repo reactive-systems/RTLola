@@ -99,14 +99,6 @@ pub(crate) fn analyze<'a, 'b>(spec: &'a LolaSpec, handler: &'b Handler) -> Analy
         result.version = version_result;
     }
 
-    // TODO move this check
-    let some_expression_is_missing =
-        missing_expression_check::any_expression_missing(spec, handler);
-    if some_expression_is_missing {
-        handler.error("aborting due to previous error");
-        return AnalysisResult::new();
-    }
-
     let graph_result = graph_based_analysis::analyze(
         spec,
         &version_analyzer.result,
@@ -127,5 +119,13 @@ pub(crate) fn analyze<'a, 'b>(spec: &'a LolaSpec, handler: &'b Handler) -> Analy
     } else {
         result.graph_analysis_result = graph_result;
     }
+
+    let some_expression_is_missing =
+        missing_expression_check::any_expression_missing(spec, handler);
+    if some_expression_is_missing {
+        handler.error("aborting due to previous error");
+        return AnalysisResult::new();
+    }
+
     result
 }
