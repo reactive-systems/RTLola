@@ -714,7 +714,9 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
             ParenthesizedExpression(_, expr, _) => {
                 self.infer_expression(expr, target, stream_ty)?
             }
-            MissingExpression => panic!("Should be handles in preceding step."),
+            MissingExpression => {
+                // we simply ignore missing expressions and continue with type analysis
+            }
         }
         Ok(())
     }
@@ -2084,6 +2086,13 @@ mod tests {
     #[test]
     fn test_casting_explicit_types() {
         let spec = "input x: Int32\noutput y: UInt32 := cast<Int32,UInt32>(x)";
+        assert_eq!(0, num_type_errors(spec));
+    }
+
+    #[test]
+    fn test_missing_expression() {
+        // should not produce an error as we want to be able to handle incomplete specs in analysis
+        let spec = "input x: Bool\noutput y: Bool := \ntrigger (y || x)";
         assert_eq!(0, num_type_errors(spec));
     }
 }

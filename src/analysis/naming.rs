@@ -338,7 +338,10 @@ impl<'a, 'b> NamingAnalysis<'a, 'b> {
         } else {
             // it does not exist
             self.handler.error_with_span(
-                "name `{}` does not exist in current scope",
+                &format!(
+                    "name `{}` does not exist in current scope",
+                    &instance.stream_identifier.name
+                ),
                 LabeledSpan::new(instance.span, "does not exist", true),
             );
         }
@@ -362,7 +365,7 @@ impl<'a, 'b> NamingAnalysis<'a, 'b> {
             self.result.insert(expression.id, decl);
         } else {
             self.handler.error_with_span(
-                "name `{}` does not exist in current scope",
+                &format!("name `{}` does not exist in current scope", &ident.name),
                 LabeledSpan::new(ident.span, "does not exist", true),
             );
         }
@@ -648,6 +651,15 @@ mod tests {
         assert_eq!(
             0,
             number_of_naming_errors("import math\noutput x: Float32 := sqrt(2)")
+        )
+    }
+
+    #[test]
+    fn missing_expression() {
+        // should not produce an error as we want to be able to handle incomplete specs in analysis
+        assert_eq!(
+            0,
+            number_of_naming_errors("input x: Bool\noutput y: Bool := \ntrigger (y || x)")
         )
     }
 }

@@ -67,13 +67,6 @@ pub(crate) fn analyze<'a, 'b>(spec: &'a LolaSpec, handler: &'b Handler) -> Analy
         result.declaration_table = Some(decl_table);
     }
 
-    // TODO move this check
-    let some_expression_is_missing =
-        missing_expression_check::any_expression_missing(spec, handler);
-    if some_expression_is_missing {
-        handler.error("aborting due to previous error");
-        return AnalysisResult::new();
-    }
     let mut type_analysis = TypeAnalysis::new(
         &handler,
         result
@@ -89,6 +82,14 @@ pub(crate) fn analyze<'a, 'b>(spec: &'a LolaSpec, handler: &'b Handler) -> Analy
         return AnalysisResult::new();
     } else {
         result.type_table = type_table;
+    }
+
+    // TODO move this check
+    let some_expression_is_missing =
+        missing_expression_check::any_expression_missing(spec, handler);
+    if some_expression_is_missing {
+        handler.error("aborting due to previous error");
+        return AnalysisResult::new();
     }
 
     let mut version_analyzer = LolaVersionAnalysis::new(
