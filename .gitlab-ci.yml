@@ -22,6 +22,7 @@ cargo:test:windows:
     - windows
   image: rust:latest
   script:
+    - rustup update
     - rustc --version && cargo --version      # Print version info for debugging
     - cargo test --all --all-features --verbose
   allow_failure: true
