@@ -16,7 +16,7 @@ cargo:test:
     - cargo test --all --all-features --verbose
 
 # Use cargo to test the project on stable toolchain
-cargo test windows:
+cargo:test:windows:
   stage: test
   tags:
     - windows
@@ -24,6 +24,7 @@ cargo test windows:
   script:
     - rustc --version && cargo --version      # Print version info for debugging
     - cargo test --all --all-features --verbose
+  allow_failure: true
 
 # Use cargo to check the source code formatting
 cargo:check-format:
