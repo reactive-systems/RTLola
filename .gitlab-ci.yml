@@ -15,6 +15,16 @@ cargo:test:
     - rustc --version && cargo --version      # Print version info for debugging
     - cargo test --all --all-features --verbose
 
+# Use cargo to test the project on stable toolchain
+cargo test windows:
+  stage: test
+  tags:
+    - windows
+  image: rust:latest
+  script:
+    - rustc --version && cargo --version      # Print version info for debugging
+    - cargo test --all --all-features --verbose
+
 # Use cargo to check the source code formatting
 cargo:check-format:
   stage: test
