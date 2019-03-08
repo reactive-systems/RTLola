@@ -503,7 +503,7 @@ impl<'a> Lowering<'a> {
             }
             ExpressionKind::Default(e, dft) => {
                 if let ExpressionKind::Lookup(_, _, _) = &e.kind {
-                    let result_type = self.lower_value_type(e.id);
+                    let result_type = self.lower_value_type(expr.id);
                     self.lower_lookup_expression(e, dft, state, result_type, false)
                 } else {
                     // A "stray" default expression such as `5 ? 3` is valid, but a no-op.
@@ -514,7 +514,7 @@ impl<'a> Lowering<'a> {
             }
             ExpressionKind::Hold(e, dft) => {
                 if let ExpressionKind::Lookup(_, _, _) = &e.kind {
-                    let result_type = self.lower_value_type(e.id);
+                    let result_type = self.lower_value_type(expr.id);
                     self.lower_lookup_expression(e, dft, state, result_type, true)
                 } else {
                     // A "stray" sample and hold expression such as `5 ! 3` is valid, but a no-op.
@@ -810,7 +810,12 @@ impl<'a> Lowering<'a> {
                 }
             };
 
-            let lookup_type = self.lower_value_type(lookup_expr.id);
+            let lookup_result_type = self.lower_value_type(lookup_expr.id);
+            let lookup_type = match lookup_result_type {
+                ir::Type::Option(t) => *t.clone(),
+                _ => panic!("A non-sync lookups always ought to produce an option."),
+            };
+
             let lookup_stmt = ir::Statement {
                 target: state.temp_for_type(&lookup_type),
                 op,
@@ -1406,9 +1411,10 @@ mod tests {
     }
 
     #[test]
-    fn window_spurious_cast() {
+    fn test_superfluous_casts_after_lookup() {
         let ir = spec_to_ir("input v: Bool\n output b: Bool := v & v[-1] ? false");
-        assert_eq!(ir.outputs[0].expr.stmts.len(), 6);
+        // We need a sync lookup, an async lookup, load false, and the and operation.
+        assert_eq!(ir.outputs[0].expr.stmts.len(), 4);
     }
 
     #[test]
