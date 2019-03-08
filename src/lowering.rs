@@ -503,7 +503,8 @@ impl<'a> Lowering<'a> {
             }
             ExpressionKind::Default(e, dft) => {
                 if let ExpressionKind::Lookup(_, _, _) = &e.kind {
-                    self.lower_lookup_expression(e, dft, state, false)
+                    let result_type = self.lower_value_type(e.id);
+                    self.lower_lookup_expression(e, dft, state, result_type, false)
                 } else {
                     // A "stray" default expression such as `5 ? 3` is valid, but a no-op.
                     // Thus, print a warning. Evaluating the expression is necessary, the dft can be skipped.
@@ -513,7 +514,8 @@ impl<'a> Lowering<'a> {
             }
             ExpressionKind::Hold(e, dft) => {
                 if let ExpressionKind::Lookup(_, _, _) = &e.kind {
-                    self.lower_lookup_expression(e, dft, state, true)
+                    let result_type = self.lower_value_type(e.id);
+                    self.lower_lookup_expression(e, dft, state, result_type, true)
                 } else {
                     // A "stray" sample and hold expression such as `5 ! 3` is valid, but a no-op.
                     // Thus, print a warning. Evaluating the expression is necessary, the dft can be skipped.
@@ -766,10 +768,9 @@ impl<'a> Lowering<'a> {
         lookup_expr: &ast::Expression,
         dft: &ast::Expression,
         mut state: LoweringState,
+        desired_return_type: ir::Type,
         is_hold: bool,
     ) -> LoweringState {
-        let result_type = self.lower_value_type(lookup_expr.id);
-
         if let ExpressionKind::Lookup(instance, offset, op) = &lookup_expr.kind {
             let target_ref = self.extract_target_from_lookup(&lookup_expr.kind);
 
@@ -777,9 +778,9 @@ impl<'a> Lowering<'a> {
             state = self.lower_subexpression(dft, state);
 
             let default_type = state.result_type();
-            if default_type != &result_type {
+            if default_type != &desired_return_type {
                 let conversion_source = state.get_target();
-                let conversion_target = state.temp_for_type(&result_type);
+                let conversion_target = state.temp_for_type(&desired_return_type);
                 state = self.convert_temp(state, conversion_source, conversion_target);
             }
             let default_temp = state.get_target();
@@ -817,9 +818,9 @@ impl<'a> Lowering<'a> {
             };
             state = state.with_stmt(lookup_stmt);
 
-            if lookup_type != result_type {
+            if lookup_type != desired_return_type {
                 let conversion_source = state.get_target();
-                let conversion_target = state.temp_for_type(&result_type);
+                let conversion_target = state.temp_for_type(&desired_return_type);
                 state = self.convert_temp(state, conversion_source, conversion_target);
             }
             state
@@ -1402,6 +1403,12 @@ mod tests {
         let ir = spec_to_ir("input a: Int32 output b: Int32 { extend @1Hz } := a[3s, sum] ? 3");
         let window = &ir.sliding_windows[0];
         assert_eq!(window, ir.get_window(window.reference));
+    }
+
+    #[test]
+    fn window_spurious_cast() {
+        let ir = spec_to_ir("input v: Bool\n output b: Bool := v & v[-1] ? false");
+        assert_eq!(ir.outputs[0].expr.stmts.len(), 6);
     }
 
     #[test]
