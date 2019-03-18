@@ -95,3 +95,6 @@ Cargo.lock
 **/*.rs.bk
 
 # End of https://www.gitignore.io/api/rust,intellij
+
+# gitignore for mac
+.DS_Store
