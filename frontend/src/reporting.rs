@@ -132,6 +132,10 @@ impl StderrEmitter {
 }
 
 impl Emitter for StderrEmitter {
+    /// Implement two versions of emit in order to suppress output when testing.
+
+    /// standard emit implementation
+    #[cfg(not(test))]
     fn emit(&mut self, mapper: &SourceMapper, diagnostic: &Diagnostic) {
         let mut stderr = StandardStream::stderr(ColorChoice::Always);
         for line in self.render(mapper, diagnostic) {
@@ -144,6 +148,10 @@ impl Emitter for StderrEmitter {
         stderr.reset().expect("cannot reset output color");
         stderr.flush().expect("flushing stderr failed");
     }
+
+    /// test emit implementation
+    #[cfg(test)]
+    fn emit(&mut self, _mapper: &SourceMapper, _diagnostic: &Diagnostic) {}
 }
 
 impl StderrEmitter {
