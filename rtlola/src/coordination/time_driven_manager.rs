@@ -53,6 +53,12 @@ pub(crate) struct TimeDrivenManager {
     handler: OutputHandler,
 }
 
+struct Schedule {
+    gcd: Duration,
+    hyper_period: Duration,
+    deadlines: Vec<Deadline>,
+}
+
 impl TimeDrivenManager {
     /// Creates a new TimeDrivenManager managing time-driven output streams.
     pub(crate) fn setup(ir: LolaIR, config: EvalConfig) -> TimeDrivenManager {
@@ -68,6 +74,20 @@ impl TimeDrivenManager {
             };
         }
 
+        let schedule = Self::compute_schedule(&ir);
+
+        // TODO: Sort by evaluation order!
+
+        TimeDrivenManager {
+            last_state: None,
+            deadlines: schedule.deadlines,
+            hyper_period: schedule.hyper_period,
+            start_time: None,
+            handler
+        }
+    }
+
+    fn compute_schedule(ir: &LolaIR) -> Schedule {
         let rates: Vec<Duration> = ir.time_driven.iter().map(|s| s.extend_rate).collect();
         let gcd = Self::find_extend_period(&rates);
         let hyper_period = Self::find_hyper_period(&rates);
@@ -76,9 +96,11 @@ impl TimeDrivenManager {
         let extend_steps = TimeDrivenManager::apply_periodicity(&extend_steps);
         let deadlines = TimeDrivenManager::condense_deadlines(gcd, extend_steps);
 
-        // TODO: Sort by evaluation order!
-
-        TimeDrivenManager { last_state: None, deadlines, hyper_period, start_time: None, handler }
+        Schedule {
+            deadlines,
+            gcd,
+            hyper_period
+        }
     }
 
     fn condense_deadlines(gcd: Duration, extend_steps: Vec<Vec<StreamReference>>) -> Vec<Deadline> {
@@ -106,7 +128,7 @@ impl TimeDrivenManager {
     /// Hyper period: 2 seconds, gcd: 100ms, streams: (c @ .5Hz), (b @ 1Hz), (a @ 2Hz)
     /// Result: `[[a] [b] [] [c]]`
     /// Meaning: `a` starts being scheduled after one gcd, `b` after two gcds, `c` after 4 gcds.
-    fn build_extend_steps(ir: LolaIR, gcd: Duration, hyper_period: Duration) -> Vec<Vec<StreamReference>> {
+    fn build_extend_steps(ir: &LolaIR, gcd: Duration, hyper_period: Duration) -> Vec<Vec<StreamReference>> {
         let num_steps = TimeDrivenManager::divide_durations(hyper_period, gcd, false);
         let mut extend_steps = vec![Vec::new(); num_steps];
         for s in ir.time_driven.iter() {
