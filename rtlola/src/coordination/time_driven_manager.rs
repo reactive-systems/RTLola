@@ -1,5 +1,4 @@
 use super::WorkItem;
-use crate::basics::util;
 use crate::basics::{EvalConfig, OutputHandler};
 
 use lola_parser::ir::{LolaIR, StreamReference};
@@ -7,7 +6,8 @@ use std::sync::mpsc::{Receiver, Sender};
 use std::thread::sleep;
 use std::time::{Duration, SystemTime};
 
-const NANOS_PER_SEC: u128 = 1_000_000_000;
+use common::duration::*;
+use common::schedule::{Deadline, Schedule};
 
 pub(crate) type TimeEvaluation = Vec<StreamReference>;
 
@@ -38,12 +38,6 @@ impl From<u128> for TimeDrivenCycleCount {
     }
 }
 
-#[derive(Debug, Clone)]
-struct Deadline {
-    pause: Duration,
-    due: Vec<StreamReference>,
-}
-
 pub(crate) struct TimeDrivenManager {
     #[allow(dead_code)]
     last_state: Option<TDMState>,
@@ -51,12 +45,6 @@ pub(crate) struct TimeDrivenManager {
     hyper_period: Duration,
     start_time: Option<SystemTime>,
     handler: OutputHandler,
-}
-
-struct Schedule {
-    gcd: Duration,
-    hyper_period: Duration,
-    deadlines: Vec<Deadline>,
 }
 
 impl TimeDrivenManager {
@@ -74,7 +62,7 @@ impl TimeDrivenManager {
             };
         }
 
-        let schedule = Self::compute_schedule(&ir);
+        let schedule = Schedule::from(&ir);
 
         // TODO: Sort by evaluation order!
 
@@ -83,83 +71,8 @@ impl TimeDrivenManager {
             deadlines: schedule.deadlines,
             hyper_period: schedule.hyper_period,
             start_time: None,
-            handler
+            handler,
         }
-    }
-
-    fn compute_schedule(ir: &LolaIR) -> Schedule {
-        let rates: Vec<Duration> = ir.time_driven.iter().map(|s| s.extend_rate).collect();
-        let gcd = Self::find_extend_period(&rates);
-        let hyper_period = Self::find_hyper_period(&rates);
-
-        let extend_steps = TimeDrivenManager::build_extend_steps(ir, gcd, hyper_period);
-        let extend_steps = TimeDrivenManager::apply_periodicity(&extend_steps);
-        let deadlines = TimeDrivenManager::condense_deadlines(gcd, extend_steps);
-
-        Schedule {
-            deadlines,
-            gcd,
-            hyper_period
-        }
-    }
-
-    fn condense_deadlines(gcd: Duration, extend_steps: Vec<Vec<StreamReference>>) -> Vec<Deadline> {
-        let init: (u32, Vec<Deadline>) = (0, Vec::new());
-        let (remaining, mut deadlines) = extend_steps.iter().fold(init, |(empty_counter, mut deadlines), step| {
-            if step.is_empty() {
-                (empty_counter + 1, deadlines)
-            } else {
-                let pause = (empty_counter + 1) * gcd;
-                let deadline = Deadline { pause, due: step.clone() };
-                deadlines.push(deadline);
-                (0, deadlines)
-            }
-        });
-        if remaining != 0 {
-            // There is some gcd periods left at the end of the hyper period.
-            // We cannot add them to the first because this would off-set the very first iteration.
-            deadlines.push(Deadline { pause: remaining * gcd, due: Vec::new() });
-        }
-        deadlines
-    }
-
-    /// Build extend steps for each gcd-sized time interval up to the hyper period.
-    /// Example:
-    /// Hyper period: 2 seconds, gcd: 100ms, streams: (c @ .5Hz), (b @ 1Hz), (a @ 2Hz)
-    /// Result: `[[a] [b] [] [c]]`
-    /// Meaning: `a` starts being scheduled after one gcd, `b` after two gcds, `c` after 4 gcds.
-    fn build_extend_steps(ir: &LolaIR, gcd: Duration, hyper_period: Duration) -> Vec<Vec<StreamReference>> {
-        let num_steps = TimeDrivenManager::divide_durations(hyper_period, gcd, false);
-        let mut extend_steps = vec![Vec::new(); num_steps];
-        for s in ir.time_driven.iter() {
-            let ix = Self::divide_durations(s.extend_rate, gcd, false) - 1;
-            extend_steps[ix].push(s.reference);
-        }
-        extend_steps
-    }
-
-    /// Takes a vec of gdc-sized intervals. In each interval, there is the streams that need
-    /// to be scheduled periodically at this point in time.
-    /// Example:
-    /// Hyper period: 2 seconds, gcd: 100ms, streams: (c @ .5Hz), (b @ 1Hz), (a @ 2Hz)
-    /// Input:  `[[a] [b]   []  [c]]`
-    /// Output: `[[a] [a,b] [a] [a,b,c]`
-    fn apply_periodicity(steps: &[Vec<StreamReference>]) -> Vec<Vec<StreamReference>> {
-        // Whenever there are streams in a cell at index `i`,
-        // add them to every cell with index k*i within bounds, where k > 1.
-        // k = 0 would always schedule them initially, so this must be skipped.
-        // TODO: Skip last half of the array.
-        let mut res = vec![Vec::new(); steps.len()];
-        for (ix, streams) in steps.iter().enumerate() {
-            if !streams.is_empty() {
-                let mut k = 1;
-                while let Some(target) = res.get_mut(k * (ix + 1) - 1) {
-                    target.extend(streams);
-                    k += 1;
-                }
-            }
-        }
-        res
     }
 
     fn get_current_deadline(&self, ts: Option<SystemTime>) -> (Duration, Vec<StreamReference>) {
@@ -177,9 +90,9 @@ impl TimeDrivenManager {
     fn earliest_deadline_state(&self, time: SystemTime) -> TDMState {
         let start_time = self.start_time.unwrap();
         assert!(start_time <= time);
-        let hyper_nanos = Self::dur_as_nanos(self.hyper_period);
+        let hyper_nanos = dur_as_nanos(self.hyper_period);
         let time_since_start =
-            Self::dur_as_nanos(time.duration_since(start_time).expect("Time did not behave monotonically!"));
+            dur_as_nanos(time.duration_since(start_time).expect("Time did not behave monotonically!"));
 
         let hyper = time_since_start / hyper_nanos;
         let time_within_hyper = time_since_start % hyper_nanos;
@@ -187,20 +100,16 @@ impl TimeDrivenManager {
         // Determine the index of the current deadline.
         let mut sum = 0u128;
         for (ix, dl) in self.deadlines.iter().enumerate() {
-            let pause = Self::dur_as_nanos(dl.pause);
+            let pause = dur_as_nanos(dl.pause);
             if sum + pause < time_within_hyper {
                 sum += pause
             } else {
-                let offset_from_start = Self::dur_from_nanos(hyper_nanos * hyper + sum);
+                let offset_from_start = dur_from_nanos(hyper_nanos * hyper + sum);
                 let dl_time = start_time + offset_from_start;
                 return TDMState { cycle: hyper.into(), deadline: ix, time: dl_time };
             }
         }
         unreachable!()
-    }
-
-    fn dur_as_nanos(dur: Duration) -> u128 {
-        u128::from(dur.as_secs()) * NANOS_PER_SEC + u128::from(dur.subsec_nanos())
     }
 
     pub fn start_offline(
@@ -268,51 +177,6 @@ impl TimeDrivenManager {
                 self.handler.runtime_warning(|| "TDM: Sending failed; evaluation cycle lost.");
             }
         }
-    }
-
-    /// Determines the max amount of time the process can wait between successive checks for
-    /// due deadlines without missing one.
-    fn find_extend_period(rates: &[Duration]) -> Duration {
-        assert!(!rates.is_empty());
-        let rates: Vec<u128> = rates.iter().map(|r| Self::dur_as_nanos(*r)).collect();
-        let gcd = util::gcd_all(&rates);
-        Self::dur_from_nanos(gcd)
-    }
-
-    /// Determines the hyper period of the given `rates`.
-    fn find_hyper_period(rates: &[Duration]) -> Duration {
-        assert!(!rates.is_empty());
-        let rates: Vec<u128> = rates.iter().map(|r| Self::dur_as_nanos(*r)).collect();
-        let lcm = util::lcm_all(&rates);
-        Self::dur_from_nanos(lcm)
-    }
-
-    /// Divides two durations. If `rhs` is not a divider of `lhs`, a warning is emitted and the
-    /// rounding strategy `round_up` is applied.
-    fn divide_durations(lhs: Duration, rhs: Duration, round_up: bool) -> usize {
-        // The division of durations is currently unstable (feature duration_float) because
-        // it falls back to using floats which cannot necessarily represent the durations
-        // accurately. We, however, fall back to nanoseconds as u128. Regardless, some inaccuracies
-        // might occur, rendering this code TODO *not stable for real-time devices!*
-        let lhs = Self::dur_as_nanos(lhs);
-        let rhs = Self::dur_as_nanos(rhs);
-        let representable = lhs % rhs == 0;
-        let mut div = lhs / rhs;
-        if !representable {
-            println!("Warning: Spec unstable: Cannot accurately represent extend periods.");
-            // TODO: Introduce better mechanism for emitting such warnings.
-            if round_up {
-                div += 1;
-            }
-        }
-        div as usize
-    }
-
-    fn dur_from_nanos(dur: u128) -> Duration {
-        // TODO: Introduce sanity checks for `dur` s.t. cast is safe.
-        let secs = (dur / NANOS_PER_SEC) as u64; // safe cast for realistic values of `dur`.
-        let nanos = (dur % NANOS_PER_SEC) as u32; // safe case
-        Duration::new(secs, nanos)
     }
 
     //The following code is useful and should partly be used again for robustness.
@@ -471,112 +335,4 @@ impl TimeDrivenManager {
     }
 
     */
-}
-
-mod tests {
-    #[allow(unused_imports)]
-    use super::*;
-    use lola_parser::ir::LolaIR;
-
-    #[allow(dead_code)]
-    fn to_ir(spec: &str) -> LolaIR {
-        lola_parser::parse(spec)
-    }
-
-    #[test]
-    #[ignore]
-    fn test_extension_rate_extraction() {
-        let input = "input a: UInt8\n";
-        let hz50 = "output b: UInt8 {extend @50Hz} := a";
-        let hz40 = "output b: UInt8 {extend @40Hz} := a";
-        let ms20 = "output b: UInt8 {extend @20ms} := a"; // 5Hz
-        let ms1 = "output b: UInt8 {extend @1ms} := a"; // 100Hz
-
-        let case1 = (format!("{}{}", input, hz50), 2_000);
-        let case2 = (format!("{}{}{}", input, hz50, hz50), 20_000);
-        let case3 = (format!("{}{}{}", input, hz50, hz40), 5_000);
-        let case4 = (format!("{}{}{}", input, hz50, ms1), 1_000);
-        let case5 = (format!("{}{}{}{}", input, hz50, ms20, ms1), 1_000);
-
-        let cases = [case1, case2, case3, case4, case5];
-        for (spec, expected) in cases.iter() {
-            let rates: Vec<std::time::Duration> = to_ir(spec).time_driven.iter().map(|s| s.extend_rate).collect();
-            let was = TimeDrivenManager::find_extend_period(&rates);
-            let was = TimeDrivenManager::dur_as_nanos(was);
-            assert_eq!(*expected, was);
-        }
-    }
-
-    #[test]
-    fn test_divide_durations_round_down() {
-        type TestDurations = ((u64, u32), (u64, u32), usize);
-        let case1: TestDurations = ((1, 0), (1, 0), 1);
-        let case2: TestDurations = ((1, 0), (0, 100_000_000), 10);
-        let case3: TestDurations = ((1, 0), (0, 100_000), 10_000);
-        let case4: TestDurations = ((1, 0), (0, 20_000), 50_000);
-        let case5: TestDurations = ((0, 40_000), (0, 30_000), 1);
-        let case6: TestDurations = ((3, 1_000), (3, 5_000), 0);
-
-        let cases = [case1, case2, case3, case4, case5, case6];
-        for (a, b, expected) in &cases {
-            let to_dur = |(s, n)| Duration::new(s, n);
-            let was = TimeDrivenManager::divide_durations(to_dur(*a), to_dur(*b), false);
-            assert_eq!(was, *expected, "Expected {}, but was {}.", expected, was);
-        }
-    }
-
-    //    #[test]
-    //    fn test_compare_states() {
-    //        let handler = OutputHandler::default();
-    //        fn dl(s: u64, n: u32) -> Deadline {
-    //            Deadline { pause: Duration::new(s, n), due: Vec::new() }
-    //        }
-    //        fn dur(s: u64, n: u32) -> Duration {
-    //            Duration::new(s, n)
-    //        }
-    //        // 1s, 0.1s, 2.3s, 1.6s
-    //        let deadlines = vec![dl(1, 0), dl(0, 100_000_000), dl(2, 300_000_000), dl(1, 600_000_000)];
-    //        let tdm = TimeDrivenManager { last_state: None, deadlines, hyper_period: dur(1, 0), start_time: None, handler };
-    //        fn state(cy: u128, dl: usize) -> TDMState {
-    //            let time = SystemTime::now();
-    //            TDMState { cycle: cy.into(), deadline: dl, time }
-    //        }
-    //        type Case = (TDMState, TDMState, StateCompare);
-    //        let cases: Vec<Case> = vec![
-    //            (state(0, 0), state(0, 0), StateCompare::Equal),
-    //            (state(1, 0), state(0, 0), StateCompare::TimeTravel),
-    //            (state(1, 2), state(2, 1), StateCompare::Skipped { cycles: 0, deadlines: 2 }),
-    //            (state(1, 2), state(3, 1), StateCompare::Skipped { cycles: 1, deadlines: 2 }),
-    //            (state(1, 2), state(3, 0), StateCompare::Skipped { cycles: 1, deadlines: 1 }),
-    //            (state(0, 0), state(0, 1), StateCompare::Next),
-    //            (state(4, 3), state(5, 0), StateCompare::Next),
-    //        ];
-    //        for (old, new, expected) in &cases {
-    //            let was = tdm.compare_states(*old, *new);
-    //            assert_eq!(
-    //                was, *expected,
-    //                "Expected {:?}, but was {:?} for old: {:?} and new: {:?}.",
-    //                expected, was, old, new
-    //            )
-    //        }
-    //    }
-
-    #[test]
-    fn test_divide_durations_round_up() {
-        type TestDurations = ((u64, u32), (u64, u32), usize);
-        let case1: TestDurations = ((1, 0), (1, 0), 1);
-        let case2: TestDurations = ((1, 0), (0, 100_000_000), 10);
-        let case3: TestDurations = ((1, 0), (0, 100_000), 10_000);
-        let case4: TestDurations = ((1, 0), (0, 20_000), 50_000);
-        let case5: TestDurations = ((0, 40_000), (0, 30_000), 2);
-        let case6: TestDurations = ((3, 1_000), (3, 5_000), 1);
-
-        let cases = [case1, case2, case3, case4, case5, case6];
-        for (a, b, expected) in &cases {
-            let to_dur = |(s, n)| Duration::new(s, n);
-            let was = TimeDrivenManager::divide_durations(to_dur(*a), to_dur(*b), true);
-            assert_eq!(was, *expected, "Expected {}, but was {}.", expected, was);
-        }
-    }
-
 }

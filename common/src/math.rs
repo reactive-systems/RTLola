@@ -24,6 +24,7 @@ pub(crate) fn lcm_all(v: &[u128]) -> u128 {
     v.iter().fold(v[0], |a, b| lcm(a, *b))
 }
 
+#[cfg(test)]
 mod tests {
 
     #[test]
