@@ -1,6 +1,7 @@
 pub mod dependency_graph;
 pub mod evaluation_order;
 pub mod future_dependency;
+mod input_dependencies;
 mod memory_analysis;
 pub mod space_requirements;
 
@@ -16,6 +17,7 @@ use std::time::Duration;
 
 pub(crate) use self::evaluation_order::EvaluationOrderResult;
 pub(crate) use self::future_dependency::FutureDependentStreams;
+pub(crate) use self::input_dependencies::RequiredInputs;
 pub(crate) use self::space_requirements::SpaceRequirements;
 use self::space_requirements::TrackingRequirements;
 use crate::ty::{FloatTy, IntTy, UIntTy, ValueTy};
@@ -33,6 +35,7 @@ pub(crate) struct GraphAnalysisResult {
     pub(crate) future_dependent_streams: FutureDependentStreams,
     pub(crate) space_requirements: SpaceRequirements,
     pub(crate) tracking_requirements: TrackingRequirements,
+    pub(crate) input_dependencies: RequiredInputs,
 }
 
 pub(crate) fn analyze<'a>(
@@ -73,11 +76,14 @@ pub(crate) fn analyze<'a>(
         MemoryBound::Unknown => println!("Incomplete specification: we cannot determine the memory consumption."),
     };
 
+    let input_dependencies = input_dependencies::determine_required_inputs(&pruned_graph);
+
     Some(GraphAnalysisResult {
         evaluation_order: evaluation_order_result,
         future_dependent_streams,
         space_requirements,
         tracking_requirements,
+        input_dependencies,
     })
 }
 
