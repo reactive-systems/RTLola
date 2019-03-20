@@ -19,7 +19,7 @@ use crate::analysis::graph_based_analysis::space_requirements::{
     SpaceRequirements as MemoryTable, TrackingRequirements,
 };
 //use crate::analysis::graph_based_analysis::future_dependency::FutureDependentStreams;
-use crate::analysis::graph_based_analysis::{ComputeStep, StorageRequirement, TrackingRequirement};
+use crate::analysis::graph_based_analysis::{ComputeStep, RequiredInputs, StorageRequirement, TrackingRequirement};
 
 use self::lowering_state::*;
 use crate::analysis::AnalysisResult;
@@ -37,6 +37,7 @@ pub(crate) struct Lowering<'a> {
     mt: &'a MemoryTable,
     tr: &'a TrackingRequirements,
     ir: LolaIR,
+    ri: &'a RequiredInputs,
 }
 
 impl<'a> Lowering<'a> {
@@ -65,6 +66,7 @@ impl<'a> Lowering<'a> {
             mt: &graph.space_requirements,
             tr: &graph.tracking_requirements,
             ir,
+            ri: &graph.input_dependencies,
         }
     }
 
@@ -128,6 +130,10 @@ impl<'a> Lowering<'a> {
         );
     }
 
+    fn gather_dependent_inputs(&mut self, node_id: NodeId) -> Vec<StreamReference> {
+        self.ri[&node_id].iter().map(|input_id| self.get_ref_for_stream(*input_id)).collect()
+    }
+
     fn lower_trigger(&mut self, trigger: &ast::Trigger) {
         let name = if let Some(msg) = trigger.message.as_ref() {
             format!("trigger_{}", msg.clone().replace(" ", "_"))
@@ -139,6 +145,7 @@ impl<'a> Lowering<'a> {
         let expr = self.lower_expression(&trigger.expression, &ty);
         let reference = StreamReference::OutRef(self.ir.outputs.len());
         let outgoing_dependencies = self.find_dependencies(&trigger.expression);
+        let input_dependencies = self.gather_dependent_inputs(trigger.id);
         let output = ir::OutputStream {
             name,
             ty,
@@ -149,6 +156,7 @@ impl<'a> Lowering<'a> {
             layer: self.get_layer(trigger.id),
             reference,
             outgoing_dependencies,
+            input_dependencies,
         };
         self.ir.outputs.push(output);
         let trig = ir::Trigger { message: trigger.message.clone(), reference };
@@ -193,6 +201,7 @@ impl<'a> Lowering<'a> {
             dep_map.into_iter().map(|(sr, offsets)| ir::Dependency { stream: sr, offsets }).collect();
 
         let output_type = self.lower_value_type(nid);
+        let input_dependencies = self.gather_dependent_inputs(nid);
         let output = ir::OutputStream {
             name: ast_output.name.name.clone(),
             ty: output_type.clone(),
@@ -203,6 +212,7 @@ impl<'a> Lowering<'a> {
             memory_bound,
             layer,
             reference,
+            input_dependencies,
         };
 
         let debug_clone = output.clone();

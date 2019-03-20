@@ -96,6 +96,7 @@ pub struct OutputStream {
     pub name: String,
     pub ty: Type,
     pub expr: Expression,
+    pub input_dependencies: Vec<StreamReference>,
     pub outgoing_dependencies: Vec<Dependency>,
     pub dependent_streams: Vec<Tracking>,
     pub dependent_windows: Vec<WindowReference>,
