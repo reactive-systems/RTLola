@@ -1,0 +1,24 @@
+[package]
+name = "lola-parser"
+version = "0.1.0"
+authors = [
+    "Malte Schledjewski <schledjewski@react.uni-saarland.de>",
+    "Maximilian Schwenger <schwenger@react.uni-saarland.de>",
+    "Leander Tentrup <tentrup@react.uni-saarland.de>"
+]
+edition = "2018"
+
+[dependencies]
+log = "0.4.6"  # logging macros
+simplelog = "0.5.3"  # logging implementation
+pest = "^2.0"         # parser generator
+pest_derive = "^2.0"
+lazy_static = "1.2.0" # lazy_static! macro
+clap = "2.32.0"  # command line parsing
+termcolor = "1"  # color output to terminal
+itertools = "0.8"
+petgraph = "0.4.13"
+ena = "0.11" # union-find implementation
+num = "0.2"
+
+[features]
