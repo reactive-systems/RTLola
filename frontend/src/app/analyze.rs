@@ -35,58 +35,31 @@ impl Config {
             .version(env!("CARGO_PKG_VERSION"))
             .author(env!("CARGO_PKG_AUTHORS"))
             .about("lola-anlyze is a tool to parse, type check, and analyze Lola specifications")
-            .arg(
-                Arg::with_name("v")
-                    .short("v")
-                    .multiple(true)
-                    .required(false)
-                    .help("Sets the level of verbosity"),
-            )
+            .arg(Arg::with_name("v").short("v").multiple(true).required(false).help("Sets the level of verbosity"))
             .subcommand(
                 SubCommand::with_name("parse")
                     .about("Parses the input file and outputs parse tree")
-                    .arg(
-                        Arg::with_name("INPUT")
-                            .help("Sets the input file to use")
-                            .required(true)
-                            .index(1),
-                    ),
-            ).subcommand(
+                    .arg(Arg::with_name("INPUT").help("Sets the input file to use").required(true).index(1)),
+            )
+            .subcommand(
                 SubCommand::with_name("ast")
                     .about("Parses the input file and outputs internal representation of abstract syntax tree")
-                    .arg(
-                        Arg::with_name("INPUT")
-                            .help("Sets the input file to use")
-                            .required(true)
-                            .index(1),
-                    ),
-            ).subcommand(
+                    .arg(Arg::with_name("INPUT").help("Sets the input file to use").required(true).index(1)),
+            )
+            .subcommand(
                 SubCommand::with_name("pretty-print")
                     .about("Parses the input file and outputs pretty printed representation")
-                    .arg(
-                        Arg::with_name("INPUT")
-                            .help("Sets the input file to use")
-                            .required(true)
-                            .index(1),
-                    ),
-            ).subcommand(
+                    .arg(Arg::with_name("INPUT").help("Sets the input file to use").required(true).index(1)),
+            )
+            .subcommand(
                 SubCommand::with_name("analyze")
                     .about("Parses the input file and runs semantic analysis")
-                    .arg(
-                        Arg::with_name("INPUT")
-                            .help("Sets the input file to use")
-                            .required(true)
-                            .index(1),
-                    ),
-            ).subcommand(
+                    .arg(Arg::with_name("INPUT").help("Sets the input file to use").required(true).index(1)),
+            )
+            .subcommand(
                 SubCommand::with_name("ir")
                     .about("Parses the input file and returns the intermediate representation")
-                    .arg(
-                        Arg::with_name("INPUT")
-                            .help("Sets the input file to use")
-                            .required(true)
-                            .index(1),
-                    ),
+                    .arg(Arg::with_name("INPUT").help("Sets the input file to use").required(true).index(1)),
             )
             .get_matches_from(args);
 
@@ -109,68 +82,38 @@ impl Config {
         match matches.subcommand() {
             ("parse", Some(parse_matches)) => {
                 // Now we have a reference to clone's matches
-                let filename = parse_matches
-                    .value_of("INPUT")
-                    .map(|s| s.to_string())
-                    .unwrap();
+                let filename = parse_matches.value_of("INPUT").map(|s| s.to_string()).unwrap();
                 eprintln!("Input file `{}`", filename);
 
-                Config {
-                    which: Analysis::Parse,
-                    filename,
-                }
+                Config { which: Analysis::Parse, filename }
             }
             ("ast", Some(parse_matches)) => {
                 // Now we have a reference to clone's matches
-                let filename = parse_matches
-                    .value_of("INPUT")
-                    .map(|s| s.to_string())
-                    .unwrap();
+                let filename = parse_matches.value_of("INPUT").map(|s| s.to_string()).unwrap();
                 eprintln!("Input file `{}`", filename);
 
-                Config {
-                    which: Analysis::AST,
-                    filename,
-                }
+                Config { which: Analysis::AST, filename }
             }
             ("pretty-print", Some(parse_matches)) => {
                 // Now we have a reference to clone's matches
-                let filename = parse_matches
-                    .value_of("INPUT")
-                    .map(|s| s.to_string())
-                    .unwrap();
+                let filename = parse_matches.value_of("INPUT").map(|s| s.to_string()).unwrap();
                 eprintln!("Input file `{}`", filename);
 
-                Config {
-                    which: Analysis::Prettyprint,
-                    filename,
-                }
+                Config { which: Analysis::Prettyprint, filename }
             }
             ("analyze", Some(parse_matches)) => {
                 // Now we have a reference to clone's matches
-                let filename = parse_matches
-                    .value_of("INPUT")
-                    .map(|s| s.to_string())
-                    .unwrap();
+                let filename = parse_matches.value_of("INPUT").map(|s| s.to_string()).unwrap();
                 eprintln!("Input file `{}`", filename);
 
-                Config {
-                    which: Analysis::Analyze,
-                    filename,
-                }
+                Config { which: Analysis::Analyze, filename }
             }
             ("ir", Some(parse_matches)) | ("intermediate-representation", Some(parse_matches)) => {
                 // Now we have a reference to clone's matches
-                let filename = parse_matches
-                    .value_of("INPUT")
-                    .map(|s| s.to_string())
-                    .unwrap();
+                let filename = parse_matches.value_of("INPUT").map(|s| s.to_string()).unwrap();
                 eprintln!("Input file `{}`", filename);
 
-                Config {
-                    which: Analysis::IR,
-                    filename,
-                }
+                Config { which: Analysis::IR, filename }
             }
             ("", None) => {
                 println!("No subcommand was used");
@@ -189,8 +132,7 @@ impl Config {
         let mapper = SourceMapper::new(PathBuf::from(&self.filename), &contents);
         match &self.which {
             Analysis::Parse => {
-                let result =
-                    LolaParser::parse(Rule::Spec, &contents).unwrap_or_else(|e| panic!("{}", e));
+                let result = LolaParser::parse(Rule::Spec, &contents).unwrap_or_else(|e| panic!("{}", e));
                 println!("{:#?}", result);
                 Ok(())
             }

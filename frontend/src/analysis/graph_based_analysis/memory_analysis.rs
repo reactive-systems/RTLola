@@ -25,11 +25,7 @@ fn is_efficient_operator(op: WindowOperation) -> bool {
     }
 }
 
-fn determine_needed_window_memory(
-    type_size: u128,
-    number_of_element: u128,
-    op: WindowOperation,
-) -> u128 {
+fn determine_needed_window_memory(type_size: u128, number_of_element: u128, op: WindowOperation) -> u128 {
     match op {
         WindowOperation::Product | WindowOperation::Sum => type_size * number_of_element,
         WindowOperation::Count => number_of_element * 8,
@@ -138,14 +134,14 @@ fn add_sliding_windows<'a>(
                 };
             }
         }
-        ExpressionKind::Field(_, _)
-        | ExpressionKind::Method(_, _, _, _) => unimplemented!(),
+        ExpressionKind::Field(_, _) | ExpressionKind::Method(_, _, _, _) => unimplemented!(),
         ExpressionKind::Lookup(instance, offset, op) => match op {
             None => {}
             Some(wop) => {
-                let node_id = match declaration_table.get(&instance.id).expect(
-                    "We expect the the declaration-table to contain information about every stream access",
-                ) {
+                let node_id = match declaration_table
+                    .get(&instance.id)
+                    .expect("We expect the the declaration-table to contain information about every stream access")
+                {
                     Declaration::In(input) => input.id,
                     Declaration::Out(output) => output.id,
                     _ => unimplemented!(),
@@ -180,8 +176,7 @@ fn add_sliding_windows<'a>(
                     }
                     (TimingInfo::Event, true) => {
                         let number_of_panes = 64;
-                        required_memory +=
-                            determine_needed_window_memory(value_type_size, number_of_panes, *wop);
+                        required_memory += determine_needed_window_memory(value_type_size, number_of_panes, *wop);
                     }
                     (TimingInfo::RealTime(freq), true) => {
                         let number_of_panes = 64;
@@ -197,11 +192,7 @@ fn add_sliding_windows<'a>(
                                 .expect("Number of complete periods does not fit in u128"),
                             number_of_panes,
                         );
-                        required_memory += determine_needed_window_memory(
-                            value_type_size,
-                            number_of_elements,
-                            *wop,
-                        );
+                        required_memory += determine_needed_window_memory(value_type_size, number_of_elements, *wop);
                     }
                 }
             }
@@ -278,14 +269,14 @@ pub(crate) fn determine_worst_case_memory_consumption<'a>(
                 //----------------------
                 // tracking
 
-                let tracking_requirement = tracking_requirements.get(&output.id)
-                    .expect("We should have determined the tracking requirements for all streams that did not get pruned!");
+                let tracking_requirement = tracking_requirements.get(&output.id).expect(
+                    "We should have determined the tracking requirements for all streams that did not get pruned!",
+                );
                 let mut it = tracking_requirement.iter();
                 let mut tracking_per_instance: u128 = 0_u128;
                 while let Some((node_id, tracking)) = it.next() {
                     let value_type = type_table.get_value_type(*node_id);
-                    let value_type_size = if let MemoryBound::Bounded(i) = get_byte_size(value_type)
-                    {
+                    let value_type_size = if let MemoryBound::Bounded(i) = get_byte_size(value_type) {
                         i
                     } else {
                         return MemoryBound::Unbounded;
@@ -305,15 +296,14 @@ pub(crate) fn determine_worst_case_memory_consumption<'a>(
 
                 //----------------------
                 // windows
-                let windows_space =
-                    match add_sliding_windows(&output.expression, type_table, declaration_table) {
-                        MemoryBound::Bounded(i) => i,
-                        MemoryBound::Unknown => {
-                            unknown_size = true;
-                            0
-                        }
-                        MemoryBound::Unbounded => return MemoryBound::Unbounded,
-                    };
+                let windows_space = match add_sliding_windows(&output.expression, type_table, declaration_table) {
+                    MemoryBound::Bounded(i) => i,
+                    MemoryBound::Unknown => {
+                        unknown_size = true;
+                        0
+                    }
+                    MemoryBound::Unbounded => return MemoryBound::Unbounded,
+                };
                 required_memory += windows_space;
 
                 //----------------------
@@ -343,9 +333,7 @@ pub(crate) fn determine_worst_case_memory_consumption<'a>(
                 };
 
                 match tracking {
-                    TrackingRequirement::Finite(size) => {
-                        tracking_per_instance += u128::from(*size) * value_type_size
-                    }
+                    TrackingRequirement::Finite(size) => tracking_per_instance += u128::from(*size) * value_type_size,
                     // TODO What about accessing a future dependent stream?
                     TrackingRequirement::Future => unimplemented!(),
                     TrackingRequirement::Unbounded => unimplemented!(),
@@ -356,15 +344,14 @@ pub(crate) fn determine_worst_case_memory_consumption<'a>(
 
             //----------------------
             // windows
-            let windows_space =
-                match add_sliding_windows(&trigger.expression, type_table, declaration_table) {
-                    MemoryBound::Bounded(i) => i,
-                    MemoryBound::Unknown => {
-                        unknown_size = true;
-                        0
-                    }
-                    MemoryBound::Unbounded => return MemoryBound::Unbounded,
-                };
+            let windows_space = match add_sliding_windows(&trigger.expression, type_table, declaration_table) {
+                MemoryBound::Bounded(i) => i,
+                MemoryBound::Unknown => {
+                    unknown_size = true;
+                    0
+                }
+                MemoryBound::Unbounded => return MemoryBound::Unbounded,
+            };
             required_memory += windows_space;
 
             //----------------------

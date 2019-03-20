@@ -13,9 +13,7 @@ pub(crate) type FutureDependentStreams = HashSet<NodeId>;
 
 /// Computes the set of streams and triggers (represented by their `NodeId`)
 /// that (transitively) depend on future values.
-pub(crate) fn future_dependent_stream(
-    dependency_graph: &DependencyGraph,
-) -> FutureDependentStreams {
+pub(crate) fn future_dependent_stream(dependency_graph: &DependencyGraph) -> FutureDependentStreams {
     let mut future_dependent_streams: HashSet<NodeId> = HashSet::new();
 
     for node_index in dependency_graph.node_indices() {
@@ -62,18 +60,13 @@ fn propagate_future_dependence(
     dependency_graph: &DependencyGraph,
     node_index: NIx,
 ) {
-    future_dependent_streams.insert(get_ast_id(
-        *(dependency_graph
-            .node_weight(node_index)
-            .expect("We expect the node index to be valid")),
-    ));
+    future_dependent_streams
+        .insert(get_ast_id(*(dependency_graph.node_weight(node_index).expect("We expect the node index to be valid"))));
 
     for neighbor in dependency_graph.neighbors_directed(node_index, Direction::Incoming) {
-        if !future_dependent_streams.contains(&get_ast_id(
-            *(dependency_graph
-                .node_weight(neighbor)
-                .expect("We iterate over all neighbors")),
-        )) {
+        if !future_dependent_streams
+            .contains(&get_ast_id(*(dependency_graph.node_weight(neighbor).expect("We iterate over all neighbors"))))
+        {
             propagate_future_dependence(future_dependent_streams, dependency_graph, neighbor);
         }
     }
@@ -108,14 +101,11 @@ mod tests {
         let type_table = type_analysis.check(&spec);
         let mut version_analyzer = LolaVersionAnalysis::new(
             &handler,
-            type_table.as_ref().expect(
-                "We expect in the tests, that the version analysis returned without an error",
-            ),
+            type_table.as_ref().expect("We expect in the tests, that the version analysis returned without an error"),
         );
         let _version = version_analyzer.analyse(&spec);
 
-        let dependency_analysis =
-            analyse_dependencies(&spec, &version_analyzer.result, &decl_table, &handler);
+        let dependency_analysis = analyse_dependencies(&spec, &version_analyzer.result, &decl_table, &handler);
 
         let (_, pruned_graph) = determine_evaluation_order(dependency_analysis.dependency_graph);
 
@@ -123,10 +113,7 @@ mod tests {
 
         assert_eq!(expected_errors, handler.emitted_errors());
         assert_eq!(expected_warning, handler.emitted_warnings());
-        assert_eq!(
-            expected_number_future_dependent,
-            future_dependent_stream.len()
-        );
+        assert_eq!(expected_number_future_dependent, future_dependent_stream.len());
         for index in expected_future_dependent {
             let output = &spec.outputs[index];
             assert!(future_dependent_stream.contains(&output.id));

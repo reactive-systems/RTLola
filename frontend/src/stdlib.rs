@@ -24,13 +24,8 @@ impl BinOp {
         match self {
             Add | Sub | Mul | Div | Rem | Pow => FuncDecl {
                 name: format!("{}", self),
-                generics: vec![Generic {
-                    constraint: ValueTy::Constr(TypeConstraint::Numeric),
-                }],
-                parameters: vec![
-                    ValueTy::Param(0, "T".to_string()),
-                    ValueTy::Param(0, "T".to_string()),
-                ],
+                generics: vec![Generic { constraint: ValueTy::Constr(TypeConstraint::Numeric) }],
+                parameters: vec![ValueTy::Param(0, "T".to_string()), ValueTy::Param(0, "T".to_string())],
                 return_type: ValueTy::Param(0, "T".to_string()),
             },
             And | Or => FuncDecl {
@@ -41,24 +36,14 @@ impl BinOp {
             },
             Eq | Ne => FuncDecl {
                 name: format!("{}", self),
-                generics: vec![Generic {
-                    constraint: ValueTy::Constr(TypeConstraint::Equatable),
-                }],
-                parameters: vec![
-                    ValueTy::Param(0, "T".to_string()),
-                    ValueTy::Param(0, "T".to_string()),
-                ],
+                generics: vec![Generic { constraint: ValueTy::Constr(TypeConstraint::Equatable) }],
+                parameters: vec![ValueTy::Param(0, "T".to_string()), ValueTy::Param(0, "T".to_string())],
                 return_type: ValueTy::Bool,
             },
             Lt | Le | Ge | Gt => FuncDecl {
                 name: format!("{}", self),
-                generics: vec![Generic {
-                    constraint: ValueTy::Constr(TypeConstraint::Comparable),
-                }],
-                parameters: vec![
-                    ValueTy::Param(0, "T".to_string()),
-                    ValueTy::Param(0, "T".to_string()),
-                ],
+                generics: vec![Generic { constraint: ValueTy::Constr(TypeConstraint::Comparable) }],
+                parameters: vec![ValueTy::Param(0, "T".to_string()), ValueTy::Param(0, "T".to_string())],
                 return_type: ValueTy::Bool,
             },
         }
@@ -77,9 +62,7 @@ impl UnOp {
             },
             Neg => FuncDecl {
                 name: format!("{}", self),
-                generics: vec![Generic {
-                    constraint: ValueTy::Constr(TypeConstraint::Numeric),
-                }],
+                generics: vec![Generic { constraint: ValueTy::Constr(TypeConstraint::Numeric) }],
                 parameters: vec![ValueTy::Param(0, "T".to_string())],
                 return_type: ValueTy::Param(0, "T".to_string()),
             },

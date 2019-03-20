@@ -63,11 +63,7 @@ pub enum Tracking {
     /// Need to store every single value of a stream
     All(StreamReference),
     /// Need to store `num` values of `trackee`, evicting/add a value every `rate` time units.
-    Bounded {
-        trackee: StreamReference,
-        num: u128,
-        rate: Duration,
-    },
+    Bounded { trackee: StreamReference, num: u128, rate: Duration },
 }
 
 impl PartialOrd for MemorizationBound {
@@ -76,9 +72,7 @@ impl PartialOrd for MemorizationBound {
         match (self, other) {
             (MemorizationBound::Unbounded, MemorizationBound::Unbounded) => None,
             (MemorizationBound::Bounded(_), MemorizationBound::Unbounded) => Some(Ordering::Less),
-            (MemorizationBound::Unbounded, MemorizationBound::Bounded(_)) => {
-                Some(Ordering::Greater)
-            }
+            (MemorizationBound::Unbounded, MemorizationBound::Bounded(_)) => Some(Ordering::Greater),
             (MemorizationBound::Bounded(b1), MemorizationBound::Bounded(b2)) => Some(b1.cmp(&b2)),
         }
     }
@@ -184,17 +178,11 @@ pub enum Op {
     /// Accessing another stream
     /// 1st argument -> default
     /// StreamInstance contains further arguments.
-    StreamLookup {
-        instance: StreamInstance,
-        offset: Offset,
-    },
+    StreamLookup { instance: StreamInstance, offset: Offset },
     /// Accessing another stream under sample and hold semantics
     /// 1st argument -> default
     /// StreamInstance contains further arguments.
-    SampleAndHoldStreamLookup {
-        instance: StreamInstance,
-        offset: Offset,
-    },
+    SampleAndHoldStreamLookup { instance: StreamInstance, offset: Offset },
     /// Accessing another stream synchronously
     /// No arguments; StreamInstance contains further arguments.
     SyncStreamLookup(StreamInstance),
@@ -202,10 +190,7 @@ pub enum Op {
     WindowLookup(WindowReference),
     /// An if-then-else expression
     /// One argument: The register with the condition.
-    Ite {
-        consequence: Vec<Statement>,
-        alternative: Vec<Statement>,
-    },
+    Ite { consequence: Vec<Statement>, alternative: Vec<Statement> },
     /// A tuple expression
     /// Arguments: values of the tuple.
     Tuple,
@@ -387,9 +372,7 @@ impl MemorizationBound {
     pub fn unwrap(self) -> u16 {
         match self {
             MemorizationBound::Bounded(b) => b,
-            MemorizationBound::Unbounded => {
-                panic!("Called `MemorizationBound::unwrap()` on an `Unbounded` value.")
-            }
+            MemorizationBound::Unbounded => panic!("Called `MemorizationBound::unwrap()` on an `Unbounded` value."),
         }
     }
     pub fn unwrap_or(self, dft: u16) -> u16 {
@@ -438,44 +421,33 @@ impl Stream for InputStream {
 
 impl LolaIR {
     pub fn output_refs(&self) -> Vec<StreamReference> {
-        self.outputs
-            .iter()
-            .map(|s| (s as &Stream).as_stream_ref())
-            .collect()
+        self.outputs.iter().map(|s| (s as &Stream).as_stream_ref()).collect()
     }
 
     pub(crate) fn get_in_mut(&mut self, reference: StreamReference) -> &mut InputStream {
         match reference {
             StreamReference::InRef(ix) => &mut self.inputs[ix],
-            StreamReference::OutRef(_) => {
-                panic!("Called `LolaIR::get_out` with a `StreamReference::OutRef`.")
-            }
+            StreamReference::OutRef(_) => panic!("Called `LolaIR::get_out` with a `StreamReference::OutRef`."),
         }
     }
 
     pub fn get_in(&self, reference: StreamReference) -> &InputStream {
         match reference {
             StreamReference::InRef(ix) => &self.inputs[ix],
-            StreamReference::OutRef(_) => {
-                panic!("Called `LolaIR::get_out` with a `StreamReference::OutRef`.")
-            }
+            StreamReference::OutRef(_) => panic!("Called `LolaIR::get_out` with a `StreamReference::OutRef`."),
         }
     }
 
     pub(crate) fn get_out_mut(&mut self, reference: StreamReference) -> &mut OutputStream {
         match reference {
-            StreamReference::InRef(_) => {
-                panic!("Called `LolaIR::get_out` with a `StreamReference::InRef`.")
-            }
+            StreamReference::InRef(_) => panic!("Called `LolaIR::get_out` with a `StreamReference::InRef`."),
             StreamReference::OutRef(ix) => &mut self.outputs[ix],
         }
     }
 
     pub fn get_out(&self, reference: StreamReference) -> &OutputStream {
         match reference {
-            StreamReference::InRef(_) => {
-                panic!("Called `LolaIR::get_out` with a `StreamReference::InRef`.")
-            }
+            StreamReference::InRef(_) => panic!("Called `LolaIR::get_out` with a `StreamReference::InRef`."),
             StreamReference::OutRef(ix) => &self.outputs[ix],
         }
     }
@@ -490,31 +462,19 @@ impl LolaIR {
     }
 
     pub fn get_triggers(&self) -> Vec<&OutputStream> {
-        self.triggers
-            .iter()
-            .map(|t| self.get_out(t.reference))
-            .collect()
+        self.triggers.iter().map(|t| self.get_out(t.reference)).collect()
     }
 
     pub fn get_event_driven(&self) -> Vec<&OutputStream> {
-        self.event_driven
-            .iter()
-            .map(|t| self.get_out(t.reference))
-            .collect()
+        self.event_driven.iter().map(|t| self.get_out(t.reference)).collect()
     }
 
     pub fn get_time_driven(&self) -> Vec<&OutputStream> {
-        self.time_driven
-            .iter()
-            .map(|t| self.get_out(t.reference))
-            .collect()
+        self.time_driven.iter().map(|t| self.get_out(t.reference)).collect()
     }
 
     pub fn get_parametrized(&self) -> Vec<&OutputStream> {
-        self.parametrized
-            .iter()
-            .map(|t| self.get_out(t.reference))
-            .collect()
+        self.parametrized.iter().map(|t| self.get_out(t.reference)).collect()
     }
 
     pub fn get_window(&self, window: WindowReference) -> &SlidingWindow {
@@ -554,9 +514,10 @@ impl Type {
             Type::Float(FloatTy::F32) => Some(ValSize(4)),
             Type::Float(FloatTy::F64) => Some(ValSize(8)),
             Type::Option(_) => panic!("Should not be used directly!"),
-            Type::Tuple(t) => t.iter().map(Type::size).fold(Some(ValSize(0)), |acc, e| {
-                acc.and_then(|acc| e.map(|e| ValSize(e.0 + acc.0)))
-            }),
+            Type::Tuple(t) => t
+                .iter()
+                .map(Type::size)
+                .fold(Some(ValSize(0)), |acc, e| acc.and_then(|acc| e.map(|e| ValSize(e.0 + acc.0)))),
             Type::String => None,
         }
     }

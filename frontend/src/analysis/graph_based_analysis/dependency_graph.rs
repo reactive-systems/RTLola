@@ -1,6 +1,4 @@
-use super::{
-    DependencyGraph, EIx, Location, NIx, Offset, StreamDependency, StreamNode, TimeOffset,
-};
+use super::{DependencyGraph, EIx, Location, NIx, Offset, StreamDependency, StreamNode, TimeOffset};
 use crate::analysis::lola_version::LolaVersionTable;
 use crate::analysis::naming::{Declaration, DeclarationTable};
 use crate::ast::{ExpressionKind, LanguageSpec, LitKind, LolaSpec, Output, TemplateSpec, UnOp};
@@ -34,10 +32,7 @@ struct CycleTracker {
 
 impl Default for CycleTracker {
     fn default() -> Self {
-        Self {
-            positive: Vec::new(),
-            negative: Vec::new(),
-        }
+        Self { positive: Vec::new(), negative: Vec::new() }
     }
 }
 
@@ -75,22 +70,14 @@ impl<'a> CycleFinder<'a> {
         b_lists.resize(number_of_nodes, Vec::new());
         let stack: Vec<NIx> = Vec::new();
         let cycles: Vec<Vec<NIx>> = Vec::new();
-        CycleFinder {
-            dependency_graph,
-            blocked,
-            b_lists,
-            stack,
-            cycles,
-        }
+        CycleFinder { dependency_graph, blocked, b_lists, stack, cycles }
     }
 
     fn get_elementary_cycles(mut self) -> Vec<Vec<NIx>> {
         let strongly_connected_components: Vec<Vec<NIx>> = tarjan_scc(self.dependency_graph);
         for component in &strongly_connected_components {
-            let starting_node: NIx = *component
-                .iter()
-                .min()
-                .expect("Each strongly connected component must have at least one node.");
+            let starting_node: NIx =
+                *component.iter().min().expect("Each strongly connected component must have at least one node.");
             self.get_elementary_circuits_for_component(starting_node, starting_node, component);
         }
         // check for self-loops
@@ -109,21 +96,14 @@ impl<'a> CycleFinder<'a> {
     fn unblock(&mut self, node: NIx) {
         self.blocked[node.index()] = false;
         while !self.b_lists[node.index()].is_empty() {
-            let w = self.b_lists[node.index()]
-                .pop()
-                .expect("We checked that the list is not empty.");
+            let w = self.b_lists[node.index()].pop().expect("We checked that the list is not empty.");
             if self.blocked[w.index()] {
                 self.unblock(w);
             }
         }
     }
 
-    fn get_elementary_circuits_for_component(
-        &mut self,
-        node: NIx,
-        starting_node: NIx,
-        nodes_in_scc: &[NIx],
-    ) -> bool {
+    fn get_elementary_circuits_for_component(&mut self, node: NIx, starting_node: NIx, nodes_in_scc: &[NIx]) -> bool {
         let mut found = false;
         self.stack.push(node);
         self.blocked[node.index()] = true;
@@ -150,10 +130,7 @@ impl<'a> CycleFinder<'a> {
             self.unblock(node);
         } else {
             for w in neighbors {
-                if w != node
-                    && nodes_in_scc.contains(&w)
-                    && !self.b_lists[w.index()].contains(&node)
-                {
+                if w != node && nodes_in_scc.contains(&w) && !self.b_lists[w.index()].contains(&node) {
                     self.b_lists[w.index()].push(node);
                 }
             }
@@ -185,11 +162,7 @@ fn enumerate_paths(
     }
     let index = remaining_elements - 1;
 
-    let target = if cycle.len() == remaining_elements {
-        start_node
-    } else {
-        cycle[remaining_elements]
-    };
+    let target = if cycle.len() == remaining_elements { start_node } else { cycle[remaining_elements] };
     let node_index = cycle[index];
     for edge in dependency_graph.edges(node_index) {
         if edge.target() == target {
@@ -268,11 +241,7 @@ impl<'a> DependencyAnalyser<'a> {
         }
     }
 
-    fn evaluate_discrete(
-        &self,
-        expr: &crate::ast::Expression,
-        naming_table: &'a DeclarationTable,
-    ) -> i32 {
+    fn evaluate_discrete(&self, expr: &crate::ast::Expression, naming_table: &'a DeclarationTable) -> i32 {
         // TODO need typing information
         match &expr.kind {
             ExpressionKind::Lit(lit) => match &lit.kind {
@@ -291,9 +260,7 @@ impl<'a> DependencyAnalyser<'a> {
                 -self.evaluate_discrete(expr, naming_table)
             }
             ExpressionKind::Ite(_, _, _) => unreachable!(),
-            ExpressionKind::ParenthesizedExpression(_, expr, _) => {
-                self.evaluate_discrete(expr, naming_table)
-            }
+            ExpressionKind::ParenthesizedExpression(_, expr, _) => self.evaluate_discrete(expr, naming_table),
             ExpressionKind::MissingExpression => unreachable!(),
             ExpressionKind::Tuple(_) => unimplemented!(),
             ExpressionKind::Function(_, _, _) => unimplemented!(),
@@ -302,11 +269,7 @@ impl<'a> DependencyAnalyser<'a> {
         }
     }
 
-    fn translate_offset(
-        &self,
-        offset: &crate::ast::Offset,
-        naming_table: &'a DeclarationTable,
-    ) -> Offset {
+    fn translate_offset(&self, offset: &crate::ast::Offset, naming_table: &'a DeclarationTable) -> Offset {
         // TODO replace the evaluate_discrete/float
         match offset {
             crate::ast::Offset::DiscreteOffset(expr) => {
@@ -315,15 +278,9 @@ impl<'a> DependencyAnalyser<'a> {
             }
             crate::ast::Offset::RealTimeOffset(time_spec) => {
                 if time_spec.signum <= 0 {
-                    Offset::Time(TimeOffset::UpToNow(
-                        time_spec.period,
-                        time_spec.exact_period.abs(),
-                    ))
+                    Offset::Time(TimeOffset::UpToNow(time_spec.period, time_spec.exact_period.abs()))
                 } else {
-                    Offset::Time(TimeOffset::Future(
-                        time_spec.period,
-                        time_spec.exact_period.abs(),
-                    ))
+                    Offset::Time(TimeOffset::Future(time_spec.period, time_spec.exact_period.abs()))
                 }
             }
         }
@@ -361,10 +318,7 @@ impl<'a> DependencyAnalyser<'a> {
                 self.add_edges_for_expression(current_node, &*right, location, mapping);
             }
             ExpressionKind::Ident(_) => match &self.naming_table[&expr.id] {
-                Declaration::Type(_)
-                | Declaration::Func(_)
-                | Declaration::Param(_)
-                | Declaration::Const(_) => {}
+                Declaration::Type(_) | Declaration::Func(_) | Declaration::Param(_) | Declaration::Const(_) => {}
                 Declaration::In(input) => {
                     let target_stream_id = input.id;
                     let target_stream_entry = mapping[&target_stream_id];
@@ -450,9 +404,7 @@ impl<'a> DependencyAnalyser<'a> {
                 StreamDependency::Access(_, offset, _) => match offset {
                     Offset::Time(_, ..) => unreachable!("This is a cycle without realtime"),
                     Offset::Discrete(offset) => total_weight += offset,
-                    Offset::SlidingWindow => {
-                        unreachable!("Sliding windows do not count for cycles")
-                    }
+                    Offset::SlidingWindow => unreachable!("Sliding windows do not count for cycles"),
                 },
             }
         }
@@ -465,22 +417,12 @@ impl<'a> DependencyAnalyser<'a> {
         }
     }
 
-    fn find_all_cyclic_paths(
-        &mut self,
-        cycles: &[Vec<NodeIndex>],
-    ) -> Vec<Vec<petgraph::prelude::EdgeIndex>> {
+    fn find_all_cyclic_paths(&mut self, cycles: &[Vec<NodeIndex>]) -> Vec<Vec<petgraph::prelude::EdgeIndex>> {
         let mut paths: Vec<Vec<petgraph::prelude::EdgeIndex>> = Vec::with_capacity(cycles.len());
         let mut path: Vec<petgraph::prelude::EdgeIndex> = Vec::new();
         for cycle in cycles.iter() {
             println!("Transforming cycle {:?}", cycle);
-            enumerate_paths(
-                &self.dependency_graph,
-                cycle,
-                cycle.len(),
-                &mut paths,
-                &mut path,
-                cycle[0],
-            );
+            enumerate_paths(&self.dependency_graph, cycle, cycle.len(), &mut paths, &mut path, cycle[0]);
         }
         paths
     }
@@ -628,10 +570,7 @@ impl<'a> DependencyAnalyser<'a> {
 
         let nodes_with_positive_cycle = self.check_cycles();
 
-        DependencyAnalysis {
-            dependency_graph: self.dependency_graph,
-            nodes_with_positive_cycle,
-        }
+        DependencyAnalysis { dependency_graph: self.dependency_graph, nodes_with_positive_cycle }
     }
 
     fn check_cycles(&mut self) -> Vec<NodeId> {
@@ -642,8 +581,7 @@ impl<'a> DependencyAnalyser<'a> {
         // TODO check each path individually
         // TODO check +/0/-
         // Map stream.index  -> (Vec<Vec<EIx>>,,)
-        let mut cycles_per_stream: HashMap<NodeId, CycleTracker> =
-            HashMap::with_capacity(self.spec.outputs.len());
+        let mut cycles_per_stream: HashMap<NodeId, CycleTracker> = HashMap::with_capacity(self.spec.outputs.len());
         // add entry for each output
         for output in &self.spec.outputs {
             cycles_per_stream.insert(output.id, CycleTracker::default());
@@ -652,13 +590,9 @@ impl<'a> DependencyAnalyser<'a> {
             let weight = self.get_cycle_weight(&cyclic_path);
             if let Some(weight) = weight {
                 match weight {
-                    CycleWeight::Negative | CycleWeight::Positive => self
-                        .add_path_index_for_all_nodes(
-                            &mut cycles_per_stream,
-                            path_index,
-                            cyclic_path,
-                            weight,
-                        ),
+                    CycleWeight::Negative | CycleWeight::Positive => {
+                        self.add_path_index_for_all_nodes(&mut cycles_per_stream, path_index, cyclic_path, weight)
+                    }
                     CycleWeight::Zero => self.build_zero_weight_cycle_error(cyclic_path),
                 }
             }
@@ -849,32 +783,23 @@ impl<'a> DependencyAnalyser<'a> {
         if let CycleWeight::Positive = weight {
             for edge_index in cyclic_path {
                 let stream_id = self.get_stream_id_from_start_node(*edge_index);
-                let node_entry = cycles_per_stream
-                    .get_mut(stream_id)
-                    .expect("We added all outputs to the map");
+                let node_entry = cycles_per_stream.get_mut(stream_id).expect("We added all outputs to the map");
                 node_entry.positive.push(path_index);
             }
         } else {
             for edge_index in cyclic_path {
                 let stream_id = self.get_stream_id_from_start_node(*edge_index);
-                let node_entry = cycles_per_stream
-                    .get_mut(stream_id)
-                    .expect("We added all outputs to the map");
+                let node_entry = cycles_per_stream.get_mut(stream_id).expect("We added all outputs to the map");
                 node_entry.negative.push(path_index);
             }
         }
     }
 
     fn get_stream_id_from_start_node(&mut self, edge_index: EIx) -> &NodeId {
-        let edge_start_index = self
-            .dependency_graph
-            .edge_endpoints(edge_index)
-            .expect("We only accept a valid EdgeIndex")
-            .0;
-        let start_node_info = self
-            .dependency_graph
-            .node_weight(edge_start_index)
-            .expect("The graph library just us this NodeIndex");
+        let edge_start_index =
+            self.dependency_graph.edge_endpoints(edge_index).expect("We only accept a valid EdgeIndex").0;
+        let start_node_info =
+            self.dependency_graph.node_weight(edge_start_index).expect("The graph library just us this NodeIndex");
         match start_node_info {
             StreamNode::ClassicOutput(id)
             | StreamNode::ParameterizedOutput(id)
@@ -927,37 +852,23 @@ mod tests {
         let type_table = type_analysis.check(&ast);
         let mut version_analyzer = LolaVersionAnalysis::new(
             &handler,
-            type_table
-                .as_ref()
-                .expect("We expect in these tests that the type analysis checks out."),
+            type_table.as_ref().expect("We expect in these tests that the type analysis checks out."),
         );
         let version = version_analyzer.analyse(&ast);
-        assert!(
-            !version.is_none(),
-            "We only analyze dependencies for specifications that so far seem to be ok."
-        );
-        let _dependency_analysis =
-            analyse_dependencies(&ast, &version_analyzer.result, &decl_table, &handler);
+        assert!(!version.is_none(), "We only analyze dependencies for specifications that so far seem to be ok.");
+        let _dependency_analysis = analyse_dependencies(&ast, &version_analyzer.result, &decl_table, &handler);
         assert_eq!(num_errors, handler.emitted_errors());
         assert_eq!(num_warnings, handler.emitted_warnings());
     }
 
     #[test]
     fn simple_cycle() {
-        check_graph(
-            "input a: Int8\noutput b: Int8 := a+d\noutput c: Int8 := b\noutput d: Int8 := c",
-            1,
-            0,
-        )
+        check_graph("input a: Int8\noutput b: Int8 := a+d\noutput c: Int8 := b\noutput d: Int8 := c", 1, 0)
     }
 
     #[test]
     fn linear_should_be_no_problem() {
-        check_graph(
-            "input a: Int8\noutput b: Int8 := a\noutput c: Int8 := b\noutput d: Int8 := c",
-            0,
-            0,
-        )
+        check_graph("input a: Int8\noutput b: Int8 := a\noutput c: Int8 := b\noutput d: Int8 := c", 0, 0)
     }
 
     #[test]
@@ -978,15 +889,15 @@ mod tests {
 
     #[test]
     fn self_loop() {
-        check_graph("input a: Int8\noutput b: Int8 := a\noutput c: Int8 := b\noutput d: Int8 := c\noutput e: Int8 := e",1,0)
+        check_graph(
+            "input a: Int8\noutput b: Int8 := a\noutput c: Int8 := b\noutput d: Int8 := c\noutput e: Int8 := e",
+            1,
+            0,
+        )
     }
 
     #[test]
     fn parallel_edges_in_a_cycle() {
-        check_graph(
-            "input a: Int8\noutput b: Int8 := a+d+d\noutput c: Int8 := b\noutput d: Int8 := c",
-            2,
-            0,
-        )
+        check_graph("input a: Int8\noutput b: Int8 := a+d+d\noutput c: Int8 := b\noutput d: Int8 := c", 2, 0)
     }
 }

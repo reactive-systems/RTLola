@@ -75,13 +75,9 @@ impl<'a, 'b> NamingAnalysis<'a, 'b> {
     /// * declaration already exists in current scope
     fn add_decl_for(&mut self, decl: Declaration<'a>) {
         assert!(!decl.is_type());
-        let name = decl
-            .get_name()
-            .expect("added declarations are guaranteed to have a name");
+        let name = decl.get_name().expect("added declarations are guaranteed to have a name");
 
-        let span = decl
-            .get_span()
-            .expect("all user defined declarations have a `Span`");
+        let span = decl.get_span().expect("all user defined declarations have a `Span`");
 
         // check for keyword
         let lower = name.to_lowercase();
@@ -98,11 +94,7 @@ impl<'a, 'b> NamingAnalysis<'a, 'b> {
                 LabeledSpan::new(span, &format!("`{}` redefined here", name), true),
             );
             if let Some(span) = decl.get_span() {
-                builder.add_span_with_label(
-                    span,
-                    &format!("previous definition of the value `{}` here", name),
-                    false,
-                );
+                builder.add_span_with_label(span, &format!("previous definition of the value `{}` here", name), false);
             }
             builder.emit();
         } else {
@@ -139,15 +131,9 @@ impl<'a, 'b> NamingAnalysis<'a, 'b> {
             assert!(!decl.is_type());
 
             // check if there is a parameter with the same name
-            if let Some(decl) = self
-                .declarations
-                .get_decl_in_current_scope_for(&param.name.name)
-            {
+            if let Some(decl) = self.declarations.get_decl_in_current_scope_for(&param.name.name) {
                 let mut builder = self.handler.build_error_with_span(
-                    &format!(
-                        "identifier `{}` is use more than once in this paramater list",
-                        param.name.name
-                    ),
+                    &format!("identifier `{}` is use more than once in this paramater list", param.name.name),
                     LabeledSpan::new(
                         param.name.span,
                         &format!("`{}` used as a parameter more than once", param.name.name),
@@ -155,8 +141,7 @@ impl<'a, 'b> NamingAnalysis<'a, 'b> {
                     ),
                 );
                 builder.add_span_with_label(
-                    decl.get_span()
-                        .expect("as it is in parameter list, it has a span"),
+                    decl.get_span().expect("as it is in parameter list, it has a span"),
                     &format!("previous use of the parameter `{}` here", param.name.name),
                     false,
                 );
@@ -199,10 +184,7 @@ impl<'a, 'b> NamingAnalysis<'a, 'b> {
 
             // check types for parametric inputs
             self.declarations.push();
-            input
-                .params
-                .iter()
-                .for_each(|param| self.check_param(&param));
+            input.params.iter().for_each(|param| self.check_param(&param));
             self.declarations.pop();
         }
 
@@ -225,11 +207,7 @@ impl<'a, 'b> NamingAnalysis<'a, 'b> {
                 if let Some(decl) = self.declarations.get_decl_in_current_scope_for(&ident.name) {
                     let mut builder = self.handler.build_error_with_span(
                         &format!("the name `{}` is defined multiple times", ident.name),
-                        LabeledSpan::new(
-                            ident.span,
-                            &format!("`{}` redefined here", ident.name),
-                            true,
-                        ),
+                        LabeledSpan::new(ident.span, &format!("`{}` redefined here", ident.name), true),
                     );
                     if let Some(span) = decl.get_span() {
                         builder.add_span_with_label(
@@ -247,15 +225,8 @@ impl<'a, 'b> NamingAnalysis<'a, 'b> {
                             if ident.name == **name {
                                 found = true;
                                 let mut builder = self.handler.build_error_with_span(
-                                    &format!(
-                                        "the trigger `{}` is defined multiple times",
-                                        ident.name
-                                    ),
-                                    LabeledSpan::new(
-                                        ident.span,
-                                        &format!("`{}` redefined here", ident.name),
-                                        true,
-                                    ),
+                                    &format!("the trigger `{}` is defined multiple times", ident.name),
+                                    LabeledSpan::new(ident.span, &format!("`{}` redefined here", ident.name), true),
                                 );
                                 builder.add_span_with_label(
                                     previous_trigger.span,
@@ -283,10 +254,7 @@ impl<'a, 'b> NamingAnalysis<'a, 'b> {
         // recurse into expressions and check them
         for output in &spec.outputs {
             self.declarations.push();
-            output
-                .params
-                .iter()
-                .for_each(|param| self.check_param(&param));
+            output.params.iter().for_each(|param| self.check_param(&param));
             if let Some(ref template_spec) = output.template_spec {
                 if let Some(ref invoke) = template_spec.inv {
                     self.check_expression(&invoke.target);
@@ -303,27 +271,20 @@ impl<'a, 'b> NamingAnalysis<'a, 'b> {
                     self.check_expression(&terminate.target);
                 }
             }
-            self.declarations
-                .add_decl_for("self", Declaration::Out(output));
+            self.declarations.add_decl_for("self", Declaration::Out(output));
             self.check_expression(&output.expression);
             self.declarations.pop();
         }
     }
 
     fn check_stream_instance(&mut self, instance: &'a StreamInstance) {
-        if let Some(decl) = self
-            .declarations
-            .get_decl_for(&instance.stream_identifier.name)
-        {
+        if let Some(decl) = self.declarations.get_decl_for(&instance.stream_identifier.name) {
             if decl.is_lookup_target() {
                 self.result.insert(instance.id, decl);
             } else {
                 // not a stream
                 let mut builder = self.handler.build_error_with_span(
-                    &format!(
-                        "the name `{}` is not a stream",
-                        instance.stream_identifier.name
-                    ),
+                    &format!("the name `{}` is not a stream", instance.stream_identifier.name),
                     LabeledSpan::new(instance.span, "expected a stream here", true),
                 );
                 if let Some(span) = decl.get_span() {
@@ -338,10 +299,7 @@ impl<'a, 'b> NamingAnalysis<'a, 'b> {
         } else {
             // it does not exist
             self.handler.error_with_span(
-                &format!(
-                    "name `{}` does not exist in current scope",
-                    &instance.stream_identifier.name
-                ),
+                &format!("name `{}` does not exist in current scope", &instance.stream_identifier.name),
                 LabeledSpan::new(instance.span, "does not exist", true),
             );
         }
@@ -424,9 +382,7 @@ pub(crate) struct ScopedDecl<'a> {
 
 impl<'a> ScopedDecl<'a> {
     fn new() -> Self {
-        ScopedDecl {
-            scopes: vec![HashMap::new()],
-        }
+        ScopedDecl { scopes: vec![HashMap::new()] }
     }
 
     fn push(&mut self) {
@@ -448,12 +404,7 @@ impl<'a> ScopedDecl<'a> {
     }
 
     fn get_decl_in_current_scope_for(&self, name: &str) -> Option<Declaration<'a>> {
-        match self
-            .scopes
-            .last()
-            .expect("It appears that we popped the global context.")
-            .get(name)
-        {
+        match self.scopes.last().expect("It appears that we popped the global context.").get(name) {
             Some(&decl) => Some(decl),
             None => None,
         }
@@ -461,10 +412,7 @@ impl<'a> ScopedDecl<'a> {
 
     pub(crate) fn add_decl_for(&mut self, name: &'a str, decl: Declaration<'a>) {
         assert!(self.scopes.last().is_some());
-        self.scopes
-            .last_mut()
-            .expect("It appears that we popped the global context.")
-            .insert(name, decl);
+        self.scopes.last_mut().expect("It appears that we popped the global context.").insert(name, decl);
     }
 }
 
@@ -514,10 +462,7 @@ impl<'a> Declaration<'a> {
     fn is_lookup_target(&self) -> bool {
         match self {
             Declaration::In(_) | Declaration::Out(_) => true,
-            Declaration::Const(_)
-            | Declaration::Type(_)
-            | Declaration::Param(_)
-            | Declaration::Func(_) => false,
+            Declaration::Const(_) | Declaration::Type(_) | Declaration::Param(_) | Declaration::Func(_) => false,
         }
     }
 }
@@ -564,10 +509,7 @@ mod tests {
 
     #[test]
     fn unknown_types_are_reported() {
-        assert_eq!(
-            3,
-            number_of_naming_errors("output test<ab: B, c: D>: E := 3")
-        )
+        assert_eq!(3, number_of_naming_errors("output test<ab: B, c: D>: E := 3"))
     }
 
     #[test]
@@ -577,38 +519,24 @@ mod tests {
 
     #[test]
     fn primitive_types_are_a_known() {
-        for ty in &[
-            "Int8", "Int16", "Int32", "Int64", "Float32", "Float64", "Bool", "String",
-        ] {
-            assert_eq!(
-                0,
-                number_of_naming_errors(&format!("output test: {} := 3", ty))
-            )
+        for ty in &["Int8", "Int16", "Int32", "Int64", "Float32", "Float64", "Bool", "String"] {
+            assert_eq!(0, number_of_naming_errors(&format!("output test: {} := 3", ty)))
         }
     }
 
     #[test]
     fn duplicate_names_at_the_same_level_are_reported() {
-        assert_eq!(
-            1,
-            number_of_naming_errors("output test: String := 3\noutput test: String := 3")
-        )
+        assert_eq!(1, number_of_naming_errors("output test: String := 3\noutput test: String := 3"))
     }
 
     #[test]
     fn duplicate_parameters_are_not_allowed_for_outputs() {
-        assert_eq!(
-            1,
-            number_of_naming_errors("output test<ab: Int8, ab: Int8> := 3")
-        )
+        assert_eq!(1, number_of_naming_errors("output test<ab: Int8, ab: Int8> := 3"))
     }
 
     #[test]
     fn duplicate_parameters_are_not_allowed_for_inputs() {
-        assert_eq!(
-            1,
-            number_of_naming_errors("input test<ab: Int8, ab: Int8> : Int8")
-        )
+        assert_eq!(1, number_of_naming_errors("input test<ab: Int8, ab: Int8> : Int8"))
     }
 
     #[test]
@@ -648,18 +576,12 @@ mod tests {
 
     #[test]
     fn known_function_though_import() {
-        assert_eq!(
-            0,
-            number_of_naming_errors("import math\noutput x: Float32 := sqrt(2)")
-        )
+        assert_eq!(0, number_of_naming_errors("import math\noutput x: Float32 := sqrt(2)"))
     }
 
     #[test]
     fn missing_expression() {
         // should not produce an error as we want to be able to handle incomplete specs in analysis
-        assert_eq!(
-            0,
-            number_of_naming_errors("input x: Bool\noutput y: Bool := \ntrigger (y || x)")
-        )
+        assert_eq!(0, number_of_naming_errors("input x: Bool\noutput y: Bool := \ntrigger (y || x)"))
     }
 }

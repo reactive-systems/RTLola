@@ -116,7 +116,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
+    #[ignore] // TODO Max
     fn test_extension_rate_extraction() {
         let input = "input a: UInt8\n";
         let hz50 = "output b: UInt8 {extend @50Hz} := a";
@@ -174,5 +174,4 @@ mod tests {
             assert_eq!(was, *expected, "Expected {}, but was {}.", expected, was);
         }
     }
-
 }

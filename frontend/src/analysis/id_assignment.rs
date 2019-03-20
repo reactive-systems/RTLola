@@ -136,17 +136,13 @@ where
             assign_ids_literal(lit, next_id);
         }
         ExpressionKind::Ident(_) | ExpressionKind::MissingExpression => {}
-        ExpressionKind::Default(lhs, rhs)
-        | ExpressionKind::Hold(lhs, rhs)
-        | ExpressionKind::Binary(_, lhs, rhs) => {
+        ExpressionKind::Default(lhs, rhs) | ExpressionKind::Hold(lhs, rhs) | ExpressionKind::Binary(_, lhs, rhs) => {
             assign_ids_expr(lhs, next_id);
             assign_ids_expr(rhs, next_id);
         }
         ExpressionKind::Lookup(inst, offset, _winop) => {
             inst.id = next_id();
-            inst.arguments
-                .iter_mut()
-                .for_each(|e| assign_ids_expr(e, next_id));
+            inst.arguments.iter_mut().for_each(|e| assign_ids_expr(e, next_id));
             match offset {
                 Offset::DiscreteOffset(expr) => assign_ids_expr(expr, next_id),
                 Offset::RealTimeOffset(time_spec) => time_spec.id = next_id(),
@@ -286,10 +282,7 @@ mod tests {
         ];
         v.dedup();
         assert_eq!(v.len(), 9, "Some ids occur multiple times.");
-        assert!(
-            v.iter().all(|id| *id != NodeId::DUMMY),
-            "No node should have a dummy id anymore."
-        );
+        assert!(v.iter().all(|id| *id != NodeId::DUMMY), "No node should have a dummy id anymore.");
     }
 
     #[test]
@@ -308,20 +301,11 @@ mod tests {
         let mut spec = LolaSpec::new();
         let lhs = Expression::new(ExpressionKind::Ident(ident()), span());
         let rhs = Expression::new(ExpressionKind::Ident(ident()), span());
-        let expr = Expression::new(
-            ExpressionKind::Binary(BinOp::Div, Box::new(lhs), Box::new(rhs)),
-            span(),
-        );
+        let expr = Expression::new(ExpressionKind::Binary(BinOp::Div, Box::new(lhs), Box::new(rhs)), span());
         spec.outputs.push(output(expr));
         assign_ids(&mut spec);
-        let mut v = vec![
-            get_id_o(spec.outputs.get(0)),
-            spec.outputs[0].id,
-            spec.outputs[0].expression.id,
-        ];
-        if let ExpressionKind::Binary(BinOp::Div, ref lhs, ref rhs) =
-            spec.outputs[0].expression.kind
-        {
+        let mut v = vec![get_id_o(spec.outputs.get(0)), spec.outputs[0].id, spec.outputs[0].expression.id];
+        if let ExpressionKind::Binary(BinOp::Div, ref lhs, ref rhs) = spec.outputs[0].expression.kind {
             v.push(rhs.id);
             v.push(lhs.id);
         } else {
@@ -330,9 +314,6 @@ mod tests {
         v.dedup();
 
         assert_eq!(v.len(), 5, "Some ids occur multiple times.");
-        assert!(
-            v.iter().all(|id| *id != NodeId::DUMMY),
-            "No node should have a dummy id anymore."
-        );
+        assert!(v.iter().all(|id| *id != NodeId::DUMMY), "No node should have a dummy id anymore.");
     }
 }

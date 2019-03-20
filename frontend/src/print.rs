@@ -41,13 +41,7 @@ fn format_type(ty: &Option<Type>) -> String {
 
 impl Display for Constant {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        write!(
-            f,
-            "constant {}{} := {}",
-            self.name,
-            format_type(&self.ty),
-            self.literal
-        )
+        write!(f, "constant {}{} := {}", self.name, format_type(&self.ty), self.literal)
     }
 }
 
@@ -73,12 +67,7 @@ impl Display for Output {
                 write!(f, ": {}", self.ty)?;
             }
         }
-        write!(
-            f,
-            "{} := {}",
-            format_opt(&self.template_spec, " ", ""),
-            self.expression
-        )
+        write!(f, "{} := {}", format_opt(&self.template_spec, " ", ""), self.expression)
     }
 }
 
@@ -110,13 +99,7 @@ impl Display for Parameter {
 impl Display for InvokeSpec {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         match self.condition {
-            Some(ref c) => write!(
-                f,
-                "invoke {} {} {}",
-                self.target,
-                if self.is_if { "if" } else { "unless" },
-                c,
-            ),
+            Some(ref c) => write!(f, "invoke {} {} {}", self.target, if self.is_if { "if" } else { "unless" }, c,),
             None => write!(f, "invoke {}", self.target),
         }
     }
@@ -124,12 +107,7 @@ impl Display for InvokeSpec {
 
 impl Display for ExtendSpec {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        write!(
-            f,
-            "extend {}{}",
-            format_opt(&self.target, "", ""),
-            format_opt(&self.freq, " @ ", ""),
-        )
+        write!(f, "extend {}{}", format_opt(&self.target, "", ""), format_opt(&self.freq, " @ ", ""),)
     }
 }
 
@@ -139,88 +117,40 @@ impl Display for TimeSpec {
         let abs_value = value.abs();
 
         if !value.is_zero() {
-            if (&abs_value)
-                .rem(10_u64.pow(9) * 60 * 60 * 24 * 365)
-                .is_zero()
-            {
+            if (&abs_value).rem(10_u64.pow(9) * 60 * 60 * 24 * 365).is_zero() {
                 let x: BigInt = abs_value / (10_u64.pow(9) * 60 * 60 * 24 * 365);
-                return write!(
-                    f,
-                    "{}{:?}a",
-                    if value.is_negative() { "-" } else { "" },
-                    x.to_u128().unwrap()
-                );
+                return write!(f, "{}{:?}a", if value.is_negative() { "-" } else { "" }, x.to_u128().unwrap());
             }
             if (&abs_value).rem(10_u64.pow(9) * 60 * 60 * 24 * 7).is_zero() {
                 let x: BigInt = abs_value / (10_u64.pow(9) * 60 * 60 * 24 * 7);
-                return write!(
-                    f,
-                    "{}{:?}w",
-                    if value.is_negative() { "-" } else { "" },
-                    x.to_u128().unwrap()
-                );
+                return write!(f, "{}{:?}w", if value.is_negative() { "-" } else { "" }, x.to_u128().unwrap());
             }
             if (&abs_value).rem(10_u64.pow(9) * 60 * 60 * 24).is_zero() {
                 let x: BigInt = abs_value / (10_u64.pow(9) * 60 * 60 * 24);
-                return write!(
-                    f,
-                    "{}{:?}d",
-                    if value.is_negative() { "-" } else { "" },
-                    x.to_u128().unwrap()
-                );
+                return write!(f, "{}{:?}d", if value.is_negative() { "-" } else { "" }, x.to_u128().unwrap());
             }
             if (&abs_value).rem(10_u64.pow(9) * 60 * 60).is_zero() {
                 let x: BigInt = abs_value / (10_u64.pow(9) * 60 * 60);
-                return write!(
-                    f,
-                    "{}{:?}h",
-                    if value.is_negative() { "-" } else { "" },
-                    x.to_u128().unwrap()
-                );
+                return write!(f, "{}{:?}h", if value.is_negative() { "-" } else { "" }, x.to_u128().unwrap());
             }
             if (&abs_value).rem(10_u64.pow(9) * 60).is_zero() {
                 let x: BigInt = abs_value / (10_u64.pow(9) * 60);
-                return write!(
-                    f,
-                    "{}{:?}min",
-                    if value.is_negative() { "-" } else { "" },
-                    x.to_u128().unwrap()
-                );
+                return write!(f, "{}{:?}min", if value.is_negative() { "-" } else { "" }, x.to_u128().unwrap());
             }
             if (&abs_value).rem(10_u64.pow(9)).is_zero() {
                 let x: BigInt = abs_value / (10_u64.pow(9));
-                return write!(
-                    f,
-                    "{}{:?}s",
-                    if value.is_negative() { "-" } else { "" },
-                    x.to_u128().unwrap()
-                );
+                return write!(f, "{}{:?}s", if value.is_negative() { "-" } else { "" }, x.to_u128().unwrap());
             }
             if (&abs_value).rem(10_u64.pow(6)).is_zero() {
                 let x: BigInt = abs_value / (10_u64.pow(6));
-                return write!(
-                    f,
-                    "{}{:?}ms",
-                    if value.is_negative() { "-" } else { "" },
-                    x.to_u128().unwrap()
-                );
+                return write!(f, "{}{:?}ms", if value.is_negative() { "-" } else { "" }, x.to_u128().unwrap());
             }
             if (&abs_value).rem(10_u64.pow(3)).is_zero() {
                 let x: BigInt = abs_value / (10_u64.pow(3));
-                return write!(
-                    f,
-                    "{}{:?}μs",
-                    if value.is_negative() { "-" } else { "" },
-                    x.to_u128().unwrap()
-                );
+                return write!(f, "{}{:?}μs", if value.is_negative() { "-" } else { "" }, x.to_u128().unwrap());
             }
         }
-        write!(
-            f,
-            "{}{:?}ns",
-            if value.is_negative() { "-" } else { "" },
-            abs_value.to_u128().unwrap()
-        )
+        write!(f, "{}{:?}ns", if value.is_negative() { "-" } else { "" }, abs_value.to_u128().unwrap())
     }
 }
 
@@ -280,22 +210,14 @@ impl Display for Expression {
             ExpressionKind::Ident(ident) => write!(f, "{}", ident),
             ExpressionKind::Default(expr, val) => write!(f, "{} ? {}", expr, val),
             ExpressionKind::Hold(expr, val) => write!(f, "{} ! {}", expr, val),
-            ExpressionKind::Lookup(inst, offset, Some(aggr)) => {
-                write!(f, "{}[{}, {}]", inst, offset, aggr)
-            }
+            ExpressionKind::Lookup(inst, offset, Some(aggr)) => write!(f, "{}[{}, {}]", inst, offset, aggr),
             ExpressionKind::Lookup(inst, offset, None) => write!(f, "{}[{}]", inst, offset),
             ExpressionKind::Binary(op, lhs, rhs) => write!(f, "{} {} {}", lhs, op, rhs),
             ExpressionKind::Unary(operator, operand) => write!(f, "{}{}", operator, operand),
-            ExpressionKind::Ite(cond, cons, alt) => {
-                write!(f, "if {} then {} else {}", cond, cons, alt)
+            ExpressionKind::Ite(cond, cons, alt) => write!(f, "if {} then {} else {}", cond, cons, alt),
+            ExpressionKind::ParenthesizedExpression(left, expr, right) => {
+                write!(f, "{}{}{}", if left.is_some() { "(" } else { "" }, expr, if right.is_some() { ")" } else { "" })
             }
-            ExpressionKind::ParenthesizedExpression(left, expr, right) => write!(
-                f,
-                "{}{}{}",
-                if left.is_some() { "(" } else { "" },
-                expr,
-                if right.is_some() { ")" } else { "" }
-            ),
             ExpressionKind::MissingExpression => Ok(()),
             ExpressionKind::Tuple(exprs) => write_delim_list(f, exprs, "(", ")", ", "),
             ExpressionKind::Function(kind, types, args) => {

@@ -19,8 +19,7 @@ pub(crate) fn warn_about_missing_parenthesis_in_expression(expr: &Expression, ha
         | ExpressionKind::Lookup(_, _, _)
         | ExpressionKind::Ident(_)
         | ExpressionKind::MissingExpression => {}
-        ExpressionKind::Unary(_, inner)
-        | ExpressionKind::Field(inner, _) => {
+        ExpressionKind::Unary(_, inner) | ExpressionKind::Field(inner, _) => {
             warn_about_missing_parenthesis_in_expression(&inner, handler);
         }
         ExpressionKind::Binary(_, left, right)
@@ -38,34 +37,22 @@ pub(crate) fn warn_about_missing_parenthesis_in_expression(expr: &Expression, ha
             if left.is_none() {
                 handler.warn_with_span(
                     "missing opening parenthesis",
-                    LabeledSpan::new(
-                        expr.span,
-                        "This expression is missing an opening parenthesis.",
-                        true,
-                    ),
+                    LabeledSpan::new(expr.span, "This expression is missing an opening parenthesis.", true),
                 )
             }
             warn_about_missing_parenthesis_in_expression(&inner, handler);
             if right.is_none() {
                 handler.warn_with_span(
                     "missing closing parenthesis",
-                    LabeledSpan::new(
-                        expr.span,
-                        "This expression is missing a closing parenthesis.",
-                        true,
-                    ),
+                    LabeledSpan::new(expr.span, "This expression is missing a closing parenthesis.", true),
                 )
             }
         }
         ExpressionKind::Tuple(entries) | ExpressionKind::Function(_, _, entries) => {
-            entries
-                .iter()
-                .for_each(|entry| warn_about_missing_parenthesis_in_expression(&**entry, handler));
+            entries.iter().for_each(|entry| warn_about_missing_parenthesis_in_expression(&**entry, handler));
         }
         ExpressionKind::Method(base, _, _, arguments) => {
-            arguments
-                .iter()
-                .for_each(|entry| warn_about_missing_parenthesis_in_expression(&**entry, handler));
+            arguments.iter().for_each(|entry| warn_about_missing_parenthesis_in_expression(&**entry, handler));
             warn_about_missing_parenthesis_in_expression(&base, handler);
         }
     }
@@ -88,17 +75,11 @@ mod tests {
 
     #[test]
     fn warn_about_missing_parenthesis() {
-        assert_eq!(
-            1,
-            number_of_missing_parenthesis_warnings("output test: Int8 := (3+3")
-        )
+        assert_eq!(1, number_of_missing_parenthesis_warnings("output test: Int8 := (3+3"))
     }
 
     #[test]
     fn do_not_warn_about_existing_parenthesis() {
-        assert_eq!(
-            0,
-            number_of_missing_parenthesis_warnings("output test: Int8 := (3+3)")
-        )
+        assert_eq!(0, number_of_missing_parenthesis_warnings("output test: Int8 := (3+3)"))
     }
 }

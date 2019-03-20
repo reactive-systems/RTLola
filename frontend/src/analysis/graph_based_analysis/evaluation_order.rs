@@ -86,8 +86,7 @@ struct StepEntry {
 fn build_compute_graph(mut dependency_graph: DependencyGraph) -> ComputationGraph {
     let expected_capacity = dependency_graph.node_count() * 4;
     let mut mapping: HashMap<NodeId, StepEntry> = HashMap::with_capacity(expected_capacity);
-    let mut computation_graph =
-        ComputationGraph::with_capacity(expected_capacity, expected_capacity);
+    let mut computation_graph = ComputationGraph::with_capacity(expected_capacity, expected_capacity);
     for node in dependency_graph.node_weights_mut() {
         // TODO ignore real time streams
         let id = get_ast_id(*node);
@@ -98,43 +97,22 @@ fn build_compute_graph(mut dependency_graph: DependencyGraph) -> ComputationGrap
         computation_graph.add_edge(extend, invoke, ());
         computation_graph.add_edge(terminate, invoke, ());
         computation_graph.add_edge(evaluate, extend, ());
-        mapping.insert(
-            id,
-            StepEntry {
-                invoke,
-                extend,
-                evaluate,
-                terminate,
-            },
-        );
+        mapping.insert(id, StepEntry { invoke, extend, evaluate, terminate });
     }
 
     for edge_idx in dependency_graph.edge_indices() {
-        let edge_weight = dependency_graph
-            .edge_weight(edge_idx)
-            .expect("We iterate over all existing EdgeIndices");
-        let (source, target) = dependency_graph
-            .edge_endpoints(edge_idx)
-            .expect("We iterate over all existing EdgeIndices");
-        let source_id = get_ast_id(
-            *dependency_graph
-                .node_weight(source)
-                .expect("We just git this NodeIndex from the graph"),
-        );
-        let target_id = get_ast_id(
-            *dependency_graph
-                .node_weight(target)
-                .expect("We just git this NodeIndex from the graph"),
-        );
+        let edge_weight = dependency_graph.edge_weight(edge_idx).expect("We iterate over all existing EdgeIndices");
+        let (source, target) =
+            dependency_graph.edge_endpoints(edge_idx).expect("We iterate over all existing EdgeIndices");
+        let source_id =
+            get_ast_id(*dependency_graph.node_weight(source).expect("We just git this NodeIndex from the graph"));
+        let target_id =
+            get_ast_id(*dependency_graph.node_weight(target).expect("We just git this NodeIndex from the graph"));
 
         match edge_weight {
             StreamDependency::InvokeByName(_) => {
                 // we need to know the values so we need evaluate
-                computation_graph.add_edge(
-                    mapping[&source_id].invoke,
-                    mapping[&target_id].evaluate,
-                    (),
-                );
+                computation_graph.add_edge(mapping[&source_id].invoke, mapping[&target_id].evaluate, ());
             }
             StreamDependency::Access(location, offset, _) => {
                 match offset {
@@ -192,20 +170,12 @@ fn build_compute_graph(mut dependency_graph: DependencyGraph) -> ComputationGrap
                     }
                     Offset::Time(offset) => {
                         if let TimeOffset::UpToNow(_, _) = offset {
-                            computation_graph.add_edge(
-                                mapping[&source_id].evaluate,
-                                mapping[&target_id].evaluate,
-                                (),
-                            );
+                            computation_graph.add_edge(mapping[&source_id].evaluate, mapping[&target_id].evaluate, ());
                         }
                     }
                     Offset::SlidingWindow => {
                         if source_id != target_id {
-                            computation_graph.add_edge(
-                                mapping[&source_id].evaluate,
-                                mapping[&target_id].evaluate,
-                                (),
-                            );
+                            computation_graph.add_edge(mapping[&source_id].evaluate, mapping[&target_id].evaluate, ());
                         }
                     }
                 }
@@ -229,11 +199,7 @@ fn get_compute_order(mut compute_graph: ComputationGraph) -> Vec<Vec<ComputeStep
                 compute_step_order
                     .last_mut()
                     .expect("We always push a new vector at the beginning of the iteration.")
-                    .push(
-                        *compute_graph
-                            .node_weight(index)
-                            .expect("The indices are provided by the graph."),
-                    );
+                    .push(*compute_graph.node_weight(index).expect("The indices are provided by the graph."));
             }
         }
 
@@ -245,10 +211,7 @@ fn get_compute_order(mut compute_graph: ComputationGraph) -> Vec<Vec<ComputeStep
 
     // now prune empty steps ones from the back
     while !compute_step_order.is_empty()
-        && compute_step_order
-            .last()
-            .expect("We just checked that the vector is not empty.")
-            .is_empty()
+        && compute_step_order.last().expect("We just checked that the vector is not empty.").is_empty()
     {
         compute_step_order.pop();
     }

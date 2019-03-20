@@ -55,14 +55,10 @@ pub(crate) fn analyze<'a>(
 
     let future_dependent_streams = future_dependency::future_dependent_stream(&pruned_graph);
 
-    let space_requirements =
-        space_requirements::determine_buffer_size(&pruned_graph, &future_dependent_streams);
+    let space_requirements = space_requirements::determine_buffer_size(&pruned_graph, &future_dependent_streams);
 
-    let tracking_requirements = space_requirements::determine_tracking_size(
-        &pruned_graph,
-        type_table,
-        &future_dependent_streams,
-    );
+    let tracking_requirements =
+        space_requirements::determine_tracking_size(&pruned_graph, type_table, &future_dependent_streams);
 
     let memory_requirement = memory_analysis::determine_worst_case_memory_consumption(
         spec,
@@ -72,13 +68,9 @@ pub(crate) fn analyze<'a>(
         declaration_table,
     );
     match memory_requirement {
-        MemoryBound::Unbounded => {
-            println!("The specification has no bound on the memory consumption.")
-        }
+        MemoryBound::Unbounded => println!("The specification has no bound on the memory consumption."),
         MemoryBound::Bounded(bytes) => println!("The specification uses at most {} bytes.", bytes),
-        MemoryBound::Unknown => {
-            println!("Incomplete specification: we cannot determine the memory consumption.")
-        }
+        MemoryBound::Unknown => println!("Incomplete specification: we cannot determine the memory consumption."),
     };
 
     Some(GraphAnalysisResult {

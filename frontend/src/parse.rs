@@ -90,11 +90,7 @@ fn parse_import(_spec: &mut LolaSpec, pair: Pair<Rule>) -> Import {
     let span = pair.as_span().into();
     let mut pairs = pair.into_inner();
     let name = parse_ident(&pairs.next().expect("mismatch between grammar and AST"));
-    Import {
-        name,
-        id: NodeId::DUMMY,
-        span,
-    }
+    Import { name, id: NodeId::DUMMY, span }
 }
 
 /**
@@ -110,18 +106,9 @@ fn parse_constant(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> Constant {
     let span = pair.as_span().into();
     let mut pairs = pair.into_inner();
     let name = parse_ident(&pairs.next().expect("mismatch between grammar and AST"));
-    let ty = parse_type(
-        spec,
-        pairs.next().expect("mismatch between grammar and AST"),
-    );
+    let ty = parse_type(spec, pairs.next().expect("mismatch between grammar and AST"));
     let literal = parse_literal(pairs.next().expect("mismatch between grammar and AST"));
-    Constant {
-        id: NodeId::DUMMY,
-        name,
-        ty: Some(ty),
-        literal,
-        span,
-    }
+    Constant { id: NodeId::DUMMY, name, ty: Some(ty), literal, span }
 }
 
 /**
@@ -150,13 +137,7 @@ fn parse_inputs(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> Vec<Input> {
         };
         let end = pair.as_span().end();
         let ty = parse_type(spec, pair);
-        inputs.push(Input {
-            id: NodeId::DUMMY,
-            name,
-            params,
-            ty,
-            span: Span { start, end },
-        })
+        inputs.push(Input { id: NodeId::DUMMY, name, params, ty, span: Span { start, end } })
     }
 
     assert!(!inputs.is_empty());
@@ -203,15 +184,7 @@ fn parse_output(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> Output {
     // Parse expression
     let expr_span = pair.as_span();
     let expression = build_expression_ast(spec, pair.into_inner(), expr_span.into());
-    Output {
-        id: NodeId::DUMMY,
-        name,
-        ty,
-        params,
-        template_spec: tspec,
-        expression,
-        span,
-    }
+    Output { id: NodeId::DUMMY, name, ty, params, template_spec: tspec, expression, span }
 }
 
 fn parse_parameter_list(spec: &mut LolaSpec, param_list: Pairs<'_, Rule>) -> Vec<Parameter> {
@@ -227,12 +200,7 @@ fn parse_parameter_list(spec: &mut LolaSpec, param_list: Pairs<'_, Rule>) -> Vec
         } else {
             Type::new_inferred()
         };
-        params.push(Parameter {
-            name,
-            ty,
-            id: NodeId::DUMMY,
-            span,
-        });
+        params.push(Parameter { name, ty, id: NodeId::DUMMY, span });
     }
     params
 }
@@ -259,25 +227,12 @@ fn parse_template_spec(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> TemplateSpe
     if let Some(Rule::TerminateDecl) = rule {
         let exp = pair.unwrap();
         let span_ter = exp.as_span().into();
-        let expr = exp
-            .into_inner()
-            .next()
-            .expect("mismatch between grammar and AST");
+        let expr = exp.into_inner().next().expect("mismatch between grammar and AST");
         let expr_span = expr.as_span().into();
         let expr = build_expression_ast(spec, expr.into_inner(), expr_span);
-        ter_spec = Some(TerminateSpec {
-            target: expr,
-            id: NodeId::DUMMY,
-            span: span_ter,
-        });
+        ter_spec = Some(TerminateSpec { target: expr, id: NodeId::DUMMY, span: span_ter });
     }
-    TemplateSpec {
-        inv: inv_spec,
-        ext: ext_spec,
-        ter: ter_spec,
-        id: NodeId::DUMMY,
-        span,
-    }
+    TemplateSpec { inv: inv_spec, ext: ext_spec, ter: ter_spec, id: NodeId::DUMMY, span }
 }
 
 pub(crate) fn build_time_spec(expr: Expression, unit_str: &str, span: Span) -> TimeSpec {
@@ -287,22 +242,10 @@ pub(crate) fn build_time_spec(expr: Expression, unit_str: &str, span: Span) -> T
         "ms" => (BigRational::from_u64(10_u64.pow(6)).unwrap(), false),
         "s" => (BigRational::from_u64(10_u64.pow(9)).unwrap(), false),
         "min" => (BigRational::from_u64(10_u64.pow(9) * 60).unwrap(), false),
-        "h" => (
-            BigRational::from_u64(10_u64.pow(9) * 60 * 60).unwrap(),
-            false,
-        ),
-        "d" => (
-            BigRational::from_u64(10_u64.pow(9) * 60 * 60 * 24).unwrap(),
-            false,
-        ),
-        "w" => (
-            BigRational::from_u64(10_u64.pow(9) * 60 * 60 * 24 * 7).unwrap(),
-            false,
-        ),
-        "a" => (
-            BigRational::from_u64(10_u64.pow(9) * 60 * 60 * 24 * 365).unwrap(),
-            false,
-        ),
+        "h" => (BigRational::from_u64(10_u64.pow(9) * 60 * 60).unwrap(), false),
+        "d" => (BigRational::from_u64(10_u64.pow(9) * 60 * 60 * 24).unwrap(), false),
+        "w" => (BigRational::from_u64(10_u64.pow(9) * 60 * 60 * 24 * 7).unwrap(), false),
+        "a" => (BigRational::from_u64(10_u64.pow(9) * 60 * 60 * 24 * 365).unwrap(), false),
         "μHz" | "uHz" => (BigRational::from_u64(10_u64.pow(15)).unwrap(), true),
         "mHz" => (BigRational::from_u64(10_u64.pow(12)).unwrap(), true),
         "Hz" => (BigRational::from_u64(10_u64.pow(9)).unwrap(), true),
@@ -322,10 +265,7 @@ pub(crate) fn build_time_spec(expr: Expression, unit_str: &str, span: Span) -> T
                 period *= factor;
                 if period.is_negative() {
                     let rounded_period: Duration = Duration::from_nanos(
-                        (-period.clone())
-                            .to_integer()
-                            .to_u64()
-                            .expect("Period [ns] too large for u64!"),
+                        (-period.clone()).to_integer().to_u64().expect("Period [ns] too large for u64!"),
                     );
                     TimeSpec {
                         period: rounded_period,
@@ -338,12 +278,8 @@ pub(crate) fn build_time_spec(expr: Expression, unit_str: &str, span: Span) -> T
                         span,
                     }
                 } else {
-                    let rounded_period: Duration = Duration::from_nanos(
-                        period
-                            .to_integer()
-                            .to_u64()
-                            .expect("Period [ns] too large for u64!"),
-                    );
+                    let rounded_period: Duration =
+                        Duration::from_nanos(period.to_integer().to_u64().expect("Period [ns] too large for u64!"));
                     TimeSpec {
                         period: rounded_period,
                         exact_period: period,
@@ -364,10 +300,7 @@ pub(crate) fn build_time_spec(expr: Expression, unit_str: &str, span: Span) -> T
                 period *= factor;
                 if period.is_negative() {
                     let rounded_period: Duration = Duration::from_nanos(
-                        (-period.clone())
-                            .to_integer()
-                            .to_u64()
-                            .expect("Period [ns] too large for u64!"),
+                        (-period.clone()).to_integer().to_u64().expect("Period [ns] too large for u64!"),
                     );
                     TimeSpec {
                         period: rounded_period,
@@ -380,12 +313,8 @@ pub(crate) fn build_time_spec(expr: Expression, unit_str: &str, span: Span) -> T
                         span,
                     }
                 } else {
-                    let rounded_period: Duration = Duration::from_nanos(
-                        period
-                            .to_integer()
-                            .to_u64()
-                            .expect("Period [ns] too large for u64!"),
-                    );
+                    let rounded_period: Duration =
+                        Duration::from_nanos(period.to_integer().to_u64().expect("Period [ns] too large for u64!"));
                     TimeSpec {
                         period: rounded_period,
                         exact_period: period,
@@ -447,20 +376,13 @@ fn parse_ext_spec(spec: &mut LolaSpec, ext_pair: Pair<'_, Rule>) -> ExtendSpec {
         _ => unreachable!(),
     }
     assert!(freq.is_some() || target.is_some());
-    ExtendSpec {
-        target,
-        freq,
-        id: NodeId::DUMMY,
-        span: span_ext,
-    }
+    ExtendSpec { target, freq, id: NodeId::DUMMY, span: span_ext }
 }
 
 fn parse_inv_spec(spec: &mut LolaSpec, inv_pair: Pair<'_, Rule>) -> InvokeSpec {
     let span_inv = inv_pair.as_span().into();
     let mut inv_children = inv_pair.into_inner();
-    let expr_pair = inv_children
-        .next()
-        .expect("mismatch between grammar and AST");
+    let expr_pair = inv_children.next().expect("mismatch between grammar and AST");
     let expr_span = expr_pair.as_span().into();
     let inv_target = build_expression_ast(spec, expr_pair.into_inner(), expr_span);
     // Compute invocation condition:
@@ -472,24 +394,11 @@ fn parse_inv_spec(spec: &mut LolaSpec, inv_pair: Pair<'_, Rule>) -> InvokeSpec {
             Rule::InvokeUnless => false,
             _ => unreachable!(),
         };
-        let condition = inv_cond_pair
-            .into_inner()
-            .next()
-            .expect("mismatch between grammar and AST");
+        let condition = inv_cond_pair.into_inner().next().expect("mismatch between grammar and AST");
         let cond_expr_span = condition.as_span().into();
-        cond_expr = Some(build_expression_ast(
-            spec,
-            condition.into_inner(),
-            cond_expr_span,
-        ))
+        cond_expr = Some(build_expression_ast(spec, condition.into_inner(), cond_expr_span))
     }
-    InvokeSpec {
-        condition: cond_expr,
-        is_if,
-        target: inv_target,
-        id: NodeId::DUMMY,
-        span: span_inv,
-    }
+    InvokeSpec { condition: cond_expr, is_if, target: inv_target, id: NodeId::DUMMY, span: span_inv }
 }
 
 /**
@@ -522,13 +431,7 @@ fn parse_trigger(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> Trigger {
         message = Some(pair.as_str().to_string());
     }
 
-    Trigger {
-        id: NodeId::DUMMY,
-        name,
-        expression,
-        message,
-        span,
-    }
+    Trigger { id: NodeId::DUMMY, name, expression, message, span }
 }
 
 /**
@@ -553,24 +456,11 @@ fn parse_type_declaration(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> TypeDecl
     let mut fields = Vec::new();
     while let Some(pair) = pairs.next() {
         let field_name = pair.as_str().to_string();
-        let ty = parse_type(
-            spec,
-            pairs.next().expect("mismatch between grammar and AST"),
-        );
-        fields.push(Box::new(TypeDeclField {
-            name: field_name,
-            ty,
-            id: NodeId::DUMMY,
-            span: pair.as_span().into(),
-        }));
+        let ty = parse_type(spec, pairs.next().expect("mismatch between grammar and AST"));
+        fields.push(Box::new(TypeDeclField { name: field_name, ty, id: NodeId::DUMMY, span: pair.as_span().into() }));
     }
 
-    TypeDeclaration {
-        name: Some(name),
-        span,
-        id: NodeId::DUMMY,
-        fields,
-    }
+    TypeDeclaration { name: Some(name), span, id: NodeId::DUMMY, fields }
 }
 
 /**
@@ -828,10 +718,7 @@ fn parse_rational(repr: &str) -> BigRational {
  */
 fn parse_literal(pair: Pair<'_, Rule>) -> Literal {
     assert_eq!(pair.as_rule(), Rule::Literal);
-    let inner = pair
-        .into_inner()
-        .next()
-        .expect("Rule::Literal has exactly one child");
+    let inner = pair.into_inner().next().expect("Rule::Literal has exactly one child");
     match inner.as_rule() {
         Rule::String => {
             let str_rep = inner.as_str();
@@ -866,12 +753,7 @@ fn parse_stream_instance(spec: &mut LolaSpec, instance: Pair<'_, Rule>) -> Strea
     let stream_ident = parse_ident(&children.next().unwrap());
     // Parse remaining children, aka the arguments.
     let args = parse_vec_of_expressions(spec, children);
-    StreamInstance {
-        stream_identifier: stream_ident,
-        arguments: args,
-        id: NodeId::DUMMY,
-        span,
-    }
+    StreamInstance { stream_identifier: stream_ident, arguments: args, id: NodeId::DUMMY, span }
 }
 
 fn parse_vec_of_expressions(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>) -> Vec<Box<Expression>> {
@@ -890,17 +772,14 @@ fn parse_vec_of_types(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>) -> Vec<Type> 
 
 fn parse_lookup_expression(spec: &mut LolaSpec, pair: Pair<'_, Rule>, span: Span) -> Expression {
     let mut children = pair.into_inner();
-    let stream_instance = children
-        .next()
-        .expect("Lookups need to have a target stream instance.");
+    let stream_instance = children.next().expect("Lookups need to have a target stream instance.");
     let stream_instance = parse_stream_instance(spec, stream_instance);
     let second_child = children.next().unwrap();
     let second_child_span = second_child.as_span();
     match second_child.as_rule() {
         Rule::Expr => {
             // Discrete offset
-            let offset =
-                build_expression_ast(spec, second_child.into_inner(), second_child_span.into());
+            let offset = build_expression_ast(spec, second_child.into_inner(), second_child_span.into());
             let offset = Offset::DiscreteOffset(Box::new(offset));
             Expression::new(ExpressionKind::Lookup(stream_instance, offset, None), span)
         }
@@ -908,22 +787,12 @@ fn parse_lookup_expression(spec: &mut LolaSpec, pair: Pair<'_, Rule>, span: Span
             // Real time offset
             let duration_span = second_child.as_span().into();
             let mut duration_children = second_child.into_inner();
-            let time_interval = duration_children
-                .next()
-                .expect("Duration needs a time span.");
+            let time_interval = duration_children.next().expect("Duration needs a time span.");
             let time_interval_span = time_interval.as_span().into();
-            let val = time_interval
-                .as_str()
-                .parse()
-                .expect("number literal can be parsed into integer");
-            let unit_string = duration_children
-                .next()
-                .expect("Duration needs a time unit.")
-                .as_str();
-            let duration_value = Expression::new(
-                ExpressionKind::Lit(Literal::new_int(val, duration_span)),
-                time_interval_span,
-            );
+            let val = time_interval.as_str().parse().expect("number literal can be parsed into integer");
+            let unit_string = duration_children.next().expect("Duration needs a time unit.").as_str();
+            let duration_value =
+                Expression::new(ExpressionKind::Lit(Literal::new_int(val, duration_span)), time_interval_span);
             let time_spec = build_time_spec(duration_value, unit_string, time_interval_span);
             let offset = Offset::RealTimeOffset(time_spec);
             // Now check whether it is a window or not.
@@ -936,10 +805,7 @@ fn parse_lookup_expression(spec: &mut LolaSpec, pair: Pair<'_, Rule>, span: Span
                 None => None,
                 _ => unreachable!(),
             };
-            Expression::new(
-                ExpressionKind::Lookup(stream_instance, offset, aggregation),
-                span,
-            )
+            Expression::new(ExpressionKind::Lookup(stream_instance, offset, aggregation), span)
         }
         _ => unreachable!(),
     }
@@ -971,30 +837,30 @@ fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>, span: Span)
         pairs,
         |pair: Pair<'_, Rule>| {
             let span = pair.as_span();
-            match pair.as_rule() { // Map function from `Pair` to AST data structure `Expression`
-                Rule::Literal => {
-                    Expression::new(ExpressionKind::Lit(parse_literal(pair)), span.into())
-                }
-                Rule::Ident => {
-                    Expression::new(ExpressionKind::Ident(parse_ident(&pair)), span.into())
-                }
+            match pair.as_rule() {
+                // Map function from `Pair` to AST data structure `Expression`
+                Rule::Literal => Expression::new(ExpressionKind::Lit(parse_literal(pair)), span.into()),
+                Rule::Ident => Expression::new(ExpressionKind::Ident(parse_ident(&pair)), span.into()),
                 Rule::ParenthesizedExpression => {
-                    let mut inner = pair
-                        .into_inner();
-                    let opp = inner.next().expect("Rule::ParenthesizedExpression has a token for the (potentialy missing) opening parenthesis");
-                    let opening_parenthesis  = if let Rule::OpeningParenthesis = opp.as_rule() {
+                    let mut inner = pair.into_inner();
+                    let opp = inner.next().expect(
+                        "Rule::ParenthesizedExpression has a token for the (potentialy missing) opening parenthesis",
+                    );
+                    let opening_parenthesis = if let Rule::OpeningParenthesis = opp.as_rule() {
                         Some(Box::new(Parenthesis::new(opp.as_span().into())))
-                    } else{
+                    } else {
                         None
                     };
 
-                    let inner_expression = inner.next().expect("Rule::ParenthesizedExpression has a token for the contained expression");
+                    let inner_expression =
+                        inner.next().expect("Rule::ParenthesizedExpression has a token for the contained expression");
 
-                    let closing = inner.next().expect("Rule::ParenthesizedExpression has a token for the (potentialy missing) closing parenthesis");
-                    let closing_parenthesis  = if let Rule::ClosingParenthesis = closing.as_rule() {
-                    Some(Box::new(Parenthesis::new(closing.as_span().into())))
-                    }
-                    else{
+                    let closing = inner.next().expect(
+                        "Rule::ParenthesizedExpression has a token for the (potentialy missing) closing parenthesis",
+                    );
+                    let closing_parenthesis = if let Rule::ClosingParenthesis = closing.as_rule() {
+                        Some(Box::new(Parenthesis::new(closing.as_span().into())))
+                    } else {
                         None
                     };
 
@@ -1003,12 +869,14 @@ fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>, span: Span)
                         ExpressionKind::ParenthesizedExpression(
                             opening_parenthesis,
                             Box::new(build_expression_ast(spec, inner_expression.into_inner(), inner_span)),
-                            closing_parenthesis
+                            closing_parenthesis,
                         ),
-                        span.into())
-                },
+                        span.into(),
+                    )
+                }
                 Rule::LookupExpr => parse_lookup_expression(spec, pair, span.into()),
-                Rule::UnaryExpr => { // First child is the operator, second the operand.
+                Rule::UnaryExpr => {
+                    // First child is the operator, second the operand.
                     let mut children = pair.into_inner();
                     let pest_operator = children.next().expect("Unary expressions need to have an operator.");
                     let operand = children.next().expect("Unary expressions need to have an operand.");
@@ -1021,17 +889,20 @@ fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>, span: Span)
                         _ => unreachable!(),
                     };
                     Expression::new(ExpressionKind::Unary(operator, Box::new(operand)), span.into())
-                },
+                }
                 Rule::TernaryExpr => {
                     let mut children = parse_vec_of_expressions(spec, pair.into_inner());
                     assert_eq!(children.len(), 3, "A ternary expression needs exactly three children.");
-                    Expression::new(ExpressionKind::Ite(children.remove(0), children.remove(0), children.remove(0)), span.into())
-                },
+                    Expression::new(
+                        ExpressionKind::Ite(children.remove(0), children.remove(0), children.remove(0)),
+                        span.into(),
+                    )
+                }
                 Rule::Tuple => {
                     let elements = parse_vec_of_expressions(spec, pair.into_inner());
                     assert!(elements.len() != 1, "Tuples may not have exactly one element.");
                     Expression::new(ExpressionKind::Tuple(elements), span.into())
-                },
+                }
                 Rule::Expr => {
                     let span = pair.as_span();
                     build_expression_ast(spec, pair.into_inner(), span.into())
@@ -1040,15 +911,16 @@ fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>, span: Span)
                 Rule::IntegerLiteral => {
                     let span = span.into();
                     Expression::new(ExpressionKind::Lit(Literal::new_int(pair.as_str().parse().unwrap(), span)), span)
-                },
+                }
                 Rule::MissingExpression => {
                     let span = span.into();
                     Expression::new(ExpressionKind::MissingExpression, span)
-                },
+                }
                 _ => panic!("Unexpected rule when parsing expression ast: {:?}", pair.as_rule()),
             }
         },
-        |lhs: Expression, op: Pair<'_, Rule>, rhs: Expression| { // Reduce function combining `Expression`s to `Expression`s with the correct precs
+        |lhs: Expression, op: Pair<'_, Rule>, rhs: Expression| {
+            // Reduce function combining `Expression`s to `Expression`s with the correct precs
             let op = match op.as_rule() {
                 Rule::Add => BinOp::Add,
                 Rule::Subtract => BinOp::Sub,
@@ -1078,25 +950,18 @@ fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>, span: Span)
                                 }
                             };
                             return Expression::new(ExpressionKind::Field(Box::new(lhs), ident), span);
-                        },
+                        }
                         ExpressionKind::Function(ident, types, args) => {
                             return Expression::new(ExpressionKind::Method(Box::new(lhs), ident, types, args), span);
                         }
                         _ => panic!("tuple accesses require a number"),
                     }
-                },
-                Rule::Default => {
-                    return Expression::new(ExpressionKind::Default(Box::new(lhs), Box::new(rhs)), span)
-                },
-                Rule::Hold => {
-                    return Expression::new(ExpressionKind::Hold(Box::new(lhs), Box::new(rhs)), span)
-                },
+                }
+                Rule::Default => return Expression::new(ExpressionKind::Default(Box::new(lhs), Box::new(rhs)), span),
+                Rule::Hold => return Expression::new(ExpressionKind::Hold(Box::new(lhs), Box::new(rhs)), span),
                 _ => unreachable!(),
             };
-            Expression::new(
-                ExpressionKind::Binary(op, Box::new(lhs), Box::new(rhs)),
-                span,
-            )
+            Expression::new(ExpressionKind::Binary(op, Box::new(lhs), Box::new(rhs)), span)
         },
     )
 }
@@ -1154,19 +1019,13 @@ pub struct Span {
 impl Span {
     pub fn unknown() -> Span {
         use std::usize;
-        Span {
-            start: usize::max_value(),
-            end: usize::max_value(),
-        }
+        Span { start: usize::max_value(), end: usize::max_value() }
     }
 }
 
 impl<'a> From<pest::Span<'a>> for Span {
     fn from(span: pest::Span<'a>) -> Self {
-        Span {
-            start: span.start(),
-            end: span.end(),
-        }
+        Span { start: span.start(), end: span.end() }
     }
 }
 
@@ -1189,22 +1048,14 @@ pub(crate) struct CodeLine {
 impl PartialEq for CodeLine {
     /// the equality on code lines is given by the equality of the tuples `(path, line_number, column_number)`
     fn eq(&self, rhs: &CodeLine) -> bool {
-        (&self.path, self.line_number, self.column_number).eq(&(
-            &rhs.path,
-            rhs.line_number,
-            rhs.column_number,
-        ))
+        (&self.path, self.line_number, self.column_number).eq(&(&rhs.path, rhs.line_number, rhs.column_number))
     }
 }
 
 impl PartialOrd for CodeLine {
     /// the partial order on code lines is given by the lexicographic order of `(path, line_number, column_number)`
     fn partial_cmp(&self, rhs: &CodeLine) -> Option<std::cmp::Ordering> {
-        (&self.path, self.line_number, self.column_number).partial_cmp(&(
-            &rhs.path,
-            rhs.line_number,
-            rhs.column_number,
-        ))
+        (&self.path, self.line_number, self.column_number).partial_cmp(&(&rhs.path, rhs.line_number, rhs.column_number))
     }
 }
 
@@ -1216,10 +1067,7 @@ pub(crate) struct CharSpan {
 
 impl SourceMapper {
     pub(crate) fn new(path: PathBuf, content: &str) -> SourceMapper {
-        SourceMapper {
-            path,
-            content: content.to_string(),
-        }
+        SourceMapper { path, content: content.to_string() }
     }
 
     pub(crate) fn get_line(&self, span: Span) -> Option<CodeLine> {
@@ -1283,11 +1131,8 @@ mod tests {
 
     #[test]
     fn parse_simple() {
-        let _ = LolaParser::parse(
-            Rule::Spec,
-            "input in: Int\noutput out: Int := in\ntrigger in ≠ out",
-        )
-        .unwrap_or_else(|e| panic!("{}", e));
+        let _ = LolaParser::parse(Rule::Spec, "input in: Int\noutput out: Int := in\ntrigger in ≠ out")
+            .unwrap_or_else(|e| panic!("{}", e));
     }
 
     #[allow(clippy::cyclomatic_complexity)]
@@ -1441,10 +1286,7 @@ mod tests {
 
     #[test]
     fn parse_expression() {
-        let expr = LolaParser::parse(Rule::Expr, "in + 1\n")
-            .unwrap_or_else(|e| panic!("{}", e))
-            .next()
-            .unwrap();
+        let expr = LolaParser::parse(Rule::Expr, "in + 1\n").unwrap_or_else(|e| panic!("{}", e)).next().unwrap();
         let mut spec = LolaSpec::new();
         let span = expr.as_span();
         let ast = build_expression_ast(&mut spec, expr.into_inner(), span.into());
@@ -1453,10 +1295,7 @@ mod tests {
 
     #[test]
     fn parse_expression_precedence() {
-        let expr = LolaParser::parse(Rule::Expr, "(a ∨ b ∧ c)")
-            .unwrap_or_else(|e| panic!("{}", e))
-            .next()
-            .unwrap();
+        let expr = LolaParser::parse(Rule::Expr, "(a ∨ b ∧ c)").unwrap_or_else(|e| panic!("{}", e)).next().unwrap();
         let mut spec = LolaSpec::new();
         let span = expr.as_span();
         let ast = build_expression_ast(&mut spec, expr.into_inner(), span.into());
@@ -1465,10 +1304,7 @@ mod tests {
 
     #[test]
     fn parse_missing_closing_parenthesis() {
-        let expr = LolaParser::parse(Rule::Expr, "(a ∨ b ∧ c")
-            .unwrap_or_else(|e| panic!("{}", e))
-            .next()
-            .unwrap();
+        let expr = LolaParser::parse(Rule::Expr, "(a ∨ b ∧ c").unwrap_or_else(|e| panic!("{}", e)).next().unwrap();
         let mut spec = LolaSpec::new();
         let span = expr.as_span();
         let ast = build_expression_ast(&mut spec, expr.into_inner(), span.into());
@@ -1565,8 +1401,7 @@ mod tests {
 
     #[test]
     fn build_template_spec() {
-        let spec =
-            "output s: Int { invoke inp unless 3 > 5 extend b @ 0.5GHz terminate false } := 3\n";
+        let spec = "output s: Int { invoke inp unless 3 > 5 extend b @ 0.5GHz terminate false } := 3\n";
         let throw = |e| panic!("{}", e);
         let ast = parse(spec).unwrap_or_else(throw);
         // 0.5GHz correspond to 2ns.
@@ -1628,10 +1463,7 @@ mod tests {
 
     fn time_spec_int(val: i128, unit: &str) -> Duration {
         build_time_spec(
-            Expression::new(
-                ExpressionKind::Lit(Literal::new_int(val, Span::unknown())),
-                Span::unknown(),
-            ),
+            Expression::new(ExpressionKind::Lit(Literal::new_int(val, Span::unknown())), Span::unknown()),
             unit,
             Span::unknown(),
         )
@@ -1646,10 +1478,7 @@ mod tests {
         assert_eq!(time_spec_int(12354, "ns"), Duration::new(0, 12354));
         assert_eq!(time_spec_int(90351, "us"), Duration::new(0, 90351 * 1_000));
         assert_eq!(time_spec_int(248, "ms"), Duration::new(0, 248 * 1_000_000));
-        assert_eq!(
-            time_spec_int(29_489_232, "ms"),
-            Duration::new(29_489, 232 * 1_000_000)
-        );
+        assert_eq!(time_spec_int(29_489_232, "ms"), Duration::new(29_489, 232 * 1_000_000));
     }
 
     #[test]

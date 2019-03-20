@@ -23,11 +23,7 @@ impl VersionTracker {
     }
 }
 
-fn analyse_expression(
-    version_tracker: &mut VersionTracker,
-    expr: &Expression,
-    toplevel_in_trigger: bool,
-) {
+fn analyse_expression(version_tracker: &mut VersionTracker, expr: &Expression, toplevel_in_trigger: bool) {
     match &expr.kind {
         ExpressionKind::Lit(_) | ExpressionKind::Ident(_) => {}
         ExpressionKind::Default(target, default) => {
@@ -40,18 +36,14 @@ fn analyse_expression(
             }
             Offset::RealTimeOffset(time_spec) => {
                 let span = time_spec.span;
-                version_tracker.cannot_be_lola2 =
-                    Some((span, String::from("Real time offset – no Lola2")));
-                version_tracker.cannot_be_classic =
-                    Some((span, String::from("Real time offset – no ClassicLola")));
+                version_tracker.cannot_be_lola2 = Some((span, String::from("Real time offset – no Lola2")));
+                version_tracker.cannot_be_classic = Some((span, String::from("Real time offset – no ClassicLola")));
             }
         },
         ExpressionKind::Hold(target, default) => {
             let span = expr.span;
-            version_tracker.cannot_be_lola2 =
-                Some((span, String::from("Sample and hold – no Lola2")));
-            version_tracker.cannot_be_classic =
-                Some((span, String::from("Sample and hold – no ClassicLola")));
+            version_tracker.cannot_be_lola2 = Some((span, String::from("Sample and hold – no Lola2")));
+            version_tracker.cannot_be_classic = Some((span, String::from("Sample and hold – no ClassicLola")));
             analyse_expression(version_tracker, target.as_ref(), false);
             analyse_expression(version_tracker, default.as_ref(), false);
         }
@@ -99,11 +91,7 @@ pub(crate) struct LolaVersionAnalysis<'a> {
 
 impl<'a> LolaVersionAnalysis<'a> {
     pub(crate) fn new(handler: &'a Handler, tt: &'a TypeTable) -> Self {
-        LolaVersionAnalysis {
-            result: HashMap::new(),
-            handler,
-            type_table: tt,
-        }
+        LolaVersionAnalysis { result: HashMap::new(), handler, type_table: tt }
     }
 
     fn analyse_input(&mut self, input: &'a Input) {
@@ -123,9 +111,7 @@ impl<'a> LolaVersionAnalysis<'a> {
 
         let is_timed: Option<WhyNot> = match &self.type_table.get_stream_type(output.id).timing {
             TimingInfo::Event => None,
-            TimingInfo::RealTime(_frequ) => {
-                Some((output.name.span, String::from("Stream has frequency")))
-            }
+            TimingInfo::RealTime(_frequ) => Some((output.name.span, String::from("Stream has frequency"))),
         };
 
         let mut version_tracker = VersionTracker::from_stream(is_parameterized, is_timed);
@@ -147,10 +133,9 @@ impl<'a> LolaVersionAnalysis<'a> {
     fn analyse_trigger(&mut self, trigger: &'a Trigger) {
         let is_timed: Option<WhyNot> = match &self.type_table.get_stream_type(trigger.id).timing {
             TimingInfo::Event => None,
-            TimingInfo::RealTime(_frequ) => Some((
-                trigger.expression.span,
-                String::from("Trigger expression has a frequency"),
-            )),
+            TimingInfo::RealTime(_frequ) => {
+                Some((trigger.expression.span, String::from("Trigger expression has a frequency")))
+            }
         };
 
         let mut version_tracker = VersionTracker::from_stream(None, is_timed);
@@ -227,26 +212,18 @@ impl<'a> LolaVersionAnalysis<'a> {
                 LanguageSpec::Classic => {}
                 LanguageSpec::Lola2 => {
                     if reason_against_classic_lola.is_none() {
-                        *reason_against_classic_lola = Some((
-                            span,
-                            "Classic Lola is not possible due to this being a Lola2 trigger."
-                                .to_string(),
-                        ))
+                        *reason_against_classic_lola =
+                            Some((span, "Classic Lola is not possible due to this being a Lola2 trigger.".to_string()))
                     }
                 }
                 LanguageSpec::RTLola => {
                     if reason_against_classic_lola.is_none() {
-                        *reason_against_classic_lola = Some((
-                            span,
-                            "Classic Lola is not possible due to this being a RTLola trigger."
-                                .to_string(),
-                        ))
+                        *reason_against_classic_lola =
+                            Some((span, "Classic Lola is not possible due to this being a RTLola trigger.".to_string()))
                     }
                     if reason_against_lola2.is_none() {
-                        *reason_against_lola2 = Some((
-                            span,
-                            "Lola2 is not possible due to this being a RTLola trigger.".to_string(),
-                        ))
+                        *reason_against_lola2 =
+                            Some((span, "Lola2 is not possible due to this being a RTLola trigger.".to_string()))
                     }
                 }
             }
@@ -267,10 +244,7 @@ impl<'a> LolaVersionAnalysis<'a> {
                     if reason_against_classic_lola.is_none() {
                         *reason_against_classic_lola = Some((
                             span,
-                            format!(
-                                "Classic Lola is not possible due to {} being a Lola2 stream.",
-                                output.name.name
-                            ),
+                            format!("Classic Lola is not possible due to {} being a Lola2 stream.", output.name.name),
                         ))
                     }
                 }
@@ -278,19 +252,13 @@ impl<'a> LolaVersionAnalysis<'a> {
                     if reason_against_classic_lola.is_none() {
                         *reason_against_classic_lola = Some((
                             span,
-                            format!(
-                                "Classic Lola is not possible due to {} being a RTLola stream.",
-                                output.name.name
-                            ),
+                            format!("Classic Lola is not possible due to {} being a RTLola stream.", output.name.name),
                         ))
                     }
                     if reason_against_lola2.is_none() {
                         *reason_against_lola2 = Some((
                             span,
-                            format!(
-                                "Lola2 is not possible due to {} being a RTLola stream.",
-                                output.name.name
-                            ),
+                            format!("Lola2 is not possible due to {} being a RTLola stream.", output.name.name),
                         ))
                     }
                 }
@@ -298,11 +266,7 @@ impl<'a> LolaVersionAnalysis<'a> {
         }
     }
 
-    fn rule_out_versions_based_on_inputs(
-        &mut self,
-        spec: &LolaSpec,
-        reason_against_classic_lola: &mut Option<WhyNot>,
-    ) {
+    fn rule_out_versions_based_on_inputs(&mut self, spec: &LolaSpec, reason_against_classic_lola: &mut Option<WhyNot>) {
         for input in &spec.inputs {
             match &self.result[&input.id] {
                 LanguageSpec::Classic => {}
@@ -346,9 +310,7 @@ mod tests {
         let mut naming_analyzer = NamingAnalysis::new(&handler);
         let decl_table = naming_analyzer.check(&ast);
         let mut type_analysis = TypeAnalysis::new(&handler, &decl_table);
-        let type_table = type_analysis
-            .check(&ast)
-            .expect("We expect the spec to be well-typed");
+        let type_table = type_analysis.check(&ast).expect("We expect the spec to be well-typed");
         let mut version_analyzer = LolaVersionAnalysis::new(&handler, &type_table);
         let version = version_analyzer.analyse(&ast);
         assert_eq!(expected_errors, handler.emitted_errors());
@@ -363,10 +325,7 @@ mod tests {
                 .result
                 .get(&node_id)
                 .unwrap_or_else(|| panic!("There is no version for this NodeId in the result",));
-            assert_eq!(
-                version, *actual_version,
-                "The expected version and the actual version do not match."
-            );
+            assert_eq!(version, *actual_version, "The expected version and the actual version do not match.");
         }
     }
 

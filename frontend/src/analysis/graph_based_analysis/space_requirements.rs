@@ -36,11 +36,7 @@ pub(crate) fn determine_buffer_size(
     let mut store_all_inputs = false;
     let mut storage_requirements: HashMap<NodeId, StorageRequirement> = HashMap::new();
     for node_index in dependency_graph.node_indices() {
-        let id = get_ast_id(
-            *dependency_graph
-                .node_weight(node_index)
-                .expect("We iterate over all node indices"),
-        );
+        let id = get_ast_id(*dependency_graph.node_weight(node_index).expect("We iterate over all node indices"));
         let this_stream_is_future_dependent = future_dependent_streams.contains(&id);
 
         // normal event based stream
@@ -55,9 +51,7 @@ pub(crate) fn determine_buffer_size(
 
                         if *offset > 0 {
                             storage_required = max(storage_required, 1_u16);
-                            if this_stream_is_future_dependent
-                                && !store_all_inputs
-                                && *location != Location::Expression
+                            if this_stream_is_future_dependent && !store_all_inputs && *location != Location::Expression
                             {
                                 // future dependency in auxiliary streams is really bad
                                 store_all_inputs = true;
@@ -79,9 +73,7 @@ pub(crate) fn determine_buffer_size(
     // we have a future reference in
     if store_all_inputs {
         for node_index in dependency_graph.node_indices() {
-            let node_weight = dependency_graph
-                .node_weight(node_index)
-                .expect("We iterate over all node indices");
+            let node_weight = dependency_graph.node_weight(node_index).expect("We iterate over all node indices");
             match node_weight {
                 StreamNode::ClassicInput(id) | StreamNode::ParameterizedInput(id) => {
                     storage_requirements.insert(*id, StorageRequirement::Unbounded);
@@ -103,11 +95,7 @@ pub(crate) fn determine_tracking_size(
 ) -> TrackingRequirements {
     let mut tracking: HashMap<NodeId, Vec<(NodeId, TrackingRequirement)>> = HashMap::new();
     for node_index in dependency_graph.node_indices() {
-        let id = get_ast_id(
-            *dependency_graph
-                .node_weight(node_index)
-                .expect("We iterate over all node indices"),
-        );
+        let id = get_ast_id(*dependency_graph.node_weight(node_index).expect("We iterate over all node indices"));
         let mut tracking_requirements: Vec<(NodeId, TrackingRequirement)> = Vec::new();
 
         let this_is_time_based = is_it_time_based(dependency_graph, node_index, type_table);
@@ -130,20 +118,11 @@ pub(crate) fn determine_tracking_size(
                         if let TimingInfo::RealTime(freq) = out_timing {
                             let result: BigRational = exact_offset_duration / &freq.ns;
                             let needed_space: u16 = if result.is_integer() {
-                                result
-                                    .trunc()
-                                    .to_integer()
-                                    .to_u16()
-                                    .expect("buffer size does not fit in u16")
+                                result.trunc().to_integer().to_u16().expect("buffer size does not fit in u16")
                             } else {
-                                result
-                                    .ceil()
-                                    .to_integer()
-                                    .to_u16()
-                                    .expect("buffer size does not fit in u16")
+                                result.ceil().to_integer().to_u16().expect("buffer size does not fit in u16")
                             };
-                            tracking_requirements
-                                .push((src_id, TrackingRequirement::Finite(needed_space)));
+                            tracking_requirements.push((src_id, TrackingRequirement::Finite(needed_space)));
                         // TODO We might be able to use the max(src_duration, out_duration)
                         } else {
                             unreachable!()
@@ -151,26 +130,16 @@ pub(crate) fn determine_tracking_size(
                     } else {
                         match src_timing {
                             TimingInfo::Event => {
-                                tracking_requirements
-                                    .push((src_id, TrackingRequirement::Unbounded));
+                                tracking_requirements.push((src_id, TrackingRequirement::Unbounded));
                             }
                             TimingInfo::RealTime(freq) => {
                                 let result: BigRational = exact_offset_duration / &freq.ns;
                                 let needed_space: u16 = if result.is_integer() {
-                                    result
-                                        .trunc()
-                                        .to_integer()
-                                        .to_u16()
-                                        .expect("buffer size does not fit in u16")
+                                    result.trunc().to_integer().to_u16().expect("buffer size does not fit in u16")
                                 } else {
-                                    result
-                                        .ceil()
-                                        .to_integer()
-                                        .to_u16()
-                                        .expect("buffer size does not fit in u16")
+                                    result.ceil().to_integer().to_u16().expect("buffer size does not fit in u16")
                                 };
-                                tracking_requirements
-                                    .push((src_id, TrackingRequirement::Finite(needed_space)));
+                                tracking_requirements.push((src_id, TrackingRequirement::Finite(needed_space)));
                             }
                         }
                     }
@@ -185,15 +154,12 @@ pub(crate) fn determine_tracking_size(
     tracking
 }
 
-fn is_it_time_based(
-    dependency_graph: &DependencyGraph,
-    node_index: NIx,
-    type_table: &TypeTable,
-) -> bool {
-    let id =
-        get_ast_id(*dependency_graph.node_weight(node_index).expect(
-            "We assume that the type-table has information about every stream and trigger",
-        ));
+fn is_it_time_based(dependency_graph: &DependencyGraph, node_index: NIx, type_table: &TypeTable) -> bool {
+    let id = get_ast_id(
+        *dependency_graph
+            .node_weight(node_index)
+            .expect("We assume that the type-table has information about every stream and trigger"),
+    );
     match type_table.get_stream_type(id).timing {
         TimingInfo::Event => false,
         TimingInfo::RealTime(_) => true,
@@ -238,14 +204,11 @@ mod tests {
         let type_table = type_analysis.check(&spec);
         let mut version_analyzer = LolaVersionAnalysis::new(
             &handler,
-            type_table
-                .as_ref()
-                .expect("We expect that the version analysis found no error"),
+            type_table.as_ref().expect("We expect that the version analysis found no error"),
         );
         let _version = version_analyzer.analyse(&spec);
 
-        let dependency_analysis =
-            analyse_dependencies(&spec, &version_analyzer.result, &decl_table, &handler);
+        let dependency_analysis = analyse_dependencies(&spec, &version_analyzer.result, &decl_table, &handler);
 
         let (_, pruned_graph) = determine_evaluation_order(dependency_analysis.dependency_graph);
 
@@ -261,9 +224,9 @@ mod tests {
                 StreamIndex::Out(i) => spec.outputs[i].id,
                 StreamIndex::In(i) => spec.inputs[i].id,
             };
-            let actual_buffer = space_requirements.get(&node_id).unwrap_or_else(|| {
-                panic!("There is no buffer size for this NodeId in the result",)
-            });
+            let actual_buffer = space_requirements
+                .get(&node_id)
+                .unwrap_or_else(|| panic!("There is no buffer size for this NodeId in the result",));
             assert_eq!(
                 expected_buffer_size, *actual_buffer,
                 "The expected buffer size and the actual buffer size do not match."
@@ -286,24 +249,18 @@ mod tests {
         let type_table = type_analysis.check(&spec);
         let mut version_analyzer = LolaVersionAnalysis::new(
             &handler,
-            type_table
-                .as_ref()
-                .expect("We expect that the version analysis found no erro"),
+            type_table.as_ref().expect("We expect that the version analysis found no erro"),
         );
         let _version = version_analyzer.analyse(&spec);
 
-        let dependency_analysis =
-            analyse_dependencies(&spec, &version_analyzer.result, &decl_table, &handler);
+        let dependency_analysis = analyse_dependencies(&spec, &version_analyzer.result, &decl_table, &handler);
         let mut type_analysis = TypeAnalysis::new(&handler, &decl_table);
-        let type_table = type_analysis
-            .check(&spec)
-            .expect("We expect that the spec is well typed");
+        let type_table = type_analysis.check(&spec).expect("We expect that the spec is well typed");
         let (_, pruned_graph) = determine_evaluation_order(dependency_analysis.dependency_graph);
 
         let future_dependent_stream = future_dependent_stream(&pruned_graph);
 
-        let tracking_requirements =
-            determine_tracking_size(&pruned_graph, &type_table, &future_dependent_stream);
+        let tracking_requirements = determine_tracking_size(&pruned_graph, &type_table, &future_dependent_stream);
 
         assert_eq!(expected_errors, handler.emitted_errors());
         assert_eq!(expected_warning, handler.emitted_warnings());
@@ -313,9 +270,9 @@ mod tests {
                 StreamIndex::In(i) => spec.inputs[i].id,
                 StreamIndex::Out(i) => spec.outputs[i].id,
             };
-            let actual_tracking_info = tracking_requirements.get(&node_id).unwrap_or_else(|| {
-                panic!("There is no tracking info for this NodeId in the result",)
-            });
+            let actual_tracking_info = tracking_requirements
+                .get(&node_id)
+                .unwrap_or_else(|| panic!("There is no tracking info for this NodeId in the result",));
 
             assert_eq!(
                 expected_tracking_info.len(),
@@ -378,10 +335,7 @@ mod tests {
             0,
             2,
             vec![
-                (
-                    StreamIndex::Out(0),
-                    vec![(StreamIndex::In(0), TrackingRequirement::Future)],
-                ),
+                (StreamIndex::Out(0), vec![(StreamIndex::In(0), TrackingRequirement::Future)]),
                 (StreamIndex::In(0), vec![]),
             ],
         )
@@ -396,10 +350,7 @@ mod tests {
             0,
             2,
             vec![
-                (
-                    StreamIndex::Out(0),
-                    vec![(StreamIndex::In(0), TrackingRequirement::Unbounded)],
-                ),
+                (StreamIndex::Out(0), vec![(StreamIndex::In(0), TrackingRequirement::Unbounded)]),
                 (StreamIndex::In(0), vec![]),
             ],
         )
@@ -414,10 +365,7 @@ mod tests {
             0,
             3,
             vec![
-                (
-                    StreamIndex::Out(0),
-                    vec![(StreamIndex::Out(1), TrackingRequirement::Finite(1))],
-                ),
+                (StreamIndex::Out(0), vec![(StreamIndex::Out(1), TrackingRequirement::Finite(1))]),
                 (StreamIndex::In(0), vec![]),
                 (StreamIndex::Out(1), vec![]),
             ],
@@ -433,10 +381,7 @@ mod tests {
             0,
             2,
             vec![
-                (
-                    StreamIndex::Out(0),
-                    vec![(StreamIndex::In(0), TrackingRequirement::Finite(3))],
-                ),
+                (StreamIndex::Out(0), vec![(StreamIndex::In(0), TrackingRequirement::Finite(3))]),
                 (StreamIndex::In(0), vec![]),
             ],
         )

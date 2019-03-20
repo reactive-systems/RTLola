@@ -6,8 +6,8 @@ use crate::ast;
 use crate::ast::{ExpressionKind, LolaSpec};
 use crate::ir;
 use crate::ir::{
-    EventDrivenStream, LolaIR, MemorizationBound, ParametrizedStream, StreamReference,
-    TimeDrivenStream, WindowReference,
+    EventDrivenStream, LolaIR, MemorizationBound, ParametrizedStream, StreamReference, TimeDrivenStream,
+    WindowReference,
 };
 use crate::parse::NodeId;
 use crate::ty::TimingInfo;
@@ -82,12 +82,8 @@ impl<'a> Lowering<'a> {
 
     fn link_windows(&mut self) {
         // Extract and copy relevant information before-hand to avoid double burrow.
-        let essences: Vec<(StreamReference, WindowReference)> = self
-            .ir
-            .sliding_windows
-            .iter()
-            .map(|window| (window.target, window.reference))
-            .collect();
+        let essences: Vec<(StreamReference, WindowReference)> =
+            self.ir.sliding_windows.iter().map(|window| (window.target, window.reference)).collect();
         for (target, window) in essences {
             match target {
                 StreamReference::InRef(_) => {
@@ -125,7 +121,11 @@ impl<'a> Lowering<'a> {
         let debug_clone = input.clone();
         self.ir.inputs.push(input);
 
-        assert_eq!(self.ir.get_in(reference), &debug_clone, "Bug in implementation: Output vector in IR changed between creation of reference and insertion of stream.");
+        assert_eq!(
+            self.ir.get_in(reference),
+            &debug_clone,
+            "Bug in implementation: Output vector in IR changed between creation of reference and insertion of stream."
+        );
     }
 
     fn lower_trigger(&mut self, trigger: &ast::Trigger) {
@@ -151,10 +151,7 @@ impl<'a> Lowering<'a> {
             outgoing_dependencies,
         };
         self.ir.outputs.push(output);
-        let trig = ir::Trigger {
-            message: trigger.message.clone(),
-            reference,
-        };
+        let trig = ir::Trigger { message: trigger.message.clone(), reference };
         match self.check_time_driven(trigger.id, reference) {
             None => self.ir.event_driven.push(EventDrivenStream { reference }),
             Some(tds) => self.ir.time_driven.push(tds),
@@ -162,11 +159,7 @@ impl<'a> Lowering<'a> {
         self.ir.triggers.push(trig);
     }
 
-    fn collect_tracking_info(
-        &self,
-        nid: NodeId,
-        time_driven: Option<TimeDrivenStream>,
-    ) -> Vec<ir::Tracking> {
+    fn collect_tracking_info(&self, nid: NodeId, time_driven: Option<TimeDrivenStream>) -> Vec<ir::Tracking> {
         let dependent = self.find_depending_streams(nid);
         assert!(
             dependent.iter().all(|(_, req)| match req {
@@ -176,10 +169,7 @@ impl<'a> Lowering<'a> {
             "Unbounded dependencies are not supported, yet."
         );
 
-        dependent
-            .into_iter()
-            .map(|(trackee, req)| self.lower_tracking_req(time_driven, trackee, req))
-            .collect()
+        dependent.into_iter().map(|(trackee, req)| self.lower_tracking_req(time_driven, trackee, req)).collect()
     }
 
     /// Does *not* add dependent windows, yet.
@@ -196,19 +186,11 @@ impl<'a> Lowering<'a> {
         let outgoing_dependencies = self.find_dependencies(&ast_output.expression);
         let mut dep_map: HashMap<StreamReference, Vec<ir::Offset>> = HashMap::new();
         outgoing_dependencies.into_iter().for_each(|dep| {
-            dep_map
-                .entry(dep.stream)
-                .or_insert_with(Vec::new)
-                .extend_from_slice(dep.offsets.as_slice())
+            dep_map.entry(dep.stream).or_insert_with(Vec::new).extend_from_slice(dep.offsets.as_slice())
         });
 
-        let outgoing_dependencies = dep_map
-            .into_iter()
-            .map(|(sr, offsets)| ir::Dependency {
-                stream: sr,
-                offsets,
-            })
-            .collect();
+        let outgoing_dependencies =
+            dep_map.into_iter().map(|(sr, offsets)| ir::Dependency { stream: sr, offsets }).collect();
 
         let output_type = self.lower_value_type(nid);
         let output = ir::OutputStream {
@@ -225,7 +207,11 @@ impl<'a> Lowering<'a> {
 
         let debug_clone = output.clone();
         self.ir.outputs.push(output);
-        assert_eq!(self.ir.get_out(reference), &debug_clone, "Bug in implementation: Output vector in IR changed between creation of reference and insertion of stream.");
+        assert_eq!(
+            self.ir.get_out(reference),
+            &debug_clone,
+            "Bug in implementation: Output vector in IR changed between creation of reference and insertion of stream."
+        );
 
         if let Some(td_ref) = time_driven {
             self.ir.time_driven.push(td_ref)
@@ -244,11 +230,7 @@ impl<'a> Lowering<'a> {
         F: Fn(&'a ast::Expression) -> Vec<T>,
     {
         let recursion = |e| Lowering::collect_expression(e, f, pre_order);
-        let pre = if pre_order {
-            f(expr).into_iter()
-        } else {
-            Vec::new().into_iter()
-        };
+        let pre = if pre_order { f(expr).into_iter() } else { Vec::new().into_iter() };
         let post = || {
             if pre_order {
                 Vec::new().into_iter()
@@ -259,33 +241,23 @@ impl<'a> Lowering<'a> {
         match &expr.kind {
             ExpressionKind::Lit(_) => pre.chain(post()).collect(),
             ExpressionKind::Ident(_) => pre.chain(post()).collect(),
-            ExpressionKind::Default(e, dft) | ExpressionKind::Hold(e, dft) => pre
-                .chain(recursion(e))
-                .chain(recursion(dft))
-                .chain(post())
-                .collect(),
+            ExpressionKind::Default(e, dft) | ExpressionKind::Hold(e, dft) => {
+                pre.chain(recursion(e)).chain(recursion(dft)).chain(post()).collect()
+            }
             ExpressionKind::Lookup(inst, _, _) => {
                 let args = inst.arguments.iter().flat_map(|a| recursion(a));
                 pre.chain(args).chain(post()).collect()
             }
-            ExpressionKind::Binary(_, lhs, rhs) => pre
-                .chain(recursion(lhs))
-                .chain(recursion(rhs))
-                .chain(post())
-                .collect(),
-            ExpressionKind::Unary(_, operand) => {
-                pre.chain(recursion(operand)).chain(post()).collect()
+            ExpressionKind::Binary(_, lhs, rhs) => {
+                pre.chain(recursion(lhs)).chain(recursion(rhs)).chain(post()).collect()
             }
-            ExpressionKind::Ite(cond, cons, alt) => pre
-                .chain(recursion(cond))
-                .chain(recursion(cons))
-                .chain(recursion(alt))
-                .chain(post())
-                .collect(),
-            ExpressionKind::ParenthesizedExpression(_, e, _) => pre
-                .chain(Lowering::collect_expression(e, f, pre_order))
-                .chain(post())
-                .collect(),
+            ExpressionKind::Unary(_, operand) => pre.chain(recursion(operand)).chain(post()).collect(),
+            ExpressionKind::Ite(cond, cons, alt) => {
+                pre.chain(recursion(cond)).chain(recursion(cons)).chain(recursion(alt)).chain(post()).collect()
+            }
+            ExpressionKind::ParenthesizedExpression(_, e, _) => {
+                pre.chain(Lowering::collect_expression(e, f, pre_order)).chain(post()).collect()
+            }
             ExpressionKind::MissingExpression => panic!(), // TODO: Eradicate in preceding step.
             ExpressionKind::Tuple(exprs) => {
                 let elems = exprs.iter().flat_map(|a| recursion(a));
@@ -306,18 +278,12 @@ impl<'a> Lowering<'a> {
                 ExpressionKind::Lookup(_target, offset, None) => {
                     let sr = self.extract_target_from_lookup(&e.kind);
                     let offset = self.lower_offset(offset);
-                    vec![ir::Dependency {
-                        stream: sr,
-                        offsets: vec![offset],
-                    }]
+                    vec![ir::Dependency { stream: sr, offsets: vec![offset] }]
                 }
                 ExpressionKind::Ident(_ident) => {
                     let sr = self.get_ref_for_ident(e.id);
                     let offset = ir::Offset::PastDiscreteOffset(0);
-                    vec![ir::Dependency {
-                        stream: sr,
-                        offsets: vec![offset],
-                    }]
+                    vec![ir::Dependency { stream: sr, offsets: vec![offset] }]
                 }
                 _ => Vec::new(),
             }
@@ -336,11 +302,7 @@ impl<'a> Lowering<'a> {
             TrackingRequirement::Unbounded => ir::Tracking::All(trackee),
             TrackingRequirement::Finite(num) => {
                 let rate = tracker.map_or(Duration::from_secs(0), |tds| tds.extend_rate);
-                ir::Tracking::Bounded {
-                    trackee,
-                    num: u128::from(num),
-                    rate,
-                }
+                ir::Tracking::Bounded { trackee, num: u128::from(num), rate }
             }
             TrackingRequirement::Future => unimplemented!(),
         }
@@ -351,24 +313,14 @@ impl<'a> Lowering<'a> {
             let duration = match self.lower_offset(offset) {
                 ir::Offset::PastDiscreteOffset(_)
                 | ir::Offset::FutureDiscreteOffset(_)
-                | ir::Offset::PastRealTimeOffset(_) => {
-                    panic!("Bug: Should be caught in preceeding step.")
-                }
+                | ir::Offset::PastRealTimeOffset(_) => panic!("Bug: Should be caught in preceeding step."),
                 ir::Offset::FutureRealTimeOffset(dur) => dur,
             };
             let ty = self.lower_value_type(expr.id);
             let target = self.extract_target_from_lookup(&expr.kind);
-            let reference = WindowReference {
-                ix: self.ir.sliding_windows.len(),
-            };
+            let reference = WindowReference { ix: self.ir.sliding_windows.len() };
             let op = self.lower_window_op(*op);
-            let window = ir::SlidingWindow {
-                target,
-                duration,
-                op,
-                reference,
-                ty,
-            };
+            let window = ir::SlidingWindow { target, duration, op, reference, ty };
             self.ir.sliding_windows.push(window);
             reference
         } else {
@@ -384,9 +336,7 @@ impl<'a> Lowering<'a> {
                 Declaration::In(inp) => inp.id,
                 Declaration::Const(_) => unimplemented!(),
                 Declaration::Param(_) => unimplemented!(),
-                Declaration::Type(_) | Declaration::Func(_) => {
-                    panic!("Bug in implementation: Invalid lookup.")
-                }
+                Declaration::Type(_) | Declaration::Func(_) => panic!("Bug in implementation: Invalid lookup."),
             };
             *self.ref_lookup.get(&nid).expect("Bug in ReferenceLookup.")
         } else {
@@ -411,10 +361,7 @@ impl<'a> Lowering<'a> {
     ) -> Option<ParametrizedStream> {
         if let Some(temp_spec) = ast_output.template_spec.as_ref() {
             // Check if it is merely timed, not parametrized.
-            if temp_spec
-                .ext
-                .as_ref()
-                .map_or(false, |e| e.target.is_none() && e.freq.is_some())
+            if temp_spec.ext.as_ref().map_or(false, |e| e.target.is_none() && e.freq.is_some())
                 && temp_spec.inv.is_none()
                 && temp_spec.ter.is_none()
             {
@@ -423,11 +370,7 @@ impl<'a> Lowering<'a> {
                 // TODO: Finalize and implement parametrization.
                 Some(ParametrizedStream {
                     reference,
-                    params: ast_output
-                        .params
-                        .iter()
-                        .map(|p| self.lower_param(p))
-                        .collect(),
+                    params: ast_output.params.iter().map(|p| self.lower_param(p)).collect(),
                     invoke: None,
                     extend: None,
                     terminate: None,
@@ -440,10 +383,7 @@ impl<'a> Lowering<'a> {
     }
 
     fn lower_param(&mut self, param: &ast::Parameter) -> ir::Parameter {
-        ir::Parameter {
-            name: param.name.name.clone(),
-            ty: self.lower_value_type(param.id),
-        }
+        ir::Parameter { name: param.name.name.clone(), ty: self.lower_value_type(param.id) }
     }
 
     fn lower_storage_req(&self, req: StorageRequirement) -> MemorizationBound {
@@ -459,11 +399,7 @@ impl<'a> Lowering<'a> {
         self.tt.get_value_type(id).into()
     }
 
-    fn lower_expression(
-        &mut self,
-        expression: &ast::Expression,
-        expected_type: &ir::Type,
-    ) -> ir::Expression {
+    fn lower_expression(&mut self, expression: &ast::Expression, expected_type: &ir::Type) -> ir::Expression {
         let mut state = self.lower_subexpression(expression, LoweringState::empty());
         if state.result_type() != expected_type {
             let convert = ir::Statement {
@@ -477,11 +413,7 @@ impl<'a> Lowering<'a> {
         ir::Expression { stmts, temporaries }
     }
 
-    fn lower_subexpression(
-        &mut self,
-        expr: &ast::Expression,
-        mut state: LoweringState,
-    ) -> LoweringState {
+    fn lower_subexpression(&mut self, expr: &ast::Expression, mut state: LoweringState) -> LoweringState {
         use crate::ir::{Op, Statement};
 
         let result_type = self.lower_value_type(expr.id);
@@ -490,11 +422,7 @@ impl<'a> Lowering<'a> {
             ExpressionKind::Lit(l) => {
                 let op = Op::LoadConstant(self.lower_literal(l));
                 let args = Vec::new();
-                let stmt = Statement {
-                    target: state.temp_for_type(&result_type),
-                    op,
-                    args,
-                };
+                let stmt = Statement { target: state.temp_for_type(&result_type), op, args };
                 state.with_stmt(stmt)
             }
             ExpressionKind::Ident(_) => {
@@ -563,21 +491,13 @@ impl<'a> Lowering<'a> {
 
                 let args = vec![lhs_target, rhs_target];
                 let op = Op::ArithLog(Lowering::lower_bin_op(*ast_op));
-                let stmt = Statement {
-                    target: state.temp_for_type(&result_type),
-                    op,
-                    args,
-                };
+                let stmt = Statement { target: state.temp_for_type(&result_type), op, args };
                 state.with_stmt(stmt)
             }
             ExpressionKind::Unary(ast_op, operand) => {
                 state = self.lower_subexpression(operand, state);
                 let op = Op::ArithLog(Lowering::lower_un_op(*ast_op));
-                let stmt = Statement {
-                    target: state.temp_for_type(&result_type),
-                    op,
-                    args: vec![state.get_target()],
-                };
+                let stmt = Statement { target: state.temp_for_type(&result_type), op, args: vec![state.get_target()] };
                 state.with_stmt(stmt)
             }
             ExpressionKind::Ite(cond, cons, alt) => {
@@ -602,8 +522,7 @@ impl<'a> Lowering<'a> {
                 if &result_type != cons_state.result_type() {
                     let conversion_source = cons_state.get_target();
                     let conversion_target = cons_state.temp_for_type(&result_type);
-                    cons_state =
-                        self.convert_temp(cons_state, conversion_source, conversion_target);
+                    cons_state = self.convert_temp(cons_state, conversion_source, conversion_target);
                 }
                 let branch_target = cons_state.get_target();
 
@@ -619,11 +538,7 @@ impl<'a> Lowering<'a> {
                     self.convert_temp(alt_state, branch_target, branch_target)
                 } else {
                     let move_source = alt_state.get_target();
-                    alt_state.with_stmt(ir::Statement {
-                        target: branch_target,
-                        op: Op::Move,
-                        args: vec![move_source],
-                    })
+                    alt_state.with_stmt(ir::Statement { target: branch_target, op: Op::Move, args: vec![move_source] })
                 };
 
                 // g) Merge temps into state.
@@ -631,30 +546,17 @@ impl<'a> Lowering<'a> {
                 state = state.with_temps(alt_temps);
 
                 // h) Add Ite Statement.
-                let op = Op::Ite {
-                    consequence: cons_stmts,
-                    alternative: alt_stmts,
-                };
-                let ite_stmt = Statement {
-                    target: branch_target,
-                    op,
-                    args: vec![cond_target],
-                };
+                let op = Op::Ite { consequence: cons_stmts, alternative: alt_stmts };
+                let ite_stmt = Statement { target: branch_target, op, args: vec![cond_target] };
 
                 state.with_stmt(ite_stmt)
             }
             ExpressionKind::ParenthesizedExpression(_, e, _) => self.lower_subexpression(e, state),
-            ExpressionKind::MissingExpression => {
-                panic!("How wasn't this caught in a preceding step?!")
-            }
+            ExpressionKind::MissingExpression => panic!("How wasn't this caught in a preceding step?!"),
             ExpressionKind::Tuple(exprs) => {
                 let lowered_list = self.lower_expression_list(exprs, state);
                 state = lowered_list.0;
-                let stmt = Statement {
-                    target: state.temp_for_type(&result_type),
-                    op: Op::Tuple,
-                    args: lowered_list.1,
-                };
+                let stmt = Statement { target: state.temp_for_type(&result_type), op: Op::Tuple, args: lowered_list.1 };
                 state.with_stmt(stmt)
             }
             ExpressionKind::Function(name, _, args) if name.name == "cast" => {
@@ -699,11 +601,8 @@ impl<'a> Lowering<'a> {
                     arg_temps.push(state.get_target())
                 }
 
-                let stmt = Statement {
-                    target: state.temp_for_type(&result_type),
-                    op: Op::Function(ir_kind),
-                    args: arg_temps,
-                };
+                let stmt =
+                    Statement { target: state.temp_for_type(&result_type), op: Op::Function(ir_kind), args: arg_temps };
                 state.with_stmt(stmt)
             }
             ExpressionKind::Field(_, _) => unimplemented!(),
@@ -711,28 +610,12 @@ impl<'a> Lowering<'a> {
         }
     }
 
-    fn convert_temp(
-        &self,
-        state: LoweringState,
-        source: ir::Temporary,
-        target: ir::Temporary,
-    ) -> LoweringState {
-        state.with_stmt(ir::Statement {
-            target,
-            op: ir::Op::Convert,
-            args: vec![source],
-        })
+    fn convert_temp(&self, state: LoweringState, source: ir::Temporary, target: ir::Temporary) -> LoweringState {
+        state.with_stmt(ir::Statement { target, op: ir::Op::Convert, args: vec![source] })
     }
 
-    fn lower_sync_lookup(
-        &self,
-        mut state: LoweringState,
-        lu_target_ref: StreamReference,
-    ) -> LoweringState {
-        let lu_target = ir::StreamInstance {
-            reference: lu_target_ref,
-            arguments: Vec::new(),
-        };
+    fn lower_sync_lookup(&self, mut state: LoweringState, lu_target_ref: StreamReference) -> LoweringState {
+        let lu_target = ir::StreamInstance { reference: lu_target_ref, arguments: Vec::new() };
         let lu_type = match lu_target_ref {
             StreamReference::InRef(_) => &self.ir.get_in(lu_target_ref).ty,
             StreamReference::OutRef(_) => &self.ir.get_out(lu_target_ref).ty,
@@ -740,11 +623,8 @@ impl<'a> Lowering<'a> {
 
         let lu_target_temp = state.temp_for_type(lu_type);
 
-        let lu_stmt = ir::Statement {
-            target: lu_target_temp,
-            op: ir::Op::SyncStreamLookup(lu_target),
-            args: Vec::new(),
-        };
+        let lu_stmt =
+            ir::Statement { target: lu_target_temp, op: ir::Op::SyncStreamLookup(lu_target), args: Vec::new() };
 
         state.with_stmt(lu_stmt)
     }
@@ -754,13 +634,11 @@ impl<'a> Lowering<'a> {
         expressions: &[Box<ast::Expression>],
         state: LoweringState,
     ) -> (LoweringState, Vec<ir::Temporary>) {
-        expressions
-            .iter()
-            .fold((state, Vec::new()), |(mut state, mut results), e| {
-                state = self.lower_subexpression(e, state);
-                results.push(state.get_target());
-                (state, results)
-            })
+        expressions.iter().fold((state, Vec::new()), |(mut state, mut results), e| {
+            state = self.lower_subexpression(e, state);
+            results.push(state.get_target());
+            (state, results)
+        })
     }
 
     fn lower_lookup_expression(
@@ -793,20 +671,11 @@ impl<'a> Lowering<'a> {
                 let window_ref = self.lower_window(&lookup_expr);
                 ir::Op::WindowLookup(window_ref)
             } else {
-                let target_instance = ir::StreamInstance {
-                    reference: target_ref,
-                    arguments: lookup_args,
-                };
+                let target_instance = ir::StreamInstance { reference: target_ref, arguments: lookup_args };
                 if is_hold {
-                    ir::Op::SampleAndHoldStreamLookup {
-                        instance: target_instance,
-                        offset: self.lower_offset(&offset),
-                    }
+                    ir::Op::SampleAndHoldStreamLookup { instance: target_instance, offset: self.lower_offset(&offset) }
                 } else {
-                    ir::Op::StreamLookup {
-                        instance: target_instance,
-                        offset: self.lower_offset(&offset),
-                    }
+                    ir::Op::StreamLookup { instance: target_instance, offset: self.lower_offset(&offset) }
                 }
             };
 
@@ -816,11 +685,7 @@ impl<'a> Lowering<'a> {
                 _ => panic!("A non-sync lookups always ought to produce an option."),
             };
 
-            let lookup_stmt = ir::Statement {
-                target: state.temp_for_type(&lookup_type),
-                op,
-                args: vec![default_temp],
-            };
+            let lookup_stmt = ir::Statement { target: state.temp_for_type(&lookup_type), op, args: vec![default_temp] };
             state = state.with_stmt(lookup_stmt);
 
             if lookup_type != desired_return_type {
@@ -900,18 +765,12 @@ impl<'a> Lowering<'a> {
         }
     }
 
-    fn check_time_driven(
-        &mut self,
-        stream_id: NodeId,
-        reference: StreamReference,
-    ) -> Option<TimeDrivenStream> {
+    fn check_time_driven(&mut self, stream_id: NodeId, reference: StreamReference) -> Option<TimeDrivenStream> {
         match &self.tt.get_stream_type(stream_id).timing {
             TimingInfo::RealTime(f) => Some(TimeDrivenStream {
                 reference,
                 extend_rate: Duration::from_nanos(
-                    f.ns.to_integer()
-                        .to_u64()
-                        .expect("extend duration [ns] does not fit in u64"),
+                    f.ns.to_integer().to_u64().expect("extend duration [ns] does not fit in u64"),
                 ),
             }),
             _ => None,
@@ -930,18 +789,9 @@ impl<'a> Lowering<'a> {
             .collect()
     }
 
-    fn create_ref_lookup(
-        inputs: &[ast::Input],
-        outputs: &[ast::Output],
-    ) -> HashMap<NodeId, StreamReference> {
-        let ins = inputs
-            .iter()
-            .enumerate()
-            .map(|(ix, i)| (i.id, StreamReference::InRef(ix)));
-        let outs = outputs
-            .iter()
-            .enumerate()
-            .map(|(ix, o)| (o.id, StreamReference::OutRef(ix))); // Re-start indexing @ 0.
+    fn create_ref_lookup(inputs: &[ast::Input], outputs: &[ast::Output]) -> HashMap<NodeId, StreamReference> {
+        let ins = inputs.iter().enumerate().map(|(ix, i)| (i.id, StreamReference::InRef(ix)));
+        let outs = outputs.iter().enumerate().map(|(ix, o)| (o.id, StreamReference::OutRef(ix))); // Re-start indexing @ 0.
         ins.chain(outs).collect()
     }
 
@@ -987,9 +837,7 @@ impl<'a> Lowering<'a> {
             Declaration::In(inp) => self.get_ref_for_stream(inp.id),
             Declaration::Out(out) => self.get_ref_for_stream(out.id),
             Declaration::Param(_) | Declaration::Const(_) => unimplemented!(),
-            Declaration::Type(_) | Declaration::Func(_) => {
-                panic!("Types and functions are not streams.")
-            }
+            Declaration::Type(_) | Declaration::Func(_) => panic!("Types and functions are not streams."),
         }
     }
 }
@@ -1012,24 +860,14 @@ mod lowering_state {
         }
 
         pub(crate) fn get_target(&self) -> ir::Temporary {
-            self.stmts
-                .last()
-                .expect("A expression needs to return a value.")
-                .target
+            self.stmts.last().expect("A expression needs to return a value.").target
         }
 
         pub(crate) fn branch(&self) -> LoweringState {
-            LoweringState {
-                stmts: Vec::new(),
-                temps: self.temps.clone(),
-                next_temp: self.next_temp,
-            }
+            LoweringState { stmts: Vec::new(), temps: self.temps.clone(), next_temp: self.next_temp }
         }
 
-        pub(crate) fn with_temps(
-            mut self,
-            others: HashMap<ir::Temporary, ir::Type>,
-        ) -> LoweringState {
+        pub(crate) fn with_temps(mut self, others: HashMap<ir::Temporary, ir::Type>) -> LoweringState {
             for (temp, ty) in others {
                 if temp.0 > self.next_temp as usize {
                     self.next_temp = (temp.0 + 1) as u32;
@@ -1061,11 +899,7 @@ mod lowering_state {
         }
 
         pub(crate) fn empty() -> LoweringState {
-            LoweringState {
-                stmts: Vec::new(),
-                temps: HashMap::new(),
-                next_temp: 0,
-            }
+            LoweringState { stmts: Vec::new(), temps: HashMap::new(), next_temp: 0 }
         }
 
         pub(crate) fn destruct(self) -> (Vec<ir::Statement>, HashMap<ir::Temporary, ir::Type>) {
@@ -1246,19 +1080,11 @@ mod tests {
         assert_eq!(stmts.len(), 2);
 
         let lu_target = match &stmts[0] {
-            Statement {
-                target,
-                op: Op::SyncStreamLookup(_),
-                args,
-            } if args.is_empty() => *target,
+            Statement { target, op: Op::SyncStreamLookup(_), args } if args.is_empty() => *target,
             _ => panic!("Incorrect stream lookup."),
         };
         let res_target = match &stmts[1] {
-            Statement {
-                target,
-                op: Op::Convert,
-                args,
-            } if args.len() == 1 => {
+            Statement { target, op: Op::Convert, args } if args.len() == 1 => {
                 assert_eq!(args[0], lu_target);
                 *target
             }
@@ -1287,10 +1113,7 @@ mod tests {
         let load = &expr.stmts[0];
 
         match &load.op {
-            Op::SyncStreamLookup(StreamInstance {
-                reference,
-                arguments,
-            }) => {
+            Op::SyncStreamLookup(StreamInstance { reference, arguments }) => {
                 assert!(arguments.is_empty(), "Lookup does not have arguments.");
                 match reference {
                     StreamReference::InRef(0) => {}
@@ -1323,10 +1146,7 @@ mod tests {
         let load = &expr.stmts[0];
 
         match &load.op {
-            Op::SyncStreamLookup(StreamInstance {
-                reference,
-                arguments,
-            }) => {
+            Op::SyncStreamLookup(StreamInstance { reference, arguments }) => {
                 assert!(arguments.is_empty(), "Lookup does not have arguments.");
                 match reference {
                     StreamReference::InRef(0) => {}
@@ -1346,9 +1166,7 @@ mod tests {
 
     #[test]
     fn lower_function_expression_regex() {
-        let ir = spec_to_ir(
-            "import regex\ninput a: String output v: Bool := matches_regex(a, r\"a*b\")",
-        );
+        let ir = spec_to_ir("import regex\ninput a: String output v: Bool := matches_regex(a, r\"a*b\")");
 
         let stream: &OutputStream = &ir.outputs[0];
 
@@ -1362,10 +1180,7 @@ mod tests {
         let load = &expr.stmts[0];
 
         match &load.op {
-            Op::SyncStreamLookup(StreamInstance {
-                reference,
-                arguments,
-            }) => {
+            Op::SyncStreamLookup(StreamInstance { reference, arguments }) => {
                 assert!(arguments.is_empty(), "Lookup does not have arguments.");
                 match reference {
                     StreamReference::InRef(0) => {}
@@ -1435,12 +1250,11 @@ mod tests {
 
     #[test]
     fn dependency_test() {
-        let ir = spec_to_ir("input a: Int32\ninput b: Int32\ninput c: Int32\noutput d: Int32 := a + b + (b[-1]?0) + (a[-2]?0) + c");
-        let mut in_refs: [StreamReference; 3] = [
-            StreamReference::InRef(5),
-            StreamReference::InRef(5),
-            StreamReference::InRef(5),
-        ];
+        let ir = spec_to_ir(
+            "input a: Int32\ninput b: Int32\ninput c: Int32\noutput d: Int32 := a + b + (b[-1]?0) + (a[-2]?0) + c",
+        );
+        let mut in_refs: [StreamReference; 3] =
+            [StreamReference::InRef(5), StreamReference::InRef(5), StreamReference::InRef(5)];
         for i in ir.inputs {
             if i.name == "a" {
                 in_refs[0] = i.reference;
@@ -1454,18 +1268,9 @@ mod tests {
         }
         let out_dep = &ir.outputs[0].outgoing_dependencies;
         assert_eq!(out_dep.len(), 3);
-        let a_dep = out_dep
-            .into_iter()
-            .find(|&x| x.stream == in_refs[0])
-            .expect("a dependencies not found");
-        let b_dep = out_dep
-            .into_iter()
-            .find(|&x| x.stream == in_refs[1])
-            .expect("b dependencies not found");
-        let c_dep = out_dep
-            .into_iter()
-            .find(|&x| x.stream == in_refs[2])
-            .expect("c dependencies not found");
+        let a_dep = out_dep.into_iter().find(|&x| x.stream == in_refs[0]).expect("a dependencies not found");
+        let b_dep = out_dep.into_iter().find(|&x| x.stream == in_refs[1]).expect("b dependencies not found");
+        let c_dep = out_dep.into_iter().find(|&x| x.stream == in_refs[2]).expect("c dependencies not found");
         assert_eq!(a_dep.offsets.len(), 2);
         assert_eq!(b_dep.offsets.len(), 2);
         assert_eq!(c_dep.offsets.len(), 1);

@@ -187,10 +187,7 @@ pub struct Parenthesis {
 
 impl Parenthesis {
     pub fn new(span: Span) -> Parenthesis {
-        Parenthesis {
-            id: NodeId::DUMMY,
-            span,
-        }
+        Parenthesis { id: NodeId::DUMMY, span }
     }
 }
 
@@ -203,27 +200,15 @@ pub struct Type {
 
 impl Type {
     pub fn new_simple(name: String, span: Span) -> Type {
-        Type {
-            id: NodeId::DUMMY,
-            kind: TypeKind::Simple(name),
-            span,
-        }
+        Type { id: NodeId::DUMMY, kind: TypeKind::Simple(name), span }
     }
 
     pub fn new_tuple(tuple: Vec<Type>, span: Span) -> Type {
-        Type {
-            id: NodeId::DUMMY,
-            kind: TypeKind::Tuple(tuple),
-            span,
-        }
+        Type { id: NodeId::DUMMY, kind: TypeKind::Tuple(tuple), span }
     }
 
     pub fn new_inferred() -> Type {
-        Type {
-            id: NodeId::DUMMY,
-            kind: TypeKind::Inferred,
-            span: Span::unknown(),
-        }
+        Type { id: NodeId::DUMMY, kind: TypeKind::Inferred, span: Span::unknown() }
     }
 }
 
@@ -253,11 +238,7 @@ pub struct Expression {
 
 impl Expression {
     pub fn new(kind: ExpressionKind, span: Span) -> Expression {
-        Expression {
-            id: NodeId::DUMMY,
-            kind,
-            span,
-        }
+        Expression { id: NodeId::DUMMY, kind, span }
     }
 }
 
@@ -280,11 +261,7 @@ pub enum ExpressionKind {
     /// An if-then-else expression
     Ite(Box<Expression>, Box<Expression>, Box<Expression>),
     /// An expression enveloped in parentheses
-    ParenthesizedExpression(
-        Option<Box<Parenthesis>>,
-        Box<Expression>,
-        Option<Box<Parenthesis>>,
-    ),
+    ParenthesizedExpression(Option<Box<Parenthesis>>, Box<Expression>, Option<Box<Parenthesis>>),
     /// An expression was expected, e.g., after an operator like `*`
     MissingExpression,
     /// A tuple expression
@@ -315,43 +292,23 @@ pub struct Literal {
 
 impl Literal {
     pub fn new_bool(val: bool, span: Span) -> Literal {
-        Literal {
-            id: NodeId::DUMMY,
-            kind: LitKind::Bool(val),
-            span,
-        }
+        Literal { id: NodeId::DUMMY, kind: LitKind::Bool(val), span }
     }
 
     pub fn new_int(val: i128, span: Span) -> Literal {
-        Literal {
-            id: NodeId::DUMMY,
-            kind: LitKind::Int(val),
-            span,
-        }
+        Literal { id: NodeId::DUMMY, kind: LitKind::Int(val), span }
     }
 
     pub fn new_float(float: f64, val: BigRational, span: Span) -> Literal {
-        Literal {
-            id: NodeId::DUMMY,
-            kind: LitKind::Float(float, val),
-            span,
-        }
+        Literal { id: NodeId::DUMMY, kind: LitKind::Float(float, val), span }
     }
 
     pub(crate) fn new_str(val: &str, span: Span) -> Literal {
-        Literal {
-            id: NodeId::DUMMY,
-            kind: LitKind::Str(val.to_string()),
-            span,
-        }
+        Literal { id: NodeId::DUMMY, kind: LitKind::Str(val.to_string()), span }
     }
 
     pub(crate) fn new_raw_str(val: &str, span: Span) -> Literal {
-        Literal {
-            id: NodeId::DUMMY,
-            kind: LitKind::RawStr(val.to_string()),
-            span,
-        }
+        Literal { id: NodeId::DUMMY, kind: LitKind::RawStr(val.to_string()), span }
     }
 }
 

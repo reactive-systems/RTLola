@@ -93,11 +93,7 @@ impl Handler {
         });
     }
 
-    pub(crate) fn build_error_with_span(
-        &self,
-        message: &str,
-        span: LabeledSpan,
-    ) -> DiagnosticBuilder<'_> {
+    pub(crate) fn build_error_with_span(&self, message: &str, span: LabeledSpan) -> DiagnosticBuilder<'_> {
         let mut builder = DiagnosticBuilder::new(&self, Error, message);
         builder.add_labeled_span(span);
         builder
@@ -140,9 +136,7 @@ impl Emitter for StderrEmitter {
         let mut stderr = StandardStream::stderr(ColorChoice::Always);
         for line in self.render(mapper, diagnostic) {
             for part in &line.strings {
-                stderr
-                    .set_color(&part.color)
-                    .expect("cannot set output color");
+                stderr.set_color(&part.color).expect("cannot set output color");
                 write!(&mut stderr, "{}", part.string).expect("writing to stderr failed");
             }
             writeln!(&mut stderr).expect("writing to stderr failed");
@@ -168,18 +162,12 @@ impl StderrEmitter {
         let mut snippets: Vec<(CodeLine, Option<String>, bool)> = diagnostic
             .span
             .iter()
-            .flat_map(|s| {
-                mapper
-                    .get_line(s.span)
-                    .map(|l| (l, s.label.clone(), s.primary))
-            })
+            .flat_map(|s| mapper.get_line(s.span).map(|l| (l, s.label.clone(), s.primary)))
             .collect();
 
         if !snippets.is_empty() && snippets.len() == diagnostic.span.len() {
-            let line_number_length = snippets
-                .iter()
-                .map(|(s, _, _)| format!("{}", s.line_number).len())
-                .fold(0, std::cmp::max);
+            let line_number_length =
+                snippets.iter().map(|(s, _, _)| format!("{}", s.line_number).len()).fold(0, std::cmp::max);
 
             // we assume the first span is the main one, i.e., we output path information
             let path = {
@@ -190,12 +178,7 @@ impl StderrEmitter {
                 rendered_line.push(&" ".repeat(line_number_length), ColorSpec::new());
                 rendered_line.push("--> ", ColorSpec::new().set_fg(Some(Color::Blue)).clone());
                 rendered_line.push(
-                    &format!(
-                        "{}:{}:{}",
-                        main.path.display(),
-                        main.line_number,
-                        main.column_number,
-                    ),
+                    &format!("{}:{}:{}", main.path.display(), main.line_number, main.column_number,),
                     ColorSpec::new(),
                 );
                 lines.push(rendered_line);
@@ -220,10 +203,7 @@ impl StderrEmitter {
                     rendered_line
                 }
 
-                assert_eq!(
-                    path, snippet.path,
-                    "assume snippets to be in same source file, use `SubDiagnostic` if not"
-                );
+                assert_eq!(path, snippet.path, "assume snippets to be in same source file, use `SubDiagnostic` if not");
 
                 // source code snippet
                 if prev_line_number.is_none() {
@@ -238,12 +218,10 @@ impl StderrEmitter {
                     lines.push(render_source_line(&snippet));
                 } else {
                     //                    assert!(prev_line_number.unwrap() <= snippet.line_number);
-                    if diagnostic.sort_spans && prev_line_number.unwrap() + 1 < snippet.line_number
-                    {
+                    if diagnostic.sort_spans && prev_line_number.unwrap() + 1 < snippet.line_number {
                         // print ...
                         let mut rendered_line = ColoredLine::new();
-                        rendered_line
-                            .push("...", ColorSpec::new().set_fg(Some(Color::Blue)).clone());
+                        rendered_line.push("...", ColorSpec::new().set_fg(Some(Color::Blue)).clone());
                         lines.push(rendered_line);
                     }
 
@@ -264,10 +242,7 @@ impl StderrEmitter {
                     diagnostic.level.to_color()
                 } else {
                     let mut colorspec = ColorSpec::new();
-                    colorspec
-                        .set_intense(true)
-                        .set_bold(true)
-                        .set_fg(Some(Color::Blue));
+                    colorspec.set_intense(true).set_bold(true).set_fg(Some(Color::Blue));
                     colorspec
                 };
                 rendered_line.push(
@@ -380,11 +355,7 @@ pub(crate) struct LabeledSpan {
 
 impl LabeledSpan {
     pub(crate) fn new(span: Span, label: &str, primary: bool) -> Self {
-        LabeledSpan {
-            span,
-            label: Some(label.to_string()),
-            primary,
-        }
+        LabeledSpan { span, label: Some(label.to_string()), primary }
     }
 }
 
@@ -430,9 +401,7 @@ impl<'a> DiagnosticBuilder<'a> {
     }
 
     pub(crate) fn add_span_with_label(&mut self, span: Span, label: &str, primary: bool) {
-        self.diagnostic
-            .span
-            .push(LabeledSpan::new(span, label, primary))
+        self.diagnostic.span.push(LabeledSpan::new(span, label, primary))
     }
 
     pub(crate) fn add_labeled_span(&mut self, span: LabeledSpan) {
@@ -469,15 +438,10 @@ struct ColoredLine {
 
 impl ColoredLine {
     fn new() -> ColoredLine {
-        ColoredLine {
-            strings: Vec::new(),
-        }
+        ColoredLine { strings: Vec::new() }
     }
 
     fn push(&mut self, string: &str, color: ColorSpec) {
-        self.strings.push(ColoredString {
-            string: string.to_owned(),
-            color,
-        })
+        self.strings.push(ColoredString { string: string.to_owned(), color })
     }
 }

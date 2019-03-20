@@ -81,10 +81,7 @@ impl std::fmt::Display for Freq {
 
 impl StreamTy {
     pub(crate) fn new(timing: TimingInfo) -> StreamTy {
-        StreamTy {
-            parameters: vec![],
-            timing,
-        }
+        StreamTy { parameters: vec![], timing }
     }
 
     pub(crate) fn new_parametric(parameters: Vec<ValueTy>, timing: TimingInfo) -> StreamTy {
@@ -98,10 +95,7 @@ impl StreamTy {
 
 impl Freq {
     pub(crate) fn new(repr: &str, ns: BigRational) -> Self {
-        Freq {
-            repr: repr.to_string(),
-            ns,
-        }
+        Freq { repr: repr.to_string(), ns }
     }
 
     pub(crate) fn is_multiple_of(&self, other: &Freq) -> bool {
@@ -237,12 +231,9 @@ impl std::fmt::Display for StreamTy {
             let joined: Vec<String> = self.parameters.iter().map(|e| format!("{}", e)).collect();
             match &self.timing {
                 TimingInfo::Event => write!(f, "Parametric<({}), EventStream>", joined.join(", ")),
-                TimingInfo::RealTime(freq) => write!(
-                    f,
-                    "Parametric<({}), RealTimeStream<{}>>",
-                    joined.join(", "),
-                    freq
-                ),
+                TimingInfo::RealTime(freq) => {
+                    write!(f, "Parametric<({}), RealTimeStream<{}>>", joined.join(", "), freq)
+                }
             }
         } else {
             match &self.timing {
@@ -280,10 +271,7 @@ impl TypeConstraint {
         }
     }
 
-    pub(crate) fn conjunction<'a>(
-        &'a self,
-        other: &'a TypeConstraint,
-    ) -> Option<&'a TypeConstraint> {
+    pub(crate) fn conjunction<'a>(&'a self, other: &'a TypeConstraint) -> Option<&'a TypeConstraint> {
         use self::TypeConstraint::*;
         if self > other {
             return other.conjunction(self);
