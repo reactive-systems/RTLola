@@ -94,8 +94,8 @@ fn parse_import(_spec: &mut LolaSpec, pair: Pair<Rule>) -> Import {
 }
 
 /**
- * Transforms a `Rule::ConstantStrean` into `Constant` AST node.
- * Panics if input is not `Rule::ConstantStrean`.
+ * Transforms a `Rule::ConstantStream` into `Constant` AST node.
+ * Panics if input is not `Rule::ConstantStream`.
  * The constant rule consists of the following tokens:
  * - `Rule::Ident`
  * - `Rule::Type`
@@ -112,8 +112,8 @@ fn parse_constant(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> Constant {
 }
 
 /**
- * Transforms a `Rule::InputStrean` into `Input` AST node.
- * Panics if input is not `Rule::InputStrean`.
+ * Transforms a `Rule::InputStream` into `Input` AST node.
+ * Panics if input is not `Rule::InputStream`.
  * The input rule consists of non-empty sequences of following tokens:
  * - `Rule::Ident`
  * - (`Rule::ParamList`)?
