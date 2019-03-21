@@ -10,6 +10,7 @@ use std::process;
 use std::time::Duration;
 
 fn main() -> Result<(), Box<dyn Error>> {
+    #[allow(unused_variables)]
     let args: Vec<String> = env::args().collect();
 
     let matches = App::new("StreamLAB")
