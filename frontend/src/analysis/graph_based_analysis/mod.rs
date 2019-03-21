@@ -32,6 +32,7 @@ pub(crate) enum MemoryBound {
 
 pub(crate) struct GraphAnalysisResult {
     pub(crate) evaluation_order: EvaluationOrderResult,
+    #[allow(dead_code)]
     pub(crate) future_dependent_streams: FutureDependentStreams,
     pub(crate) space_requirements: SpaceRequirements,
     pub(crate) tracking_requirements: TrackingRequirements,
