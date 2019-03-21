@@ -155,6 +155,7 @@ pub struct Trigger {
     pub(crate) span: Span,
 }
 
+#[allow(clippy::vec_box)]
 #[derive(Debug, Clone)]
 pub struct TypeDeclaration {
     pub name: Option<Ident>,
@@ -171,6 +172,7 @@ pub struct TypeDeclField {
     pub(crate) span: Span,
 }
 
+#[allow(clippy::vec_box)]
 #[derive(Debug, Clone)]
 pub struct StreamInstance {
     pub stream_identifier: Ident,
@@ -242,6 +244,7 @@ impl Expression {
     }
 }
 
+#[allow(clippy::vec_box)]
 #[derive(Debug, Clone)]
 pub enum ExpressionKind {
     /// A literal, e.g., `1`, `"foo"`

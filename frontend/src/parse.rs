@@ -756,6 +756,7 @@ fn parse_stream_instance(spec: &mut LolaSpec, instance: Pair<'_, Rule>) -> Strea
     StreamInstance { stream_identifier: stream_ident, arguments: args, id: NodeId::DUMMY, span }
 }
 
+#[allow(clippy::vec_box)]
 fn parse_vec_of_expressions(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>) -> Vec<Box<Expression>> {
     pairs
         .map(|expr| {
