@@ -808,6 +808,7 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn infer_function_application(
         &mut self,
         node_id: NodeId,
