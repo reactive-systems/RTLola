@@ -1350,6 +1350,7 @@ enum StreamVarOrTy {
 
 type InferResult = Result<(), InferError>;
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug)]
 pub enum InferError {
     ValueTypeMismatch(ValueTy, ValueTy),
