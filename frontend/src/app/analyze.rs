@@ -34,7 +34,7 @@ impl Config {
         let matches = App::new("lola-analyze")
             .version(env!("CARGO_PKG_VERSION"))
             .author(env!("CARGO_PKG_AUTHORS"))
-            .about("lola-anlyze is a tool to parse, type check, and analyze Lola specifications")
+            .about("lola-analyze is a useful tool to analyze Lola specifications")
             .arg(Arg::with_name("v").short("v").multiple(true).required(false).help("Sets the level of verbosity"))
             .subcommand(
                 SubCommand::with_name("parse")
