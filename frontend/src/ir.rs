@@ -515,11 +515,11 @@ impl Type {
             Type::Float(FloatTy::F32) => Some(ValSize(4)),
             Type::Float(FloatTy::F64) => Some(ValSize(8)),
             Type::Option(_) => panic!("Should not be used directly!"),
-            Type::Tuple(t) => t
-                .iter()
-                .map(Type::size)
-                .fold(Some(ValSize(0)), |acc, e| acc.and_then(|acc| e.map(|e| ValSize(e.0 + acc.0)))),
-            Type::String => None,
+            Type::Tuple(t) => {
+                let size = t.iter().map(|t| Type::size(t).unwrap().0).sum();
+                Some(ValSize(size))
+            }
+            Type::String => panic!("Strings are not properly handled yet."),
         }
     }
 }

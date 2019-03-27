@@ -97,7 +97,7 @@ GenericParam = { "<" ~ Type ~ ("," ~ Type)* ~ ">" }
 FunctionArgs = { ( "(" ~ ")" ) | ( "(" ~ Expr ~ ("," ~ Expr)* ~ ")" ) }
 
 UnaryExpr = {
-      UnaryOperation~ Expr}
+      UnaryOperation~ Term}
 
 TernaryExpr = {
       "if"~ Expr~ "then"~ Expr~ "else"~ Expr}
