@@ -422,6 +422,10 @@ impl Stream for InputStream {
 }
 
 impl LolaIR {
+    pub fn input_refs(&self) -> Vec<StreamReference> {
+        self.inputs.iter().map(|s| (s as &Stream).as_stream_ref()).collect()
+    }
+
     pub fn output_refs(&self) -> Vec<StreamReference> {
         self.outputs.iter().map(|s| (s as &Stream).as_stream_ref()).collect()
     }
@@ -455,12 +459,7 @@ impl LolaIR {
     }
 
     pub fn all_streams(&self) -> Vec<StreamReference> {
-        self.inputs
-            .iter()
-            .enumerate()
-            .map(|(ix, _)| StreamReference::InRef(ix))
-            .chain(self.output_refs().iter().cloned())
-            .collect()
+        self.input_refs().iter().chain(self.output_refs().iter()).cloned().collect()
     }
 
     pub fn get_triggers(&self) -> Vec<&OutputStream> {
