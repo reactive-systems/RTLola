@@ -58,24 +58,25 @@ pub enum MemorizationBound {
     Bounded(u16),
 }
 
+impl PartialOrd for MemorizationBound {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        use std::cmp::Ordering;
+        use MemorizationBound::*;
+        match (self, other) {
+            (Unbounded, Unbounded) => None,
+            (Bounded(_), Unbounded) => Some(Ordering::Less),
+            (Unbounded, Bounded(_)) => Some(Ordering::Greater),
+            (Bounded(b1), Bounded(b2)) => Some(b1.cmp(&b2)),
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum Tracking {
     /// Need to store every single value of a stream
     All(StreamReference),
     /// Need to store `num` values of `trackee`, evicting/add a value every `rate` time units.
     Bounded { trackee: StreamReference, num: u128, rate: Duration },
-}
-
-impl PartialOrd for MemorizationBound {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        use std::cmp::Ordering;
-        match (self, other) {
-            (MemorizationBound::Unbounded, MemorizationBound::Unbounded) => None,
-            (MemorizationBound::Bounded(_), MemorizationBound::Unbounded) => Some(Ordering::Less),
-            (MemorizationBound::Unbounded, MemorizationBound::Bounded(_)) => Some(Ordering::Greater),
-            (MemorizationBound::Bounded(b1), MemorizationBound::Bounded(b2)) => Some(b1.cmp(&b2)),
-        }
-    }
 }
 
 /// Represents an input stream of a Lola specification.
