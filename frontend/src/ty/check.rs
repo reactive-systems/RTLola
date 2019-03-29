@@ -1759,4 +1759,31 @@ mod tests {
             ])
         );
     }
+
+    #[test]
+    fn test_realtime_stream_integer_offset() {
+        let spec = "output b @2Hz := b[-1].defaults(to: 0)";
+        assert_eq!(0, num_type_errors(spec));
+    }
+
+    #[test]
+    fn test_realtime_stream_integer_offset_faster() {
+        let spec = "output a @4Hz := 0\noutput b @2Hz := b[-1].defaults(to: 0) + a[-1].defaults(to: 0)";
+        // equivalent to b[-500ms].defaults(to: 0) + a[-250ms].defaults(to: 0)
+        assert_eq!(0, num_type_errors(spec));
+    }
+
+    #[test]
+    fn test_realtime_stream_integer_offset_incompatible() {
+        let spec = "output a @3Hz := 0\noutput b @2Hz := b[-1].defaults(to: 0) + a[-1].defaults(to: 0)";
+        // does not work, a[-1] is not guaranteed to exist
+        assert_eq!(1, num_type_errors(spec));
+    }
+
+    #[test]
+    fn test_realtime_stream_integer_offset_sample_and_hold() {
+        let spec = "output a @3Hz := 0\noutput b @2Hz := b[-1].defaults(to: 0) + a[-1].hold().defaults(to: 0)";
+        // workaround using sample and hold
+        assert_eq!(0, num_type_errors(spec));
+    }
 }
