@@ -1001,21 +1001,11 @@ impl<T: UnifiableTy> Unifier for ValueUnifier<T> {
     /// If this fails as well, we try to coerce them, i.e., transform one type into the other.
     fn unify_var_var(&mut self, left: Self::Var, right: Self::Var) -> InferResult {
         debug!("unify var var {} {}", left, right);
-        if let (ValueVarVal::Known(ty_l), ValueVarVal::Known(ty_r)) =
-            (self.table.probe_value(left), self.table.probe_value(right))
-        {
-            // if both variables have values, we try to unify them recursively
-            if let Some(ty) = ty_l.equal_to(self, &ty_r) {
-                // proceed with unification
-                self.table.unify_var_value(left, ValueVarVal::Concretize(ty.clone())).expect("overwrite cannot fail");
-                self.table.unify_var_value(right, ValueVarVal::Concretize(ty)).expect("overwrite cannot fail");
-            } else if ty_l.coerces_with(self, &ty_r) {
-                return Ok(());
-            } else {
-                return Err(ty_l.conflicts_with(ty_r));
-            }
+        match (self.table.probe_value(left), self.table.probe_value(right)) {
+            (_, ValueVarVal::Known(ty)) => self.unify_var_ty(left, ty),
+            (ValueVarVal::Known(ty), ValueVarVal::Unknown) => self.unify_var_ty(right, ty),
+            _ => self.table.unify_var_var(left, right),
         }
-        self.table.unify_var_var(left, right)
     }
 
     /// Unifies a variable with a type.
@@ -1877,5 +1867,12 @@ mod tests {
         // should not produce an error as we want to be able to handle incomplete specs in analysis
         let spec = "input x: Bool\noutput y: Bool := \ntrigger (y || x)";
         assert_eq!(0, num_type_errors(spec));
+    }
+
+    #[test]
+    fn infinite_recursion_regression() {
+        // this should fail in type checking as the value type of `c` cannot be determined.
+        let spec = "output c := c[0]?0";
+        assert_eq!(1, num_type_errors(spec));
     }
 }
