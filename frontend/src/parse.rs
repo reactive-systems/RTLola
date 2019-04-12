@@ -1490,4 +1490,42 @@ mod tests {
         assert_eq!(time_spec_int(400, "uHz"), Duration::new(2_500, 0));
         assert_eq!(time_spec_int(20, "mHz"), Duration::new(50, 0));
     }
+
+    #[test]
+    fn parse_precedence_not_regression() {
+        parses_to! {
+            parser: LolaParser,
+            input:  "!(fast[-1] ? false) & fast",
+            rule:   Rule::Expr,
+            tokens: [
+                Expr(0, 26, [
+                    UnaryExpr(0, 19, [
+                        Neg(0, 1, []),
+                        ParenthesizedExpression(1, 19, [
+                            OpeningParenthesis(1, 2, []),
+                            Expr(2, 18, [
+                                LookupExpr(2, 10, [
+                                    StreamInstance(2, 6, [
+                                        Ident(2, 6, [])
+                                    ]),
+                                    Expr(7, 9, [
+                                        Literal(7, 9, [
+                                            NumberLiteral(7, 9, [])
+                                        ])
+                                    ]),
+                                ]),
+                                Default(11, 12, []),
+                                Literal(13, 18, [
+                                    False(13, 18, [])
+                                ])
+                            ]),
+                            ClosingParenthesis(18, 19, [])
+                        ])
+                    ]),
+                    And(20, 22, []),
+                    Ident(22, 26, [])
+                ]),
+            ]
+        };
+    }
 }
