@@ -167,13 +167,23 @@ fn parse_output(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> Output {
         Vec::new()
     };
 
-    let ty;
-    if let Rule::Type = pair.as_rule() {
-        ty = parse_type(spec, pair);
+    let ty = if let Rule::Type = pair.as_rule() {
+        let ty = parse_type(spec, pair);
         pair = pairs.next().expect("mismatch between grammar and AST");
+        ty
     } else {
-        ty = Type::new_inferred();
-    }
+        Type::new_inferred()
+    };
+
+    // Parse the `@ [Frequency]` part of output declaration
+    let extend = if let Rule::NewExtendDecl = pair.as_rule() {
+        let span: Span = pair.as_span().into();
+        let freq = parse_frequency(spec, pair.into_inner().next().expect("mismatch between grammar and AST"));
+        pair = pairs.next().expect("mismatch between grammar and AST");
+        ExtendDecl { freq: Some(freq), id: NodeId::DUMMY, span }
+    } else {
+        ExtendDecl { freq: None, id: NodeId::DUMMY, span: Span::unknown() }
+    };
 
     let mut tspec = None;
     if let Rule::TemplateSpec = pair.as_rule() {
@@ -184,7 +194,7 @@ fn parse_output(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> Output {
     // Parse expression
     let expr_span = pair.as_span();
     let expression = build_expression_ast(spec, pair.into_inner(), expr_span.into());
-    Output { id: NodeId::DUMMY, name, ty, params, template_spec: tspec, expression, span }
+    Output { id: NodeId::DUMMY, name, ty, extend, params, template_spec: tspec, expression, span }
 }
 
 fn parse_parameter_list(spec: &mut LolaSpec, param_list: Pairs<'_, Rule>) -> Vec<Parameter> {

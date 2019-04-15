@@ -33,6 +33,8 @@ ExtendDecl = { "extend" ~(("@" ~ FrequencyDecl) | (Expr ~("@" ~ FrequencyDecl)?)
 
 FrequencyDecl = _{ Frequency | Duration }
 
+NewExtendDecl = { "@" ~ FrequencyDecl }
+
 TerminateDecl = { "terminate" ~Expr }
 
 IncludeStatement = { "include"~ StringLiteral}
@@ -43,7 +45,7 @@ ConstantStream = { "constant"~ Ident ~ (":" ~ Type)? ~":=" ~Literal}
 
 InputStream = { "input" ~Ident ~ ParamList? ~ (":" ~ Type)? ~(","~ Ident~ ParamList? ~ ":" ~ Type)*}
 
-OutputStream = { "output"~ Ident ~ ParamList?~ (":" ~ Type)? ~ TemplateSpec? ~":="~ Expr}
+OutputStream = { "output"~ Ident ~ ParamList?~ (":" ~ Type)? ~ NewExtendDecl? ~ TemplateSpec? ~":="~ Expr}
 
 Trigger = { "trigger"~ (Ident ~ ":=")? ~ Expr~ StringLiteral?}
 

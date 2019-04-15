@@ -236,6 +236,7 @@ mod tests {
             id: NodeId::DUMMY,
             name: ident(),
             ty: ty(),
+            extend: ExtendDecl { freq: None, id: NodeId::DUMMY, span: span() },
             params: Vec::new(),
             template_spec: None,
             expression: expr,

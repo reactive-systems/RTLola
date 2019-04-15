@@ -86,6 +86,7 @@ pub struct Input {
 pub struct Output {
     pub name: Ident,
     pub ty: Type,
+    pub extend: ExtendDecl,
     pub params: Vec<Parameter>,
     pub template_spec: Option<TemplateSpec>,
     pub expression: Expression,
@@ -97,6 +98,13 @@ pub struct Output {
 pub struct Parameter {
     pub name: Ident,
     pub ty: Type,
+    pub(crate) id: NodeId,
+    pub(crate) span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub struct ExtendDecl {
+    pub freq: Option<TimeSpec>,
     pub(crate) id: NodeId,
     pub(crate) span: Span,
 }
