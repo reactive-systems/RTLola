@@ -67,6 +67,12 @@ impl Display for Output {
                 write!(f, ": {}", self.ty)?;
             }
         }
+        match &self.extend.freq {
+            None => {}
+            Some(freq) => {
+                write!(f, " @ {}", freq)?;
+            }
+        }
         write!(f, "{} := {}", format_opt(&self.template_spec, " ", ""), self.expression)
     }
 }

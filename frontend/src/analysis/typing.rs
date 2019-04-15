@@ -232,17 +232,20 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
         }
 
         // check if stream has timing infos
-        let mut frequence = None;
+        let mut frequency = None;
         if let Some(template_spec) = &output.template_spec {
             if let Some(extend) = &template_spec.ext {
                 if let Some(time_spec) = &extend.freq {
-                    frequence = Some(Freq::new(&format!("{}", time_spec), time_spec.exact_period.clone()));
+                    frequency = Some(Freq::new(&format!("{}", time_spec), time_spec.exact_period.clone()));
                 }
             }
         }
+        if let Some(time_spec) = &output.extend.freq {
+            frequency = Some(Freq::new(&format!("{}", time_spec), time_spec.exact_period.clone()));
+        }
 
         // determine whether stream is timed or event based
-        let timing: TimingInfo = if let Some(f) = frequence { TimingInfo::RealTime(f) } else { TimingInfo::Event };
+        let timing: TimingInfo = if let Some(f) = frequency { TimingInfo::RealTime(f) } else { TimingInfo::Event };
 
         if param_types.is_empty() {
             self.stream_unifier
@@ -1806,13 +1809,13 @@ mod tests {
 
     #[test]
     fn test_window_widening() {
-        let spec = "input in: Int8\n output out: Int64 {extend @5Hz}:= in[3s, Σ] ? 0";
+        let spec = "input in: Int8\n output out: Int64 @5Hz:= in[3s, Σ] ? 0";
         assert_eq!(0, num_type_errors(spec));
     }
 
     #[test]
     fn test_window() {
-        let spec = "input in: Int8\n output out: Int8 {extend @5Hz} := in[3s, Σ] ? 0";
+        let spec = "input in: Int8\n output out: Int8 @5Hz := in[3s, Σ] ? 0";
         assert_eq!(0, num_type_errors(spec));
     }
 
@@ -1824,60 +1827,60 @@ mod tests {
 
     #[test]
     fn test_window_faulty() {
-        let spec = "input in: Int8\n output out: Bool {extend @5Hz} := in[3s, Σ] ? 5";
+        let spec = "input in: Int8\n output out: Bool @5Hz := in[3s, Σ] ? 5";
         assert_eq!(1, num_type_errors(spec));
     }
 
     #[test]
     fn test_timed() {
-        let spec = "output o1: Bool {extend @10Hz}:= false\noutput o2: Bool {extend @10Hz}:= o1";
+        let spec = "output o1: Bool @10Hz:= false\noutput o2: Bool @10Hz:= o1";
         assert_eq!(0, num_type_errors(spec));
     }
 
     #[test]
     fn test_timed_faster() {
-        let spec = "output o1: Bool {extend @20Hz}:= false\noutput o2: Bool {extend @10Hz}:= o1";
+        let spec = "output o1: Bool @20Hz := false\noutput o2: Bool @10Hz:= o1";
         assert_eq!(0, num_type_errors(spec));
     }
 
     #[test]
     fn test_timed_incompatible() {
-        let spec = "output o1: Bool {extend @3Hz}:= false\noutput o2: Bool {extend @10Hz}:= o1";
+        let spec = "output o1: Bool @3Hz := false\noutput o2: Bool@10Hz:= o1";
         assert_eq!(1, num_type_errors(spec));
     }
 
     #[test]
     fn test_timed_binary() {
-        let spec = "output o1: Bool {extend @10Hz}:= false\noutput o2: Bool {extend @10Hz}:= o1 && true";
+        let spec = "output o1: Bool @10Hz:= false\noutput o2: Bool @10Hz:= o1 && true";
         assert_eq!(0, num_type_errors(spec));
     }
 
     #[test]
     fn test_involved() {
-        let spec = "input velo: Float32\n output avg: Float64 {extend @5Hz} := velo[1h, avg] ? 10000.0";
+        let spec = "input velo: Float32\n output avg: Float64 @5Hz := velo[1h, avg] ? 10000.0";
         assert_eq!(0, num_type_errors(spec));
     }
 
     #[test]
     fn test_rt_offset() {
-        let spec = "output a: Int8 { extend @1s } := 1\noutput b: Int8 { extend @1s } := a[-1s] ? 0";
+        let spec = "output a: Int8 @1s := 1\noutput b: Int8 @1s := a[-1s] ? 0";
         assert_eq!(0, num_type_errors(spec));
     }
 
     #[test]
     fn test_rt_offset_skip() {
-        let spec = "output a: Int8 { extend @1s } := 1\noutput b: Int8 { extend @2s } := a[-1s] ? 0";
+        let spec = "output a: Int8 @1s := 1\noutput b: Int8 @2s := a[-1s] ? 0";
         assert_eq!(0, num_type_errors(spec));
     }
     #[test]
     fn test_rt_offset_skip2() {
-        let spec = "output a: Int8 { extend @1s } := 1\noutput b: Int8 { extend @2s } := a[-2s] ? 0";
+        let spec = "output a: Int8 @1s := 1\noutput b: Int8 @2s := a[-2s] ? 0";
         assert_eq!(0, num_type_errors(spec));
     }
 
     #[test]
     fn test_rt_offset_fail() {
-        let spec = "output a: Int8 { extend @2s } := 1\noutput b: Int8 { extend @1s } := a[-1s] ? 0";
+        let spec = "output a: Int8 @2s := 1\noutput b: Int8 @1s := a[-1s] ? 0";
         assert_eq!(1, num_type_errors(spec));
     }
 
@@ -1895,7 +1898,7 @@ mod tests {
 
     #[test]
     fn test_sample_and_hold_useful() {
-        let spec = "input x: UInt8\noutput y: UInt8 { extend @1Hz } := x ! 0";
+        let spec = "input x: UInt8\noutput y: UInt8 @1Hz := x ! 0";
         assert_eq!(0, num_type_errors(spec));
     }
 

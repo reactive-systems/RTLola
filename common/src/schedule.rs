@@ -119,10 +119,10 @@ mod tests {
     #[ignore] // TODO Max
     fn test_extension_rate_extraction() {
         let input = "input a: UInt8\n";
-        let hz50 = "output b: UInt8 {extend @50Hz} := a";
-        let hz40 = "output b: UInt8 {extend @40Hz} := a";
-        let ms20 = "output b: UInt8 {extend @20ms} := a"; // 5Hz
-        let ms1 = "output b: UInt8 {extend @1ms} := a"; // 100Hz
+        let hz50 = "output b: UInt8 @50Hz := a";
+        let hz40 = "output b: UInt8 @40Hz := a";
+        let ms20 = "output b: UInt8 @20ms := a"; // 5Hz
+        let ms1 = "output b: UInt8 @1ms := a"; // 100Hz
 
         let case1 = (format!("{}{}", input, hz50), 2_000);
         let case2 = (format!("{}{}{}", input, hz50, hz50), 20_000);

@@ -988,13 +988,13 @@ mod tests {
 
     #[test]
     fn lower_one_output_time() {
-        let ir = spec_to_ir("output a: Int32 { extend @1Hz } := 34");
+        let ir = spec_to_ir("output a: Int32 @1Hz := 34");
         check_stream_number(&ir, 0, 1, 1, 0, 0, 0, 0);
     }
 
     #[test]
     fn lower_one_sliding() {
-        let ir = spec_to_ir("input a: Int32 output b: Int64 { extend @1Hz } := a[3s, sum] ? 4");
+        let ir = spec_to_ir("input a: Int32 output b: Int64 @1Hz := a[3s, sum] ? 4");
         check_stream_number(&ir, 1, 1, 1, 0, 0, 1, 0);
     }
 
@@ -1006,10 +1006,10 @@ mod tests {
              input a: Int32 \n\
              input b: Bool \n\
              output c: Int32 := a \n\
-             output d: Int64 { extend @1Hz } := a[3s, sum] ? 19 \n\
+             output d: Int64 @1Hz := a[3s, sum] ? 19 \n\
              output e: Bool := a > 4 && b \n\
-             output f: Int64 { extend @1Hz } := if (e ! true) then (c ! 0) else 0 \n\
-             output g: Float64 { extend @0.1Hz } :=  cast(f[10s, avg] ? 0) \n\
+             output f: Int64 @1Hz := if (e ! true) then (c ! 0) else 0 \n\
+             output g: Float64 @0.1Hz :=  cast(f[10s, avg] ? 0) \n\
              trigger g > 17.0 \
              ",
         );
@@ -1230,7 +1230,7 @@ mod tests {
 
     #[test]
     fn window_lookup() {
-        let ir = spec_to_ir("input a: Int32 output b: Int32 { extend @1Hz } := a[3s, sum] ? 3");
+        let ir = spec_to_ir("input a: Int32 output b: Int32 @1Hz := a[3s, sum] ? 3");
         let window = &ir.sliding_windows[0];
         assert_eq!(window, ir.get_window(window.reference));
     }
