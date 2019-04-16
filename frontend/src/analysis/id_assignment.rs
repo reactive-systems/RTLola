@@ -37,6 +37,7 @@ pub(crate) fn assign_ids(spec: &mut LolaSpec) {
         assert_eq!(o.id, NodeId::DUMMY, "Ids already assigned.");
         o.id = next_id();
         assign_ids_type(&mut o.ty, &mut next_id);
+        assign_ids_extend(&mut o.extend, &mut next_id);
 
         for param in &mut o.params {
             assign_ids_parameter(param, &mut next_id);
@@ -124,6 +125,13 @@ where
             assign_ids_type(element, next_id);
         }
     }
+}
+
+fn assign_ids_extend<E>(extend: &mut ExtendDecl, next_id: &mut E)
+where
+    E: FnMut() -> NodeId,
+{
+    extend.id = next_id();
 }
 
 fn assign_ids_expr<E>(exp: &mut Expression, next_id: &mut E)

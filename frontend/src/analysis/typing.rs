@@ -847,8 +847,6 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
                 .map_err(|err| self.handle_error(err, provided_type.span))?;
         }
 
-        println!("x");
-
         for (type_param, parameter) in fun_decl.parameters.iter().zip(params) {
             let ty = type_param.replace_params(&generics);
             if let Some(&param_var) = self.value_vars.get(&parameter.id) {
@@ -860,17 +858,11 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
                 self.infer_expression(parameter, Some(ty), StreamVarOrTy::Var(stream_var))?;
             }
         }
-        println!("y");
         // return type
         let ty = fun_decl.return_type.replace_params(&generics);
 
         // ?param_var = `ty`
         self.unifier.unify_var_ty(var, ty).map_err(|err| self.handle_error(err, span))?;
-
-        println!("{:?}", &generics);
-        for var in &generics {
-            println!("{:?}", self.unifier.get_type(*var));
-        }
 
         // store generic parameters for later lookup
         self.generic_function_vars.insert(node_id, generics);
