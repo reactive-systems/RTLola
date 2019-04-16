@@ -1,0 +1,95 @@
+\documentclass{article}
+
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{mathtools}
+
+\usepackage{listings}
+\usepackage{proof}
+\usepackage{framed}
+
+\newcommand{\ldot}{\mathpunct{.}}
+\newcommand{\nats}{\mathbb{N}}
+\newcommand{\type}[1]{\texttt{#1}}
+
+\title{Type System}
+\author{Leander Tentrup}
+
+\begin{document}
+
+\maketitle
+
+\section{Preliminaries}
+
+\begin{itemize}
+  \item A stream has two types, a \emph{value type} representing the value stored, e.g., \type{Bool}, \type{String}, and \type{Int32}, and a \emph{stream type} representing when a stream is scheduled.
+  \item A stream type can be either \emph{periodic} with a fixed frequency, or input-driven with a variable frequency.
+  \item For a stream with variable frequency, we define an activation condition, that is, a Boolean constraint, and a stream is evaluated only if the activation condition evaluates to true.
+  \item A type rule describes how the stream and value type for an expression is derived.
+\end{itemize}
+
+\begin{framed}
+Example specification
+\begin{lstlisting}
+input a: Bool, b: Bool, c: Bool;
+output x = a || b;
+output y = x && c;
+\end{lstlisting}
+\end{framed}
+
+\begin{framed}
+Example type rule
+\begin{equation*}
+  \infer
+  {\Gamma \vdash e_0 + e_1 \colon \binom{\tau'}{\sigma'}}
+  {\Gamma \vdash e_0 \colon \binom{\tau_0}{\sigma_0} & \Gamma \vdash e_1 \colon \binom{\tau_1}{\sigma_1} & \tau' \sqsubseteq \tau_0 \sqcap \tau_1 & \tau' \sqsubseteq \type{Numeric} & \sigma' \sqsubseteq \sigma_0 \sqcap \sigma_1}
+\end{equation*}
+Here, $\tau$ is a value type, $\sigma$ is a stream type, and $\binom{\tau}{\sigma}$ is the combined type.
+\end{framed}
+
+\subsection{Value Types}
+
+For value types the following holds
+\begin{itemize}
+  \item $\type{Int8} \sqsubset \type{Int16} \sqsubset \type{Int32} \sqsubset \type{Int64}$,
+  \item $\type{UInt8} \sqsubset \type{UInt16} \sqsubset \type{UInt32} \sqsubset \type{UInt64}$, and
+  \item $\type{Float32} \sqsubset \type{Float64}$
+\end{itemize}
+
+Type classes
+\begin{itemize}
+  \item \type{UnsignedInteger}: \type{UIntX}
+  \item \type{SignedInteger}: \type{IntX}
+  \item $\type{Integer} = \type{UnsignedInteger} \cup \type{SignedInteger}$
+  \item \type{FloatingPoint}: \type{FloatX}
+  \item $\type{Numeric} = \type{Integer} \cup \type{FloatingPoint}$
+  \item \type{Comparable}, \type{Equatable}: Currently all types
+\end{itemize}
+
+\subsection{Stream Types}
+
+For two periodic $\sigma_0$ and $\sigma_1$ with frequencies $f_0$ and $f_1$, respectively, it holds that
+\begin{equation*}
+  \sigma_0 \sqcap \sigma_1 \coloneqq
+  \begin{cases}
+    f_0 & \text{if } f_0 \sqsubseteq f_1 \\
+    f_1 & \text{if } f_1 \sqsubseteq f_0 \\
+    \bot & \text{otherwise}
+  \end{cases}
+\end{equation*}
+where $f_0 \sqsubseteq f_1$ is defined as $\exists c \in \nats \colon f_0 \cdot c = f_1$.
+%
+For example, $1\,\text{Hz} \sqcap 2\,\text{Hz} = 1\,\text{Hz}$, $4\,\text{Hz} \sqcap 2\,\text{Hz} = 2\,\text{Hz}$, and $2\,\text{Hz} \sqcap 3\,\text{Hz} = \bot$.
+
+For two variable frequency streams, $\sqcap$ amounts to a Boolean conjunction of the activation conditions of the operands.
+%
+For example, \texttt{a || b} returns $\sigma \sqsubseteq a \land b$. and \texttt{x \&\& c} returns $\sigma \sqsubseteq x \land c = a \land b \land c$.
+$\sigma \sqsubseteq \sigma'$ holds if $\sigma \rightarrow \sigma'$ is valid.
+Disjunctive constraints can be produce by annotating the output declaration, e.g.,
+\begin{lstlisting}
+output z @(x | y) := x!false xor y!false;
+\end{lstlisting}
+produces an output stream $z$ that is evaluates if either $x$ or $y$ are evaluated.
+As $(x \lor y) \rightarrow x$ is not valid, we have to use the sample and hold operator $!$ as it is not guaranteed that $x$ and $y$ have values whenever $z$ is evaluated.
+
+\end{document}
