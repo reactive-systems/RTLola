@@ -819,6 +819,7 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
         types: &[Type],
         params: &[&'a Expression],
     ) -> Result<(), ()> {
+        trace!("infer function application");
         assert!(types.len() <= fun_decl.generics.len());
         assert_eq!(params.len(), fun_decl.parameters.len());
 
@@ -843,6 +844,8 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
                 .map_err(|err| self.handle_error(err, provided_type.span))?;
         }
 
+        println!("x");
+
         for (type_param, parameter) in fun_decl.parameters.iter().zip(params) {
             let ty = type_param.replace_params(&generics);
             if let Some(&param_var) = self.value_vars.get(&parameter.id) {
@@ -854,10 +857,17 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
                 self.infer_expression(parameter, Some(ty), StreamVarOrTy::Var(stream_var))?;
             }
         }
+        println!("y");
         // return type
         let ty = fun_decl.return_type.replace_params(&generics);
+
         // ?param_var = `ty`
         self.unifier.unify_var_ty(var, ty).map_err(|err| self.handle_error(err, span))?;
+
+        println!("{:?}", &generics);
+        for var in &generics {
+            println!("{:?}", self.unifier.get_type(*var));
+        }
 
         // store generic parameters for later lookup
         self.generic_function_vars.insert(node_id, generics);
@@ -1002,10 +1012,34 @@ impl<T: UnifiableTy> Unifier for ValueUnifier<T> {
     fn unify_var_var(&mut self, left: Self::Var, right: Self::Var) -> InferResult {
         debug!("unify var var {} {}", left, right);
         match (self.table.probe_value(left), self.table.probe_value(right)) {
-            (_, ValueVarVal::Known(ty)) => self.unify_var_ty(left, ty),
-            (ValueVarVal::Known(ty), ValueVarVal::Unknown) => self.unify_var_ty(right, ty),
-            _ => self.table.unify_var_var(left, right),
+            (ValueVarVal::Known(ty_l), ValueVarVal::Known(ty_r)) => {
+                // if both variables have values, we try to unify them recursively
+                if let Some(ty) = ty_l.equal_to(self, &ty_r) {
+                    // proceed with unification
+                    self.table
+                        .unify_var_value(left, ValueVarVal::Concretize(ty.clone()))
+                        .expect("overwrite cannot fail");
+                    self.table.unify_var_value(right, ValueVarVal::Concretize(ty)).expect("overwrite cannot fail");
+                } else if ty_l.coerces_with(self, &ty_r) {
+                    return Ok(());
+                } else {
+                    return Err(ty_l.conflicts_with(ty_r));
+                }
+            }
+            (ValueVarVal::Unknown, ValueVarVal::Known(ty)) => {
+                if ty.contains_var(self, left) {
+                    return Err(InferError::CyclicDependency);
+                }
+            }
+            (ValueVarVal::Known(ty), ValueVarVal::Unknown) => {
+                if ty.contains_var(self, right) {
+                    return Err(InferError::CyclicDependency);
+                }
+            }
+            _ => {}
         }
+
+        self.table.unify_var_var(left, right)
     }
 
     /// Unifies a variable with a type.
@@ -1892,10 +1926,11 @@ mod tests {
     }
 
     #[test]
-    fn test_typing_regression() {
-        // this should fail in type checking as the value type of `c` cannot be determined.
+    fn test_function_arguments_regression() {
         let spec = "input a: Int32\ntrigger a > 50";
         let type_table = type_check(spec);
+        // expression `a > 50` has NodeId = 3
         assert_eq!(type_table.get_value_type(NodeId::new(3)), &ValueTy::Bool);
+        assert_eq!(type_table.get_func_arg_types(NodeId::new(3)), &vec![ValueTy::Int(IntTy::I32)]);
     }
 }
