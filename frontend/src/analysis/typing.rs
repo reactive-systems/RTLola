@@ -1399,6 +1399,21 @@ mod tests {
         type_analysis.get_type(spec.outputs.last().expect("spec needs at least one output").id)
     }
 
+    fn type_check(spec: &str) -> TypeTable {
+        let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
+
+        let spec = match parse(spec) {
+            Err(e) => panic!("Spec {} cannot be parsed: {}.", spec, e),
+            Ok(s) => s,
+        };
+        let mut na = NamingAnalysis::new(&handler);
+        let decl_table = na.check(&spec);
+        assert!(!handler.contains_error(), "Spec produces errors in naming analysis.");
+        let mut type_analysis = TypeAnalysis::new(&handler, &decl_table);
+        type_analysis.check(&spec);
+        type_analysis.extract_type_table()
+    }
+
     #[test]
     fn simple_input() {
         let spec = "input i: Int8";
@@ -1874,5 +1889,13 @@ mod tests {
         // this should fail in type checking as the value type of `c` cannot be determined.
         let spec = "output c := c[0]?0";
         assert_eq!(1, num_type_errors(spec));
+    }
+
+    #[test]
+    fn test_typing_regression() {
+        // this should fail in type checking as the value type of `c` cannot be determined.
+        let spec = "input a: Int32\ntrigger a > 50";
+        let type_table = type_check(spec);
+        assert_eq!(type_table.get_value_type(NodeId::new(3)), &ValueTy::Bool);
     }
 }
