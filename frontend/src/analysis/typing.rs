@@ -557,7 +557,7 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
 
                 if let Some(infered) = self.unifier.get_type(self.value_vars[&base.id]) {
                     debug!("{} {}", base, infered);
-                    if let Some(fun_decl) = self.method_lookup.get(&infered, name.name.as_str()) {
+                    if let Some(fun_decl) = self.method_lookup.get(&infered, &name) {
                         debug!("{:?}", fun_decl);
 
                         for ty in types {

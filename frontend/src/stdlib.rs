@@ -1,6 +1,6 @@
 //! This module contains the Lola standard library.
 
-use crate::ast::{BinOp, UnOp};
+use crate::ast::{BinOp, FunctionName, UnOp};
 use crate::ty::{TypeConstraint, ValueTy};
 use lazy_static::lazy_static;
 
@@ -164,7 +164,7 @@ impl MethodLookup {
         MethodLookup {}
     }
 
-    pub(crate) fn get(&self, ty: &ValueTy, name: &str) -> Option<FuncDecl> {
+    pub(crate) fn get(&self, ty: &ValueTy, name: &FunctionName) -> Option<FuncDecl> {
         unimplemented!("method lookup {} {}", ty, name)
     }
 }

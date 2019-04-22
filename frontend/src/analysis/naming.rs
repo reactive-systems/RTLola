@@ -354,7 +354,7 @@ impl<'a, 'b> NamingAnalysis<'a, 'b> {
                 exprs.iter().for_each(|expr| self.check_expression(expr));
             }
             Function(name, types, exprs) => {
-                self.check_ident(expression, name);
+                //self.check_ident(expression, name);
                 types.iter().for_each(|ty| self.check_type(ty));
                 exprs.iter().for_each(|expr| self.check_expression(expr));
             }

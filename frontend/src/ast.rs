@@ -252,7 +252,6 @@ impl Expression {
     }
 }
 
-#[allow(clippy::vec_box)]
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone)]
 pub enum ExpressionKind {
@@ -281,9 +280,9 @@ pub enum ExpressionKind {
     /// Access of a named (`obj.foo`) or unnamed (`obj.0`) struct field
     Field(Box<Expression>, Ident),
     /// A method call, e.g., `foo.offset(-1)`
-    Method(Box<Expression>, Ident, Vec<Type>, Vec<Box<Expression>>),
+    Method(Box<Expression>, FunctionName, Vec<Type>, Vec<Box<Expression>>),
     /// A function call
-    Function(Ident, Vec<Type>, Vec<Box<Expression>>),
+    Function(FunctionName, Vec<Type>, Vec<Box<Expression>>),
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -397,4 +396,10 @@ pub enum Offset {
     DiscreteOffset(Box<Expression>),
     /// A real-time offset, e.g., `3ms`, `4min`, `2.3h`
     RealTimeOffset(TimeSpec),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FunctionName {
+    pub name: Ident,
+    pub arg_names: Vec<Option<Ident>>,
 }

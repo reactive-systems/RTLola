@@ -569,7 +569,7 @@ impl<'a> Lowering<'a> {
                 let stmt = Statement { target: state.temp_for_type(&result_type), op: Op::Tuple, args: lowered_list.1 };
                 state.with_stmt(stmt)
             }
-            ExpressionKind::Function(name, _, args) if name.name == "cast" => {
+            ExpressionKind::Function(name, _, args) if name.name.name == "cast" => {
                 // Special case for cast function.
                 assert_eq!(args.len(), 1);
                 let arg = &args[0];
@@ -580,7 +580,7 @@ impl<'a> Lowering<'a> {
             }
             ExpressionKind::Function(name, _, args) => {
                 use crate::ty::ValueTy;
-                let ir_kind = name.name.clone();
+                let ir_kind = name.name.name.clone();
 
                 let req_arg_types = self.tt.get_func_arg_types(expr.id);
                 let args = if let Declaration::Func(fd) = self.get_decl(expr.id) {

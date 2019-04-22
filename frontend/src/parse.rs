@@ -824,7 +824,7 @@ fn parse_lookup_expression(spec: &mut LolaSpec, pair: Pair<'_, Rule>, span: Span
 
 fn build_function_expression(spec: &mut LolaSpec, pair: Pair<'_, Rule>, span: Span) -> Expression {
     let mut children = pair.into_inner();
-    let ident = parse_ident(&children.next().unwrap());
+    let fun_name = parse_ident(&children.next().unwrap());
     let mut next = children.next().expect("Mismatch between AST and parser");
     let type_params = match next.as_rule() {
         Rule::GenericParam => {
@@ -836,8 +836,24 @@ fn build_function_expression(spec: &mut LolaSpec, pair: Pair<'_, Rule>, span: Sp
         _ => unreachable!(),
     };
     assert_eq!(next.as_rule(), Rule::FunctionArgs);
-    let args = parse_vec_of_expressions(spec, next.into_inner());
-    Expression::new(ExpressionKind::Function(ident, type_params, args), span)
+    let mut args = Vec::new();
+    let mut arg_names = Vec::new();
+    for pair in next.into_inner() {
+        assert_eq!(pair.as_rule(), Rule::FunctionArg);
+        let mut pairs = pair.into_inner();
+        let mut pair = pairs.next().expect("Mismatch between AST and parser");
+        if pair.as_rule() == Rule::Ident {
+            // named argument
+            arg_names.push(Some(parse_ident(&pair)));
+            pair = pairs.next().expect("Mismatch between AST and parser");
+        } else {
+            arg_names.push(None);
+        }
+        let span = pair.as_span();
+        args.push(build_expression_ast(spec, pair.into_inner(), span.into()).into());
+    }
+    let name = FunctionName { name: fun_name, arg_names };
+    Expression::new(ExpressionKind::Function(name, type_params, args), span)
 }
 
 /**
@@ -978,7 +994,7 @@ fn build_term_ast(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> Expression {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq)]
 pub struct Ident {
     pub name: String,
     pub span: Span,
@@ -987,6 +1003,14 @@ pub struct Ident {
 impl Ident {
     pub fn new(name: String, span: Span) -> Ident {
         Ident { name, span }
+    }
+}
+
+/// In the equality definition of `Ident`, we only compare the string values
+/// and ignore the `Span` info
+impl PartialEq for Ident {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name
     }
 }
 
@@ -1469,6 +1493,13 @@ mod tests {
     #[test]
     fn parse_realtime_offset() {
         let spec = "output a := b[-1s]\n";
+        let ast = parse(spec).unwrap_or_else(|e| panic!("{}", e));
+        cmp_ast_spec(&ast, spec);
+    }
+
+    #[test]
+    fn parse_function_argument_name() {
+        let spec = "output a := b.hold().defaults(to: 0)\n";
         let ast = parse(spec).unwrap_or_else(|e| panic!("{}", e));
         cmp_ast_spec(&ast, spec);
     }

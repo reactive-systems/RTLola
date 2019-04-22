@@ -226,22 +226,53 @@ impl Display for Expression {
             }
             ExpressionKind::MissingExpression => Ok(()),
             ExpressionKind::Tuple(exprs) => write_delim_list(f, exprs, "(", ")", ", "),
-            ExpressionKind::Function(kind, types, args) => {
-                write!(f, "{}", kind)?;
+            ExpressionKind::Function(name, types, args) => {
+                write!(f, "{}", name.name)?;
                 if !types.is_empty() {
                     write_delim_list(f, types, "<", ">", ", ")?;
                 }
-                write_delim_list(f, args, "(", ")", ", ")
+                let args: Vec<String> = args
+                    .iter()
+                    .zip(&name.arg_names)
+                    .map(|(arg, arg_name)| match arg_name {
+                        None => format!("{}", arg),
+                        Some(arg_name) => format!("{}: {}", arg_name, arg),
+                    })
+                    .collect();
+                write_delim_list(f, &args, "(", ")", ", ")
             }
             ExpressionKind::Field(expr, ident) => write!(f, "{}.{}", expr, ident),
-            ExpressionKind::Method(expr, ident, types, args) => {
-                write!(f, "{}.{}", expr, ident)?;
+            ExpressionKind::Method(expr, name, types, args) => {
+                write!(f, "{}.{}", expr, name.name)?;
                 if !types.is_empty() {
                     write_delim_list(f, types, "<", ">", ", ")?;
                 }
-                write_delim_list(f, args, "(", ")", ", ")
+                let args: Vec<String> = args
+                    .iter()
+                    .zip(&name.arg_names)
+                    .map(|(arg, arg_name)| match arg_name {
+                        None => format!("{}", arg),
+                        Some(arg_name) => format!("{}: {}", arg_name, arg),
+                    })
+                    .collect();
+                write_delim_list(f, &args, "(", ")", ", ")
             }
         }
+    }
+}
+
+impl Display for FunctionName {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        write!(f, "{}", self.name)?;
+        let args: Vec<String> = self
+            .arg_names
+            .iter()
+            .map(|arg_name| match arg_name {
+                None => format!("_"),
+                Some(arg_name) => format!("{}", arg_name),
+            })
+            .collect();
+        write_delim_list(f, &args, "(", ")", ":")
     }
 }
 

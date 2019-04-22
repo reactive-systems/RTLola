@@ -96,7 +96,8 @@ FunctionExpr = {
       FunctionSymbol ~ GenericParam? ~ FunctionArgs }
 
 GenericParam = { "<" ~ Type ~ ("," ~ Type)* ~ ">" }
-FunctionArgs = { ( "(" ~ ")" ) | ( "(" ~ Expr ~ ("," ~ Expr)* ~ ")" ) }
+FunctionArgs = { ( "(" ~ ")" ) | ( "(" ~ FunctionArg ~ ("," ~ FunctionArg)* ~ ")" ) }
+FunctionArg = { (Ident ~ ":")? ~ Expr }
 
 UnaryExpr = {
       UnaryOperation~ Term}
