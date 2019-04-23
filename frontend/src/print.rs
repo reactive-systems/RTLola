@@ -219,6 +219,10 @@ impl Display for Expression {
                 StreamAccessKind::Optional => write!(f, "{}.get()", expr),
             },
             ExpressionKind::Default(expr, val) => write!(f, "{}.defaults(to: {})", expr, val),
+            ExpressionKind::Offset(expr, val) => write!(f, "{}.offset(by: {})", expr, val),
+            ExpressionKind::SlidingWindowAggregation { expr, duration, aggregation } => {
+                write!(f, "{}.aggregate(over: {}, using: {})", expr, duration, aggregation)
+            }
             ExpressionKind::Hold(expr, val) => write!(f, "{} ! {}", expr, val),
             ExpressionKind::Lookup(inst, offset, Some(aggr)) => write!(f, "{}[{}, {}]", inst, offset, aggr),
             ExpressionKind::Lookup(inst, offset, None) => write!(f, "{}[{}]", inst, offset),

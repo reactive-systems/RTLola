@@ -31,6 +31,10 @@ fn analyse_expression(version_tracker: &mut VersionTracker, expr: &Expression, t
             analyse_expression(version_tracker, &*target, false);
             analyse_expression(version_tracker, &*default, false);
         }
+        ExpressionKind::Offset(_, _) => unimplemented!(),
+        ExpressionKind::SlidingWindowAggregation { expr: _expr, duration: _duration, aggregation: _aggregation } => {
+            unimplemented!()
+        }
         ExpressionKind::Lookup(_, offset, _) => match offset {
             Offset::DiscreteOffset(expr) => {
                 analyse_expression(version_tracker, &*expr, false);

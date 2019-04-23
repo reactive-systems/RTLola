@@ -149,6 +149,10 @@ where
             assign_ids_expr(lhs, next_id);
             assign_ids_expr(rhs, next_id);
         }
+        ExpressionKind::Offset(_, _) => unimplemented!(),
+        ExpressionKind::SlidingWindowAggregation { expr: _expr, duration: _duration, aggregation: _aggregation } => {
+            unimplemented!()
+        }
         ExpressionKind::Lookup(inst, offset, _winop) => {
             inst.id = next_id();
             inst.arguments.iter_mut().for_each(|e| assign_ids_expr(e, next_id));

@@ -253,6 +253,12 @@ impl<'a> DependencyAnalyser<'a> {
             },
             ExpressionKind::StreamAccess(_, _) => unimplemented!(),
             ExpressionKind::Default(_, _) => unreachable!(),
+            ExpressionKind::Offset(_, _) => unimplemented!(),
+            ExpressionKind::SlidingWindowAggregation {
+                expr: _expr,
+                duration: _duration,
+                aggregation: _aggregation,
+            } => unimplemented!(),
             ExpressionKind::Hold(_, _) => unreachable!(),
             ExpressionKind::Lookup(_, _, _) => unreachable!(),
             ExpressionKind::Binary(_, _, _) => unimplemented!(),
@@ -342,6 +348,12 @@ impl<'a> DependencyAnalyser<'a> {
                 }
             },
             ExpressionKind::StreamAccess(_, _) => unimplemented!(),
+            ExpressionKind::Offset(_, _) => unimplemented!(),
+            ExpressionKind::SlidingWindowAggregation {
+                expr: _expr,
+                duration: _duration,
+                aggregation: _aggregation,
+            } => unimplemented!(),
             ExpressionKind::Lookup(instance, offset, op) => {
                 let target_stream_id = match &self.naming_table[&instance.id] {
                     Declaration::Out(output) => output.id,

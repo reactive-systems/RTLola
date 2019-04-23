@@ -20,6 +20,10 @@ pub(crate) fn warn_about_missing_parenthesis_in_expression(expr: &Expression, ha
         | ExpressionKind::Ident(_)
         | ExpressionKind::MissingExpression => {}
         ExpressionKind::StreamAccess(_, _) => unimplemented!(),
+        ExpressionKind::Offset(_, _) => unimplemented!(),
+        ExpressionKind::SlidingWindowAggregation { expr: _expr, duration: _duration, aggregation: _aggregation } => {
+            unimplemented!()
+        }
         ExpressionKind::Unary(_, inner)
         | ExpressionKind::Field(inner, _) => {
             warn_about_missing_parenthesis_in_expression(&inner, handler);

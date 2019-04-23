@@ -442,6 +442,10 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
                 }
             }
             StreamAccess(_, _) => unimplemented!(),
+            Offset(_, _) => unimplemented!(),
+            SlidingWindowAggregation { expr: _expr, duration: _duration, aggregation: _aggregation } => {
+                unimplemented!()
+            }
             Ite(cond, left, right) => {
                 // constraints
                 // - ?cond = EventStream<bool>

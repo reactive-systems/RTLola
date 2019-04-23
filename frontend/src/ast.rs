@@ -263,6 +263,10 @@ pub enum ExpressionKind {
     StreamAccess(Box<Expression>, StreamAccessKind),
     /// A default expression, e.g., `a.defaults(to: 0) `
     Default(Box<Expression>, Box<Expression>),
+    /// An offset expression, e.g., `a.offset(by: -1)`
+    Offset(Box<Expression>, Box<Expression>),
+    /// A sliding window with duration `duration` and aggregation function `aggregation`
+    SlidingWindowAggregation { expr: Box<Expression>, duration: Box<Expression>, aggregation: WindowOperation },
     /// A sample and hold expression, e.g., `a ! 4`
     Hold(Box<Expression>, Box<Expression>),
     /// A stream lookup with offset

@@ -255,6 +255,12 @@ impl<'a> Lowering<'a> {
             ExpressionKind::Default(e, dft) | ExpressionKind::Hold(e, dft) => {
                 pre.chain(recursion(e)).chain(recursion(dft)).chain(post()).collect()
             }
+            ExpressionKind::Offset(_, _) => unimplemented!(),
+            ExpressionKind::SlidingWindowAggregation {
+                expr: _expr,
+                duration: _duration,
+                aggregation: _aggregation,
+            } => unimplemented!(),
             ExpressionKind::Lookup(inst, _, _) => {
                 let args = inst.arguments.iter().flat_map(|a| recursion(a));
                 pre.chain(args).chain(post()).collect()
@@ -452,6 +458,12 @@ impl<'a> Lowering<'a> {
                     self.lower_subexpression(e, state)
                 }
             }
+            ExpressionKind::Offset(_, _) => unimplemented!(),
+            ExpressionKind::SlidingWindowAggregation {
+                expr: _expr,
+                duration: _duration,
+                aggregation: _aggregation,
+            } => unimplemented!(),
             ExpressionKind::Hold(e, dft) => {
                 if let ExpressionKind::Lookup(_, _, _) = &e.kind {
                     let result_type = self.lower_value_type(expr.id);

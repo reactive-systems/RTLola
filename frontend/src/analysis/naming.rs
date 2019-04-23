@@ -337,7 +337,11 @@ impl<'a, 'b> NamingAnalysis<'a, 'b> {
             Ident(ident) => {
                 self.check_ident(expression, ident);
             }
-            ExpressionKind::StreamAccess(_, _) => unimplemented!(),
+            StreamAccess(_, _) => unimplemented!(),
+            Offset(_, _) => unimplemented!(),
+            SlidingWindowAggregation { expr: _expr, duration: _duration, aggregation: _aggregation } => {
+                unimplemented!()
+            }
             Binary(_, left, right) => {
                 self.check_expression(left);
                 self.check_expression(right);

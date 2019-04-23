@@ -904,7 +904,7 @@ fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>, span: Span)
                                 }
                                 "offset(by:)" => {
                                     assert_eq!(args.len(), 1);
-                                    unimplemented!();
+                                    ExpressionKind::Offset(lhs.into(), args[0].clone())
                                 }
                                 "hold()" => {
                                     assert_eq!(args.len(), 0);

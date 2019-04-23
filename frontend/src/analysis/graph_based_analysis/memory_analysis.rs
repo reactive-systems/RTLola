@@ -102,6 +102,10 @@ fn add_sliding_windows<'a>(
                 };
             }
         }
+        ExpressionKind::Offset(_, _) => unimplemented!(),
+        ExpressionKind::SlidingWindowAggregation { expr: _expr, duration: _duration, aggregation: _aggregation } => {
+            unimplemented!()
+        }
         ExpressionKind::Unary(_, inner) | ExpressionKind::ParenthesizedExpression(_, inner, _) => {
             match add_sliding_windows(&*inner, type_table, declaration_table) {
                 MemoryBound::Bounded(u) => required_memory += u,

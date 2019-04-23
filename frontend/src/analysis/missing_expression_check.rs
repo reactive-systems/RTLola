@@ -36,6 +36,10 @@ pub(crate) fn any_expression_missing_in_expression(expr: &Expression, handler: &
             let right_missing = any_expression_missing_in_expression(&*right, handler);
             left_missing || right_missing
         }
+        ExpressionKind::Offset(_, _) => unimplemented!(),
+        ExpressionKind::SlidingWindowAggregation { expr: _expr, duration: _duration, aggregation: _aggregation } => {
+            unimplemented!()
+        }
         ExpressionKind::Ite(cond, normal, alternative) => {
             let in_cond_missing = any_expression_missing_in_expression(&*cond, handler);
             let in_normal_missing = any_expression_missing_in_expression(&*normal, handler);
