@@ -214,8 +214,12 @@ impl Display for Expression {
         match &self.kind {
             ExpressionKind::Lit(l) => write!(f, "{}", l),
             ExpressionKind::Ident(ident) => write!(f, "{}", ident),
+            ExpressionKind::StreamAccess(expr, access) => match access {
+                StreamAccessKind::Hold => write!(f, "{}.hold()", expr),
+                StreamAccessKind::Optional => write!(f, "{}.get()", expr),
+            },
             ExpressionKind::Default(expr, val) => write!(f, "{}.defaults(to: {})", expr, val),
-            ExpressionKind::Hold(expr, _val) => write!(f, "{}.hold()", expr),
+            ExpressionKind::Hold(expr, val) => write!(f, "{} ! {}", expr, val),
             ExpressionKind::Lookup(inst, offset, Some(aggr)) => write!(f, "{}[{}, {}]", inst, offset, aggr),
             ExpressionKind::Lookup(inst, offset, None) => write!(f, "{}[{}]", inst, offset),
             ExpressionKind::Binary(op, lhs, rhs) => write!(f, "{} {} {}", lhs, op, rhs),

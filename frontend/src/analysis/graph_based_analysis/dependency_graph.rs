@@ -251,6 +251,7 @@ impl<'a> DependencyAnalyser<'a> {
             ExpressionKind::Ident(_) => match &naming_table[&expr.id] {
                 _ => unimplemented!(),
             },
+            ExpressionKind::StreamAccess(_, _) => unimplemented!(),
             ExpressionKind::Default(_, _) => unreachable!(),
             ExpressionKind::Hold(_, _) => unreachable!(),
             ExpressionKind::Lookup(_, _, _) => unreachable!(),
@@ -340,6 +341,7 @@ impl<'a> DependencyAnalyser<'a> {
                     );
                 }
             },
+            ExpressionKind::StreamAccess(_, _) => unimplemented!(),
             ExpressionKind::Lookup(instance, offset, op) => {
                 let target_stream_id = match &self.naming_table[&instance.id] {
                     Declaration::Out(output) => output.id,

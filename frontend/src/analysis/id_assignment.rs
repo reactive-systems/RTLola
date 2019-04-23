@@ -144,6 +144,7 @@ where
             assign_ids_literal(lit, next_id);
         }
         ExpressionKind::Ident(_) | ExpressionKind::MissingExpression => {}
+        ExpressionKind::StreamAccess(_, _) => unimplemented!(),
         ExpressionKind::Default(lhs, rhs) | ExpressionKind::Hold(lhs, rhs) | ExpressionKind::Binary(_, lhs, rhs) => {
             assign_ids_expr(lhs, next_id);
             assign_ids_expr(rhs, next_id);

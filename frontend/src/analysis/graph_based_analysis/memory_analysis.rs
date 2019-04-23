@@ -44,6 +44,7 @@ fn add_sliding_windows<'a>(
 
     match &expr.kind {
         ExpressionKind::Lit(_) | ExpressionKind::Ident(_) => {}
+        ExpressionKind::StreamAccess(_, _) => unimplemented!(),
         ExpressionKind::Binary(_op, left, right) => {
             match add_sliding_windows(&*left, type_table, declaration_table) {
                 MemoryBound::Bounded(u) => required_memory += u,

@@ -259,6 +259,8 @@ pub enum ExpressionKind {
     Lit(Literal),
     /// An identifier, e.g., `foo`
     Ident(Ident),
+    /// Accessing a stream
+    StreamAccess(Box<Expression>, StreamAccessKind),
     /// A default expression, e.g., `a.defaults(to: 0) `
     Default(Box<Expression>, Box<Expression>),
     /// A sample and hold expression, e.g., `a ! 4`
@@ -292,6 +294,15 @@ pub enum WindowOperation {
     Average,
     Count,
     Integral,
+}
+
+/// Describes the operation used to access a stream
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum StreamAccessKind {
+    /// Hold access for *incompatible* stream types, returns previous known value
+    Hold,
+    /// Optional access, returns value if it exists
+    Optional,
 }
 
 #[derive(Debug, Clone)]

@@ -250,6 +250,7 @@ impl<'a> Lowering<'a> {
         };
         match &expr.kind {
             ExpressionKind::Lit(_) => pre.chain(post()).collect(),
+            ExpressionKind::StreamAccess(_, _) => unimplemented!(),
             ExpressionKind::Ident(_) => pre.chain(post()).collect(),
             ExpressionKind::Default(e, dft) | ExpressionKind::Hold(e, dft) => {
                 pre.chain(recursion(e)).chain(recursion(dft)).chain(post()).collect()
@@ -439,6 +440,7 @@ impl<'a> Lowering<'a> {
                 let sr = self.get_ref_for_ident(expr.id);
                 self.lower_sync_lookup(state, sr)
             }
+            ExpressionKind::StreamAccess(_, _) => unimplemented!(),
             ExpressionKind::Default(e, dft) => {
                 if let ExpressionKind::Lookup(_, _, _) = &e.kind {
                     let result_type = self.lower_value_type(expr.id);

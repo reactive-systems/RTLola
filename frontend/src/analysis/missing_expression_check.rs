@@ -18,6 +18,7 @@ pub(crate) fn any_expression_missing(spec: &LolaSpec, handler: &Handler) -> bool
 pub(crate) fn any_expression_missing_in_expression(expr: &Expression, handler: &Handler) -> bool {
     match &expr.kind {
         ExpressionKind::Lit(_) | ExpressionKind::Lookup(_, _, _) | ExpressionKind::Ident(_) => false,
+        ExpressionKind::StreamAccess(_, _) => unimplemented!(),
         ExpressionKind::MissingExpression => {
             handler.error_with_span(
                 "missing expression",

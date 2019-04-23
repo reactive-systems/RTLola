@@ -26,6 +26,7 @@ impl VersionTracker {
 fn analyse_expression(version_tracker: &mut VersionTracker, expr: &Expression, toplevel_in_trigger: bool) {
     match &expr.kind {
         ExpressionKind::Lit(_) | ExpressionKind::Ident(_) => {}
+        ExpressionKind::StreamAccess(_, _) => unimplemented!(),
         ExpressionKind::Default(target, default) => {
             analyse_expression(version_tracker, &*target, false);
             analyse_expression(version_tracker, &*default, false);

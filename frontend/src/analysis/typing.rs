@@ -441,6 +441,7 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
                     _ => unreachable!("unreachable ident {:?}", decl),
                 }
             }
+            StreamAccess(_, _) => unimplemented!(),
             Ite(cond, left, right) => {
                 // constraints
                 // - ?cond = EventStream<bool>

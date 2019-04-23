@@ -337,6 +337,7 @@ impl<'a, 'b> NamingAnalysis<'a, 'b> {
             Ident(ident) => {
                 self.check_ident(expression, ident);
             }
+            ExpressionKind::StreamAccess(_, _) => unimplemented!(),
             Binary(_, left, right) => {
                 self.check_expression(left);
                 self.check_expression(right);

@@ -908,18 +908,11 @@ fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>, span: Span)
                                 }
                                 "hold()" => {
                                     assert_eq!(args.len(), 0);
-                                    ExpressionKind::Hold(
-                                        lhs.into(),
-                                        // TODO: remove since it is no longer needed to give a default argument
-                                        Box::new(Expression::new(
-                                            ExpressionKind::Lit(Literal::new_bool(false, Span::unknown())),
-                                            Span::unknown(),
-                                        )),
-                                    )
+                                    ExpressionKind::StreamAccess(lhs.into(), StreamAccessKind::Hold)
                                 }
                                 "get()" => {
                                     assert_eq!(args.len(), 0);
-                                    unimplemented!();
+                                    ExpressionKind::StreamAccess(lhs.into(), StreamAccessKind::Optional)
                                 }
                                 "aggregate(over:using:)" => {
                                     assert_eq!(args.len(), 2);

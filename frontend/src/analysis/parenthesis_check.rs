@@ -19,7 +19,9 @@ pub(crate) fn warn_about_missing_parenthesis_in_expression(expr: &Expression, ha
         | ExpressionKind::Lookup(_, _, _)
         | ExpressionKind::Ident(_)
         | ExpressionKind::MissingExpression => {}
-        ExpressionKind::Unary(_, inner) | ExpressionKind::Field(inner, _) => {
+        ExpressionKind::StreamAccess(_, _) => unimplemented!(),
+        ExpressionKind::Unary(_, inner)
+        | ExpressionKind::Field(inner, _) => {
             warn_about_missing_parenthesis_in_expression(&inner, handler);
         }
         ExpressionKind::Binary(_, left, right)
