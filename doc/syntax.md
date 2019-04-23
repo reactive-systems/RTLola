@@ -48,7 +48,7 @@ Negation `-`, Logical inversion `!`
 ### Binary Operators
 
 * Artithmetic, e.g., `+`, `-`, `*`
-* Boolean, e.g., `&&`, '||'
+* Boolean, e.g., `&&`, `||`
 * Comparision `<`, `=`, `>=` 
 
 ### Stream Access
@@ -88,11 +88,12 @@ From a stream expression, there are the following ways to refer to a different s
 
 ### Offsets
 
-`.offset(by: INTEGER)` and `.offset(by: DURATION)`
+`.offset(by: INTEGER)` and `.offset(by: DURATION)`<br>
+alternative: `[INTEGER]` and `[DURATION]`
 
 ```
-x.offset(by: -1)
-y.offset(by: -100sec)
+x.offset(by: -1)       // x[-1]
+y.offset(by: -100sec)  // y[-100sec]
 ```
 
 ### Sliding Windows
