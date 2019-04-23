@@ -1451,7 +1451,7 @@ mod tests {
 
     #[test]
     fn parametric_input() {
-        let spec = "input i<a: Int8, b: Bool>: Int8\noutput o := i(1,false)[0] ? 42";
+        let spec = "input i<a: Int8, b: Bool>: Int8\noutput o := i(1,false)[0].defaults(to: 42)";
         assert_eq!(0, num_type_errors(spec));
         assert_eq!(get_type(spec), ValueTy::Int(IntTy::I8));
     }
@@ -1592,7 +1592,7 @@ mod tests {
 
     #[test]
     fn test_parenthized_expr() {
-        let spec = "input s: String\noutput o: Bool := (s[-1] ? \"\") == \"a\"";
+        let spec = "input s: String\noutput o: Bool := s[-1].defaults(to: \"\") == \"a\"";
         assert_eq!(0, num_type_errors(spec));
         assert_eq!(get_type(spec), ValueTy::Bool);
     }
@@ -1664,14 +1664,14 @@ mod tests {
 
     #[test]
     fn test_stream_lookup_dft() {
-        let spec = "output a: UInt8 := 3\n output b: UInt8 := a[-1] ? 3";
+        let spec = "output a: UInt8 := 3\n output b: UInt8 := a[-1].defaults(to: 3)";
         assert_eq!(0, num_type_errors(spec));
         assert_eq!(get_type(spec), ValueTy::UInt(UIntTy::U8));
     }
 
     #[test]
     fn test_stream_lookup_dft_fault() {
-        let spec = "output a: UInt8 := 3\n output b: Bool := a[-1] ? false";
+        let spec = "output a: UInt8 := 3\n output b: Bool := a[-1].defaults(to: false)";
         assert_eq!(1, num_type_errors(spec));
     }
 
@@ -1723,14 +1723,15 @@ mod tests {
 
     #[test]
     fn test_param_spec() {
-        let spec = "input in: Int8\n output a<p1: Int8>: Int8 { invoke in } := 3\n output b: Int8 := a(3)[-2] ? 1";
+        let spec =
+            "input in: Int8\n output a<p1: Int8>: Int8 { invoke in } := 3\n output b: Int8 := a(3)[-2].defaults(to: 1)";
         assert_eq!(0, num_type_errors(spec));
         assert_eq!(get_type(spec), ValueTy::Int(IntTy::I8));
     }
 
     #[test]
     fn test_param_spec_faulty() {
-        let spec = "input in: Int8\n output a<p1: Int8>: Int8 { invoke in } := 3\n output b: Int8 := a(true)[-2] ? 1";
+        let spec = "input in: Int8\n output a<p1: Int8>: Int8 { invoke in } := 3\n output b: Int8 := a(true)[-2].defaults(to: 1)";
         assert_eq!(1, num_type_errors(spec));
     }
 
@@ -1742,7 +1743,8 @@ mod tests {
 
     #[test]
     fn test_lookup_incomp() {
-        let spec = "input in: Int8\n output a<p1: Int8>: Int8 { invoke in } := 3\n output b: UInt8 := a(3)[2] ? 1";
+        let spec =
+            "input in: Int8\n output a<p1: Int8>: Int8 { invoke in } := 3\n output b: UInt8 := a(3)[2].defaults(to: 1)";
         assert_eq!(1, num_type_errors(spec));
     }
 
@@ -1801,25 +1803,25 @@ mod tests {
 
     #[test]
     fn test_window_widening() {
-        let spec = "input in: Int8\n output out: Int64 @5Hz:= in[3s, Σ] ? 0";
+        let spec = "input in: Int8\n output out: Int64 @5Hz:= in[3s, Σ].defaults(to: 0)";
         assert_eq!(0, num_type_errors(spec));
     }
 
     #[test]
     fn test_window() {
-        let spec = "input in: Int8\n output out: Int8 @5Hz := in[3s, Σ] ? 0";
+        let spec = "input in: Int8\n output out: Int8 @5Hz := in[3s, Σ].defaults(to: 0)";
         assert_eq!(0, num_type_errors(spec));
     }
 
     #[test]
     fn test_window_untimed() {
-        let spec = "input in: Int8\n output out: Int16 := in[3s, Σ] ? 5";
+        let spec = "input in: Int8\n output out: Int16 := in[3s, Σ].defaults(to: 5)";
         assert_eq!(1, num_type_errors(spec));
     }
 
     #[test]
     fn test_window_faulty() {
-        let spec = "input in: Int8\n output out: Bool @5Hz := in[3s, Σ] ? 5";
+        let spec = "input in: Int8\n output out: Bool @5Hz := in[3s, Σ].defaults(to: 5)";
         assert_eq!(1, num_type_errors(spec));
     }
 
@@ -1849,30 +1851,30 @@ mod tests {
 
     #[test]
     fn test_involved() {
-        let spec = "input velo: Float32\n output avg: Float64 @5Hz := velo[1h, avg] ? 10000.0";
+        let spec = "input velo: Float32\n output avg: Float64 @5Hz := velo[1h, avg].defaults(to: 10000.0)";
         assert_eq!(0, num_type_errors(spec));
     }
 
     #[test]
     fn test_rt_offset() {
-        let spec = "output a: Int8 @1s := 1\noutput b: Int8 @1s := a[-1s] ? 0";
+        let spec = "output a: Int8 @1s := 1\noutput b: Int8 @1s := a[-1s].defaults(to: 0)";
         assert_eq!(0, num_type_errors(spec));
     }
 
     #[test]
     fn test_rt_offset_skip() {
-        let spec = "output a: Int8 @1s := 1\noutput b: Int8 @2s := a[-1s] ? 0";
+        let spec = "output a: Int8 @1s := 1\noutput b: Int8 @2s := a[-1s].defaults(to: 0)";
         assert_eq!(0, num_type_errors(spec));
     }
     #[test]
     fn test_rt_offset_skip2() {
-        let spec = "output a: Int8 @1s := 1\noutput b: Int8 @2s := a[-2s] ? 0";
+        let spec = "output a: Int8 @1s := 1\noutput b: Int8 @2s := a[-2s].defaults(to: 0)";
         assert_eq!(0, num_type_errors(spec));
     }
 
     #[test]
     fn test_rt_offset_fail() {
-        let spec = "output a: Int8 @2s := 1\noutput b: Int8 @1s := a[-1s] ? 0";
+        let spec = "output a: Int8 @2s := 1\noutput b: Int8 @1s := a[-1s].defaults(to: 0)";
         assert_eq!(1, num_type_errors(spec));
     }
 

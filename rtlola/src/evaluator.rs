@@ -316,7 +316,7 @@ mod tests {
 
     #[test]
     fn test_conversion_if() {
-        let (_, mut eval) = setup("input a: UInt8\noutput b: UInt16 := if true then a else a[-1] ? 0");
+        let (_, mut eval) = setup("input a: UInt8\noutput b: UInt16 := if true then a else a[-1].defaults(to: 0)");
         let out_ref = StreamReference::OutRef(0);
         let in_ref = StreamReference::InRef(0);
         let v1 = Value::Unsigned(1);
@@ -409,7 +409,7 @@ mod tests {
     #[test]
     fn test_sum_window() {
         let mut time = SystemTime::now();
-        let (_, mut eval) = setup_time("input a: Int16\noutput b: Int16 @0.25Hz := a[40s, sum] ? -3", time);
+        let (_, mut eval) = setup_time("input a: Int16\noutput b: Int16 @0.25Hz := a[40s, sum].defaults(to: -3)", time);
         time += Duration::from_secs(45);
         let out_ref = StreamReference::OutRef(0);
         let in_ref = StreamReference::InRef(0);
@@ -428,7 +428,7 @@ mod tests {
     #[test]
     fn test_count_window() {
         let mut time = SystemTime::now();
-        let (_, mut eval) = setup_time("input a: UInt16\noutput b: UInt16 @0.25Hz := a[40s, #] ? 3", time);
+        let (_, mut eval) = setup_time("input a: UInt16\noutput b: UInt16 @0.25Hz := a[40s, #].defaults(to: 3)", time);
         time += Duration::from_secs(45);
         let out_ref = StreamReference::OutRef(0);
         let in_ref = StreamReference::InRef(0);
@@ -447,7 +447,8 @@ mod tests {
     #[test]
     fn test_integral_window() {
         let mut time = SystemTime::now();
-        let (_, mut eval) = setup_time("input a: Float64\noutput b: Float64 @0.25Hz := a[40s, integral] ? -3.0", time);
+        let (_, mut eval) =
+            setup_time("input a: Float64\noutput b: Float64 @0.25Hz := a[40s, integral].defaults(to: -3.0)", time);
         time += Duration::from_secs(45);
         let out_ref = StreamReference::OutRef(0);
         let in_ref = StreamReference::InRef(0);

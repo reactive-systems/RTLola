@@ -214,8 +214,8 @@ impl Display for Expression {
         match &self.kind {
             ExpressionKind::Lit(l) => write!(f, "{}", l),
             ExpressionKind::Ident(ident) => write!(f, "{}", ident),
-            ExpressionKind::Default(expr, val) => write!(f, "{} ? {}", expr, val),
-            ExpressionKind::Hold(expr, val) => write!(f, "{} ! {}", expr, val),
+            ExpressionKind::Default(expr, val) => write!(f, "{}.defaults(to: {})", expr, val),
+            ExpressionKind::Hold(expr, _val) => write!(f, "{}.hold()", expr),
             ExpressionKind::Lookup(inst, offset, Some(aggr)) => write!(f, "{}[{}, {}]", inst, offset, aggr),
             ExpressionKind::Lookup(inst, offset, None) => write!(f, "{}[{}]", inst, offset),
             ExpressionKind::Binary(op, lhs, rhs) => write!(f, "{} {} {}", lhs, op, rhs),
@@ -268,11 +268,11 @@ impl Display for FunctionName {
             .arg_names
             .iter()
             .map(|arg_name| match arg_name {
-                None => format!("_"),
-                Some(arg_name) => format!("{}", arg_name),
+                None => String::from("_:"),
+                Some(arg_name) => format!("{}:", arg_name),
             })
             .collect();
-        write_delim_list(f, &args, "(", ")", ":")
+        write_delim_list(f, &args, "(", ")", "")
     }
 }
 

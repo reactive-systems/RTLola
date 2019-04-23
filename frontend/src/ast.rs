@@ -259,7 +259,7 @@ pub enum ExpressionKind {
     Lit(Literal),
     /// An identifier, e.g., `foo`
     Ident(Ident),
-    /// A default expression, e.g., `a ? 0 `
+    /// A default expression, e.g., `a.defaults(to: 0) `
     Default(Box<Expression>, Box<Expression>),
     /// A sample and hold expression, e.g., `a ! 4`
     Hold(Box<Expression>, Box<Expression>),
@@ -279,7 +279,7 @@ pub enum ExpressionKind {
     Tuple(Vec<Box<Expression>>),
     /// Access of a named (`obj.foo`) or unnamed (`obj.0`) struct field
     Field(Box<Expression>, Ident),
-    /// A method call, e.g., `foo.offset(-1)`
+    /// A method call, e.g., `foo.bar(-1)`
     Method(Box<Expression>, FunctionName, Vec<Type>, Vec<Box<Expression>>),
     /// A function call
     Function(FunctionName, Vec<Type>, Vec<Box<Expression>>),
@@ -402,4 +402,10 @@ pub enum Offset {
 pub struct FunctionName {
     pub name: Ident,
     pub arg_names: Vec<Option<Ident>>,
+}
+
+impl FunctionName {
+    pub(crate) fn as_string(&self) -> String {
+        format!("{}", self)
+    }
 }

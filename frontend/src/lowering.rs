@@ -444,7 +444,7 @@ impl<'a> Lowering<'a> {
                     let result_type = self.lower_value_type(expr.id);
                     self.lower_lookup_expression(e, dft, state, result_type, false)
                 } else {
-                    // A "stray" default expression such as `5 ? 3` is valid, but a no-op.
+                    // A "stray" default expression such as `5.defaults(to: 3)` is valid, but a no-op.
                     // Thus, print a warning. Evaluating the expression is necessary, the dft can be skipped.
                     println!("WARNING: No-Op Default operation!");
                     self.lower_subexpression(e, state)
@@ -994,7 +994,7 @@ mod tests {
 
     #[test]
     fn lower_one_sliding() {
-        let ir = spec_to_ir("input a: Int32 output b: Int64 @1Hz := a[3s, sum] ? 4");
+        let ir = spec_to_ir("input a: Int32 output b: Int64 @1Hz := a[3s, sum].defaults(to: 4)");
         check_stream_number(&ir, 1, 1, 1, 0, 0, 1, 0);
     }
 
@@ -1006,10 +1006,10 @@ mod tests {
              input a: Int32 \n\
              input b: Bool \n\
              output c: Int32 := a \n\
-             output d: Int64 @1Hz := a[3s, sum] ? 19 \n\
+             output d: Int64 @1Hz := a[3s, sum].defaults(to: 19) \n\
              output e: Bool := a > 4 && b \n\
              output f: Int64 @1Hz := if (e ! true) then (c ! 0) else 0 \n\
-             output g: Float64 @0.1Hz :=  cast(f[10s, avg] ? 0) \n\
+             output g: Float64 @0.1Hz :=  cast(f[10s, avg].defaults(to: 0)) \n\
              trigger g > 17.0 \
              ",
         );
@@ -1230,14 +1230,14 @@ mod tests {
 
     #[test]
     fn window_lookup() {
-        let ir = spec_to_ir("input a: Int32 output b: Int32 @1Hz := a[3s, sum] ? 3");
+        let ir = spec_to_ir("input a: Int32 output b: Int32 @1Hz := a[3s, sum].defaults(to: 3)");
         let window = &ir.sliding_windows[0];
         assert_eq!(window, ir.get_window(window.reference));
     }
 
     #[test]
     fn test_superfluous_casts_after_lookup() {
-        let ir = spec_to_ir("input v: Bool\n output b: Bool := v & v[-1] ? false");
+        let ir = spec_to_ir("input v: Bool\n output b: Bool := v & v[-1].defaults(to: false)");
         // We need a sync lookup, an async lookup, load false, and the and operation.
         assert_eq!(ir.outputs[0].expr.stmts.len(), 4);
     }

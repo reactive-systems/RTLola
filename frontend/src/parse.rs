@@ -895,10 +895,41 @@ fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>, span: Span)
                             };
                             return Expression::new(ExpressionKind::Field(Box::new(lhs), ident), span);
                         }
-                        ExpressionKind::Function(ident, types, args) => {
-                            return Expression::new(ExpressionKind::Method(Box::new(lhs), ident, types, args), span);
+                        ExpressionKind::Function(name, types, args) => {
+                            // match for builtin function names and transform them into appropriate AST nodes
+                            let kind = match name.as_string().as_str() {
+                                "defaults(to:)" => {
+                                    assert_eq!(args.len(), 1);
+                                    ExpressionKind::Default(lhs.into(), args[0].clone())
+                                }
+                                "offset(by:)" => {
+                                    assert_eq!(args.len(), 1);
+                                    unimplemented!();
+                                }
+                                "hold()" => {
+                                    assert_eq!(args.len(), 0);
+                                    ExpressionKind::Hold(
+                                        lhs.into(),
+                                        // TODO: remove since it is no longer needed to give a default argument
+                                        Box::new(Expression::new(
+                                            ExpressionKind::Lit(Literal::new_bool(false, Span::unknown())),
+                                            Span::unknown(),
+                                        )),
+                                    )
+                                }
+                                "get()" => {
+                                    assert_eq!(args.len(), 0);
+                                    unimplemented!();
+                                }
+                                "aggregate(over:using:)" => {
+                                    assert_eq!(args.len(), 2);
+                                    unimplemented!();
+                                }
+                                _ => ExpressionKind::Method(Box::new(lhs), name, types, args),
+                            };
+                            return Expression::new(kind, span);
                         }
-                        _ => panic!("tuple accesses require a number"),
+                        _ => panic!("expected method call or tuple access, found {}", rhs),
                     }
                 }
                 Rule::Default => return Expression::new(ExpressionKind::Default(Box::new(lhs), Box::new(rhs)), span),
@@ -1373,7 +1404,7 @@ mod tests {
 
     #[test]
     fn build_lookup_expression_default() {
-        let spec = "output s: Int := s[-1] ? (3 * 4)\n";
+        let spec = "output s: Int := s[-1].defaults(to: (3 * 4))\n";
         let throw = |e| panic!("{}", e);
         let ast = parse(spec).unwrap_or_else(throw);
         cmp_ast_spec(&ast, spec);
@@ -1413,7 +1444,8 @@ mod tests {
 
     #[test]
     fn build_complex_expression() {
-        let spec = "output s: Double := if !((s[-1] ? (3 * 4) + -4) = 12) ∨ true = false then 2.0 else 4.1\n";
+        let spec =
+            "output s: Double := if !((s[-1].defaults(to: (3 * 4)) + -4) = 12) ∨ true = false then 2.0 else 4.1\n";
         let throw = |e| panic!("{}", e);
         let ast = parse(spec).unwrap_or_else(throw);
         cmp_ast_spec(&ast, spec);
@@ -1536,7 +1568,7 @@ mod tests {
     fn parse_precedence_not_regression() {
         parses_to! {
             parser: LolaParser,
-            input:  "!(fast[-1] ? false) & fast",
+            input:  "!(fast[-1] | false) & fast",
             rule:   Rule::Expr,
             tokens: [
                 Expr(0, 26, [
@@ -1555,7 +1587,7 @@ mod tests {
                                         ])
                                     ]),
                                 ]),
-                                Default(11, 12, []),
+                                Or(11, 13, []),
                                 Literal(13, 18, [
                                     False(13, 18, [])
                                 ])
