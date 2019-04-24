@@ -245,7 +245,7 @@ impl<'a> DependencyAnalyser<'a> {
         // TODO need typing information
         match &expr.kind {
             ExpressionKind::Lit(lit) => match &lit.kind {
-                LitKind::Int(int) => *int as i32,
+                //LitKind::Int(int) => *int as i32,
                 _ => unimplemented!(),
             },
             ExpressionKind::Ident(_) => match &naming_table[&expr.id] {
@@ -511,14 +511,7 @@ impl<'a> DependencyAnalyser<'a> {
         template_spec: &TemplateSpec,
     ) {
         if let Some(ref extend_spec) = template_spec.ext {
-            if let Some(target) = &extend_spec.target {
-                self.add_edges_for_expression(
-                    current_node,
-                    &target,
-                    Location::Extend,
-                    &mut mapping,
-                );
-            }
+            self.add_edges_for_expression(current_node, &extend_spec.target, Location::Extend, &mut mapping);
         }
     }
 

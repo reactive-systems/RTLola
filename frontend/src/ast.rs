@@ -6,6 +6,8 @@ use crate::parse::Span;
 use num::BigRational;
 use std::time::Duration;
 
+pub(crate) mod conversion;
+
 /// The root Lola specification
 #[derive(Debug, Default, Clone)]
 pub struct LolaSpec {
@@ -86,7 +88,7 @@ pub struct Input {
 pub struct Output {
     pub name: Ident,
     pub ty: Type,
-    pub extend: ExtendDecl,
+    pub extend: ActivationCondition,
     pub params: Vec<Parameter>,
     pub template_spec: Option<TemplateSpec>,
     pub expression: Expression,
@@ -103,8 +105,8 @@ pub struct Parameter {
 }
 
 #[derive(Debug, Clone)]
-pub struct ExtendDecl {
-    pub freq: Option<TimeSpec>,
+pub struct ActivationCondition {
+    pub expr: Option<Expression>,
     pub(crate) id: NodeId,
     pub(crate) span: Span,
 }
@@ -129,8 +131,7 @@ pub struct InvokeSpec {
 
 #[derive(Debug, Clone)]
 pub struct ExtendSpec {
-    pub target: Option<Expression>,
-    pub freq: Option<TimeSpec>,
+    pub target: Expression,
     pub(crate) id: NodeId,
     pub(crate) span: Span,
 }
@@ -321,12 +322,8 @@ impl Literal {
         Literal { id: NodeId::DUMMY, kind: LitKind::Bool(val), span }
     }
 
-    pub fn new_int(val: i128, span: Span) -> Literal {
-        Literal { id: NodeId::DUMMY, kind: LitKind::Int(val), span }
-    }
-
-    pub fn new_float(float: f64, val: BigRational, span: Span) -> Literal {
-        Literal { id: NodeId::DUMMY, kind: LitKind::Float(float, val), span }
+    pub fn new_numeric(val: &str, unit: Option<String>, span: Span) -> Literal {
+        Literal { id: NodeId::DUMMY, kind: LitKind::Numeric(val.to_string(), unit), span }
     }
 
     pub(crate) fn new_str(val: &str, span: Span) -> Literal {
@@ -344,10 +341,9 @@ pub enum LitKind {
     Str(String),
     /// A raw string literal (`r#" x " a \ff "#`)
     RawStr(String),
-    /// An integer literal (`1`)
-    Int(i128),
-    /// A float literal (`1f64` or `1E10f64`)
-    Float(f64, BigRational),
+    /// A numeric value with optional postfix part (`42`, `1.3`, `1Hz`, `100sec`)
+    /// Strored as a string to have lossless representation
+    Numeric(String, Option<String>),
     /// A boolean literal (`true`)
     Bool(bool),
 }
@@ -417,10 +413,4 @@ pub enum Offset {
 pub struct FunctionName {
     pub name: Ident,
     pub arg_names: Vec<Option<Ident>>,
-}
-
-impl FunctionName {
-    pub(crate) fn as_string(&self) -> String {
-        format!("{}", self)
-    }
 }

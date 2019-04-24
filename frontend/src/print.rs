@@ -67,10 +67,10 @@ impl Display for Output {
                 write!(f, ": {}", self.ty)?;
             }
         }
-        match &self.extend.freq {
+        match &self.extend.expr {
             None => {}
-            Some(freq) => {
-                write!(f, " @ {}", freq)?;
+            Some(expr) => {
+                write!(f, " @ {}", expr)?;
             }
         }
         write!(f, "{} := {}", format_opt(&self.template_spec, " ", ""), self.expression)
@@ -113,7 +113,7 @@ impl Display for InvokeSpec {
 
 impl Display for ExtendSpec {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        write!(f, "extend {}{}", format_opt(&self.target, "", ""), format_opt(&self.freq, " @ ", ""),)
+        write!(f, "extend {}", &self.target)
     }
 }
 
@@ -337,15 +337,7 @@ impl Display for Literal {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         match &self.kind {
             LitKind::Bool(val) => write!(f, "{}", val),
-            LitKind::Int(i) => write!(f, "{}", i),
-            LitKind::Float(fl, _precise) => {
-                // TODO this looses precision
-                if fl.fract() == 0.0 {
-                    write!(f, "{:.1}", fl)
-                } else {
-                    write!(f, "{}", fl)
-                }
-            }
+            LitKind::Numeric(val, unit) => write!(f, "{}{}", val, unit.clone().unwrap_or_default()),
             LitKind::Str(s) => write!(f, "\"{}\"", s),
             LitKind::RawStr(s) => {
                 // need to determine padding with `#`
@@ -427,5 +419,11 @@ impl Display for LolaSpec {
             writeln!(f, "{}", trigger)?;
         }
         Ok(())
+    }
+}
+
+impl FunctionName {
+    pub(crate) fn as_string(&self) -> String {
+        format!("{}", self)
     }
 }

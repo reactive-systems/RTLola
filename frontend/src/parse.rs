@@ -1,16 +1,13 @@
 //! This module contains the parser for the Lola Language.
 
 use super::ast::*;
-use crate::analysis::graph_based_analysis::space_requirements::dur_as_nanos;
 use lazy_static::lazy_static;
-use num::{BigInt, BigRational, FromPrimitive, One, Signed, ToPrimitive};
 use pest;
 use pest::iterators::{Pair, Pairs};
 use pest::prec_climber::{Assoc, Operator, PrecClimber};
 use pest::Parser;
 use pest_derive::Parser;
 use std::path::PathBuf;
-use std::time::Duration;
 
 #[derive(Parser)]
 #[grammar = "lola.pest"]
@@ -175,14 +172,14 @@ fn parse_output(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> Output {
         Type::new_inferred()
     };
 
-    // Parse the `@ [Frequency]` part of output declaration
-    let extend = if let Rule::NewExtendDecl = pair.as_rule() {
+    // Parse the `@ [Expr]` part of output declaration
+    let extend = if let Rule::ActivationCondition = pair.as_rule() {
         let span: Span = pair.as_span().into();
-        let freq = parse_frequency(spec, pair.into_inner().next().expect("mismatch between grammar and AST"));
+        let expr = build_expression_ast(spec, pair.into_inner(), span);
         pair = pairs.next().expect("mismatch between grammar and AST");
-        ExtendDecl { freq: Some(freq), id: NodeId::DUMMY, span }
+        ActivationCondition { expr: Some(expr), id: NodeId::DUMMY, span }
     } else {
-        ExtendDecl { freq: None, id: NodeId::DUMMY, span: Span::unknown() }
+        ActivationCondition { expr: None, id: NodeId::DUMMY, span: Span::unknown() }
     };
 
     let mut tspec = None;
@@ -245,148 +242,19 @@ fn parse_template_spec(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> TemplateSpe
     TemplateSpec { inv: inv_spec, ext: ext_spec, ter: ter_spec, id: NodeId::DUMMY, span }
 }
 
-pub(crate) fn build_time_spec(expr: Expression, unit_str: &str, span: Span) -> TimeSpec {
-    let (factor, invert): (BigRational, bool) = match unit_str {
-        "ns" => (BigRational::from_u64(1_u64).unwrap(), false),
-        "μs" | "us" => (BigRational::from_u64(10_u64.pow(3)).unwrap(), false),
-        "ms" => (BigRational::from_u64(10_u64.pow(6)).unwrap(), false),
-        "s" => (BigRational::from_u64(10_u64.pow(9)).unwrap(), false),
-        "min" => (BigRational::from_u64(10_u64.pow(9) * 60).unwrap(), false),
-        "h" => (BigRational::from_u64(10_u64.pow(9) * 60 * 60).unwrap(), false),
-        "d" => (BigRational::from_u64(10_u64.pow(9) * 60 * 60 * 24).unwrap(), false),
-        "w" => (BigRational::from_u64(10_u64.pow(9) * 60 * 60 * 24 * 7).unwrap(), false),
-        "a" => (BigRational::from_u64(10_u64.pow(9) * 60 * 60 * 24 * 365).unwrap(), false),
-        "μHz" | "uHz" => (BigRational::from_u64(10_u64.pow(15)).unwrap(), true),
-        "mHz" => (BigRational::from_u64(10_u64.pow(12)).unwrap(), true),
-        "Hz" => (BigRational::from_u64(10_u64.pow(9)).unwrap(), true),
-        "kHz" => (BigRational::from_u64(10_u64.pow(6)).unwrap(), true),
-        "MHz" => (BigRational::from_u64(10_u64.pow(3)).unwrap(), true),
-        "GHz" => (BigRational::from_u64(1).unwrap(), true),
-        _ => unreachable!(),
-    };
-
-    if let ExpressionKind::Lit(l) = expr.kind {
-        match l.kind {
-            LitKind::Int(i) => {
-                let mut period: BigRational = BigRational::from_integer(BigInt::from(i));
-                if invert {
-                    period = num::BigRational::one() / period;
-                }
-                period *= factor;
-                if period.is_negative() {
-                    let rounded_period: Duration = Duration::from_nanos(
-                        (-period.clone()).to_integer().to_u64().expect("Period [ns] too large for u64!"),
-                    );
-                    TimeSpec {
-                        period: rounded_period,
-                        exact_period: period,
-                        signum: match dur_as_nanos(rounded_period) {
-                            0 => 0,
-                            _ => -1,
-                        },
-                        id: NodeId::DUMMY,
-                        span,
-                    }
-                } else {
-                    let rounded_period: Duration =
-                        Duration::from_nanos(period.to_integer().to_u64().expect("Period [ns] too large for u64!"));
-                    TimeSpec {
-                        period: rounded_period,
-                        exact_period: period,
-                        signum: match dur_as_nanos(rounded_period) {
-                            0 => 0,
-                            _ => 1,
-                        },
-                        id: NodeId::DUMMY,
-                        span,
-                    }
-                }
-            }
-            LitKind::Float(_, precise) => {
-                let mut period: BigRational = precise.clone();
-                if invert {
-                    period = BigRational::one() / period;
-                }
-                period *= factor;
-                if period.is_negative() {
-                    let rounded_period: Duration = Duration::from_nanos(
-                        (-period.clone()).to_integer().to_u64().expect("Period [ns] too large for u64!"),
-                    );
-                    TimeSpec {
-                        period: rounded_period,
-                        exact_period: period,
-                        signum: match dur_as_nanos(rounded_period) {
-                            0 => 0,
-                            _ => -1,
-                        },
-                        id: NodeId::DUMMY,
-                        span,
-                    }
-                } else {
-                    let rounded_period: Duration =
-                        Duration::from_nanos(period.to_integer().to_u64().expect("Period [ns] too large for u64!"));
-                    TimeSpec {
-                        period: rounded_period,
-                        exact_period: period,
-                        signum: match dur_as_nanos(rounded_period) {
-                            0 => 0,
-                            _ => 1,
-                        },
-                        id: NodeId::DUMMY,
-                        span,
-                    }
-                }
-            }
-            _ => panic!("Needs to be numeric!"),
-        }
-    } else {
-        panic!("Expression needs to be a literal. ")
-    }
-}
-
-fn parse_frequency(spec: &mut LolaSpec, freq: Pair<'_, Rule>) -> TimeSpec {
-    let freq_rule = freq.as_rule();
-    let freq_span = freq.as_span().into();
-    let mut children = freq.into_inner();
-    let expr = children.next().expect("mismatch between grammar and AST");
-    let span = expr.as_span().into();
-    let expr = build_expression_ast(spec, expr.into_inner(), span);
-    let unit_pair = children.next().expect("mismatch between grammar and AST");
-    let unit_str = unit_pair.as_str();
-    match freq_rule {
-        Rule::Frequency => {
-            assert_eq!(unit_pair.as_rule(), Rule::UnitOfFreq);
-            build_time_spec(expr, unit_str, freq_span)
-        }
-        Rule::Duration => {
-            assert_eq!(unit_pair.as_rule(), Rule::UnitOfTime);
-            build_time_spec(expr, unit_str, freq_span)
-        }
-        _ => unreachable!(),
-    }
-}
-
 fn parse_ext_spec(spec: &mut LolaSpec, ext_pair: Pair<'_, Rule>) -> ExtendSpec {
     let span_ext = ext_pair.as_span().into();
     let mut children = ext_pair.into_inner();
 
     let first_child = children.next().expect("mismatch between grammar and ast");
-    let mut freq = None;
-    let mut target = None;
-
-    match first_child.as_rule() {
-        Rule::Frequency | Rule::Duration => freq = Some(parse_frequency(spec, first_child)),
+    let target = match first_child.as_rule() {
         Rule::Expr => {
             let span = first_child.as_span().into();
-            target = Some(build_expression_ast(spec, first_child.into_inner(), span));
-            if let Some(freq_pair) = children.next() {
-                freq = Some(parse_frequency(spec, freq_pair));
-            }
+            build_expression_ast(spec, first_child.into_inner(), span)
         }
         _ => unreachable!(),
-    }
-    assert!(freq.is_some() || target.is_some());
-    ExtendSpec { target, freq, id: NodeId::DUMMY, span: span_ext }
+    };
+    ExtendSpec { target, id: NodeId::DUMMY, span: span_ext }
 }
 
 fn parse_inv_spec(spec: &mut LolaSpec, inv_pair: Pair<'_, Rule>) -> InvokeSpec {
@@ -493,235 +361,6 @@ fn parse_type(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> Type {
     Type::new_tuple(tuple, span.into())
 }
 
-fn parse_rational(repr: &str) -> BigRational {
-    // precondition: repr is a valid floating point literal
-    assert!(repr.parse::<f64>().is_ok());
-
-    let mut value: BigRational = num::Zero::zero();
-    let mut char_indices = repr.char_indices();
-    let mut negated = false;
-
-    let ten = num::BigRational::from_i64(10).unwrap();
-    let zero: BigRational = num::Zero::zero();
-    let one = num::BigRational::from_i64(1).unwrap();
-    let two = num::BigRational::from_i64(2).unwrap();
-    let three = num::BigRational::from_i64(3).unwrap();
-    let four = num::BigRational::from_i64(4).unwrap();
-    let five = num::BigRational::from_i64(5).unwrap();
-    let six = num::BigRational::from_i64(6).unwrap();
-    let seven = num::BigRational::from_i64(7).unwrap();
-    let eight = num::BigRational::from_i64(8).unwrap();
-    let nine = num::BigRational::from_i64(9).unwrap();
-
-    let mut contains_fractional = false;
-    let mut contains_exponent = false;
-
-    //parse the before the point/exponent
-
-    loop {
-        match char_indices.next() {
-            Some((_, '+')) => {}
-            Some((_, '-')) => {
-                negated = true;
-            }
-            Some((_, '.')) => {
-                contains_fractional = true;
-                break;
-            }
-            Some((_, 'e')) => {
-                contains_exponent = true;
-                break;
-            }
-            Some((_, '0')) => {
-                value *= &ten;
-            }
-            Some((_, '1')) => {
-                value *= &ten;
-                value += &one;
-            }
-            Some((_, '2')) => {
-                value *= &ten;
-                value += &two;
-            }
-            Some((_, '3')) => {
-                value *= &ten;
-                value += &three;
-            }
-            Some((_, '4')) => {
-                value *= &ten;
-                value += &four;
-            }
-            Some((_, '5')) => {
-                value *= &ten;
-                value += &five;
-            }
-            Some((_, '6')) => {
-                value *= &ten;
-                value += &six;
-            }
-            Some((_, '7')) => {
-                value *= &ten;
-                value += &seven;
-            }
-            Some((_, '8')) => {
-                value *= &ten;
-                value += &eight;
-            }
-            Some((_, '9')) => {
-                value *= &ten;
-                value += &nine;
-            }
-            Some((_, _)) => unreachable!(),
-            None => {
-                break;
-            }
-        }
-    }
-
-    if contains_fractional {
-        let mut number_of_fractional_positions: BigRational = zero.clone();
-        loop {
-            match char_indices.next() {
-                Some((_, 'e')) => {
-                    contains_exponent = true;
-                    break;
-                }
-                Some((_, '0')) => {
-                    value *= &ten;
-                    number_of_fractional_positions += &one;
-                }
-                Some((_, '1')) => {
-                    value *= &ten;
-                    value += &one;
-                    number_of_fractional_positions += &one;
-                }
-                Some((_, '2')) => {
-                    value *= &ten;
-                    value += &two;
-                    number_of_fractional_positions += &one;
-                }
-                Some((_, '3')) => {
-                    value *= &ten;
-                    value += &three;
-                    number_of_fractional_positions += &one;
-                }
-                Some((_, '4')) => {
-                    value *= &ten;
-                    value += &four;
-                    number_of_fractional_positions += &one;
-                }
-                Some((_, '5')) => {
-                    value *= &ten;
-                    value += &five;
-                    number_of_fractional_positions += &one;
-                }
-                Some((_, '6')) => {
-                    value *= &ten;
-                    value += &six;
-                    number_of_fractional_positions += &one;
-                }
-                Some((_, '7')) => {
-                    value *= &ten;
-                    value += &seven;
-                    number_of_fractional_positions += &one;
-                }
-                Some((_, '8')) => {
-                    value *= &ten;
-                    value += &eight;
-                    number_of_fractional_positions += &one;
-                }
-                Some((_, '9')) => {
-                    value *= &ten;
-                    value += &nine;
-                    number_of_fractional_positions += &one;
-                }
-                Some((_, _)) => unreachable!(),
-                None => {
-                    break;
-                }
-            }
-        }
-        while number_of_fractional_positions > zero {
-            value /= &ten;
-            number_of_fractional_positions -= &one;
-        }
-    }
-
-    if contains_exponent {
-        let mut negated_exponent = false;
-        let mut exponent: BigRational = zero.clone();
-        loop {
-            match char_indices.next() {
-                Some((_, '+')) => {}
-                Some((_, '-')) => {
-                    negated_exponent = true;
-                }
-                Some((_, '0')) => {
-                    exponent *= &ten;
-                }
-                Some((_, '1')) => {
-                    exponent *= &ten;
-                    exponent += &one;
-                }
-                Some((_, '2')) => {
-                    exponent *= &ten;
-                    exponent += &two;
-                }
-                Some((_, '3')) => {
-                    exponent *= &ten;
-                    exponent += &three;
-                }
-                Some((_, '4')) => {
-                    exponent *= &ten;
-                    exponent += &four;
-                }
-                Some((_, '5')) => {
-                    exponent *= &ten;
-                    exponent += &five;
-                }
-                Some((_, '6')) => {
-                    exponent *= &ten;
-                    exponent += &six;
-                }
-                Some((_, '7')) => {
-                    exponent *= &ten;
-                    exponent += &seven;
-                }
-                Some((_, '8')) => {
-                    exponent *= &ten;
-                    exponent += &eight;
-                }
-                Some((_, '9')) => {
-                    exponent *= &ten;
-                    exponent += &nine;
-                }
-                Some((_, _)) => unreachable!(),
-                None => {
-                    break;
-                }
-            }
-        }
-        let mut new_value = value.clone();
-        if negated_exponent {
-            while exponent > zero {
-                new_value /= &ten;
-                exponent -= &one;
-            }
-        } else {
-            while exponent > zero {
-                new_value *= &ten;
-                exponent -= &one;
-            }
-        }
-        value = new_value;
-    }
-    if negated {
-        value = -value;
-    }
-
-    value
-}
-
 /**
  * Transforms a `Rule::Literal` into `Literal` AST node.
  * Panics if input is not `Rule::Literal`.
@@ -739,16 +378,17 @@ fn parse_literal(pair: Pair<'_, Rule>) -> Literal {
             Literal::new_raw_str(str_rep, inner.as_span().into())
         }
         Rule::NumberLiteral => {
-            let str_rep: &str = inner.as_str();
+            let span = inner.as_span();
+            let mut pairs = inner.into_inner();
+            let value = pairs.next().expect("Mismatch between AST and grammar");
 
-            if let Result::Ok(i) = str_rep.parse::<i128>() {
-                return Literal::new_int(i, inner.as_span().into());
-            } else if let Result::Ok(f) = str_rep.parse::<f64>() {
-                let ratio = parse_rational(str_rep);
-                return Literal::new_float(f, ratio, inner.as_span().into());
-            } else {
-                unreachable!();
-            }
+            let str_rep: &str = value.as_str();
+            let unit = match pairs.next() {
+                None => None,
+                Some(unit) => Some(unit.as_str().to_string()),
+            };
+
+            Literal::new_numeric(str_rep, unit, span.into())
         }
         Rule::True => Literal::new_bool(true, inner.as_span().into()),
         Rule::False => Literal::new_bool(false, inner.as_span().into()),
@@ -793,30 +433,6 @@ fn parse_lookup_expression(spec: &mut LolaSpec, pair: Pair<'_, Rule>, span: Span
             let offset = build_expression_ast(spec, second_child.into_inner(), second_child_span.into());
             let offset = Offset::DiscreteOffset(Box::new(offset));
             Expression::new(ExpressionKind::Lookup(stream_instance, offset, None), span)
-        }
-        Rule::Duration => {
-            // Real time offset
-            let duration_span = second_child.as_span().into();
-            let mut duration_children = second_child.into_inner();
-            let time_interval = duration_children.next().expect("Duration needs a time span.");
-            let time_interval_span = time_interval.as_span().into();
-            let val = time_interval.as_str().parse().expect("number literal can be parsed into integer");
-            let unit_string = duration_children.next().expect("Duration needs a time unit.").as_str();
-            let duration_value =
-                Expression::new(ExpressionKind::Lit(Literal::new_int(val, duration_span)), time_interval_span);
-            let time_spec = build_time_spec(duration_value, unit_string, time_interval_span);
-            let offset = Offset::RealTimeOffset(time_spec);
-            // Now check whether it is a window or not.
-            let aggregation = match children.next().map(|x| x.as_rule()) {
-                Some(Rule::Sum) => Some(WindowOperation::Sum),
-                Some(Rule::Product) => Some(WindowOperation::Product),
-                Some(Rule::Average) => Some(WindowOperation::Average),
-                Some(Rule::Count) => Some(WindowOperation::Count),
-                Some(Rule::Integral) => Some(WindowOperation::Integral),
-                None => None,
-                _ => unreachable!(),
-            };
-            Expression::new(ExpressionKind::Lookup(stream_instance, offset, aggregation), span)
         }
         _ => unreachable!(),
     }
@@ -885,9 +501,9 @@ fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>, span: Span)
                         // access to a tuple
                         ExpressionKind::Lit(l) => {
                             let ident = match l.kind {
-                                LitKind::Int(i) => {
-                                    assert!(i >= 0); // TODO check this and otherwise give an error
-                                    Ident::new(format!("{}", i), l.span)
+                                LitKind::Numeric(val, unit) => {
+                                    assert!(unit.is_none());
+                                    Ident::new(val.clone(), l.span)
                                 }
                                 _ => {
                                     panic!("expected unsigned integer, found {}", l);
@@ -916,7 +532,22 @@ fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>, span: Span)
                                 }
                                 "aggregate(over:using:)" => {
                                     assert_eq!(args.len(), 2);
-                                    unimplemented!();
+                                    let window_op = match &args[1].kind {
+                                        ExpressionKind::Ident(i) => match i.name.as_str() {
+                                            "Σ" | "sum" => WindowOperation::Sum,
+                                            "#" | "count" => WindowOperation::Count,
+                                            "Π" | "prod" => WindowOperation::Product,
+                                            "∫" | "integral" => WindowOperation::Integral,
+                                            "avg" => WindowOperation::Average,
+                                            fun => panic!("unknown aggregation function {}", fun),
+                                        },
+                                        _ => panic!("unknown aggregation function {}", args[1]),
+                                    };
+                                    ExpressionKind::SlidingWindowAggregation {
+                                        expr: lhs.into(),
+                                        duration: args[0].clone(),
+                                        aggregation: window_op,
+                                    }
                                 }
                                 _ => ExpressionKind::Method(Box::new(lhs), name, types, args),
                             };
@@ -1008,7 +639,7 @@ fn build_term_ast(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> Expression {
         Rule::FunctionExpr => build_function_expression(spec, pair, span.into()),
         Rule::IntegerLiteral => {
             let span = span.into();
-            Expression::new(ExpressionKind::Lit(Literal::new_int(pair.as_str().parse().unwrap(), span)), span)
+            Expression::new(ExpressionKind::Lit(Literal::new_numeric(pair.as_str(), None, span)), span)
         }
         Rule::MissingExpression => {
             let span = span.into();
@@ -1209,7 +840,9 @@ mod tests {
                         Ident(16, 19, []),
                     ]),
                     Literal(23, 24, [
-                        NumberLiteral(23, 24, []),
+                        NumberLiteral(23, 24, [
+                            NumberLiteralValue(23, 24, [])
+                        ]),
                     ]),
                 ]),
             ]
@@ -1294,7 +927,9 @@ mod tests {
                         Ident(19, 21, []),
                         Add(22, 23, []),
                         Literal(24, 25, [
-                            NumberLiteral(24, 25, []),
+                            NumberLiteral(24, 25, [
+                                NumberLiteralValue(24, 25, [])
+                            ]),
                         ]),
                     ]),
                 ]),
@@ -1462,7 +1097,7 @@ mod tests {
 
     #[test]
     fn build_template_spec() {
-        let spec = "output s: Int { invoke inp unless 3 > 5 extend b @ 0.5GHz terminate false } := 3\n";
+        let spec = "output s: Int { invoke inp unless 3 > 5 extend b terminate false } := 3\n";
         let throw = |e| panic!("{}", e);
         let ast = parse(spec).unwrap_or_else(throw);
         // 0.5GHz correspond to 2ns.
@@ -1529,34 +1164,7 @@ mod tests {
         cmp_ast_spec(&ast, spec);
     }
 
-    fn time_spec_int(val: i128, unit: &str) -> Duration {
-        build_time_spec(
-            Expression::new(ExpressionKind::Lit(Literal::new_int(val, Span::unknown())), Span::unknown()),
-            unit,
-            Span::unknown(),
-        )
-        .period
-    }
-
-    #[test]
-    fn test_time_spec_to_duration_conversion() {
-        assert_eq!(time_spec_int(1, "s"), Duration::new(1, 0));
-        assert_eq!(time_spec_int(2, "min"), Duration::new(2 * 60, 0));
-        assert_eq!(time_spec_int(33, "h"), Duration::new(33 * 60 * 60, 0));
-        assert_eq!(time_spec_int(12354, "ns"), Duration::new(0, 12354));
-        assert_eq!(time_spec_int(90351, "us"), Duration::new(0, 90351 * 1_000));
-        assert_eq!(time_spec_int(248, "ms"), Duration::new(0, 248 * 1_000_000));
-        assert_eq!(time_spec_int(29_489_232, "ms"), Duration::new(29_489, 232 * 1_000_000));
-    }
-
-    #[test]
-    fn test_frequency_to_duration_conversion() {
-        assert_eq!(time_spec_int(1, "Hz"), Duration::new(1, 0));
-        assert_eq!(time_spec_int(10, "Hz"), Duration::new(0, 100_000_000));
-        assert_eq!(time_spec_int(400, "uHz"), Duration::new(2_500, 0));
-        assert_eq!(time_spec_int(20, "mHz"), Duration::new(50, 0));
-    }
-
+    #[allow(clippy::cyclomatic_complexity)]
     #[test]
     fn parse_precedence_not_regression() {
         parses_to! {
@@ -1576,7 +1184,9 @@ mod tests {
                                     ]),
                                     Expr(7, 9, [
                                         Literal(7, 9, [
-                                            NumberLiteral(7, 9, [])
+                                            NumberLiteral(7, 9, [
+                                                NumberLiteralValue(7, 9, [])
+                                            ])
                                         ])
                                     ]),
                                 ]),

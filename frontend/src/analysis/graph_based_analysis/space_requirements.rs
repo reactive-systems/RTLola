@@ -21,12 +21,6 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::time::Duration;
 
-const NANOS_PER_SEC: u32 = 1_000_000_000;
-
-pub(crate) fn dur_as_nanos(dur: Duration) -> u128 {
-    u128::from(dur.as_secs()) * u128::from(NANOS_PER_SEC) + u128::from(dur.subsec_nanos())
-}
-
 pub(crate) type SpaceRequirements = HashMap<NodeId, StorageRequirement>;
 
 pub(crate) fn determine_buffer_size(

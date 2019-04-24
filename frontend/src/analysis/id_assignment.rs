@@ -69,12 +69,7 @@ where
     E: FnMut() -> NodeId,
 {
     ts.id = next_id();
-    if let Some(ref mut target) = ts.target {
-        assign_ids_expr(target, next_id);
-    }
-    if let Some(ref mut time_spec) = ts.freq {
-        time_spec.id = next_id();
-    }
+    assign_ids_expr(&mut ts.target, next_id);
 }
 fn assign_ids_terminate_spec<E>(ts: &mut TerminateSpec, next_id: &mut E)
 where
@@ -127,7 +122,7 @@ where
     }
 }
 
-fn assign_ids_extend<E>(extend: &mut ExtendDecl, next_id: &mut E)
+fn assign_ids_extend<E>(extend: &mut ActivationCondition, next_id: &mut E)
 where
     E: FnMut() -> NodeId,
 {
@@ -144,14 +139,17 @@ where
             assign_ids_literal(lit, next_id);
         }
         ExpressionKind::Ident(_) | ExpressionKind::MissingExpression => {}
-        ExpressionKind::StreamAccess(_, _) => unimplemented!(),
+        ExpressionKind::StreamAccess(expr, _) => {
+            assign_ids_expr(expr, next_id);
+        }
         ExpressionKind::Default(lhs, rhs) | ExpressionKind::Hold(lhs, rhs) | ExpressionKind::Binary(_, lhs, rhs) => {
             assign_ids_expr(lhs, next_id);
             assign_ids_expr(rhs, next_id);
         }
         ExpressionKind::Offset(_, _) => unimplemented!(),
-        ExpressionKind::SlidingWindowAggregation { expr: _expr, duration: _duration, aggregation: _aggregation } => {
-            unimplemented!()
+        ExpressionKind::SlidingWindowAggregation { expr, duration, aggregation: _aggregation } => {
+            assign_ids_expr(expr, next_id);
+            assign_ids_expr(duration, next_id);
         }
         ExpressionKind::Lookup(inst, offset, _winop) => {
             inst.id = next_id();
@@ -249,7 +247,7 @@ mod tests {
             id: NodeId::DUMMY,
             name: ident(),
             ty: ty(),
-            extend: ExtendDecl { freq: None, id: NodeId::DUMMY, span: span() },
+            extend: ActivationCondition { expr: None, id: NodeId::DUMMY, span: span() },
             params: Vec::new(),
             template_spec: None,
             expression: expr,

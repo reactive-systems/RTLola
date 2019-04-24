@@ -10,7 +10,7 @@ use super::naming::{Declaration, DeclarationTable};
 use crate::ast::LolaSpec;
 use crate::ast::{
     Constant, Expression, ExpressionKind, Input, LitKind, Literal, Offset, Output, StreamInstance,
-    Trigger, Type, TypeKind, WindowOperation,
+    TimeSpec, Trigger, Type, TypeKind, WindowOperation,
 };
 use crate::parse::NodeId;
 use crate::parse::Span;
@@ -233,15 +233,13 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
 
         // check if stream has timing infos
         let mut frequency = None;
-        if let Some(template_spec) = &output.template_spec {
-            if let Some(extend) = &template_spec.ext {
-                if let Some(time_spec) = &extend.freq {
-                    frequency = Some(Freq::new(&format!("{}", time_spec), time_spec.exact_period.clone()));
-                }
+        if let Some(expr) = &output.extend.expr {
+            if let Some(time_spec) = expr.parse_timespec() {
+                let time_spec: TimeSpec = time_spec;
+                frequency = Some(Freq::new(&format!("{}", time_spec), time_spec.exact_period.clone()));
+            } else {
+                unimplemented!("only frequency annotations are currently implemented for activation conditions");
             }
-        }
-        if let Some(time_spec) = &output.extend.freq {
-            frequency = Some(Freq::new(&format!("{}", time_spec), time_spec.exact_period.clone()));
         }
 
         // determine whether stream is timed or event based
@@ -325,13 +323,11 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
             }
             if let Some(extend) = &template_spec.ext {
                 // check that condition is boolean
-                if let Some(cond) = &extend.target {
-                    self.infer_expression(
-                        cond,
-                        Some(ValueTy::Bool),
-                        StreamVarOrTy::Ty(StreamTy::new(TimingInfo::Event)),
-                    )?;
-                }
+                self.infer_expression(
+                    &extend.target,
+                    Some(ValueTy::Bool),
+                    StreamVarOrTy::Ty(StreamTy::new(TimingInfo::Event)),
+                )?;
             }
             if let Some(terminate) = &template_spec.ter {
                 // check that condition is boolean
@@ -366,8 +362,17 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
         match &lit.kind {
             Str(_) | RawStr(_) => ValueTy::String,
             Bool(_) => ValueTy::Bool,
-            Int(i) => ValueTy::Constr(if *i < 0 { TypeConstraint::SignedInteger } else { TypeConstraint::Integer }),
-            Float(_, _) => ValueTy::Constr(TypeConstraint::FloatingPoint),
+            Numeric(val, unit) => {
+                assert!(unit.is_none());
+                if val.contains(".") {
+                    // Floating Point
+                    ValueTy::Constr(TypeConstraint::FloatingPoint)
+                } else if val.starts_with("-") {
+                    ValueTy::Constr(TypeConstraint::SignedInteger)
+                } else {
+                    ValueTy::Constr(TypeConstraint::Integer)
+                }
+            }
         }
     }
 
@@ -661,7 +666,7 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
 
                 let negative_offset = match &off_expr.kind {
                     ExpressionKind::Lit(l) => match &l.kind {
-                        LitKind::Int(i) => i.is_negative(),
+                        //LitKind::Int(i) => i.is_negative(),
                         _ => unreachable!("offset expressions have to be integers"),
                     },
                     _ => unreachable!("offset expressions have to be literal"),
@@ -1808,25 +1813,25 @@ mod tests {
 
     #[test]
     fn test_window_widening() {
-        let spec = "input in: Int8\n output out: Int64 @5Hz:= in[3s, Σ].defaults(to: 0)";
+        let spec = "input in: Int8\n output out: Int64 @5Hz:= in.aggregate(over: 3s, using: Σ).defaults(to: 0)";
         assert_eq!(0, num_type_errors(spec));
     }
 
     #[test]
     fn test_window() {
-        let spec = "input in: Int8\n output out: Int8 @5Hz := in[3s, Σ].defaults(to: 0)";
+        let spec = "input in: Int8\n output out: Int8 @5Hz := in.aggregate(over: 3s, using: Σ).defaults(to: 0)";
         assert_eq!(0, num_type_errors(spec));
     }
 
     #[test]
     fn test_window_untimed() {
-        let spec = "input in: Int8\n output out: Int16 := in[3s, Σ].defaults(to: 5)";
+        let spec = "input in: Int8\n output out: Int16 := in.aggregate(over: 3s, using: Σ).defaults(to: 5)";
         assert_eq!(1, num_type_errors(spec));
     }
 
     #[test]
     fn test_window_faulty() {
-        let spec = "input in: Int8\n output out: Bool @5Hz := in[3s, Σ].defaults(to: 5)";
+        let spec = "input in: Int8\n output out: Bool @5Hz := in.aggregate(over: 3s, using: Σ).defaults(to: 5)";
         assert_eq!(1, num_type_errors(spec));
     }
 
@@ -1856,7 +1861,7 @@ mod tests {
 
     #[test]
     fn test_involved() {
-        let spec = "input velo: Float32\n output avg: Float64 @5Hz := velo[1h, avg].defaults(to: 10000.0)";
+        let spec = "input velo: Float32\n output avg: Float64 @5Hz := velo.aggregate(over: 1h, using: avg).defaults(to: 10000.0)";
         assert_eq!(0, num_type_errors(spec));
     }
 

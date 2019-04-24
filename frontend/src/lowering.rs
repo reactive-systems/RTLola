@@ -378,10 +378,7 @@ impl<'a> Lowering<'a> {
     ) -> Option<ParametrizedStream> {
         if let Some(temp_spec) = ast_output.template_spec.as_ref() {
             // Check if it is merely timed, not parametrized.
-            if temp_spec.ext.as_ref().map_or(false, |e| e.target.is_none() && e.freq.is_some())
-                && temp_spec.inv.is_none()
-                && temp_spec.ter.is_none()
-            {
+            if temp_spec.ext.is_none() && temp_spec.inv.is_none() && temp_spec.ter.is_none() {
                 None
             } else {
                 // TODO: Finalize and implement parametrization.
@@ -756,8 +753,7 @@ impl<'a> Lowering<'a> {
         use crate::ast::LitKind;
         match &lit.kind {
             LitKind::Str(s) | LitKind::RawStr(s) => ir::Constant::Str(s.clone()),
-            LitKind::Int(i) => ir::Constant::Int(*i),
-            LitKind::Float(f, _precise) => ir::Constant::Float(*f),
+            LitKind::Numeric(_, _) => unimplemented!("need typing information"),
             LitKind::Bool(b) => ir::Constant::Bool(*b),
         }
     }

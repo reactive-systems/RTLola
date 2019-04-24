@@ -263,9 +263,7 @@ impl<'a, 'b> NamingAnalysis<'a, 'b> {
                     }
                 }
                 if let Some(ref extend) = template_spec.ext {
-                    if let Some(ref cond) = extend.target {
-                        self.check_expression(&cond);
-                    }
+                    self.check_expression(&extend.target);
                 }
                 if let Some(ref terminate) = template_spec.ter {
                     self.check_expression(&terminate.target);

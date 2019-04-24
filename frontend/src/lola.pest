@@ -29,11 +29,9 @@ InvokeDecl = { "invoke" ~Expr ~(InvokeIf | InvokeUnless)? }
 InvokeIf = { "if" ~Expr }
 InvokeUnless = { "unless" ~Expr }
 
-ExtendDecl = { "extend" ~(("@" ~ FrequencyDecl) | (Expr ~("@" ~ FrequencyDecl)?)) }
+ExtendDecl = { "extend" ~ Expr }
 
-FrequencyDecl = _{ Frequency | Duration }
-
-NewExtendDecl = { "@" ~ FrequencyDecl }
+ActivationCondition = { "@" ~ Expr }
 
 TerminateDecl = { "terminate" ~Expr }
 
@@ -45,7 +43,7 @@ ConstantStream = { "constant"~ Ident ~ (":" ~ Type)? ~":=" ~Literal}
 
 InputStream = { "input" ~Ident ~ ParamList? ~ (":" ~ Type)? ~(","~ Ident~ ParamList? ~ ":" ~ Type)*}
 
-OutputStream = { "output"~ Ident ~ ParamList?~ (":" ~ Type)? ~ NewExtendDecl? ~ TemplateSpec? ~":="~ Expr}
+OutputStream = { "output"~ Ident ~ ParamList?~ (":" ~ Type)? ~ ActivationCondition? ~ TemplateSpec? ~":="~ Expr}
 
 Trigger = { "trigger"~ (Ident ~ ":=")? ~ Expr~ StringLiteral?}
 
@@ -87,23 +85,17 @@ ClosingParenthesis = {")"}
 MissingClosingParenthesis = {WHITESPACE* ~ &("then" | "else" |"output" | "input" | "trigger" | "constant" | "Type" | "include" | EOI)}
 MissingExpression = {WHITESPACE* ~ &("then" | "else" |")"|"output" | "input" | "trigger" | "constant" | "Type" | "include" | EOI)}
 
-LookupExpr = {
-      StreamInstance ~"["~ Expr~ "]" 
-    | StreamInstance ~"["~ Duration ~"," ~WindowOp~ "]"
-    | StreamInstance ~"["~ Duration~ "]"}
+LookupExpr = { StreamInstance ~"["~ Expr~ "]" }
 
-FunctionExpr = { 
-      FunctionSymbol ~ GenericParam? ~ FunctionArgs }
-
+// Functions
+FunctionExpr = { FunctionSymbol ~ GenericParam? ~ FunctionArgs }
 GenericParam = { "<" ~ Type ~ ("," ~ Type)* ~ ">" }
 FunctionArgs = { ( "(" ~ ")" ) | ( "(" ~ FunctionArg ~ ("," ~ FunctionArg)* ~ ")" ) }
 FunctionArg = { (Ident ~ ":")? ~ Expr }
 
-UnaryExpr = {
-      UnaryOperation~ Term}
+UnaryExpr = { UnaryOperation~ Term }
 
-TernaryExpr = {
-      "if"~ Expr~ "then"~ Expr~ "else"~ Expr}
+TernaryExpr = { "if"~ Expr~ "then"~ Expr~ "else"~ Expr }
 
 Tuple = { "("~ (Expr~ (","~ Expr)+)?~ ")"}
 
@@ -135,7 +127,8 @@ FunctionSymbol = _{ Ident }
 //////////////////// Literals ////////////////////
 //////////////////////////////////////////////////
 
-NumberLiteral = @{ ("+" | "-")?~ Digit+~ ("."~ Digit*)?~ ("e"~ ("+" | "-")?~ Digit*)?}
+NumberLiteral = ${ NumberLiteralValue ~ NumberPostfix?}
+NumberLiteralValue = @{ ("+" | "-")?~ Digit+~ ("."~ Digit*)?~ ("e"~ ("+" | "-")?~ Digit*)? }
 
 StringLiteral = _{ "\""~ String~ "\""}
 String = @{("\\\""|!("\"") ~ ANY)*}
@@ -150,27 +143,15 @@ Literal = { StringLiteral | RawStringLiteral | NumberLiteral | BooleanLiteral}
 
 IntegerLiteral = @{ Digit+ }
 SignedIntegerLiteral = @{ ("+" | "-")?~IntegerLiteral }
+NumberPostfix = @{ LETTER+ }
 
 Type = {"("~ (Type ~(","~Type)*)?~ ")" | Ident | "_"}  // _ => infer type
-
-//////////////////////////////////////////////////
-////////////////// Time Related //////////////////
-//////////////////////////////////////////////////
-
-Duration = { Expr ~ UnitOfTime}
-
-UnitOfTime = { "ns" | "μs" | "us" | "ms" | "s" | "min" | "h" | "d" | "w" | "a" }
-
-Frequency = { Expr ~UnitOfFreq}
-
-UnitOfFreq = { "μHz" | "uHz" | "mHz" | "Hz" | "kHz" | "MHz" | "GHz" }
-
 
 //////////////////////////////////////////////////
 ///////////////////// Names //////////////////////
 //////////////////////////////////////////////////
 
-Ident = @{  (Letter | "_") ~ (Letter | Digit | "_")*}
+Ident = @{  (Letter | "_") ~ (Letter | Digit | "_")* | WindowOp}
 
 Parameter = { Ident} // Semantic Category
 
