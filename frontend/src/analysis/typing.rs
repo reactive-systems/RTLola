@@ -448,8 +448,8 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
             }
             StreamAccess(_, _) => unimplemented!(),
             Offset(_, _) => unimplemented!(),
-            SlidingWindowAggregation { expr: _expr, duration: _duration, aggregation: _aggregation } => {
-                unimplemented!()
+            SlidingWindowAggregation { expr, duration, aggregation } => {
+                self.infer_sliding_window_expression(var, stream_var, expr.span, expr, duration, aggregation)?;
             }
             Ite(cond, left, right) => {
                 // constraints
@@ -664,13 +664,8 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
                     StreamVarOrTy::Ty(StreamTy::new(TimingInfo::Event)),
                 )?;
 
-                let negative_offset = match &off_expr.kind {
-                    ExpressionKind::Lit(l) => match &l.kind {
-                        //LitKind::Int(i) => i.is_negative(),
-                        _ => unreachable!("offset expressions have to be integers"),
-                    },
-                    _ => unreachable!("offset expressions have to be literal"),
-                };
+                let offset: i32 = off_expr.parse_literal().expect("offset expressions have to be integers");
+                let negative_offset = offset.is_negative();
 
                 // need to derive "inner" type
                 let decl = self.declarations[&stream.id];
@@ -818,6 +813,56 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
                     .map_err(|err| self.handle_error(err, span))
             }
             _ => unreachable!("lookup {:?} {:?}", offset, window_op),
+        }
+    }
+
+    fn infer_sliding_window_expression(
+        &mut self,
+        var: ValueVar,
+        stream_var: StreamVar,
+        span: Span,
+        expr: &'a Expression,
+        duration: &'a Expression,
+        window_op: &'a WindowOperation,
+    ) -> Result<(), ()> {
+        let inner_var = self.value_vars[&expr.id];
+        let fresh_target_var = self.stream_unifier.new_var();
+
+        // the stream variable has to be real-time
+        match self.stream_unifier.get_type(stream_var).expect("type has to be known at this point").timing {
+            TimingInfo::RealTime(_) => {}
+            _ => {
+                self.handler.error_with_span(
+                    "Sliding windows are only allowed in real-time streams",
+                    LabeledSpan::new(span, "unexpected sliding window", true),
+                );
+                return Err(());
+            }
+        }
+
+        // value type
+        use WindowOperation::*;
+        match window_op {
+            Count => {
+                // The value type of the inner stream is not restricted
+                self.infer_expression(expr, None, StreamVarOrTy::Var(fresh_target_var))?;
+                // resulting type is a integer value
+                self.unifier
+                    .unify_var_ty(var, ValueTy::Option(ValueTy::Constr(TypeConstraint::Integer).into()))
+                    .map_err(|err| self.handle_error(err, span))
+            }
+            Average | Sum | Product | Integral => {
+                // The value type of the inner stream has to be numeric
+                self.infer_expression(
+                    expr,
+                    Some(ValueTy::Constr(TypeConstraint::Numeric)),
+                    StreamVarOrTy::Var(fresh_target_var),
+                )?;
+                // resulting type depends on the inner type
+                self.unifier
+                    .unify_var_ty(var, ValueTy::Option(ValueTy::Infer(inner_var).into()))
+                    .map_err(|err| self.handle_error(err, span))
+            }
         }
     }
 

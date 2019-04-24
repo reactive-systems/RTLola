@@ -292,7 +292,7 @@ fn parse_rational(repr: &str) -> BigRational {
 }
 
 impl Expression {
-    fn parse_literal<T>(&self) -> Option<T>
+    pub(crate) fn parse_literal<T>(&self) -> Option<T>
     where
         T: FromStr,
     {
@@ -333,7 +333,7 @@ mod tests {
         assert_eq!(time_spec_int("12354", "ns"), Duration::new(0, 12354));
         assert_eq!(time_spec_int("90351", "us"), Duration::new(0, 90351 * 1_000));
         assert_eq!(time_spec_int("248", "ms"), Duration::new(0, 248 * 1_000_000));
-        assert_eq!(time_spec_int("29_489_232", "ms"), Duration::new(29_489, 232 * 1_000_000));
+        assert_eq!(time_spec_int("29489232", "ms"), Duration::new(29_489, 232 * 1_000_000));
     }
 
     #[test]

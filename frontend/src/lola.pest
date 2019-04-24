@@ -89,6 +89,7 @@ LookupExpr = { StreamInstance ~"["~ Expr~ "]" }
 
 // Functions
 FunctionExpr = { FunctionSymbol ~ GenericParam? ~ FunctionArgs }
+FunctionSymbol = _{ Ident }
 GenericParam = { "<" ~ Type ~ ("," ~ Type)* ~ ">" }
 FunctionArgs = { ( "(" ~ ")" ) | ( "(" ~ FunctionArg ~ ("," ~ FunctionArg)* ~ ")" ) }
 FunctionArg = { (Ident ~ ":")? ~ Expr }
@@ -119,8 +120,6 @@ Integral = {"∫"  | "integral"}
 Average = { "avg" }
 
 WindowOp = _{ Sum | Product | Average | Count | Integral}
-
-FunctionSymbol = _{ Ident }
 
 
 //////////////////////////////////////////////////
@@ -153,7 +152,7 @@ Type = {"("~ (Type ~(","~Type)*)?~ ")" | Ident | "_"}  // _ => infer type
 
 Ident = @{  (Letter | "_") ~ (Letter | Digit | "_")* | WindowOp}
 
-Parameter = { Ident} // Semantic Category
+Parameter = { Ident } // Semantic Category
 
 StreamInstance = { Ident ~("(" ~Expr ~(","~ Expr)* ~")")?}
 

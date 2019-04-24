@@ -337,8 +337,9 @@ impl<'a, 'b> NamingAnalysis<'a, 'b> {
             }
             StreamAccess(_, _) => unimplemented!(),
             Offset(_, _) => unimplemented!(),
-            SlidingWindowAggregation { expr: _expr, duration: _duration, aggregation: _aggregation } => {
-                unimplemented!()
+            SlidingWindowAggregation { expr, duration, aggregation: _aggregation } => {
+                self.check_expression(expr);
+                self.check_expression(duration);
             }
             Binary(_, left, right) => {
                 self.check_expression(left);
