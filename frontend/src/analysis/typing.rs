@@ -9,8 +9,8 @@
 use super::naming::{Declaration, DeclarationTable};
 use crate::ast::LolaSpec;
 use crate::ast::{
-    Constant, Expression, ExpressionKind, Input, LitKind, Literal, Offset, Output, StreamInstance,
-    TimeSpec, Trigger, Type, TypeKind, WindowOperation,
+    Constant, Expression, ExpressionKind, Input, Literal, Offset, Output, StreamAccessKind,
+    StreamInstance, TimeSpec, Trigger, Type, TypeKind, WindowOperation,
 };
 use crate::parse::NodeId;
 use crate::parse::Span;
@@ -446,7 +446,6 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
                     _ => unreachable!("unreachable ident {:?}", decl),
                 }
             }
-            StreamAccess(_, _) => unimplemented!(),
             Offset(_, _) => unimplemented!(),
             SlidingWindowAggregation { expr, duration, aggregation } => {
                 self.infer_sliding_window_expression(var, stream_var, expr.span, expr, duration, aggregation)?;
@@ -497,29 +496,30 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
                     StreamVarOrTy::Ty(StreamTy::new(TimingInfo::Event)),
                 )?
             }
-            Hold(left, right) => {
-                // verify that `var` is infered
-                if self.stream_unifier.get_type(stream_var).is_none() {
-                    self.handler.error_with_span(
-                        "Cannot use `!` operator when stream type (event or real-time) is unknown",
-                        LabeledSpan::new(expr.span, "Consider removing `!` operator", true),
-                    );
-                    return Err(());
-                }
+            StreamAccess(expr, access_type) => match access_type {
+                StreamAccessKind::Hold => {
+                    // verify that `var` is infered
+                    // TODO: this restriction may be lifted in the future
+                    if self.stream_unifier.get_type(stream_var).is_none() {
+                        self.handler.error_with_span(
+                            "Cannot use `.hold()` when stream type (event or real-time) is unknown",
+                            LabeledSpan::new(expr.span, "Consider removing `.hold()` operator", true),
+                        );
+                        return Err(());
+                    }
 
-                let new_var = self.stream_unifier.new_var();
-                self.infer_expression(
-                    left,
-                    Some(ValueTy::Option(ValueTy::Infer(var).into())),
-                    StreamVarOrTy::Var(new_var),
-                )?;
-                // TODO: check if new_var != stream_var => warn that sample and hold is not needed.
-                self.infer_expression(
-                    right,
-                    Some(ValueTy::Infer(var)),
-                    StreamVarOrTy::Ty(StreamTy::new(TimingInfo::Event)),
-                )?
-            }
+                    // result type is an optional value
+                    let target_var = self.unifier.new_var();
+                    self.unifier
+                        .unify_var_ty(var, ValueTy::Option(ValueTy::Infer(target_var).into()))
+                        .map_err(|err| self.handle_error(err, expr.span))?;
+
+                    // the stream type of `expr` is unconstrained
+                    let new_var = self.stream_unifier.new_var();
+                    self.infer_expression(expr, Some(ValueTy::Infer(var)), StreamVarOrTy::Var(new_var))?;
+                }
+                StreamAccessKind::Optional => unimplemented!(),
+            },
             Function(_, types, params) => {
                 let decl = self.declarations[&expr.id];
                 let fun_decl = match decl {
@@ -1935,19 +1935,19 @@ mod tests {
 
     #[test]
     fn test_sample_and_hold_noop() {
-        let spec = "input x: UInt8\noutput y: UInt8 := 3 ! 0";
+        let spec = "input x: UInt8\noutput y: UInt8 := (3).hold().defaults(to: 0)";
         assert_eq!(0, num_type_errors(spec));
     }
 
     #[test]
     fn test_sample_and_hold_sync() {
-        let spec = "input x: UInt8\noutput y: UInt8 := x ! 0";
+        let spec = "input x: UInt8\noutput y: UInt8 := x.hold().defaults(to: 0)";
         assert_eq!(0, num_type_errors(spec));
     }
 
     #[test]
     fn test_sample_and_hold_useful() {
-        let spec = "input x: UInt8\noutput y: UInt8 @1Hz := x ! 0";
+        let spec = "input x: UInt8\noutput y: UInt8 @1Hz := x.hold().defaults(to: 0)";
         assert_eq!(0, num_type_errors(spec));
     }
 

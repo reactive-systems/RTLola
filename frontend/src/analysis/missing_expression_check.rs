@@ -18,7 +18,6 @@ pub(crate) fn any_expression_missing(spec: &LolaSpec, handler: &Handler) -> bool
 pub(crate) fn any_expression_missing_in_expression(expr: &Expression, handler: &Handler) -> bool {
     match &expr.kind {
         ExpressionKind::Lit(_) | ExpressionKind::Lookup(_, _, _) | ExpressionKind::Ident(_) => false,
-        ExpressionKind::StreamAccess(_, _) => unimplemented!(),
         ExpressionKind::MissingExpression => {
             handler.error_with_span(
                 "missing expression",
@@ -26,19 +25,16 @@ pub(crate) fn any_expression_missing_in_expression(expr: &Expression, handler: &
             );
             true
         }
-        ExpressionKind::Unary(_, inner) | ExpressionKind::Field(inner, _) => {
-            any_expression_missing_in_expression(&inner, handler)
-        }
+        ExpressionKind::Unary(_, inner)
+        | ExpressionKind::Field(inner, _)
+        | ExpressionKind::StreamAccess(inner, _) => any_expression_missing_in_expression(&inner, handler),
         ExpressionKind::Binary(_, left, right)
-        | ExpressionKind::Hold(left, right)
-        | ExpressionKind::Default(left, right) => {
+        | ExpressionKind::Default(left, right)
+        | ExpressionKind::Offset(left, right)
+        | ExpressionKind::SlidingWindowAggregation { expr: left, duration: right, aggregation: _ } => {
             let left_missing = any_expression_missing_in_expression(&*left, handler);
             let right_missing = any_expression_missing_in_expression(&*right, handler);
             left_missing || right_missing
-        }
-        ExpressionKind::Offset(_, _) => unimplemented!(),
-        ExpressionKind::SlidingWindowAggregation { expr: _expr, duration: _duration, aggregation: _aggregation } => {
-            unimplemented!()
         }
         ExpressionKind::Ite(cond, normal, alternative) => {
             let in_cond_missing = any_expression_missing_in_expression(&*cond, handler);

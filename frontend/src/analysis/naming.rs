@@ -362,7 +362,7 @@ impl<'a, 'b> NamingAnalysis<'a, 'b> {
                 types.iter().for_each(|ty| self.check_type(ty));
                 exprs.iter().for_each(|expr| self.check_expression(expr));
             }
-            Default(accessed, default) | Hold(accessed, default) => {
+            Default(accessed, default) => {
                 self.check_expression(accessed);
                 self.check_expression(default);
             }

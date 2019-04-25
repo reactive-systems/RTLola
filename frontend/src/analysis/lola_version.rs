@@ -26,10 +26,15 @@ impl VersionTracker {
 fn analyse_expression(version_tracker: &mut VersionTracker, expr: &Expression, toplevel_in_trigger: bool) {
     match &expr.kind {
         ExpressionKind::Lit(_) | ExpressionKind::Ident(_) => {}
-        ExpressionKind::StreamAccess(_, _) => unimplemented!(),
         ExpressionKind::Default(target, default) => {
             analyse_expression(version_tracker, &*target, false);
             analyse_expression(version_tracker, &*default, false);
+        }
+        ExpressionKind::StreamAccess(expr, _access) => {
+            let span = expr.span;
+            version_tracker.cannot_be_lola2 = Some((span, String::from("Sample and hold – no Lola2")));
+            version_tracker.cannot_be_classic = Some((span, String::from("Sample and hold – no ClassicLola")));
+            analyse_expression(version_tracker, expr.as_ref(), false);
         }
         ExpressionKind::Offset(_, _) => unimplemented!(),
         ExpressionKind::SlidingWindowAggregation { expr: _expr, duration: _duration, aggregation: _aggregation } => {
@@ -45,13 +50,6 @@ fn analyse_expression(version_tracker: &mut VersionTracker, expr: &Expression, t
                 version_tracker.cannot_be_classic = Some((span, String::from("Real time offset – no ClassicLola")));
             }
         },
-        ExpressionKind::Hold(target, default) => {
-            let span = expr.span;
-            version_tracker.cannot_be_lola2 = Some((span, String::from("Sample and hold – no Lola2")));
-            version_tracker.cannot_be_classic = Some((span, String::from("Sample and hold – no ClassicLola")));
-            analyse_expression(version_tracker, target.as_ref(), false);
-            analyse_expression(version_tracker, default.as_ref(), false);
-        }
         ExpressionKind::Binary(_, left, right) => {
             analyse_expression(version_tracker, &*left, false);
             analyse_expression(version_tracker, &*right, false);

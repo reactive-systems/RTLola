@@ -252,9 +252,7 @@ impl<'a> Lowering<'a> {
             ExpressionKind::Lit(_) => pre.chain(post()).collect(),
             ExpressionKind::StreamAccess(_, _) => unimplemented!(),
             ExpressionKind::Ident(_) => pre.chain(post()).collect(),
-            ExpressionKind::Default(e, dft) | ExpressionKind::Hold(e, dft) => {
-                pre.chain(recursion(e)).chain(recursion(dft)).chain(post()).collect()
-            }
+            ExpressionKind::Default(e, dft) => pre.chain(recursion(e)).chain(recursion(dft)).chain(post()).collect(),
             ExpressionKind::Offset(_, _) => unimplemented!(),
             ExpressionKind::SlidingWindowAggregation {
                 expr: _expr,
@@ -461,7 +459,7 @@ impl<'a> Lowering<'a> {
                 duration: _duration,
                 aggregation: _aggregation,
             } => unimplemented!(),
-            ExpressionKind::Hold(e, dft) => {
+            /*ExpressionKind::Hold(e, dft) => {
                 if let ExpressionKind::Lookup(_, _, _) = &e.kind {
                     let result_type = self.lower_value_type(expr.id);
                     self.lower_lookup_expression(e, dft, state, result_type, true)
@@ -471,7 +469,7 @@ impl<'a> Lowering<'a> {
                     println!("WARNING: No-Op Sample and Hold operation!");
                     self.lower_subexpression(e, state)
                 }
-            }
+            }*/
             ExpressionKind::Lookup(_, _, _) => {
                 // Stray lookup without any default expression surrounding it, see `ExpressionKind::Default` case.
                 // This is only valid for sync accesses, i.e. the offset is 0. And this is an `Ident` expression.
@@ -1004,7 +1002,7 @@ mod tests {
 
     #[test]
     fn lower_one_sliding() {
-        let ir = spec_to_ir("input a: Int32 output b: Int64 @1Hz := a[3s, sum].defaults(to: 4)");
+        let ir = spec_to_ir("input a: Int32 output b: Int64 @1Hz := a.aggregate(over: 3s, using: sum).defaults(to: 4)");
         check_stream_number(&ir, 1, 1, 1, 0, 0, 1, 0);
     }
 
@@ -1240,7 +1238,7 @@ mod tests {
 
     #[test]
     fn window_lookup() {
-        let ir = spec_to_ir("input a: Int32 output b: Int32 @1Hz := a[3s, sum].defaults(to: 3)");
+        let ir = spec_to_ir("input a: Int32 output b: Int32 @1Hz := a.aggregate(over: 3s, using: sum).defaults(to: 3)");
         let window = &ir.sliding_windows[0];
         assert_eq!(window, ir.get_window(window.reference));
     }

@@ -28,7 +28,6 @@ lazy_static! {
             Operator::new(Add, Left) | Operator::new(Subtract, Left),
             Operator::new(Multiply, Left) | Operator::new(Divide, Left) | Operator::new(Mod, Left),
             Operator::new(Power, Right),
-            Operator::new(Hold, Left),
             Operator::new(Default, Left),
             Operator::new(Dot, Left),
         ])
@@ -557,7 +556,6 @@ fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>, span: Span)
                     }
                 }
                 Rule::Default => return Expression::new(ExpressionKind::Default(Box::new(lhs), Box::new(rhs)), span),
-                Rule::Hold => return Expression::new(ExpressionKind::Hold(Box::new(lhs), Box::new(rhs)), span),
                 _ => unreachable!(),
             };
             Expression::new(ExpressionKind::Binary(op, Box::new(lhs), Box::new(rhs)), span)
@@ -1040,7 +1038,7 @@ mod tests {
 
     #[test]
     fn build_lookup_expression_hold() {
-        let spec = "output s: Int := s[-1] ! (3 * 4)\n";
+        let spec = "output s: Int := s[-1].hold().defaults(to: 3 * 4)\n";
         let throw = |e| panic!("{}", e);
         let ast = parse(spec).unwrap_or_else(throw);
         cmp_ast_spec(&ast, spec);

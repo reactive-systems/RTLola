@@ -19,18 +19,15 @@ pub(crate) fn warn_about_missing_parenthesis_in_expression(expr: &Expression, ha
         | ExpressionKind::Lookup(_, _, _)
         | ExpressionKind::Ident(_)
         | ExpressionKind::MissingExpression => {}
-        ExpressionKind::StreamAccess(_, _) => unimplemented!(),
-        ExpressionKind::Offset(_, _) => unimplemented!(),
-        ExpressionKind::SlidingWindowAggregation { expr: _expr, duration: _duration, aggregation: _aggregation } => {
-            unimplemented!()
-        }
         ExpressionKind::Unary(_, inner)
-        | ExpressionKind::Field(inner, _) => {
+        | ExpressionKind::Field(inner, _)
+        | ExpressionKind::StreamAccess(inner, _) => {
             warn_about_missing_parenthesis_in_expression(&inner, handler);
         }
         ExpressionKind::Binary(_, left, right)
-        | ExpressionKind::Hold(left, right)
-        | ExpressionKind::Default(left, right) => {
+        | ExpressionKind::Default(left, right)
+        | ExpressionKind::Offset(left, right)
+        | ExpressionKind::SlidingWindowAggregation { expr: left, duration: right, aggregation: _ } => {
             warn_about_missing_parenthesis_in_expression(&*left, handler);
             warn_about_missing_parenthesis_in_expression(&*right, handler);
         }

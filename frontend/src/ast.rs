@@ -268,8 +268,6 @@ pub enum ExpressionKind {
     Offset(Box<Expression>, Box<Expression>),
     /// A sliding window with duration `duration` and aggregation function `aggregation`
     SlidingWindowAggregation { expr: Box<Expression>, duration: Box<Expression>, aggregation: WindowOperation },
-    /// A sample and hold expression, e.g., `a ! 4`
-    Hold(Box<Expression>, Box<Expression>),
     /// A stream lookup with offset
     Lookup(StreamInstance, Offset, Option<WindowOperation>),
     /// A binary operation (For example: `a + b`, `a * b`)

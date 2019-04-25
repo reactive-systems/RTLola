@@ -7,10 +7,7 @@ use crate::analysis::naming::Declaration;
 use crate::analysis::DeclarationTable;
 use crate::analysis::TypeTable;
 use crate::ast;
-use crate::ast::ExpressionKind;
-use crate::ast::LolaSpec;
-use crate::ast::Offset;
-use crate::ast::WindowOperation;
+use crate::ast::{ExpressionKind, LolaSpec, Offset, StreamAccessKind, WindowOperation};
 use crate::ty::TimingInfo;
 use num::{BigRational, ToPrimitive};
 use std::cmp::min;
@@ -44,7 +41,6 @@ fn add_sliding_windows<'a>(
 
     match &expr.kind {
         ExpressionKind::Lit(_) | ExpressionKind::Ident(_) => {}
-        ExpressionKind::StreamAccess(_, _) => unimplemented!(),
         ExpressionKind::Binary(_op, left, right) => {
             match add_sliding_windows(&*left, type_table, declaration_table) {
                 MemoryBound::Bounded(u) => required_memory += u,
@@ -58,28 +54,28 @@ fn add_sliding_windows<'a>(
             };
         }
         ExpressionKind::MissingExpression => return MemoryBound::Unknown,
-        ExpressionKind::Hold(e, dft) => {
-            if let ExpressionKind::Lookup(_, _, _) = &e.kind {
-                match add_sliding_windows(&*e, type_table, declaration_table) {
-                    MemoryBound::Bounded(u) => required_memory += u,
-                    MemoryBound::Unbounded => return MemoryBound::Unbounded,
-                    MemoryBound::Unknown => unknown_size = true,
-                };
-                match add_sliding_windows(&*dft, type_table, declaration_table) {
-                    MemoryBound::Bounded(u) => required_memory += u,
-                    MemoryBound::Unbounded => return MemoryBound::Unbounded,
-                    MemoryBound::Unknown => unknown_size = true,
-                };
-            } else {
-                // A "stray" sample and hold expression such as `5 ! 3` is valid, but a no-op.
-                // Thus, print a warning. Evaluating the expression is necessary, the dft can be skipped.
-                match add_sliding_windows(&*e, type_table, declaration_table) {
-                    MemoryBound::Bounded(u) => required_memory += u,
-                    MemoryBound::Unbounded => return MemoryBound::Unbounded,
-                    MemoryBound::Unknown => unknown_size = true,
-                };
+        ExpressionKind::StreamAccess(e, access_type) => match access_type {
+            StreamAccessKind::Hold => {
+                if let ExpressionKind::Lookup(_, _, _) = &e.kind {
+                    match add_sliding_windows(&*e, type_table, declaration_table) {
+                        MemoryBound::Bounded(u) => required_memory += u,
+                        MemoryBound::Unbounded => return MemoryBound::Unbounded,
+                        MemoryBound::Unknown => unknown_size = true,
+                    };
+                } else {
+                    // A "stray" sample and hold expression such as `5.hold()` is valid, but a no-op.
+                    // Thus, print a warning. Evaluating the expression is necessary, the dft can be skipped.
+                    match add_sliding_windows(&*e, type_table, declaration_table) {
+                        MemoryBound::Bounded(u) => required_memory += u,
+                        MemoryBound::Unbounded => return MemoryBound::Unbounded,
+                        MemoryBound::Unknown => unknown_size = true,
+                    };
+                }
             }
-        }
+            StreamAccessKind::Optional => {
+                unimplemented!();
+            }
+        },
         ExpressionKind::Default(e, dft) => {
             if let ExpressionKind::Lookup(_, _, _) = &e.kind {
                 match add_sliding_windows(&*e, type_table, declaration_table) {

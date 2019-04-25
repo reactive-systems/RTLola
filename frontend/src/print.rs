@@ -223,7 +223,6 @@ impl Display for Expression {
             ExpressionKind::SlidingWindowAggregation { expr, duration, aggregation } => {
                 write!(f, "{}.aggregate(over: {}, using: {})", expr, duration, aggregation)
             }
-            ExpressionKind::Hold(expr, val) => write!(f, "{} ! {}", expr, val),
             ExpressionKind::Lookup(inst, offset, Some(aggr)) => write!(f, "{}[{}, {}]", inst, offset, aggr),
             ExpressionKind::Lookup(inst, offset, None) => write!(f, "{}[{}]", inst, offset),
             ExpressionKind::Binary(op, lhs, rhs) => write!(f, "{} {} {}", lhs, op, rhs),
