@@ -15,7 +15,7 @@ pub struct Controller {
     /// Handles all kind of output behavior according to config.
     output_handler: OutputHandler,
 
-    /// Handles evaluating stream expressions and storeage of values.
+    /// Handles evaluating stream expressions and storage of values.
     evaluator: Evaluator,
 }
 
