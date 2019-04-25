@@ -1935,7 +1935,7 @@ mod tests {
 
     #[test]
     fn test_sample_and_hold_noop() {
-        let spec = "input x: UInt8\noutput y: UInt8 := (3).hold().defaults(to: 0)";
+        let spec = "input x: UInt8\noutput y: UInt8 := 3.hold().defaults(to: 0)";
         assert_eq!(0, num_type_errors(spec));
     }
 
