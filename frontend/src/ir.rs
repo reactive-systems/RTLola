@@ -481,6 +481,44 @@ impl LolaIR {
     pub fn get_window(&self, window: WindowReference) -> &SlidingWindow {
         &self.sliding_windows[window.ix]
     }
+
+    pub fn get_event_driven_layers(&self) -> Vec<Vec<StreamReference>> {
+        if self.event_driven.is_empty() {
+            return vec![];
+        }
+
+        // Zip eval layer with stream reference.
+        let streams_with_layers: Vec<(usize, StreamReference)> =
+            self.event_driven.iter().map(|s| s.reference).map(|r| (self.get_out(r).eval_layer() as usize, r)).collect();
+
+        // Streams are annotated with an evaluation layer. The layer is not minimal, so there might be
+        // layers without entries and more layers than streams.
+        // Minimization works as follows:
+        // a) Find the greatest layer
+        // b) For each potential layer...
+        // c) Find streams that would be in it.
+        // d) If there is none, skip this layer
+        // e) If there are some, add them as layer.
+
+        // a) Find the greatest layer. Maximum must exist because vec cannot be empty.
+        let max_layer = streams_with_layers.iter().max_by_key(|(layer, _)| layer).unwrap().0;
+
+        let mut layers = Vec::new();
+        // b) For each potential layer
+        for i in 0..=max_layer {
+            // c) Find streams that would be in it.
+            let in_layer_i: Vec<StreamReference> =
+                streams_with_layers.iter().filter_map(|(l, r)| if *l == i { Some(*r) } else { None }).collect();
+            if in_layer_i.is_empty() {
+                // d) If there is none, skip this layer
+                continue;
+            } else {
+                // e) If there are some, add them as layer.
+                layers.push(in_layer_i);
+            }
+        }
+        layers
+    }
 }
 
 /// The size of a specific value in bytes.
