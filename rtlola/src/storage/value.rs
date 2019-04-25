@@ -1,6 +1,6 @@
-use lola_parser::ir::Type;
 use ordered_float::NotNan;
 use std::ops;
+use streamlab_frontend::ir::Type;
 
 use self::Value::*;
 

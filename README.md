@@ -1,3 +1,2 @@
-# LolaParser
+# StreamLAB
 
-Parser for the overarching Lola language

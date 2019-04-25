@@ -6,6 +6,14 @@ use crate::analysis::typing::ValueVar;
 use lazy_static::lazy_static;
 use num::{BigRational, Zero};
 
+/// The type of an expression consists of both, a value type (`Bool`, `String`, etc.) and
+/// a stream type (periodic or event-based).
+#[derive(Debug, PartialEq, Eq, PartialOrd, Clone, Hash)]
+pub struct Ty {
+    value: ValueTy,
+    stream: StreamTy,
+}
+
 /// The `stream` type, storing information about timing of a stream (event-based, real-time).
 #[derive(Debug, PartialEq, Eq, PartialOrd, Clone, Hash)]
 pub struct StreamTy {

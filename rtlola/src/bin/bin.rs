@@ -1,5 +1,4 @@
 use clap::{value_t, App, Arg, ArgGroup, SubCommand};
-use lola_parser;
 use rtlola::EvalConfig;
 use rtlola::InputSource;
 use std::env;
@@ -8,6 +7,7 @@ use std::fs::File;
 use std::io::Read;
 use std::process;
 use std::time::Duration;
+use streamlab_frontend;
 
 fn main() -> Result<(), Box<dyn Error>> {
     #[allow(unused_variables)]
@@ -100,7 +100,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             let mut file = File::open(&filename)?;
             let mut contents = String::new();
             file.read_to_string(&mut contents)?;
-            let _ = lola_parser::parse(contents.as_str());
+            let _ = streamlab_frontend::parse(contents.as_str());
             Ok(())
         }
         ("monitor", Some(parse_matches)) => {
@@ -111,7 +111,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             let mut contents = String::new();
             file.read_to_string(&mut contents)?;
 
-            let ir = lola_parser::parse(contents.as_str());
+            let ir = streamlab_frontend::parse(contents.as_str());
 
             let delay = if parse_matches.is_present("DELAY") {
                 value_t!(parse_matches, "DELAY", u32).unwrap_or_else(|_| {

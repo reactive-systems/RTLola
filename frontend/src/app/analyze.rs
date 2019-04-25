@@ -36,30 +36,19 @@ impl Config {
             .author(env!("CARGO_PKG_AUTHORS"))
             .about("lola-analyze is a useful tool to analyze Lola specifications")
             .arg(Arg::with_name("v").short("v").multiple(true).required(false).help("Sets the level of verbosity"))
-            .subcommand(
-                SubCommand::with_name("parse")
-                    .about("Parses the input file and outputs parse tree")
-                    .arg(Arg::with_name("INPUT").help("Sets the input file to use").required(true).index(1)),
-            )
+            .arg(Arg::with_name("INPUT").help("Sets the input file to use").required(true).index(1))
+            .subcommand(SubCommand::with_name("parse").about("Parses the input file and outputs parse tree"))
             .subcommand(
                 SubCommand::with_name("ast")
-                    .about("Parses the input file and outputs internal representation of abstract syntax tree")
-                    .arg(Arg::with_name("INPUT").help("Sets the input file to use").required(true).index(1)),
+                    .about("Parses the input file and outputs internal representation of abstract syntax tree"),
             )
             .subcommand(
                 SubCommand::with_name("pretty-print")
-                    .about("Parses the input file and outputs pretty printed representation")
-                    .arg(Arg::with_name("INPUT").help("Sets the input file to use").required(true).index(1)),
+                    .about("Parses the input file and outputs pretty printed representation"),
             )
+            .subcommand(SubCommand::with_name("analyze").about("Parses the input file and runs semantic analysis"))
             .subcommand(
-                SubCommand::with_name("analyze")
-                    .about("Parses the input file and runs semantic analysis")
-                    .arg(Arg::with_name("INPUT").help("Sets the input file to use").required(true).index(1)),
-            )
-            .subcommand(
-                SubCommand::with_name("ir")
-                    .about("Parses the input file and returns the intermediate representation")
-                    .arg(Arg::with_name("INPUT").help("Sets the input file to use").required(true).index(1)),
+                SubCommand::with_name("ir").about("Parses the input file and returns the intermediate representation"),
             )
             .get_matches_from(args);
 
@@ -69,6 +58,9 @@ impl Config {
             2 => LevelFilter::Debug,
             3 | _ => LevelFilter::Trace,
         };
+
+        let filename = matches.value_of("INPUT").map(std::string::ToString::to_string).unwrap();
+        eprintln!("Input file `{}`", filename);
 
         let mut logger: Vec<Box<dyn SharedLogger>> = Vec::new();
         if let Some(term_logger) = TermLogger::new(verbosity, simplelog::Config::default()) {
@@ -80,46 +72,14 @@ impl Config {
         CombinedLogger::init(logger).expect("failed to initialize logging framework");
 
         match matches.subcommand() {
-            ("parse", Some(parse_matches)) => {
-                // Now we have a reference to clone's matches
-                let filename = parse_matches.value_of("INPUT").map(|s| s.to_string()).unwrap();
-                eprintln!("Input file `{}`", filename);
-
-                Config { which: Analysis::Parse, filename }
-            }
-            ("ast", Some(parse_matches)) => {
-                // Now we have a reference to clone's matches
-                let filename = parse_matches.value_of("INPUT").map(|s| s.to_string()).unwrap();
-                eprintln!("Input file `{}`", filename);
-
-                Config { which: Analysis::AST, filename }
-            }
-            ("pretty-print", Some(parse_matches)) => {
-                // Now we have a reference to clone's matches
-                let filename = parse_matches.value_of("INPUT").map(|s| s.to_string()).unwrap();
-                eprintln!("Input file `{}`", filename);
-
-                Config { which: Analysis::Prettyprint, filename }
-            }
-            ("analyze", Some(parse_matches)) => {
-                // Now we have a reference to clone's matches
-                let filename = parse_matches.value_of("INPUT").map(|s| s.to_string()).unwrap();
-                eprintln!("Input file `{}`", filename);
-
-                Config { which: Analysis::Analyze, filename }
-            }
-            ("ir", Some(parse_matches)) | ("intermediate-representation", Some(parse_matches)) => {
-                // Now we have a reference to clone's matches
-                let filename = parse_matches.value_of("INPUT").map(|s| s.to_string()).unwrap();
-                eprintln!("Input file `{}`", filename);
-
-                Config { which: Analysis::IR, filename }
-            }
+            ("parse", Some(_)) => Config { which: Analysis::Parse, filename },
+            ("ast", Some(_)) => Config { which: Analysis::AST, filename },
+            ("pretty-print", Some(_)) => Config { which: Analysis::Prettyprint, filename },
+            ("analyze", Some(_)) => Config { which: Analysis::Analyze, filename },
+            ("ir", Some(_)) | ("intermediate-representation", Some(_)) => Config { which: Analysis::IR, filename },
             ("", None) => {
-                println!("No subcommand was used");
-                println!("{}", matches.usage());
-
-                process::exit(1);
+                // default to `analyze`
+                Config { which: Analysis::Analyze, filename }
             }
             _ => unreachable!(),
         }

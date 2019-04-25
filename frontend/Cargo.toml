@@ -1,5 +1,5 @@
 [package]
-name = "lola-parser"
+name = "streamlab-frontend"
 version = "0.1.0"
 authors = [
     "Malte Schledjewski <schledjewski@react.uni-saarland.de>",
@@ -19,6 +19,7 @@ termcolor = "1"  # color output to terminal
 itertools = "0.8"
 petgraph = "0.4.13"
 ena = "0.11" # union-find implementation
-num = "0.2"
+num = "0.2"     # infinite precision rationals
+color-backtrace = "0.1"
 
 [features]

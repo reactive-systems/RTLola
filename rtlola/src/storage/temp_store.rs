@@ -1,7 +1,7 @@
 use super::Value;
 use byteorder::{NativeEndian, ReadBytesExt, WriteBytesExt};
-use lola_parser::ir::{Expression, FloatTy, Temporary, Type};
 use ordered_float::NotNan;
+use streamlab_frontend::ir::{Expression, FloatTy, Temporary, Type};
 
 pub(crate) struct TempStore {
     offsets: Vec<usize>,

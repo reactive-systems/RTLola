@@ -1,7 +1,7 @@
-use lola_parser::ir::{LolaIR, StreamReference};
 use std::sync::mpsc;
 use std::thread;
 use std::time::SystemTime;
+use streamlab_frontend::ir::{LolaIR, StreamReference};
 
 use crate::basics::EvalConfig;
 use crate::basics::OutputHandler;
@@ -19,8 +19,8 @@ pub struct Controller {
     evaluator: Evaluator,
 }
 
-impl lola_parser::LolaBackend for Controller {
-    fn supported_feature_flags() -> Vec<lola_parser::ir::FeatureFlag> {
+impl streamlab_frontend::LolaBackend for Controller {
+    fn supported_feature_flags() -> Vec<streamlab_frontend::ir::FeatureFlag> {
         unimplemented!()
     }
 }

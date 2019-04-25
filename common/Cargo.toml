@@ -5,4 +5,4 @@ authors = ["Maximilian Schwenger <schwenger@react.uni-saarland.de>"]
 edition = "2018"
 
 [dependencies]
-lola-parser = {path = "../frontend/"}
+streamlab-frontend = {path = "../frontend/"}

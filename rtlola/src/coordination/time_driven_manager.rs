@@ -1,10 +1,10 @@
 use super::WorkItem;
 use crate::basics::{EvalConfig, OutputHandler};
 
-use lola_parser::ir::{LolaIR, StreamReference};
 use std::sync::mpsc::{Receiver, Sender};
 use std::thread::sleep;
 use std::time::{Duration, SystemTime};
+use streamlab_frontend::ir::{LolaIR, StreamReference};
 
 use common::duration::*;
 use common::schedule::{Deadline, Schedule};

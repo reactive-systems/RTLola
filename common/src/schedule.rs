@@ -1,7 +1,7 @@
 use crate::duration::*;
 use crate::math;
-use lola_parser::ir::{LolaIR, StreamReference};
 use std::time::Duration;
+use streamlab_frontend::ir::{LolaIR, StreamReference};
 
 #[derive(Debug, Clone)]
 pub struct Deadline {
@@ -109,10 +109,10 @@ impl Schedule {
 mod tests {
     #[allow(unused_imports)]
     use super::*;
-    use lola_parser::ir::LolaIR;
+    use streamlab_frontend::ir::LolaIR;
 
     fn to_ir(spec: &str) -> LolaIR {
-        lola_parser::parse(spec)
+        streamlab_frontend::parse(spec)
     }
 
     #[test]

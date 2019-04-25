@@ -1,4 +1,4 @@
-use lola_parser::ir::*;
+use streamlab_frontend::ir::*;
 
 use crate::basics::{EvalConfig, OutputHandler};
 use crate::storage::{GlobalStore, TempStore, Value};
@@ -117,7 +117,7 @@ impl Evaluator {
                 self.write(stmt.target, val, inst);
             }
             Op::ArithLog(op) => {
-                use lola_parser::ir::ArithLogOp::*;
+                use streamlab_frontend::ir::ArithLogOp::*;
                 // The explicit match here enables a compiler warning when a case was missed.
                 // Useful when the list in the parser is extended.
                 let arity = match op {
@@ -234,15 +234,15 @@ impl Evaluator {
 mod tests {
 
     use super::*;
-    use lola_parser::ir::LolaIR;
     use std::time::{Duration, SystemTime};
+    use streamlab_frontend::ir::LolaIR;
 
     fn setup(spec: &str) -> (LolaIR, Evaluator) {
         setup_time(spec, SystemTime::now())
     }
 
     fn setup_time(spec: &str, ts: SystemTime) -> (LolaIR, Evaluator) {
-        let ir = lola_parser::parse(spec);
+        let ir = streamlab_frontend::parse(spec);
         let eval = Evaluator::new(ir.clone(), ts, EvalConfig::default());
         (ir, eval)
     }

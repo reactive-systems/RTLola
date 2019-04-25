@@ -6,7 +6,7 @@ mod evaluator;
 mod storage;
 
 use crate::coordination::Controller;
-use lola_parser::ir::LolaIR;
+use streamlab_frontend::ir::LolaIR;
 
 pub fn start_evaluation_online(ir: LolaIR, cfg: EvalConfig) -> ! {
     Controller::evaluate(ir, cfg, false);

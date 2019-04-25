@@ -2,10 +2,10 @@ use crate::basics::{EvalConfig, InputReader, OutputHandler};
 use crate::coordination::WorkItem;
 use crate::storage::Value;
 
-use lola_parser::ir::{FloatTy, LolaIR, StreamReference, Type, UIntTy};
 use std::ops::AddAssign;
 use std::sync::mpsc::{Receiver, Sender};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use streamlab_frontend::ir::{FloatTy, LolaIR, StreamReference, Type, UIntTy};
 
 pub(crate) type EventEvaluation = Vec<(StreamReference, Value)>;
 
