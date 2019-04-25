@@ -91,7 +91,7 @@ impl Controller {
             WorkItem::Time(t, ts) => self.evaluate_timed_item(t, ts),
             WorkItem::Start(_) => panic!("Received spurious start command."),
             WorkItem::End => {
-                self.output_handler.trigger(|| "Finished entire input. Terminating.");
+                self.output_handler.output(|| "Finished entire input. Terminating.");
                 std::process::exit(0);
             }
         }
