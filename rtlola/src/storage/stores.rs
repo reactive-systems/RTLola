@@ -29,25 +29,28 @@ pub(crate) struct GlobalStore {
 impl GlobalStore {
     pub(crate) fn new(ir: &LolaIR, ts: SystemTime) -> GlobalStore {
         let mut index_map: Vec<Option<usize>> = vec![None; ir.outputs.len()];
-        let mut p_cnt = 0usize;
-        for p in &ir.parametrized {
-            index_map[p.reference.out_ix()] = Some(p_cnt);
-            p_cnt += 1;
+
+        for (p_ix, o) in ir.parametrized.iter().enumerate() {
+            index_map[o.reference.out_ix()] = Some(p_ix);
         }
+
         let nps: Vec<&OutputStream> = index_map
-            .iter_mut()
+            .iter()
             .enumerate()
-            .flat_map(|(ix, v)| if v.is_some() { None } else { Some(ix) })
+            .flat_map(|(ix, v)| if v.is_none() { Some(ix) } else { None })
             .map(|ix| &ir.outputs[ix])
             .collect(); // Give it a type.
 
-        nps.iter().map(|o| o.reference.out_ix()).enumerate().for_each(|(np_ix, ir_ix)| index_map[ir_ix] = Some(np_ix));
+        for (np_ix, o) in nps.iter().enumerate() {
+            index_map[o.reference.out_ix()] = Some(np_ix);
+        }
+
         assert!(index_map.iter().all(Option::is_some));
 
         let index_map = index_map.into_iter().flatten().collect();
-        let np_outputs = nps.iter().map(|o| &o.ty).map(InstanceStore::new).collect();
-        let p_outputs = vec![HashMap::new(); p_cnt];
-        let inputs = ir.inputs.iter().map(|i| &i.ty).map(InstanceStore::new).collect();
+        let np_outputs = nps.iter().map(|o| InstanceStore::new(&o.ty)).collect();
+        let p_outputs = vec![HashMap::new(); ir.parametrized.len()];
+        let inputs = ir.inputs.iter().map(|i| InstanceStore::new(&i.ty)).collect();
         let np_windows = ir.sliding_windows.iter().map(|w| SlidingWindow::new(w.duration, w.op, ts, &w.ty)).collect();
 
         GlobalStore { inputs, index_map, np_outputs, p_outputs, np_windows }
