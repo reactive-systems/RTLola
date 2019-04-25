@@ -7,6 +7,8 @@ use std::ops::AddAssign;
 use std::sync::mpsc::{Receiver, Sender};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+pub(crate) type EventEvaluation = Vec<(StreamReference, Value)>;
+
 /// Represents the current cycle count for event-driven events.
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
 struct EventDrivenCycleCount(u128);
@@ -62,8 +64,7 @@ impl EventDrivenManager {
             };
 
             let event = event.into_iter().flatten().collect(); // Remove non-existing values.
-            let item = EventEvaluation { event };
-            match work_queue.send(WorkItem::Event(item, SystemTime::now())) {
+            match work_queue.send(WorkItem::Event(event, SystemTime::now())) {
                 Ok(_) => {}
                 Err(e) => self.out_handler.runtime_warning(|| format!("Error when sending work item. {}", e)),
             }
@@ -144,17 +145,11 @@ impl EventDrivenManager {
             let _ = ack_chan.recv(); // Wait until be get the acknowledgement.
 
             let event = event.into_iter().flatten().collect(); // Remove non-existing entries.
-            let item = EventEvaluation { event };
-            match work_queue.send(WorkItem::Event(item, now)) {
+            match work_queue.send(WorkItem::Event(event, now)) {
                 Ok(_) => {}
                 Err(e) => self.out_handler.runtime_warning(|| format!("Error when sending work item. {}", e)),
             }
             self.current_cycle += 1;
         }
     }
-}
-
-#[derive(Debug)]
-pub(crate) struct EventEvaluation {
-    pub(crate) event: Vec<(StreamReference, Value)>,
 }

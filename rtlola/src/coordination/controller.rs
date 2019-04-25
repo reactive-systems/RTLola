@@ -102,8 +102,8 @@ impl Controller {
         t.into_iter().for_each(|s| self.evaluate_single_output(s, ts));
     }
 
-    fn evaluate_event_item(&mut self, ee: EventEvaluation, ts: SystemTime, layers: &Vec<Vec<StreamReference>>) {
-        self.evaluate_event(ee.event, ts);
+    fn evaluate_event_item(&mut self, e: EventEvaluation, ts: SystemTime, layers: &Vec<Vec<StreamReference>>) {
+        self.evaluate_event(e, ts);
         layers.iter().for_each(|layer| self.evaluate_all_outputs(layer, ts));
     }
 
