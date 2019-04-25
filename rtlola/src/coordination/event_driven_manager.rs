@@ -27,7 +27,6 @@ impl AddAssign<u128> for EventDrivenCycleCount {
 
 pub struct EventDrivenManager {
     current_cycle: EventDrivenCycleCount,
-    layers: Vec<Vec<StreamReference>>,
     out_handler: OutputHandler,
     input_reader: InputReader,
     in_types: Vec<Type>,
@@ -46,10 +45,7 @@ impl EventDrivenManager {
 
         let in_types = ir.inputs.iter().map(|i| i.ty.clone()).collect();
 
-        let layers = ir.get_event_driven_layers();
-        out_handler.debug(|| format!("Evaluation layers: {:?}", layers));
-
-        EDM { current_cycle: 0.into(), layers, out_handler, input_reader, in_types }
+        EDM { current_cycle: 0.into(), out_handler, input_reader, in_types }
     }
 
     pub(crate) fn start_online(mut self, work_queue: Sender<WorkItem>) -> ! {
@@ -65,9 +61,8 @@ impl EventDrivenManager {
                 Some(e) => e,
             };
 
-            let layers = self.layers.clone(); // TODO: Sending repeatedly is unnecessary.
             let event = event.into_iter().flatten().collect(); // Remove non-existing values.
-            let item = EventEvaluation { event, layers };
+            let item = EventEvaluation { event };
             match work_queue.send(WorkItem::Event(item, SystemTime::now())) {
                 Ok(_) => {}
                 Err(e) => self.out_handler.runtime_warning(|| format!("Error when sending work item. {}", e)),
@@ -149,8 +144,7 @@ impl EventDrivenManager {
             let _ = ack_chan.recv(); // Wait until be get the acknowledgement.
 
             let event = event.into_iter().flatten().collect(); // Remove non-existing entries.
-            let layers = self.layers.clone(); // TODO: Sending repeatedly is unnecessary.
-            let item = EventEvaluation { event, layers };
+            let item = EventEvaluation { event };
             match work_queue.send(WorkItem::Event(item, now)) {
                 Ok(_) => {}
                 Err(e) => self.out_handler.runtime_warning(|| format!("Error when sending work item. {}", e)),
@@ -163,5 +157,4 @@ impl EventDrivenManager {
 #[derive(Debug)]
 pub(crate) struct EventEvaluation {
     pub(crate) event: Vec<(StreamReference, Value)>,
-    pub(crate) layers: Vec<Vec<StreamReference>>,
 }

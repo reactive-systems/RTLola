@@ -57,6 +57,12 @@ impl Controller {
             }
         });
 
+        let output_handler = OutputHandler::new(&config);
+
+        // Layers of event based output streams
+        let layers = ir.get_event_driven_layers();
+        output_handler.debug(|| format!("Evaluation layers: {:?}", layers));
+
         let e = if online {
             Evaluator::new(ir, SystemTime::now(), config.clone())
         } else {
@@ -69,20 +75,20 @@ impl Controller {
             }
         };
 
-        let mut ctrl = Controller { output_handler: OutputHandler::new(&config), evaluator: e };
+        let mut ctrl = Controller { output_handler, evaluator: e };
 
         loop {
             match work_rx.recv() {
-                Ok(wi) => ctrl.eval_workitem(wi),
+                Ok(item) => ctrl.eval_workitem(item, &layers),
                 Err(e) => panic!("Both producers hung up! {}", e),
             }
         }
     }
 
-    fn eval_workitem(&mut self, wi: WorkItem) {
+    fn eval_workitem(&mut self, wi: WorkItem, layers: &Vec<Vec<StreamReference>>) {
         self.output_handler.debug(|| format!("Received {:?}.", wi));
         match wi {
-            WorkItem::Event(e, ts) => self.evaluate_event_item(e, ts),
+            WorkItem::Event(e, ts) => self.evaluate_event_item(e, ts, layers),
             WorkItem::Time(t, ts) => self.evaluate_timed_item(t, ts),
             WorkItem::Start(_) => panic!("Received spurious start command."),
             WorkItem::End => {
@@ -96,17 +102,17 @@ impl Controller {
         t.into_iter().for_each(|s| self.evaluate_single_output(s, ts));
     }
 
-    fn evaluate_event_item(&mut self, ee: EventEvaluation, ts: SystemTime) {
+    fn evaluate_event_item(&mut self, ee: EventEvaluation, ts: SystemTime, layers: &Vec<Vec<StreamReference>>) {
         self.evaluate_event(ee.event, ts);
-        ee.layers.into_iter().for_each(|layer| self.evaluate_all_outputs(layer, ts));
+        layers.iter().for_each(|layer| self.evaluate_all_outputs(layer, ts));
     }
 
     fn evaluate_event(&mut self, event: Vec<(StreamReference, Value)>, ts: SystemTime) {
         event.into_iter().for_each(|(sr, v)| self.evaluator.accept_input(sr, v, ts));
     }
 
-    fn evaluate_all_outputs(&mut self, streams: Vec<StreamReference>, ts: SystemTime) {
-        streams.into_iter().for_each(|s| self.evaluate_single_output(s, ts))
+    fn evaluate_all_outputs(&mut self, streams: &Vec<StreamReference>, ts: SystemTime) {
+        streams.iter().for_each(|s| self.evaluate_single_output(*s, ts))
     }
 
     fn evaluate_single_output(&mut self, stream: StreamReference, ts: SystemTime) {
