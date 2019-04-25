@@ -335,8 +335,11 @@ impl<'a, 'b> NamingAnalysis<'a, 'b> {
             Ident(ident) => {
                 self.check_ident(expression, ident);
             }
-            StreamAccess(_, _) => unimplemented!(),
-            Offset(_, _) => unimplemented!(),
+            StreamAccess(expr, _) => self.check_expression(expr),
+            Offset(expr, offset) => {
+                self.check_expression(expr);
+                self.check_expression(offset);
+            }
             SlidingWindowAggregation { expr, duration, aggregation: _aggregation } => {
                 self.check_expression(expr);
                 self.check_expression(duration);
@@ -365,10 +368,6 @@ impl<'a, 'b> NamingAnalysis<'a, 'b> {
             Default(accessed, default) => {
                 self.check_expression(accessed);
                 self.check_expression(default);
-            }
-            Lookup(instance, offset, _) => {
-                self.check_stream_instance(instance);
-                self.check_offset(offset);
             }
             Method(expr, _, types, args) => {
                 self.check_expression(expr);

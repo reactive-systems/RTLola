@@ -56,7 +56,7 @@ Trigger = { "trigger"~ (Ident ~ ":=")? ~ Expr~ StringLiteral?}
 // Precedences:
 // Atomic < TernaryExpr < BooleanDisExpr < BooleanConExpr 
 //      < CompExpr < AddExpr < MultiExpr < ExpoExpr < UnaryExpr < DefaultExpr 
-//      < FunctionExpr < LookupExpr
+//      < FunctionExpr
 
 Operation = _{ Add | Subtract | Power | Multiply | Divide | Mod | And | Or | CompOp | Default }
     Add      = { "+"  }
@@ -73,9 +73,9 @@ Operation = _{ Add | Subtract | Power | Multiply | Divide | Mod | And | Or | Com
 UnaryOperation = _{ Add | Subtract | Neg }
     Neg      = { "!" | "¬" }
 
-Expr = { (Term ~ ( (Operation ~ Term) | (Dot ~ (IntegerLiteral | FunctionExpr | Ident)) )*) }
+Expr = { (Term ~ ( (Operation ~ Term) | (Dot ~ (IntegerLiteral | FunctionExpr | Ident)) | (OpeningBracket ~ Literal ~ ClosingBracket) )*) }
 // TODO Do we need Term to exist for the precedence climber?
-Term = _{ MissingExpression | Literal | ParenthesizedExpression | LookupExpr | UnaryExpr | TernaryExpr | FunctionExpr | Ident | Tuple}
+Term = _{ MissingExpression | Literal | ParenthesizedExpression | UnaryExpr | TernaryExpr | FunctionExpr | Ident | Tuple}
 
 ParenthesizedExpression = {OpeningParenthesis ~ Expr ~ ClosingParenthesis | OpeningParenthesis ~ Expr ~ MissingClosingParenthesis}
 OpeningParenthesis = {"("}
@@ -83,8 +83,6 @@ ClosingParenthesis = {")"}
 
 MissingClosingParenthesis = {WHITESPACE* ~ &("then" | "else" |"output" | "input" | "trigger" | "constant" | "Type" | "include" | EOI)}
 MissingExpression = {WHITESPACE* ~ &("then" | "else" |")"|"output" | "input" | "trigger" | "constant" | "Type" | "include" | EOI)}
-
-LookupExpr = { StreamInstance ~"["~ Expr~ "]" }
 
 // Functions
 FunctionExpr = { FunctionSymbol ~ GenericParam? ~ FunctionArgs }
@@ -98,6 +96,9 @@ UnaryExpr = { UnaryOperation~ Term }
 TernaryExpr = { "if"~ Expr~ "then"~ Expr~ "else"~ Expr }
 
 Tuple = { "("~ (Expr~ (","~ Expr)+)?~ ")"}
+
+OpeningBracket = { "[" }
+ClosingBracket = _{ "]" }
 
 
 //////////////////////////////////////////////////
@@ -154,8 +155,6 @@ Type = {"("~ (Type ~(","~Type)*)?~ ")" | Ident | "_"}  // _ => infer type
 Ident = @{  (Letter | "_") ~ (Letter | Digit | "_")* | WindowOp}
 
 Parameter = { Ident } // Semantic Category
-
-StreamInstance = { Ident ~("(" ~Expr ~(","~ Expr)* ~")")?}
 
 //////////////////////////////////////////////////
 //////////////////// Symbols /////////////////////

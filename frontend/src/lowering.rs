@@ -259,10 +259,10 @@ impl<'a> Lowering<'a> {
                 duration: _duration,
                 aggregation: _aggregation,
             } => unimplemented!(),
-            ExpressionKind::Lookup(inst, _, _) => {
+            /*ExpressionKind::Lookup(inst, _, _) => {
                 let args = inst.arguments.iter().flat_map(|a| recursion(a));
                 pre.chain(args).chain(post()).collect()
-            }
+            }*/
             ExpressionKind::Binary(_, lhs, rhs) => {
                 pre.chain(recursion(lhs)).chain(recursion(rhs)).chain(post()).collect()
             }
@@ -290,11 +290,11 @@ impl<'a> Lowering<'a> {
     fn find_dependencies(&self, expr: &ast::Expression) -> Vec<ir::Dependency> {
         let f = |e: &ast::Expression| -> Vec<ir::Dependency> {
             match &e.kind {
-                ExpressionKind::Lookup(_target, offset, None) => {
+                /*ExpressionKind::Lookup(_target, offset, None) => {
                     let sr = self.extract_target_from_lookup(&e.kind);
                     let offset = self.lower_offset(offset);
                     vec![ir::Dependency { stream: sr, offsets: vec![offset] }]
-                }
+                }*/
                 ExpressionKind::Ident(_ident) => {
                     let sr = self.get_ref_for_ident(e.id);
                     let offset = ir::Offset::PastDiscreteOffset(0);
@@ -324,7 +324,8 @@ impl<'a> Lowering<'a> {
     }
 
     fn lower_window(&mut self, expr: &ast::Expression) -> WindowReference {
-        if let ExpressionKind::Lookup(_, offset, Some(op)) = &expr.kind {
+        unimplemented!();
+        /*if let ExpressionKind::Lookup(_, offset, Some(op)) = &expr.kind {
             let duration = match self.lower_offset(offset) {
                 ir::Offset::PastDiscreteOffset(_)
                 | ir::Offset::FutureDiscreteOffset(_)
@@ -340,11 +341,12 @@ impl<'a> Lowering<'a> {
             reference
         } else {
             panic!("Bug in implementation: Called `lower_window` on non-window expression.")
-        }
+        }*/
     }
 
     fn extract_target_from_lookup(&self, lookup: &ExpressionKind) -> StreamReference {
-        if let ExpressionKind::Lookup(inst, _, _) = lookup {
+        unimplemented!();
+        /*if let ExpressionKind::Lookup(inst, _, _) = lookup {
             let decl = self.get_decl(inst.id);
             let nid = match decl {
                 Declaration::Out(out) => out.id,
@@ -356,7 +358,7 @@ impl<'a> Lowering<'a> {
             *self.ref_lookup.get(&nid).expect("Bug in ReferenceLookup.")
         } else {
             panic!("Bug in implementation: Called `extract_target_from_lookup` on non-lookup expression.")
-        }
+        }*/
     }
 
     fn lower_window_op(&self, op: ast::WindowOperation) -> ir::WindowOperation {
@@ -443,7 +445,8 @@ impl<'a> Lowering<'a> {
             }
             ExpressionKind::StreamAccess(_, _) => unimplemented!(),
             ExpressionKind::Default(e, dft) => {
-                if let ExpressionKind::Lookup(_, _, _) = &e.kind {
+                unimplemented!();
+                /*if let ExpressionKind::Lookup(_, _, _) = &e.kind {
                     let result_type = self.lower_value_type(expr.id);
                     self.lower_lookup_expression(e, dft, state, result_type, false)
                 } else {
@@ -451,7 +454,7 @@ impl<'a> Lowering<'a> {
                     // Thus, print a warning. Evaluating the expression is necessary, the dft can be skipped.
                     println!("WARNING: No-Op Default operation!");
                     self.lower_subexpression(e, state)
-                }
+                }*/
             }
             ExpressionKind::Offset(_, _) => unimplemented!(),
             ExpressionKind::SlidingWindowAggregation {
@@ -470,11 +473,11 @@ impl<'a> Lowering<'a> {
                     self.lower_subexpression(e, state)
                 }
             }*/
-            ExpressionKind::Lookup(_, _, _) => {
+            /*ExpressionKind::Lookup(_, _, _) => {
                 // Stray lookup without any default expression surrounding it, see `ExpressionKind::Default` case.
                 // This is only valid for sync accesses, i.e. the offset is 0. And this is an `Ident` expression.
                 unimplemented!("Assert offset is 0, transform into sync access.")
-            }
+            }*/
             ExpressionKind::Binary(ast_op, lhs, rhs) => {
                 use crate::ast::BinOp::*;
                 let req_arg_types = self.tt.get_func_arg_types(expr.id);
@@ -668,7 +671,8 @@ impl<'a> Lowering<'a> {
         desired_return_type: ir::Type,
         is_hold: bool,
     ) -> LoweringState {
-        if let ExpressionKind::Lookup(instance, offset, op) = &lookup_expr.kind {
+        unimplemented!();
+        /*if let ExpressionKind::Lookup(instance, offset, op) = &lookup_expr.kind {
             let target_ref = self.extract_target_from_lookup(&lookup_expr.kind);
 
             // Compute the default value first.
@@ -715,7 +719,7 @@ impl<'a> Lowering<'a> {
             state
         } else {
             panic!("Called `lower_lookup_expression` on a non-lookup expression.");
-        }
+        }*/
     }
 
     fn lower_offset(&self, offset: &ast::Offset) -> ir::Offset {

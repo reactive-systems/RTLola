@@ -7,6 +7,7 @@ use num::BigRational;
 use std::time::Duration;
 
 pub(crate) mod conversion;
+pub(crate) mod verify;
 
 /// The root Lola specification
 #[derive(Debug, Default, Clone)]
@@ -268,8 +269,6 @@ pub enum ExpressionKind {
     Offset(Box<Expression>, Box<Expression>),
     /// A sliding window with duration `duration` and aggregation function `aggregation`
     SlidingWindowAggregation { expr: Box<Expression>, duration: Box<Expression>, aggregation: WindowOperation },
-    /// A stream lookup with offset
-    Lookup(StreamInstance, Offset, Option<WindowOperation>),
     /// A binary operation (For example: `a + b`, `a * b`)
     Binary(BinOp, Box<Expression>, Box<Expression>),
     /// A unary operation (For example: `!x`, `*x`)

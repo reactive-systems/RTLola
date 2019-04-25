@@ -259,7 +259,6 @@ impl<'a> DependencyAnalyser<'a> {
                 duration: _duration,
                 aggregation: _aggregation,
             } => unimplemented!(),
-            ExpressionKind::Lookup(_, _, _) => unreachable!(),
             ExpressionKind::Binary(_, _, _) => unimplemented!(),
             ExpressionKind::Unary(op, expr) => {
                 assert_eq!(UnOp::Neg, *op);
@@ -353,7 +352,7 @@ impl<'a> DependencyAnalyser<'a> {
                 duration: _duration,
                 aggregation: _aggregation,
             } => unimplemented!(),
-            ExpressionKind::Lookup(instance, offset, op) => {
+            /*ExpressionKind::Lookup(instance, offset, op) => {
                 let target_stream_id = match &self.naming_table[&instance.id] {
                     Declaration::Out(output) => output.id,
                     Declaration::In(input) => input.id,
@@ -379,7 +378,7 @@ impl<'a> DependencyAnalyser<'a> {
                         );
                     }
                 }
-            }
+            }*/
             ExpressionKind::Field(_, _) => unimplemented!(),
             ExpressionKind::Method(_, _, _, _) => unimplemented!(),
         }

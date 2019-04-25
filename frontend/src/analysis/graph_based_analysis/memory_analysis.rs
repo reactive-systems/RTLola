@@ -56,7 +56,8 @@ fn add_sliding_windows<'a>(
         ExpressionKind::MissingExpression => return MemoryBound::Unknown,
         ExpressionKind::StreamAccess(e, access_type) => match access_type {
             StreamAccessKind::Hold => {
-                if let ExpressionKind::Lookup(_, _, _) = &e.kind {
+                unimplemented!();
+                /*if let ExpressionKind::Lookup(_, _, _) = &e.kind {
                     match add_sliding_windows(&*e, type_table, declaration_table) {
                         MemoryBound::Bounded(u) => required_memory += u,
                         MemoryBound::Unbounded => return MemoryBound::Unbounded,
@@ -70,14 +71,15 @@ fn add_sliding_windows<'a>(
                         MemoryBound::Unbounded => return MemoryBound::Unbounded,
                         MemoryBound::Unknown => unknown_size = true,
                     };
-                }
+                }*/
             }
             StreamAccessKind::Optional => {
                 unimplemented!();
             }
         },
         ExpressionKind::Default(e, dft) => {
-            if let ExpressionKind::Lookup(_, _, _) = &e.kind {
+            unimplemented!();
+            /*if let ExpressionKind::Lookup(_, _, _) = &e.kind {
                 match add_sliding_windows(&*e, type_table, declaration_table) {
                     MemoryBound::Bounded(u) => required_memory += u,
                     MemoryBound::Unbounded => return MemoryBound::Unbounded,
@@ -96,7 +98,7 @@ fn add_sliding_windows<'a>(
                     MemoryBound::Unbounded => return MemoryBound::Unbounded,
                     MemoryBound::Unknown => unknown_size = true,
                 };
-            }
+            }*/
         }
         ExpressionKind::Offset(_, _) => unimplemented!(),
         ExpressionKind::SlidingWindowAggregation { expr: _expr, duration: _duration, aggregation: _aggregation } => {
@@ -135,69 +137,70 @@ fn add_sliding_windows<'a>(
                 };
             }
         }
-        ExpressionKind::Field(_, _) | ExpressionKind::Method(_, _, _, _) => unimplemented!(),
-        ExpressionKind::Lookup(instance, offset, op) => match op {
-            None => {}
-            Some(wop) => {
-                let node_id = match declaration_table
-                    .get(&instance.id)
-                    .expect("We expect the the declaration-table to contain information about every stream access")
-                {
-                    Declaration::In(input) => input.id,
-                    Declaration::Out(output) => output.id,
-                    _ => unimplemented!(),
-                };
+        ExpressionKind::Field(_, _) | ExpressionKind::Method(_, _, _, _) => {
+            unimplemented!()
+        } /*ExpressionKind::Lookup(instance, offset, op) => match op {
+              None => {}
+              Some(wop) => {
+                  let node_id = match declaration_table
+                      .get(&instance.id)
+                      .expect("We expect the the declaration-table to contain information about every stream access")
+                  {
+                      Declaration::In(input) => input.id,
+                      Declaration::Out(output) => output.id,
+                      _ => unimplemented!(),
+                  };
 
-                let timing = &type_table.get_stream_type(node_id).timing;
-                let value_type = type_table.get_value_type(node_id);
-                let value_type_size = match get_byte_size(value_type) {
-                    MemoryBound::Bounded(i) => i,
-                    MemoryBound::Unbounded => return MemoryBound::Unbounded,
-                    MemoryBound::Unknown => {
-                        unknown_size = true;
-                        0
-                    }
-                };
-                let efficient_operator: bool = is_efficient_operator(*wop);
-                match (timing, efficient_operator) {
-                    (TimingInfo::Event, false) => {
-                        return MemoryBound::Unbounded;
-                    }
-                    (TimingInfo::RealTime(freq), false) => {
-                        let window_size = match offset {
-                            Offset::DiscreteOffset(_) => unreachable!(),
-                            Offset::RealTimeOffset(time_spec) => &time_spec.exact_period,
-                        };
-                        let number_of_full_periods_in_window: BigRational = window_size / &freq.ns;
-                        required_memory += number_of_full_periods_in_window
-                            .to_integer()
-                            .to_u128()
-                            .expect("Number of complete periods does not fit in u128")
-                            * value_type_size;
-                    }
-                    (TimingInfo::Event, true) => {
-                        let number_of_panes = 64;
-                        required_memory += determine_needed_window_memory(value_type_size, number_of_panes, *wop);
-                    }
-                    (TimingInfo::RealTime(freq), true) => {
-                        let number_of_panes = 64;
-                        let window_size = match offset {
-                            Offset::DiscreteOffset(_) => unreachable!(),
-                            Offset::RealTimeOffset(time_spec) => &time_spec.exact_period,
-                        };
-                        let number_of_full_periods_in_window: BigRational = window_size / &freq.ns;
-                        let number_of_elements = min(
-                            number_of_full_periods_in_window
-                                .to_integer()
-                                .to_u128()
-                                .expect("Number of complete periods does not fit in u128"),
-                            number_of_panes,
-                        );
-                        required_memory += determine_needed_window_memory(value_type_size, number_of_elements, *wop);
-                    }
-                }
-            }
-        },
+                  let timing = &type_table.get_stream_type(node_id).timing;
+                  let value_type = type_table.get_value_type(node_id);
+                  let value_type_size = match get_byte_size(value_type) {
+                      MemoryBound::Bounded(i) => i,
+                      MemoryBound::Unbounded => return MemoryBound::Unbounded,
+                      MemoryBound::Unknown => {
+                          unknown_size = true;
+                          0
+                      }
+                  };
+                  let efficient_operator: bool = is_efficient_operator(*wop);
+                  match (timing, efficient_operator) {
+                      (TimingInfo::Event, false) => {
+                          return MemoryBound::Unbounded;
+                      }
+                      (TimingInfo::RealTime(freq), false) => {
+                          let window_size = match offset {
+                              Offset::DiscreteOffset(_) => unreachable!(),
+                              Offset::RealTimeOffset(time_spec) => &time_spec.exact_period,
+                          };
+                          let number_of_full_periods_in_window: BigRational = window_size / &freq.ns;
+                          required_memory += number_of_full_periods_in_window
+                              .to_integer()
+                              .to_u128()
+                              .expect("Number of complete periods does not fit in u128")
+                              * value_type_size;
+                      }
+                      (TimingInfo::Event, true) => {
+                          let number_of_panes = 64;
+                          required_memory += determine_needed_window_memory(value_type_size, number_of_panes, *wop);
+                      }
+                      (TimingInfo::RealTime(freq), true) => {
+                          let number_of_panes = 64;
+                          let window_size = match offset {
+                              Offset::DiscreteOffset(_) => unreachable!(),
+                              Offset::RealTimeOffset(time_spec) => &time_spec.exact_period,
+                          };
+                          let number_of_full_periods_in_window: BigRational = window_size / &freq.ns;
+                          let number_of_elements = min(
+                              number_of_full_periods_in_window
+                                  .to_integer()
+                                  .to_u128()
+                                  .expect("Number of complete periods does not fit in u128"),
+                              number_of_panes,
+                          );
+                          required_memory += determine_needed_window_memory(value_type_size, number_of_elements, *wop);
+                      }
+                  }
+              }
+          },*/
     }
     if unknown_size {
         MemoryBound::Unknown

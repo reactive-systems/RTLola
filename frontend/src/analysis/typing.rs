@@ -383,7 +383,7 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
         stream_ty: StreamVarOrTy,
     ) -> Result<(), ()> {
         use crate::ast::ExpressionKind::*;
-        trace!("infer expression {}", expr);
+        trace!("infer expression {} (NodeId = {})", expr, expr.id);
 
         let var = self.new_value_var(expr.id);
         if let Some(target_ty) = &target {
@@ -446,7 +446,7 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
                     _ => unreachable!("unreachable ident {:?}", decl),
                 }
             }
-            Offset(_, _) => unimplemented!(),
+            Offset(expr, offset) => self.infer_offset_expr(var, stream_var, expr.span, expr, offset)?,
             SlidingWindowAggregation { expr, duration, aggregation } => {
                 self.infer_sliding_window_expression(var, stream_var, expr.span, expr, duration, aggregation)?;
             }
@@ -480,9 +480,6 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
                     &[],
                     &[left, right],
                 )?;
-            }
-            Lookup(stream, offset, aggregation) => {
-                self.infer_lookup_expr(var, stream_var, expr.span, stream, offset, *aggregation)?
             }
             Default(left, right) => {
                 self.infer_expression(
@@ -644,6 +641,65 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
             }
         }
         Ok(())
+    }
+
+    fn infer_offset_expr(
+        &mut self,
+        var: ValueVar,
+        stream_var: StreamVar,
+        span: Span,
+        expr: &'a Expression,
+        offset: &'a Expression,
+    ) -> Result<(), ()> {
+        // check if offset is discrete or time-based
+        if let Some(offset) = offset.parse_literal::<i32>() {
+            // discrete offset
+            let negative_offset = offset.is_negative();
+
+            // result type is an optional value if offset is negative
+            let target_var = self.unifier.new_var();
+            if negative_offset {
+                self.unifier
+                    .unify_var_ty(var, ValueTy::Option(ValueTy::Infer(target_var).into()))
+                    .map_err(|err| self.handle_error(err, span))?;
+            } else {
+                self.unifier.unify_var_var(var, target_var).map_err(|err| self.handle_error(err, span))?;
+            }
+
+            // We currently restrict discrete offsets to event streams
+            // TODO: lift this restriction
+            self.stream_unifier
+                .unify_var_ty(stream_var, StreamTy::new(TimingInfo::Event))
+                .map_err(|err| self.handle_error(err, span))?;
+
+            // recursion
+            // stream types have to match
+            self.infer_expression(expr, Some(ValueTy::Infer(target_var)), StreamVarOrTy::Var(stream_var))
+        } else if let Some(time_spec) = offset.parse_timespec() {
+            // time-based offset
+
+            // target value type
+            let target_value_var = self.unifier.new_var();
+            if time_spec.exact_period.is_negative() {
+                self.unifier
+                    .unify_var_ty(var, ValueTy::Option(ValueTy::Infer(target_value_var).into()))
+                    .map_err(|err| self.handle_error(err, span))?;
+            } else {
+                self.unifier.unify_var_var(var, target_value_var).map_err(|err| self.handle_error(err, span))?;
+            }
+
+            // target stream type
+            let target_stream_ty = StreamTy::new(TimingInfo::RealTime(Freq::new(
+                &format!("{:?}", time_spec.period),
+                time_spec.exact_period.abs().clone(),
+            )));
+
+            // recursion
+            // stream types have to match
+            self.infer_expression(expr, Some(ValueTy::Infer(target_value_var)), StreamVarOrTy::Ty(target_stream_ty))
+        } else {
+            unreachable!("offsets are either discrete or time-based");
+        }
     }
 
     fn infer_lookup_expr(

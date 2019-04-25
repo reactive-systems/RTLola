@@ -30,6 +30,7 @@ lazy_static! {
             Operator::new(Power, Right),
             Operator::new(Default, Left),
             Operator::new(Dot, Left),
+            Operator::new(OpeningBracket, Left),
         ])
     };
 }
@@ -420,23 +421,6 @@ fn parse_vec_of_types(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>) -> Vec<Type> 
     pairs.map(|expr| parse_type(spec, expr)).collect()
 }
 
-fn parse_lookup_expression(spec: &mut LolaSpec, pair: Pair<'_, Rule>, span: Span) -> Expression {
-    let mut children = pair.into_inner();
-    let stream_instance = children.next().expect("Lookups need to have a target stream instance.");
-    let stream_instance = parse_stream_instance(spec, stream_instance);
-    let second_child = children.next().unwrap();
-    let second_child_span = second_child.as_span();
-    match second_child.as_rule() {
-        Rule::Expr => {
-            // Discrete offset
-            let offset = build_expression_ast(spec, second_child.into_inner(), second_child_span.into());
-            let offset = Offset::DiscreteOffset(Box::new(offset));
-            Expression::new(ExpressionKind::Lookup(stream_instance, offset, None), span)
-        }
-        _ => unreachable!(),
-    }
-}
-
 fn build_function_expression(spec: &mut LolaSpec, pair: Pair<'_, Rule>, span: Span) -> Expression {
     let mut children = pair.into_inner();
     let fun_name = parse_ident(&children.next().unwrap());
@@ -556,6 +540,7 @@ fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>, span: Span)
                     }
                 }
                 Rule::Default => return Expression::new(ExpressionKind::Default(Box::new(lhs), Box::new(rhs)), span),
+                Rule::OpeningBracket => return Expression::new(ExpressionKind::Offset(lhs.into(), rhs.into()), span),
                 _ => unreachable!(),
             };
             Expression::new(ExpressionKind::Binary(op, Box::new(lhs), Box::new(rhs)), span)
@@ -602,7 +587,6 @@ fn build_term_ast(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> Expression {
                 span.into(),
             )
         }
-        Rule::LookupExpr => parse_lookup_expression(spec, pair, span.into()),
         Rule::UnaryExpr => {
             // First child is the operator, second the operand.
             let mut children = pair.into_inner();
@@ -1030,7 +1014,7 @@ mod tests {
 
     #[test]
     fn build_lookup_expression_default() {
-        let spec = "output s: Int := s[-1].defaults(to: (3 * 4))\n";
+        let spec = "output s: Int := s.offset(by: -1).defaults(to: (3 * 4))\n";
         let throw = |e| panic!("{}", e);
         let ast = parse(spec).unwrap_or_else(throw);
         cmp_ast_spec(&ast, spec);
@@ -1038,7 +1022,7 @@ mod tests {
 
     #[test]
     fn build_lookup_expression_hold() {
-        let spec = "output s: Int := s[-1].hold().defaults(to: 3 * 4)\n";
+        let spec = "output s: Int := s.offset(by: -1).hold().defaults(to: 3 * 4)\n";
         let throw = |e| panic!("{}", e);
         let ast = parse(spec).unwrap_or_else(throw);
         cmp_ast_spec(&ast, spec);
@@ -1071,7 +1055,7 @@ mod tests {
     #[test]
     fn build_complex_expression() {
         let spec =
-            "output s: Double := if !((s[-1].defaults(to: (3 * 4)) + -4) = 12) ∨ true = false then 2.0 else 4.1\n";
+            "output s: Double := if !((s.offset(by: -1).defaults(to: (3 * 4)) + -4) = 12) ∨ true = false then 2.0 else 4.1\n";
         let throw = |e| panic!("{}", e);
         let ast = parse(spec).unwrap_or_else(throw);
         cmp_ast_spec(&ast, spec);
@@ -1150,7 +1134,7 @@ mod tests {
 
     #[test]
     fn parse_realtime_offset() {
-        let spec = "output a := b[-1s]\n";
+        let spec = "output a := b.offset(by: -1s)\n";
         let ast = parse(spec).unwrap_or_else(|e| panic!("{}", e));
         cmp_ast_spec(&ast, spec);
     }
@@ -1167,37 +1151,26 @@ mod tests {
     fn parse_precedence_not_regression() {
         parses_to! {
             parser: LolaParser,
-            input:  "!(fast[-1] | false) & fast",
+            input:  "!(fast | false) & fast",
             rule:   Rule::Expr,
             tokens: [
-                Expr(0, 26, [
-                    UnaryExpr(0, 19, [
+                Expr(0, 22, [
+                    UnaryExpr(0, 15, [
                         Neg(0, 1, []),
-                        ParenthesizedExpression(1, 19, [
+                        ParenthesizedExpression(1, 15, [
                             OpeningParenthesis(1, 2, []),
-                            Expr(2, 18, [
-                                LookupExpr(2, 10, [
-                                    StreamInstance(2, 6, [
-                                        Ident(2, 6, [])
-                                    ]),
-                                    Expr(7, 9, [
-                                        Literal(7, 9, [
-                                            NumberLiteral(7, 9, [
-                                                NumberLiteralValue(7, 9, [])
-                                            ])
-                                        ])
-                                    ]),
-                                ]),
-                                Or(11, 13, []),
-                                Literal(13, 18, [
-                                    False(13, 18, [])
+                            Expr(2, 14, [
+                                Ident(2, 6, []),
+                                Or(7, 9, []),
+                                Literal(9, 14, [
+                                    False(9, 14, [])
                                 ])
                             ]),
-                            ClosingParenthesis(18, 19, [])
+                            ClosingParenthesis(14, 15, [])
                         ])
                     ]),
-                    And(20, 22, []),
-                    Ident(22, 26, [])
+                    And(16, 18, []),
+                    Ident(18, 22, [])
                 ]),
             ]
         };

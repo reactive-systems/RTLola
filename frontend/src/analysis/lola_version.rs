@@ -40,16 +40,6 @@ fn analyse_expression(version_tracker: &mut VersionTracker, expr: &Expression, t
         ExpressionKind::SlidingWindowAggregation { expr: _expr, duration: _duration, aggregation: _aggregation } => {
             unimplemented!()
         }
-        ExpressionKind::Lookup(_, offset, _) => match offset {
-            Offset::DiscreteOffset(expr) => {
-                analyse_expression(version_tracker, &*expr, false);
-            }
-            Offset::RealTimeOffset(time_spec) => {
-                let span = time_spec.span;
-                version_tracker.cannot_be_lola2 = Some((span, String::from("Real time offset – no Lola2")));
-                version_tracker.cannot_be_classic = Some((span, String::from("Real time offset – no ClassicLola")));
-            }
-        },
         ExpressionKind::Binary(_, left, right) => {
             analyse_expression(version_tracker, &*left, false);
             analyse_expression(version_tracker, &*right, false);

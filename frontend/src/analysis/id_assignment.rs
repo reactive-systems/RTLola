@@ -146,18 +146,13 @@ where
             assign_ids_expr(lhs, next_id);
             assign_ids_expr(rhs, next_id);
         }
-        ExpressionKind::Offset(_, _) => unimplemented!(),
+        ExpressionKind::Offset(expr, off) => {
+            assign_ids_expr(expr, next_id);
+            assign_ids_expr(off, next_id);
+        }
         ExpressionKind::SlidingWindowAggregation { expr, duration, aggregation: _aggregation } => {
             assign_ids_expr(expr, next_id);
             assign_ids_expr(duration, next_id);
-        }
-        ExpressionKind::Lookup(inst, offset, _winop) => {
-            inst.id = next_id();
-            inst.arguments.iter_mut().for_each(|e| assign_ids_expr(e, next_id));
-            match offset {
-                Offset::DiscreteOffset(expr) => assign_ids_expr(expr, next_id),
-                Offset::RealTimeOffset(time_spec) => time_spec.id = next_id(),
-            }
         }
         ExpressionKind::Unary(_, operand) => assign_ids_expr(operand, next_id),
         ExpressionKind::Ite(cond, cons, alt) => {
