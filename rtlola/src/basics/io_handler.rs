@@ -1,6 +1,5 @@
 use super::{EvalConfig, Verbosity};
 use csv::{Reader as CSVReader, Result as ReaderResult, StringRecord};
-use itertools::Itertools;
 use std::fs::File;
 use std::io::{stderr, stdin, stdout, Write};
 use std::time::Duration;
@@ -33,33 +32,55 @@ impl InputSource {
 }
 
 struct ColumnMapping {
-    mapping: Vec<usize>,
-    time: Option<usize>,
+    /// Mapping from stream index/reference to input column index
+    str2col: Vec<usize>,
+    /// Mapping from column index to input stream index/reference
+    col2str: Vec<Option<usize>>,
+
+    /// Column index of time (if existent)
+    time_ix: Option<usize>,
 }
 
 impl ColumnMapping {
     fn from_header(names: &[&str], header: &StringRecord) -> ColumnMapping {
-        assert_eq!(names.len(), header.len()); // TODO: Handle better.
-        let mapping: Vec<usize> = header
+        let str2col: Vec<usize> = names
             .iter()
             .map(|name| {
-                names
+                header
                     .iter()
-                    .position(|i| i == &name)
+                    .position(|entry| &entry == name)
                     .unwrap_or_else(|| panic!("CVS header does not contain an entry for stream {}.", name))
             })
             .collect();
-        let time_pos = header.iter().find_position(|name| name == &"time" || name == &"ts" || name == &"timestamp");
-        let time = time_pos.map(|(ix, _)| ix);
-        ColumnMapping { mapping, time }
+
+        let mut col2str: Vec<Option<usize>> = vec![None; header.len()];
+        for (str_ix, header_ix) in str2col.iter().enumerate() {
+            col2str[*header_ix] = Some(str_ix);
+        }
+
+        let time_ix = header.iter().position(|name| name == "time" || name == "ts" || name == "timestamp");
+        ColumnMapping { str2col, col2str, time_ix }
     }
 
-    fn stream_ix_for_col_id(&self, col_id: usize) -> usize {
-        self.mapping[col_id]
+    fn stream_ix_for_col_ix(&self, col_ix: usize) -> Option<usize> {
+        self.col2str[col_ix]
     }
 
+    #[allow(dead_code)]
+    fn time_is_stream(&self) -> bool {
+        match self.time_ix {
+            None => false,
+            Some(col_ix) => self.col2str[col_ix].is_some(),
+        }
+    }
+
+    fn num_columns(&self) -> usize {
+        self.col2str.len()
+    }
+
+    #[allow(dead_code)]
     fn num_streams(&self) -> usize {
-        self.mapping.len()
+        self.str2col.len()
     }
 }
 
@@ -107,38 +128,45 @@ impl InputReader {
         Ok(InputReader { reader: wrapper, mapping, record: StringRecord::new(), reading_delay: delay })
     }
 
-    pub(crate) fn read_blocking(&mut self, buffer: &mut [String]) -> ReaderResult<bool> {
-        assert_eq!(buffer.len(), self.mapping.num_streams());
-
+    pub(crate) fn read_blocking(&mut self) -> ReaderResult<bool> {
         if let Some(delay) = self.reading_delay {
             std::thread::sleep(delay);
+        }
+
+        if cfg!(debug_assertion) {
+            // Reset record.
+            self.record.clear();
         }
 
         if !self.reader.read_record(&mut self.record)? {
             return Ok(false);
         }
+        assert_eq!(self.record.len(), self.mapping.num_columns());
+
+        //TODO(marvin): this assertion seems wrong, empty strings could be valid values
         if cfg!(debug_assertion) {
-            // Reset all buffered strings.
-            buffer.iter_mut().for_each(|v| *v = String::new());
-        }
-
-        assert_eq!(self.record.len(), self.mapping.num_streams());
-
-        self.record.iter().enumerate().for_each(|(ix, str_val)| {
-            let stream_ix = self.mapping.stream_ix_for_col_id(ix);
-            buffer[stream_ix] = String::from(str_val);
-        });
-
-        if cfg!(debug_assertion) {
-            // Reset all buffered strings.
-            assert!(buffer.iter().all(|v| !v.is_empty())) // TODO Runtime Error.
+            assert!(self
+                .record
+                .iter()
+                .enumerate()
+                .filter(|(ix, _)| self.mapping.stream_ix_for_col_ix(*ix).is_some())
+                .all(|(_, str)| !str.is_empty()));
         }
 
         Ok(true)
     }
 
+    pub(crate) fn str_ref_for_stream_ix(&self, stream_ix: usize) -> &str {
+        &self.record[self.mapping.str2col[stream_ix]]
+    }
+
+    pub(crate) fn str_ref_for_time(&self) -> &str {
+        assert!(self.time_index().is_some());
+        &self.record[self.time_index().unwrap()]
+    }
+
     pub(crate) fn time_index(&self) -> Option<usize> {
-        self.mapping.time
+        self.mapping.time_ix
     }
 }
 

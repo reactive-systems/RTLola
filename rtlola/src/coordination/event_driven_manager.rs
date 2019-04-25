@@ -2,7 +2,7 @@ use crate::basics::{EvalConfig, InputReader, OutputHandler};
 use crate::coordination::WorkItem;
 use crate::storage::Value;
 
-use lola_parser::ir::{LolaIR, StreamReference, Type};
+use lola_parser::ir::{FloatTy, LolaIR, StreamReference, Type, UIntTy};
 use std::ops::AddAssign;
 use std::sync::mpsc::{Receiver, Sender};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -10,6 +10,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 pub(crate) type EventEvaluation = Vec<(StreamReference, Value)>;
 
 /// Represents the current cycle count for event-driven events.
+//TODO(marvin): u128? wouldn't u64 suffice?
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
 struct EventDrivenCycleCount(u128);
 
@@ -52,16 +53,14 @@ impl EventDrivenManager {
 
     pub(crate) fn start_online(mut self, work_queue: Sender<WorkItem>) -> ! {
         loop {
-            let event = match self.read_event() {
-                None => {
-                    let _ = work_queue.send(WorkItem::End); // Whether it fails or not, we really don't care.
-                                                            // Sleep until you slowly fade into nothingness...
-                    loop {
-                        std::thread::sleep(std::time::Duration::new(u64::max_value(), 0))
-                    }
+            if !self.read_event() {
+                let _ = work_queue.send(WorkItem::End); // Whether it fails or not, we really don't care.
+                                                        // Sleep until you slowly fade into nothingness...
+                loop {
+                    std::thread::sleep(std::time::Duration::new(u64::max_value(), 0))
                 }
-                Some(e) => e,
-            };
+            }
+            let event = self.get_event();
 
             let event = event.into_iter().flatten().collect(); // Remove non-existing values.
             match work_queue.send(WorkItem::Event(event, SystemTime::now())) {
@@ -72,21 +71,17 @@ impl EventDrivenManager {
         }
     }
 
-    fn read_event(&mut self) -> Option<Vec<Option<(StreamReference, Value)>>> {
-        let mut buffer = vec![String::new(); self.in_types.len()];
-        match self.input_reader.read_blocking(&mut buffer) {
-            Ok(true) => {}
-            Ok(false) => return None,
-            Err(e) => panic!("Error reading data. {}", e),
-        }
+    fn read_event(&mut self) -> bool {
+        self.input_reader.read_blocking().unwrap_or_else(|e| panic!("Error reading data. {}", e))
+    }
 
-        Some(
-            buffer
-                .iter()
-                .zip(self.in_types.iter())
+    fn get_event(&self) -> Vec<Option<(StreamReference, Value)>> {
+        self.in_types.iter()
                 .enumerate()
-                .map(|(ix, (s, t))| {
+                .map(|(ix, t)| {
+                    let s = self.input_reader.str_ref_for_stream_ix(ix);
                     if s == "#" {
+                        //TODO(marvin): we could also change the return type and ignore non-value streams
                         None
                     } else {
                         let v = Value::try_from(s, t)
@@ -95,8 +90,33 @@ impl EventDrivenManager {
                     }
                 })
                 .map(|opt| opt.map(|(ix, v)| (StreamReference::InRef(ix), v)))
-                .collect(),
-        )
+                //TODO(marvin): merge this into map from above? Check if done by compiler.
+                .collect()
+    }
+
+    fn get_time(&self) -> SystemTime {
+        let s = self.input_reader.str_ref_for_time();
+        //TODO(marvin): fix this typing issue
+        let mut v = Value::try_from(s, &Type::Float(FloatTy::F64));
+        if v.is_none() {
+            v = Value::try_from(s, &Type::UInt(UIntTy::U64));
+        }
+        let v = v.unwrap_or_else(|| panic!("Failed to parse time string {}.", s));
+
+        //TODO(marvin): simplify time computation
+        match v {
+            Value::Unsigned(u) => UNIX_EPOCH + Duration::from_secs(u as u64),
+            Value::Float(f) => {
+                let f: f64 = (f).into();
+                let nanos_per_sec: u32 = 1_000_000_000;
+                let nanos = f * (f64::from(nanos_per_sec));
+                let nanos = nanos as u128;
+                let secs = (nanos / (u128::from(nanos_per_sec))) as u64;
+                let nanos = (nanos % (u128::from(nanos_per_sec))) as u32;
+                UNIX_EPOCH + Duration::new(secs, nanos)
+            }
+            _ => panic!("Invalid time stamp value type: {:?}", v),
+        }
     }
 
     pub(crate) fn start_offline(
@@ -105,47 +125,31 @@ impl EventDrivenManager {
         time_chan: Sender<SystemTime>,
         ack_chan: Receiver<()>,
     ) -> ! {
-        let time_ix = self.input_reader.time_index().unwrap();
         let mut start_time: Option<SystemTime> = None;
         loop {
-            let event = match self.read_event() {
-                None => {
-                    let _ = work_queue.send(WorkItem::End); // Whether it fails or not, we really don't care.
-                                                            // Sleep until you slowly fade into nothingness...
-                    loop {
-                        std::thread::sleep(std::time::Duration::new(u64::max_value(), 0))
-                    }
+            if !self.read_event() {
+                let _ = work_queue.send(WorkItem::End); // Whether it fails or not, we really don't care.
+                                                        // Sleep until you slowly fade into nothingness...
+                loop {
+                    std::thread::sleep(std::time::Duration::new(u64::max_value(), 0))
                 }
-                Some(e) => e,
-            };
-            let time_value = event[time_ix].as_ref().map(|s| &s.1).expect("Timestamp needs to be present.");
-            let now = match time_value {
-                Value::Unsigned(u) => UNIX_EPOCH + Duration::from_secs(*u as u64),
-                Value::Float(f) => {
-                    let f: f64 = (*f).into();
-                    let nanos_per_sec: u32 = 1_000_000_000;
-                    let nanos = f * (f64::from(nanos_per_sec));
-                    let nanos = nanos as u128;
-                    let secs = (nanos / (u128::from(nanos_per_sec))) as u64;
-                    let nanos = (nanos % (u128::from(nanos_per_sec))) as u32;
-                    UNIX_EPOCH + Duration::new(secs, nanos)
-                }
-                _ => panic!("Time stamps need to be unsigned integers."),
-            };
+            }
+            let event = self.get_event();
+            let time = self.get_time();
 
             if start_time.is_none() {
-                start_time = Some(now);
-                let _ = work_queue.send(WorkItem::Start(now));
+                start_time = Some(time);
+                let _ = work_queue.send(WorkItem::Start(time));
             }
 
             // Inform the time driven manager first.
-            if let Err(e) = time_chan.send(now) {
+            if let Err(e) = time_chan.send(time) {
                 panic!("Problem with TDM! {:?}", e)
             }
             let _ = ack_chan.recv(); // Wait until be get the acknowledgement.
 
             let event = event.into_iter().flatten().collect(); // Remove non-existing entries.
-            match work_queue.send(WorkItem::Event(event, now)) {
+            match work_queue.send(WorkItem::Event(event, time)) {
                 Ok(_) => {}
                 Err(e) => self.out_handler.runtime_warning(|| format!("Error when sending work item. {}", e)),
             }
