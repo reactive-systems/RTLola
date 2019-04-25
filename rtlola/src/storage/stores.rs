@@ -13,7 +13,7 @@ pub(crate) struct GlobalStore {
     /// Access by stream reference.
     inputs: Vec<InstanceStore>,
 
-    /// Transforms a output stream reference into the respective index of the stream vector.
+    /// Transforms a output stream reference into the respective index of the stream vectors ((non-)parametrized).
     index_map: Vec<usize>,
 
     /// Non-parametrized outputs. Access by index.
