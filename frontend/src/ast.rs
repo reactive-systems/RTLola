@@ -411,3 +411,12 @@ pub struct FunctionName {
     pub name: Ident,
     pub arg_names: Vec<Option<Ident>>,
 }
+
+impl FunctionName {
+    pub(crate) fn new(name: String, arg_names: &[Option<String>]) -> Self {
+        Self {
+            name: Ident::new(name, Span::unknown()),
+            arg_names: arg_names.iter().map(|o| o.clone().map(|s| Ident::new(s, Span::unknown()))).collect(),
+        }
+    }
+}

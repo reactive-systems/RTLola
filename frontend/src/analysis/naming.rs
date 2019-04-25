@@ -45,6 +45,7 @@ pub(crate) type DeclarationTable<'a> = HashMap<NodeId, Declaration<'a>>;
 pub(crate) struct NamingAnalysis<'a, 'b> {
     declarations: ScopedDecl<'a>,
     type_declarations: ScopedDecl<'a>,
+    fun_declarations: ScopedDecl<'a>,
     result: DeclarationTable<'a>,
     handler: &'b Handler,
 }
@@ -63,6 +64,7 @@ impl<'a, 'b> NamingAnalysis<'a, 'b> {
         NamingAnalysis {
             declarations: ScopedDecl::new(),
             type_declarations: scoped_decls,
+            fun_declarations: ScopedDecl::new(),
             result: HashMap::new(),
             handler,
         }
@@ -158,11 +160,11 @@ impl<'a, 'b> NamingAnalysis<'a, 'b> {
 
     /// Entry method, checks that every identifier in the given spec is bound.
     pub(crate) fn check(&mut self, spec: &'a LolaSpec) -> DeclarationTable<'a> {
-        stdlib::import_implicit_module(&mut self.declarations);
+        stdlib::import_implicit_module(&mut self.fun_declarations);
         for import in &spec.imports {
             match import.name.name.as_str() {
-                "math" => stdlib::import_math_module(&mut self.declarations),
-                "regex" => stdlib::import_regex_module(&mut self.declarations),
+                "math" => stdlib::import_math_module(&mut self.fun_declarations),
+                "regex" => stdlib::import_regex_module(&mut self.fun_declarations),
                 n => self.handler.error_with_span(
                     &format!("unresolved import `{}`", n),
                     LabeledSpan::new(import.name.span, &format!("no `{}` in the root", n), true),
@@ -327,6 +329,20 @@ impl<'a, 'b> NamingAnalysis<'a, 'b> {
         }
     }
 
+    fn check_function(&mut self, expression: &'a Expression, name: &'a FunctionName) {
+        let str_repr = name.to_string();
+        if let Some(decl) = self.fun_declarations.get_decl_for(str_repr.as_str()) {
+            assert!(decl.is_function());
+
+            self.result.insert(expression.id, decl);
+        } else {
+            self.handler.error_with_span(
+                &format!("function name `{}` does not exist in current scope", str_repr),
+                LabeledSpan::new(name.name.span, "does not exist", true),
+            );
+        }
+    }
+
     fn check_expression(&mut self, expression: &'a Expression) {
         use self::ExpressionKind::*;
         assert_ne!(expression.id, NodeId::DUMMY);
@@ -360,8 +376,8 @@ impl<'a, 'b> NamingAnalysis<'a, 'b> {
             Tuple(exprs) => {
                 exprs.iter().for_each(|expr| self.check_expression(expr));
             }
-            Function(_name, types, exprs) => {
-                //self.check_ident(expression, name);
+            Function(name, types, exprs) => {
+                self.check_function(expression, name);
                 types.iter().for_each(|ty| self.check_type(ty));
                 exprs.iter().for_each(|expr| self.check_expression(expr));
             }
@@ -380,7 +396,7 @@ impl<'a, 'b> NamingAnalysis<'a, 'b> {
 
 /// Provides a mapping from `String` to `Declaration` and is able to handle different scopes.
 pub(crate) struct ScopedDecl<'a> {
-    scopes: Vec<HashMap<&'a str, Declaration<'a>>>,
+    scopes: Vec<HashMap<String, Declaration<'a>>>,
 }
 
 impl<'a> ScopedDecl<'a> {
@@ -413,9 +429,15 @@ impl<'a> ScopedDecl<'a> {
         }
     }
 
-    pub(crate) fn add_decl_for(&mut self, name: &'a str, decl: Declaration<'a>) {
+    fn add_decl_for(&mut self, name: &'a str, decl: Declaration<'a>) {
         assert!(self.scopes.last().is_some());
-        self.scopes.last_mut().expect("It appears that we popped the global context.").insert(name, decl);
+        self.scopes.last_mut().expect("It appears that we popped the global context.").insert(name.to_string(), decl);
+    }
+
+    pub(crate) fn add_fun_decl(&mut self, fun: &'a FuncDecl) {
+        assert!(self.scopes.last().is_some());
+        let name = fun.name.to_string();
+        self.scopes.last_mut().expect("It appears that we popped the global context.").insert(name, fun.into());
     }
 }
 
@@ -468,6 +490,13 @@ impl<'a> Declaration<'a> {
             Declaration::Const(_) | Declaration::Type(_) | Declaration::Param(_) | Declaration::Func(_) => false,
         }
     }
+
+    fn is_function(&self) -> bool {
+        match self {
+            Declaration::Func(_) => true,
+            _ => false,
+        }
+    }
 }
 
 impl<'a> Into<Declaration<'a>> for &'a Constant {
@@ -491,6 +520,12 @@ impl<'a> Into<Declaration<'a>> for &'a Output {
 impl<'a> Into<Declaration<'a>> for &'a Parameter {
     fn into(self) -> Declaration<'a> {
         Declaration::Param(self)
+    }
+}
+
+impl<'a> Into<Declaration<'a>> for &'a FuncDecl {
+    fn into(self) -> Declaration<'a> {
+        Declaration::Func(self)
     }
 }
 
@@ -575,6 +610,12 @@ mod tests {
     #[test]
     fn unknown_function() {
         assert_eq!(1, number_of_naming_errors("output x: Float32 := sqrt(2)"))
+    }
+
+    #[test]
+    fn wrong_arity_function() {
+        let spec = "import math\noutput o: Float64 := cos()";
+        assert_eq!(1, number_of_naming_errors(spec));
     }
 
     #[test]

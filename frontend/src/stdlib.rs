@@ -12,7 +12,7 @@ pub struct Generic {
 /// A (possibly generic) function declaration
 #[derive(Debug)]
 pub struct FuncDecl {
-    pub name: String,
+    pub name: FunctionName,
     pub generics: Vec<Generic>,
     pub parameters: Vec<ValueTy>,
     pub return_type: ValueTy,
@@ -23,25 +23,25 @@ impl BinOp {
         use self::BinOp::*;
         match self {
             Add | Sub | Mul | Div | Rem | Pow => FuncDecl {
-                name: format!("{}", self),
+                name: FunctionName::new(format!("{}", self), &[None, None]),
                 generics: vec![Generic { constraint: ValueTy::Constr(TypeConstraint::Numeric) }],
                 parameters: vec![ValueTy::Param(0, "T".to_string()), ValueTy::Param(0, "T".to_string())],
                 return_type: ValueTy::Param(0, "T".to_string()),
             },
             And | Or => FuncDecl {
-                name: format!("{}", self),
+                name: FunctionName::new(format!("{}", self), &[None, None]),
                 generics: vec![],
                 parameters: vec![ValueTy::Bool, ValueTy::Bool],
                 return_type: ValueTy::Bool,
             },
             Eq | Ne => FuncDecl {
-                name: format!("{}", self),
+                name: FunctionName::new(format!("{}", self), &[None, None]),
                 generics: vec![Generic { constraint: ValueTy::Constr(TypeConstraint::Equatable) }],
                 parameters: vec![ValueTy::Param(0, "T".to_string()), ValueTy::Param(0, "T".to_string())],
                 return_type: ValueTy::Bool,
             },
             Lt | Le | Ge | Gt => FuncDecl {
-                name: format!("{}", self),
+                name: FunctionName::new(format!("{}", self), &[None, None]),
                 generics: vec![Generic { constraint: ValueTy::Constr(TypeConstraint::Comparable) }],
                 parameters: vec![ValueTy::Param(0, "T".to_string()), ValueTy::Param(0, "T".to_string())],
                 return_type: ValueTy::Bool,
@@ -55,13 +55,13 @@ impl UnOp {
         use self::UnOp::*;
         match self {
             Not => FuncDecl {
-                name: format!("{}", self),
+                name: FunctionName::new(format!("{}", self), &[None]),
                 generics: vec![],
                 parameters: vec![ValueTy::Bool],
                 return_type: ValueTy::Bool,
             },
             Neg => FuncDecl {
-                name: format!("{}", self),
+                name: FunctionName::new(format!("{}", self), &[None]),
                 generics: vec![Generic { constraint: ValueTy::Constr(TypeConstraint::Numeric) }],
                 parameters: vec![ValueTy::Param(0, "T".to_string())],
                 return_type: ValueTy::Param(0, "T".to_string()),
@@ -75,7 +75,7 @@ use crate::analysis::naming::{Declaration, ScopedDecl};
 lazy_static! {
     // fn sqrt<T: FloatingPoint>(T) -> T
     static ref SQRT: FuncDecl = FuncDecl {
-        name: "sqrt".to_string(),
+        name: FunctionName::new("sqrt".to_string(), &[None]),
         generics: vec![Generic {
             constraint: ValueTy::Constr(TypeConstraint::FloatingPoint),
         }],
@@ -84,7 +84,7 @@ lazy_static! {
     };
     // fn cos<T: FloatingPoint>(T) -> T
     static ref COS: FuncDecl = FuncDecl {
-        name: "cos".to_string(),
+        name: FunctionName::new("cos".to_string(), &[None]),
         generics: vec![Generic {
             constraint: ValueTy::Constr(TypeConstraint::FloatingPoint),
         }],
@@ -93,7 +93,7 @@ lazy_static! {
     };
     // fn sin<T: FloatingPoint>(T) -> T
     static ref SIN: FuncDecl = FuncDecl {
-        name: "sin".to_string(),
+        name: FunctionName::new("sin".to_string(), &[None]),
         generics: vec![Generic {
             constraint: ValueTy::Constr(TypeConstraint::FloatingPoint),
         }],
@@ -102,7 +102,7 @@ lazy_static! {
     };
      // fn arctan<T: FloatingPoint>(T) -> T
     static ref ARCTAN: FuncDecl = FuncDecl {
-        name: "arctan".to_string(),
+        name: FunctionName::new("arctan".to_string(), &[None]),
         generics: vec![Generic {
             constraint: ValueTy::Constr(TypeConstraint::FloatingPoint),
         }],
@@ -111,7 +111,7 @@ lazy_static! {
     };
     // fn abs<T: Numeric>(T) -> T
     static ref ABS: FuncDecl = FuncDecl {
-        name: "abs".to_string(),
+        name: FunctionName::new("abs".to_string(), &[None]),
         generics: vec![Generic {
             constraint: ValueTy::Constr(TypeConstraint::Numeric),
         }],
@@ -119,9 +119,9 @@ lazy_static! {
         return_type: ValueTy::Param(0, "T".to_string()),
     };
 
-    // fn matches_regexp(String, String) -> Bool
+    // fn matches(String, regex: String) -> Bool
     static ref MATCHES_REGEX: FuncDecl = FuncDecl {
-        name: "matches_regex".to_string(),
+        name: FunctionName::new("matches".to_string(), &[None, Some("regex".to_string())]),
         generics: vec![],
         parameters: vec![ValueTy::String, ValueTy::String],
         return_type: ValueTy::Bool,
@@ -130,7 +130,7 @@ lazy_static! {
     /// fn cast<T: Numeric, U: Numeric>(T) -> U
     /// allows for arbitrary conversion of numeric types T -> U
     static ref CAST: FuncDecl = FuncDecl {
-        name: "cast".to_string(),
+        name: FunctionName::new("cast".to_string(), &[None]),
         generics: vec![Generic {
             constraint: ValueTy::Constr(TypeConstraint::Numeric),
         }, Generic {
@@ -141,20 +141,20 @@ lazy_static! {
     };
 }
 
-pub(crate) fn import_implicit_module<'a>(scope: &mut ScopedDecl<'a>) {
-    scope.add_decl_for(&CAST.name, Declaration::Func(&CAST));
+pub(crate) fn import_implicit_module<'a>(fun_scope: &mut ScopedDecl<'a>) {
+    fun_scope.add_fun_decl(&CAST);
 }
 
-pub(crate) fn import_math_module<'a>(scope: &mut ScopedDecl<'a>) {
-    scope.add_decl_for(&SQRT.name, Declaration::Func(&SQRT));
-    scope.add_decl_for(&COS.name, Declaration::Func(&COS));
-    scope.add_decl_for(&SIN.name, Declaration::Func(&SIN));
-    scope.add_decl_for(&ABS.name, Declaration::Func(&ABS));
-    scope.add_decl_for(&ARCTAN.name, Declaration::Func(&ARCTAN));
+pub(crate) fn import_math_module<'a>(fun_scope: &mut ScopedDecl<'a>) {
+    fun_scope.add_fun_decl(&SQRT);
+    fun_scope.add_fun_decl(&COS);
+    fun_scope.add_fun_decl(&SIN);
+    fun_scope.add_fun_decl(&ABS);
+    fun_scope.add_fun_decl(&ARCTAN);
 }
 
-pub(crate) fn import_regex_module<'a>(scope: &mut ScopedDecl<'a>) {
-    scope.add_decl_for(&MATCHES_REGEX.name, Declaration::Func(&MATCHES_REGEX))
+pub(crate) fn import_regex_module<'a>(fun_scope: &mut ScopedDecl<'a>) {
+    fun_scope.add_fun_decl(&MATCHES_REGEX);
 }
 
 pub(crate) struct MethodLookup {}

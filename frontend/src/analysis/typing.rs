@@ -517,7 +517,7 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
                 }
                 StreamAccessKind::Optional => unimplemented!(),
             },
-            Function(_, types, params) => {
+            Function(name, types, params) => {
                 let decl = self.declarations[&expr.id];
                 let fun_decl = match decl {
                     Declaration::Func(fun_decl) => fun_decl,
@@ -881,7 +881,6 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
         duration: &'a Expression,
         window_op: &'a WindowOperation,
     ) -> Result<(), ()> {
-        let inner_var = self.value_vars[&expr.id];
         let fresh_target_var = self.stream_unifier.new_var();
 
         // the stream variable has to be real-time
@@ -915,6 +914,7 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
                     StreamVarOrTy::Var(fresh_target_var),
                 )?;
                 // resulting type depends on the inner type
+                let inner_var = self.value_vars[&expr.id];
                 self.unifier
                     .unify_var_ty(var, ValueTy::Option(ValueTy::Infer(inner_var).into()))
                     .map_err(|err| self.handle_error(err, span))
@@ -1735,14 +1735,8 @@ mod tests {
     }
 
     #[test]
-    fn test_trigonometric_faulty_3() {
-        let spec = "import math\noutput o: Float64 := cos()";
-        assert_eq!(1, num_type_errors(spec));
-    }
-
-    #[test]
     fn test_regex() {
-        let spec = "import regex\ninput s: String\noutput o: Bool := matches_regex(s[0], r\"(a+b)\")";
+        let spec = "import regex\ninput s: String\noutput o: Bool := matches(s[0], regex: r\"(a+b)\")";
         assert_eq!(0, num_type_errors(spec));
         assert_eq!(get_type(spec), ValueTy::Bool);
     }
