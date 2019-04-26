@@ -441,9 +441,9 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
                     _ => unreachable!("unreachable ident {:?}", decl),
                 }
             }
-            Offset(expr, offset) => self.infer_offset_expr(var, stream_var, expr.span, expr, offset)?,
-            SlidingWindowAggregation { expr, duration, aggregation } => {
-                self.infer_sliding_window_expression(var, stream_var, expr.span, expr, duration, aggregation)?;
+            Offset(inner, offset) => self.infer_offset_expr(var, stream_var, expr.span, inner, offset)?,
+            SlidingWindowAggregation { expr: inner, duration, aggregation } => {
+                self.infer_sliding_window_expression(var, stream_var, expr.span, inner, duration, aggregation)?;
             }
             Ite(cond, left, right) => {
                 // value type constraints
@@ -487,16 +487,6 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
             }
             StreamAccess(expr, access_type) => match access_type {
                 StreamAccessKind::Hold => {
-                    // verify that `var` is infered
-                    // TODO: this restriction may be lifted in the future
-                    if self.stream_unifier.get_type(stream_var).is_none() {
-                        self.handler.error_with_span(
-                            "Cannot use `.hold()` when stream type (event or real-time) is unknown",
-                            LabeledSpan::new(expr.span, "Consider removing `.hold()` operator", true),
-                        );
-                        return Err(());
-                    }
-
                     // result type is an optional value
                     let target_var = self.unifier.new_var();
                     self.unifier
@@ -508,7 +498,7 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
                 }
                 StreamAccessKind::Optional => unimplemented!(),
             },
-            Function(name, types, params) => {
+            Function(_name, types, params) => {
                 let decl = self.declarations[&expr.id];
                 let fun_decl = match decl {
                     Declaration::Func(fun_decl) => fun_decl,
@@ -657,10 +647,8 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
                 self.unifier.unify_var_var(var, target_var).map_err(|err| self.handle_error(err, span))?;
             }
 
-            // recursion
-            // stream types have to match
-            self.infer_expression(expr, Some(ValueTy::Infer(target_var)), Some(StreamVarOrTy::Var(stream_var)))?;
-            Ok(())
+            // As the recursion checks that the stream types match, any integer offset will match as well.
+            self.infer_expression(expr, Some(ValueTy::Infer(target_var)), Some(StreamVarOrTy::Var(stream_var)))
         } else if let Some(time_spec) = offset.parse_timespec() {
             // time-based offset
 
@@ -702,8 +690,8 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
         window_op: &'a WindowOperation,
     ) -> Result<(), ()> {
         // the stream variable has to be real-time
-        match self.stream_unifier.get_normalized_type(stream_var).expect("type has to be known at this point") {
-            StreamTy::RealTime(_) => {}
+        match self.stream_unifier.get_normalized_type(stream_var) {
+            Some(StreamTy::RealTime(_)) => {}
             _ => {
                 self.handler.error_with_span(
                     "Sliding windows are only allowed in real-time streams",
