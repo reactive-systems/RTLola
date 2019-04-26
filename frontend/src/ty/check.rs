@@ -29,7 +29,7 @@ pub(crate) struct TypeAnalysis<'a, 'b> {
     /// maps `NodeId`'s to the variables used in `unifier`
     value_vars: HashMap<NodeId, ValueVar>,
     stream_vars: HashMap<NodeId, StreamVar>,
-    /// maps function-like nodes (UnOp, BinOp, Func, Mathod) to the generic parameters
+    /// maps function-like nodes (UnOp, BinOp, Func, Method) to the generic parameters
     generic_function_vars: HashMap<NodeId, Vec<ValueVar>>,
 }
 

@@ -7,7 +7,7 @@ pub(crate) mod unifier;
 
 use lazy_static::lazy_static;
 use num::{BigInt, BigRational, Zero};
-use unifier::{StreamVar, ValueVar};
+use unifier::{StreamVar, ValueUnifier, ValueVar};
 
 /// The type of an expression consists of both, a value type (`Bool`, `String`, etc.) and
 /// a stream type (periodic or event-based).
@@ -126,6 +126,13 @@ impl Freq {
             repr: format!("{} * {}", val, self.repr),
             ns: self.ns.clone() * BigRational::new(BigInt::from(1), BigInt::from(val.abs())),
         }
+    }
+}
+
+impl Activation {
+    /// Checks whether `self -> other` is valid
+    pub(crate) fn implies_valid(&self, other: &Activation, unifier: ValueUnifier<StreamTy>) -> bool {
+        true
     }
 }
 
@@ -251,9 +258,26 @@ impl std::fmt::Display for ValueTy {
 impl std::fmt::Display for StreamTy {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            StreamTy::Event(_) => write!(f, "EventStream"),
+            StreamTy::Event(activation) => write!(f, "EventStream({})", activation),
             StreamTy::RealTime(freq) => write!(f, "PeriodicStream({})", freq),
-            StreamTy::Infer(_) => write!(f, "InferedStream"),
+            StreamTy::Infer(vars) => write!(f, "InferedStream({:?})", vars),
+        }
+    }
+}
+
+impl std::fmt::Display for Activation {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        use crate::print::write_delim_list;
+        match self {
+            Activation::Conjunction(con) => {
+                if con.is_empty() {
+                    write!(f, "true")
+                } else {
+                    write_delim_list(f, &con, "(", ")", " & ")
+                }
+            }
+            Activation::Disjunction(dis) => write_delim_list(f, &dis, "(", ")", " | "),
+            Activation::Stream(v) => write!(f, "{}", v),
         }
     }
 }

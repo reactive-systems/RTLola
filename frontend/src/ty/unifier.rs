@@ -324,16 +324,37 @@ impl UnifiableTy for StreamTy {
 
     fn equal_to<U: Unifier<Var = Self::V, Ty = Self>>(&self, _unifier: &mut U, right: &Self) -> Option<Self> {
         trace!("comp {} {}", self, right);
-        if self == right {
-            Some(self.clone())
-        } else {
-            None
+        match (self, right) {
+            (StreamTy::Infer(_), StreamTy::Infer(_)) => {
+                unimplemented!();
+            }
+            (StreamTy::Infer(vars), StreamTy::Event(_)) => {
+                if vars.is_empty() {
+                    Some(right.clone())
+                } else {
+                    unimplemented!();
+                }
+            }
+            (StreamTy::Event(_), StreamTy::Event(_)) => {
+                unimplemented!();
+            }
+            (StreamTy::RealTime(f_l), StreamTy::RealTime(f_r)) => {
+                if f_l == f_r {
+                    Some(self.clone())
+                } else {
+                    None
+                }
+            }
+            _ => None,
         }
     }
 
-    fn contains_var<U: Unifier<Var = Self::V, Ty = Self>>(&self, _unifier: &mut U, var: Self::V) -> bool {
+    fn contains_var<U: Unifier<Var = Self::V, Ty = Self>>(&self, unifier: &mut U, var: Self::V) -> bool {
         trace!("check occurrence {} {}", var, self);
-        false
+        match self {
+            StreamTy::Infer(vars) => vars.iter().any(|v| unifier.vars_equal(var, *v)),
+            _ => false,
+        }
     }
 
     fn is_inferred(&self) -> Option<Self::V> {
