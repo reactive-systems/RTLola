@@ -25,6 +25,7 @@ impl<'a, 'b> Verifier<'a, 'b> {
     fn check_expression(&self, expr: &Expression) {
         self.check_missing_paranthesis(expr);
         self.check_missing_expression(expr);
+        self.check_offsets_are_literals(expr);
     }
 
     fn check_missing_paranthesis(&self, expr: &Expression) {
@@ -106,6 +107,66 @@ impl<'a, 'b> Verifier<'a, 'b> {
             }
         }
     }
+
+    fn check_offsets_are_literals(&self, expr: &Expression) {
+        use ExpressionKind::*;
+        match &expr.kind {
+            Lit(_) | Ident(_) => {}
+            MissingExpression => {}
+            Unary(_, inner) | Field(inner, _) | StreamAccess(inner, _) => {
+                self.check_missing_expression(&inner);
+            }
+            Binary(_, left, right) | Default(left, right) => {
+                self.check_missing_expression(&left);
+                self.check_missing_expression(&right);
+            }
+            Offset(expr, offset) => {
+                self.check_missing_expression(&expr);
+                match &offset.kind {
+                    ExpressionKind::Lit(l) => match l.kind {
+                        LitKind::Numeric(_, _) => {
+                            return;
+                        }
+                        _ => {}
+                    },
+                    _ => {}
+                }
+                self.handler.error_with_span(
+                    "Offsets have to be numeric constants, like `42` or `10sec`",
+                    LabeledSpan::new(expr.span, "Expected a numeric value", true),
+                );
+            }
+            SlidingWindowAggregation { expr, duration, .. } => {
+                self.check_missing_expression(&expr);
+                match &duration.kind {
+                    ExpressionKind::Lit(l) => match l.kind {
+                        LitKind::Numeric(_, Some(_)) => {
+                            return;
+                        }
+                        _ => {}
+                    },
+                    _ => {}
+                }
+                self.handler.error_with_span(
+                    "Only durations are allowed in sliding windows",
+                    LabeledSpan::new(expr.span, "Expected a duration", true),
+                );
+            }
+            Ite(cond, normal, alternative) => {
+                self.check_missing_expression(&cond);
+                self.check_missing_expression(&normal);
+                self.check_missing_expression(&alternative);
+            }
+            ParenthesizedExpression(_, inner, _) => self.check_missing_expression(&inner),
+            Tuple(entries) | Function(_, _, entries) => {
+                entries.iter().for_each(|entry| self.check_missing_expression(entry))
+            }
+            Method(base, _, _, arguments) => {
+                arguments.iter().for_each(|entry| self.check_missing_expression(entry));
+                self.check_missing_expression(&base);
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -149,5 +210,13 @@ mod tests {
     #[test]
     fn do_not_warn_about_existing_expression() {
         assert_eq!(0, number_of_errors("output test: Int8 := (3+3)"))
+    }
+
+    #[test]
+    fn test_offsets_are_literals() {
+        assert_eq!(0, number_of_errors("output a := x.offest(by: 1)"));
+        assert_eq!(1, number_of_errors("output a := x.offset(by: y)"));
+        assert_eq!(0, number_of_errors("output a := x.aggregate(over: 1h, using: avg)"));
+        assert_eq!(1, number_of_errors("output a := x.aggregate(over: y, using: avg)"));
     }
 }
