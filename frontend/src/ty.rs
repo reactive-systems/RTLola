@@ -2,9 +2,12 @@
 //!
 //! It is inspired by <https://doc.rust-lang.org/nightly/nightly-rustc/rustc/ty/index.html>
 
-use crate::analysis::typing::{StreamVar, ValueVar};
+pub(crate) mod check;
+pub(crate) mod unifier;
+
 use lazy_static::lazy_static;
 use num::{BigInt, BigRational, Zero};
+use unifier::{StreamVar, ValueVar};
 
 /// The type of an expression consists of both, a value type (`Bool`, `String`, etc.) and
 /// a stream type (periodic or event-based).

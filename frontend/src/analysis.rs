@@ -9,22 +9,21 @@ pub(crate) mod graph_based_analysis;
 pub(crate) mod id_assignment;
 mod lola_version;
 pub(crate) mod naming;
-pub(crate) mod typing;
 
 use self::lola_version::LolaVersionAnalysis;
 use self::naming::NamingAnalysis;
-use self::typing::TypeAnalysis;
 use super::ast::LolaSpec;
 use crate::ast;
 use crate::reporting::Handler;
+use crate::ty::check::TypeAnalysis;
 
 pub trait AnalysisError<'a>: std::fmt::Debug {}
 
 // Export output types.
 pub(crate) use self::graph_based_analysis::GraphAnalysisResult;
 pub(crate) use self::naming::DeclarationTable;
-pub(crate) use self::typing::TypeTable;
 pub(crate) use crate::ast::LanguageSpec;
+pub(crate) use crate::ty::check::TypeTable;
 
 pub(crate) struct AnalysisResult<'a> {
     pub(crate) declaration_table: Option<DeclarationTable<'a>>,

@@ -79,10 +79,10 @@ mod tests {
     use crate::analysis::graph_based_analysis::future_dependency::future_dependent_stream;
     use crate::analysis::lola_version::LolaVersionAnalysis;
     use crate::analysis::naming::NamingAnalysis;
-    use crate::analysis::typing::TypeAnalysis;
     use crate::parse::parse;
     use crate::parse::SourceMapper;
     use crate::reporting::Handler;
+    use crate::ty::check::TypeAnalysis;
     use std::path::PathBuf;
 
     fn check_future_dependence(

@@ -6,11 +6,11 @@ mod memory_analysis;
 pub mod space_requirements;
 
 use super::lola_version::LolaVersionTable;
-use super::typing::TypeTable;
 use super::DeclarationTable;
 use crate::ast::LolaSpec;
 use crate::parse::{NodeId, Span};
 use crate::reporting::Handler;
+use crate::ty::check::TypeTable;
 use petgraph::Directed;
 use petgraph::Graph;
 use std::time::Duration;

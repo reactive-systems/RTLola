@@ -841,10 +841,10 @@ mod tests {
     use super::*;
     use crate::analysis::lola_version::LolaVersionAnalysis;
     use crate::analysis::naming::NamingAnalysis;
-    use crate::analysis::typing::TypeAnalysis;
     use crate::parse::parse;
     use crate::parse::SourceMapper;
     use crate::reporting::Handler;
+    use crate::ty::check::TypeAnalysis;
     use std::path::PathBuf;
 
     /// Parses the content, runs naming analysis, and check expected number of errors and version

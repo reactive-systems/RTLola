@@ -1,5 +1,5 @@
 use crate::analysis::naming::DeclarationTable;
-use crate::analysis::typing::TypeTable;
+use crate::ty::check::TypeTable;
 // Only import the unambiguous Nodes, use `ast::`/`ir::` prefix for disambiguation.
 use crate::analysis::naming::Declaration;
 use crate::ast;

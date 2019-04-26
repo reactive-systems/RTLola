@@ -4,8 +4,8 @@ use crate::analysis::graph_based_analysis::StreamDependency::{Access, InvokeByNa
 use crate::analysis::graph_based_analysis::{
     get_ast_id, DependencyGraph, Location, NIx, StorageRequirement, StreamNode, TimeOffset, TrackingRequirement,
 };
-use crate::analysis::typing::TypeTable;
 use crate::parse::NodeId;
+use crate::ty::check::TypeTable;
 use crate::ty::StreamTy;
 use num::{BigRational, ToPrimitive};
 use petgraph::visit::EdgeRef;
@@ -167,10 +167,10 @@ mod tests {
     use crate::analysis::graph_based_analysis::TrackingRequirement;
     use crate::analysis::lola_version::LolaVersionAnalysis;
     use crate::analysis::naming::NamingAnalysis;
-    use crate::analysis::typing::TypeAnalysis;
     use crate::parse::parse;
     use crate::parse::SourceMapper;
     use crate::reporting::Handler;
+    use crate::ty::check::TypeAnalysis;
     use std::path::PathBuf;
 
     #[derive(Debug, Clone, Copy)]

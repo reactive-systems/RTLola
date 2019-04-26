@@ -281,9 +281,9 @@ impl<'a> LolaVersionAnalysis<'a> {
 mod tests {
     use super::*;
     use crate::analysis::naming::NamingAnalysis;
-    use crate::analysis::typing::TypeAnalysis;
     use crate::parse::parse;
     use crate::parse::SourceMapper;
+    use crate::ty::check::TypeAnalysis;
     use std::path::PathBuf;
 
     #[derive(Debug, Clone, Copy)]
