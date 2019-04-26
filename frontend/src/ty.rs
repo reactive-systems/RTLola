@@ -2,9 +2,9 @@
 //!
 //! It is inspired by <https://doc.rust-lang.org/nightly/nightly-rustc/rustc/ty/index.html>
 
-use crate::analysis::typing::ValueVar;
+use crate::analysis::typing::{StreamVar, ValueVar};
 use lazy_static::lazy_static;
-use num::{BigRational, Zero};
+use num::{BigInt, BigRational, Zero};
 
 /// The type of an expression consists of both, a value type (`Bool`, `String`, etc.) and
 /// a stream type (periodic or event-based).
@@ -14,19 +14,16 @@ pub struct Ty {
     stream: StreamTy,
 }
 
-/// The `stream` type, storing information about timing of a stream (event-based, real-time).
 #[derive(Debug, PartialEq, Eq, PartialOrd, Clone, Hash)]
-pub struct StreamTy {
-    pub parameters: Vec<ValueTy>,
-    pub timing: TimingInfo,
-}
-
-#[derive(Debug, PartialEq, Eq, PartialOrd, Clone, Hash)]
-pub enum TimingInfo {
+pub enum StreamTy {
     /// An event stream with the given dependencies
-    Event,
+    Event(Activation),
     // A real-time stream with given frequency
     RealTime(Freq),
+    /// The type of the stream should be inferred.
+    /// In contrast to `ValueTy`, the `StreamTy` may depend on multiple stream variables.
+    /// In this case, the resulting type is the conjunction of the dependent stream variable types.
+    Infer(Vec<StreamVar>),
 }
 
 /// The `value` type, storing information about the stored values (`Bool`, `UInt8`, etc.)
@@ -81,6 +78,13 @@ pub struct Freq {
     pub(crate) ns: BigRational,
 }
 
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Hash)]
+pub enum Activation {
+    Conjunction(Vec<Activation>),
+    Disjunction(Vec<Activation>),
+    Stream(StreamVar),
+}
+
 impl std::fmt::Display for Freq {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "{}", self.repr)
@@ -88,16 +92,16 @@ impl std::fmt::Display for Freq {
 }
 
 impl StreamTy {
-    pub(crate) fn new(timing: TimingInfo) -> StreamTy {
-        StreamTy { parameters: vec![], timing }
+    pub(crate) fn new_event(activation: Activation) -> StreamTy {
+        StreamTy::Event(activation)
     }
 
-    pub(crate) fn new_parametric(parameters: Vec<ValueTy>, timing: TimingInfo) -> StreamTy {
-        StreamTy { parameters, timing }
+    pub(crate) fn new_periodic(freq: Freq) -> StreamTy {
+        StreamTy::RealTime(freq)
     }
 
-    pub(crate) fn is_parametric(&self) -> bool {
-        !self.parameters.is_empty()
+    pub(crate) fn new_infered() -> StreamTy {
+        StreamTy::Infer(Vec::new())
     }
 }
 
@@ -111,6 +115,14 @@ impl Freq {
             return false;
         }
         (&other.ns % &self.ns).is_zero()
+    }
+
+    pub(crate) fn multiply_by(&self, val: i32) -> Self {
+        // TODO: check that this multiplication is correct w.r.t. intended meaning in typing.rs
+        Freq {
+            repr: format!("{} * {}", val, self.repr),
+            ns: self.ns.clone() * BigRational::new(BigInt::from(1), BigInt::from(val.abs())),
+        }
     }
 }
 
@@ -235,19 +247,10 @@ impl std::fmt::Display for ValueTy {
 
 impl std::fmt::Display for StreamTy {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        if self.is_parametric() {
-            let joined: Vec<String> = self.parameters.iter().map(|e| format!("{}", e)).collect();
-            match &self.timing {
-                TimingInfo::Event => write!(f, "Parametric<({}), EventStream>", joined.join(", ")),
-                TimingInfo::RealTime(freq) => {
-                    write!(f, "Parametric<({}), RealTimeStream<{}>>", joined.join(", "), freq)
-                }
-            }
-        } else {
-            match &self.timing {
-                TimingInfo::Event => write!(f, "EventStream"),
-                TimingInfo::RealTime(freq) => write!(f, "RealTimeStream<{}>", freq),
-            }
+        match self {
+            StreamTy::Event(_) => write!(f, "EventStream"),
+            StreamTy::RealTime(freq) => write!(f, "PeriodicStream({})", freq),
+            StreamTy::Infer(_) => write!(f, "InferedStream"),
         }
     }
 }

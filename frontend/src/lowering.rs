@@ -10,7 +10,7 @@ use crate::ir::{
     WindowReference,
 };
 use crate::parse::NodeId;
-use crate::ty::TimingInfo;
+use crate::ty::StreamTy;
 use std::collections::HashMap;
 use std::time::Duration;
 
@@ -788,8 +788,8 @@ impl<'a> Lowering<'a> {
     }
 
     fn check_time_driven(&mut self, stream_id: NodeId, reference: StreamReference) -> Option<TimeDrivenStream> {
-        match &self.tt.get_stream_type(stream_id).timing {
-            TimingInfo::RealTime(f) => Some(TimeDrivenStream {
+        match &self.tt.get_stream_type(stream_id) {
+            StreamTy::RealTime(f) => Some(TimeDrivenStream {
                 reference,
                 extend_rate: Duration::from_nanos(
                     f.ns.to_integer().to_u64().expect("extend duration [ns] does not fit in u64"),

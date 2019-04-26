@@ -1,18 +1,12 @@
-use crate::analysis::graph_based_analysis::get_ast_id;
-use crate::analysis::graph_based_analysis::DependencyGraph;
-use crate::analysis::graph_based_analysis::Location;
-use crate::analysis::graph_based_analysis::NIx;
 use crate::analysis::graph_based_analysis::Offset::Discrete;
 use crate::analysis::graph_based_analysis::Offset::Time;
-use crate::analysis::graph_based_analysis::StorageRequirement;
-use crate::analysis::graph_based_analysis::StreamDependency::Access;
-use crate::analysis::graph_based_analysis::StreamDependency::InvokeByName;
-use crate::analysis::graph_based_analysis::StreamNode;
-use crate::analysis::graph_based_analysis::TimeOffset;
-use crate::analysis::graph_based_analysis::TrackingRequirement;
+use crate::analysis::graph_based_analysis::StreamDependency::{Access, InvokeByName};
+use crate::analysis::graph_based_analysis::{
+    get_ast_id, DependencyGraph, Location, NIx, StorageRequirement, StreamNode, TimeOffset, TrackingRequirement,
+};
 use crate::analysis::typing::TypeTable;
 use crate::parse::NodeId;
-use crate::ty::TimingInfo;
+use crate::ty::StreamTy;
 use num::{BigRational, ToPrimitive};
 use petgraph::visit::EdgeRef;
 use petgraph::Direction;
@@ -106,10 +100,10 @@ pub(crate) fn determine_tracking_size(
                     "time based access of future dependent streams is not implemented"
                 ); // TODO time based access of future dependent streams is not implemented
                 if let TimeOffset::UpToNow(_, exact_offset_duration) = offset {
-                    let src_timing = &type_table.get_stream_type(src_id).timing;
+                    let src_timing = &type_table.get_stream_type(src_id);
                     if this_is_time_based {
-                        let out_timing = &type_table.get_stream_type(id).timing;
-                        if let TimingInfo::RealTime(freq) = out_timing {
+                        let out_timing = &type_table.get_stream_type(id);
+                        if let StreamTy::RealTime(freq) = out_timing {
                             let result: BigRational = exact_offset_duration / &freq.ns;
                             let needed_space: u16 = if result.is_integer() {
                                 result.trunc().to_integer().to_u16().expect("buffer size does not fit in u16")
@@ -123,10 +117,10 @@ pub(crate) fn determine_tracking_size(
                         }
                     } else {
                         match src_timing {
-                            TimingInfo::Event => {
+                            StreamTy::Event(_) => {
                                 tracking_requirements.push((src_id, TrackingRequirement::Unbounded));
                             }
-                            TimingInfo::RealTime(freq) => {
+                            StreamTy::RealTime(freq) => {
                                 let result: BigRational = exact_offset_duration / &freq.ns;
                                 let needed_space: u16 = if result.is_integer() {
                                     result.trunc().to_integer().to_u16().expect("buffer size does not fit in u16")
@@ -135,6 +129,7 @@ pub(crate) fn determine_tracking_size(
                                 };
                                 tracking_requirements.push((src_id, TrackingRequirement::Finite(needed_space)));
                             }
+                            _ => unreachable!(),
                         }
                     }
                 } else {
@@ -154,9 +149,10 @@ fn is_it_time_based(dependency_graph: &DependencyGraph, node_index: NIx, type_ta
             .node_weight(node_index)
             .expect("We assume that the type-table has information about every stream and trigger"),
     );
-    match type_table.get_stream_type(id).timing {
-        TimingInfo::Event => false,
-        TimingInfo::RealTime(_) => true,
+    match type_table.get_stream_type(id) {
+        StreamTy::Event(_) => false,
+        StreamTy::RealTime(_) => true,
+        StreamTy::Infer(_) => unreachable!(),
     }
 }
 

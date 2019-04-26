@@ -8,7 +8,7 @@ use crate::analysis::DeclarationTable;
 use crate::analysis::TypeTable;
 use crate::ast;
 use crate::ast::{ExpressionKind, LolaSpec, Offset, StreamAccessKind, WindowOperation};
-use crate::ty::TimingInfo;
+use crate::ty::StreamTy;
 use num::{BigRational, ToPrimitive};
 use std::cmp::min;
 

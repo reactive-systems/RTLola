@@ -17,7 +17,7 @@ use crate::parse::Span;
 use crate::reporting::Handler;
 use crate::reporting::LabeledSpan;
 use crate::stdlib::{FuncDecl, MethodLookup};
-use crate::ty::{Freq, StreamTy, TimingInfo, TypeConstraint, ValueTy};
+use crate::ty::{Activation, Freq, StreamTy, TypeConstraint, ValueTy};
 use ena::unify::{
     EqUnifyValue, InPlace, InPlaceUnificationTable, Snapshot, UnificationStore, UnificationTable, UnifyKey, UnifyValue,
 };
@@ -195,15 +195,11 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
             param_types.push(ValueTy::Infer(param_var));
         }
 
-        if param_types.is_empty() {
-            self.stream_unifier
-                .unify_var_ty(stream_var, StreamTy::new(TimingInfo::Event))
-                .map_err(|err| self.handle_error(err, input.name.span))
-        } else {
-            self.stream_unifier
-                .unify_var_ty(stream_var, StreamTy::new_parametric(param_types, TimingInfo::Event))
-                .map_err(|err| self.handle_error(err, input.name.span))
-        }
+        assert!(param_types.is_empty(), "parametric types are currently not supported");
+
+        self.stream_unifier
+            .unify_var_ty(stream_var, StreamTy::new_event(Activation::Stream(stream_var)))
+            .map_err(|err| self.handle_error(err, input.name.span))
     }
 
     fn infer_output(&mut self, output: &'a Output) -> Result<(), ()> {
@@ -242,18 +238,13 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
             }
         }
 
-        // determine whether stream is timed or event based
-        let timing: TimingInfo = if let Some(f) = frequency { TimingInfo::RealTime(f) } else { TimingInfo::Event };
+        assert!(param_types.is_empty(), "Parametric outputs are currently not supported by type checker");
 
-        if param_types.is_empty() {
-            self.stream_unifier
-                .unify_var_ty(stream_var, StreamTy::new(timing))
-                .map_err(|err| self.handle_error(err, output.name.span))
-        } else {
-            self.stream_unifier
-                .unify_var_ty(stream_var, StreamTy::new_parametric(param_types, timing))
-                .map_err(|err| self.handle_error(err, output.name.span))
-        }
+        // determine whether stream is timed or event based or should be infered
+        let stream_ty: StreamTy =
+            if let Some(f) = frequency { StreamTy::new_periodic(f) } else { StreamTy::new_infered() };
+
+        self.stream_unifier.unify_var_ty(stream_var, stream_ty).map_err(|err| self.handle_error(err, output.name.span))
     }
 
     fn infer_type(&mut self, ast_ty: &'a Type) -> Result<(), ()> {
@@ -286,7 +277,7 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
         let out_var = self.value_vars[&output.id];
 
         // check template specification
-        if let Some(template_spec) = &output.template_spec {
+        /*if let Some(template_spec) = &output.template_spec {
             if let Some(invoke) = &template_spec.inv {
                 self.infer_expression(&invoke.target, None, StreamVarOrTy::Ty(StreamTy::new(TimingInfo::Event)))?;
                 let inv_var = self.value_vars[&invoke.target.id];
@@ -337,12 +328,16 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
                     StreamVarOrTy::Ty(StreamTy::new(TimingInfo::Event)),
                 )?;
             }
-        }
+        }*/
 
         let out_stream_var = self.stream_vars[&output.id];
 
         // generate constraint for expression
-        self.infer_expression(&output.expression, Some(ValueTy::Infer(out_var)), StreamVarOrTy::Var(out_stream_var))
+        self.infer_expression(
+            &output.expression,
+            Some(ValueTy::Infer(out_var)),
+            Some(StreamVarOrTy::Var(out_stream_var)),
+        )
     }
 
     fn infer_trigger_expression(&mut self, trigger: &'a Trigger) -> Result<(), ()> {
@@ -354,7 +349,7 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
 
         let stream_var = self.new_stream_var(trigger.id);
 
-        self.infer_expression(&trigger.expression, Some(ValueTy::Infer(var)), StreamVarOrTy::Var(stream_var))
+        self.infer_expression(&trigger.expression, Some(ValueTy::Infer(var)), Some(StreamVarOrTy::Var(stream_var)))
     }
 
     fn get_constraint_for_literal(&self, lit: &Literal) -> ValueTy {
@@ -380,7 +375,7 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
         &mut self,
         expr: &'a Expression,
         target: Option<ValueTy>,
-        stream_ty: StreamVarOrTy,
+        stream_ty: Option<StreamVarOrTy>,
     ) -> Result<(), ()> {
         use crate::ast::ExpressionKind::*;
         trace!("infer expression {} (NodeId = {})", expr, expr.id);
@@ -391,22 +386,25 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
         }
 
         let stream_var = self.new_stream_var(expr.id);
-        match &stream_ty {
-            StreamVarOrTy::Ty(ty) => self
+        match stream_ty.as_ref() {
+            Some(StreamVarOrTy::Ty(ty)) => self
                 .stream_unifier
                 .unify_var_ty(stream_var, ty.clone())
                 .expect("unification cannot fail as `var` is fresh"),
-            &StreamVarOrTy::Var(var) => {
+            Some(&StreamVarOrTy::Var(var)) => {
                 self.stream_unifier.unify_var_var(stream_var, var).expect("unification cannot fail as `var` is fresh")
             }
+            None => {}
         }
 
         match &expr.kind {
             Lit(l) => {
-                // generate constraint from literal
+                // generate value type constraint from literal
                 self.unifier
                     .unify_var_ty(var, self.get_constraint_for_literal(&l))
                     .map_err(|err| self.handle_error(err, expr.span))?;
+
+                // no stream type constraint is needed
             }
             Ident(_) => {
                 let decl = self.declarations[&expr.id];
@@ -451,13 +449,14 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
                 self.infer_sliding_window_expression(var, stream_var, expr.span, expr, duration, aggregation)?;
             }
             Ite(cond, left, right) => {
-                // constraints
-                // - ?cond = EventStream<bool>
-                // - ?left = ?expr
-                // - ?right = ?expr
-                self.infer_expression(cond, Some(ValueTy::Bool), StreamVarOrTy::Var(stream_var))?;
-                self.infer_expression(left, Some(ValueTy::Infer(var)), StreamVarOrTy::Var(stream_var))?;
-                self.infer_expression(right, Some(ValueTy::Infer(var)), StreamVarOrTy::Var(stream_var))?;
+                // value type constraints
+                // * `cond` = Bool
+                // * `left` = `var`
+                // * `right` = `var`
+                // stream type constraints: all should be the same
+                self.infer_expression(cond, Some(ValueTy::Bool), Some(StreamVarOrTy::Var(stream_var)))?;
+                self.infer_expression(left, Some(ValueTy::Infer(var)), Some(StreamVarOrTy::Var(stream_var)))?;
+                self.infer_expression(right, Some(ValueTy::Infer(var)), Some(StreamVarOrTy::Var(stream_var)))?;
             }
             Unary(op, appl) => {
                 self.infer_function_application(
@@ -485,13 +484,9 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
                 self.infer_expression(
                     left,
                     Some(ValueTy::Option(ValueTy::Infer(var).into())),
-                    StreamVarOrTy::Var(stream_var),
+                    Some(StreamVarOrTy::Var(stream_var)),
                 )?;
-                self.infer_expression(
-                    right,
-                    Some(ValueTy::Infer(var)),
-                    StreamVarOrTy::Ty(StreamTy::new(TimingInfo::Event)),
-                )?
+                self.infer_expression(right, Some(ValueTy::Infer(var)), Some(StreamVarOrTy::Var(stream_var)))?
             }
             StreamAccess(expr, access_type) => match access_type {
                 StreamAccessKind::Hold => {
@@ -512,8 +507,7 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
                         .map_err(|err| self.handle_error(err, expr.span))?;
 
                     // the stream type of `expr` is unconstrained
-                    let new_var = self.stream_unifier.new_var();
-                    self.infer_expression(expr, Some(ValueTy::Infer(var)), StreamVarOrTy::Var(new_var))?;
+                    self.infer_expression(expr, Some(ValueTy::Infer(var)), None)?;
                 }
                 StreamAccessKind::Optional => unimplemented!(),
             },
@@ -560,7 +554,7 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
             }
             Method(base, name, types, params) => {
                 // recursion
-                self.infer_expression(base, None, StreamVarOrTy::Var(stream_var))?;
+                self.infer_expression(base, None, Some(StreamVarOrTy::Var(stream_var)))?;
 
                 if let Some(infered) = self.unifier.get_type(self.value_vars[&base.id]) {
                     debug!("{} {}", base, infered);
@@ -594,7 +588,7 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
                 // recursion
                 let mut tuples: Vec<ValueTy> = Vec::with_capacity(expressions.len());
                 for element in expressions {
-                    self.infer_expression(element, None, StreamVarOrTy::Var(stream_var))?;
+                    self.infer_expression(element, None, Some(StreamVarOrTy::Var(stream_var)))?;
                     let inner = self.unifier.get_type(self.value_vars[&element.id]).expect("should have type");
                     tuples.push(inner);
                 }
@@ -605,7 +599,7 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
             }
             Field(base, ident) => {
                 // recursion
-                self.infer_expression(base, None, StreamVarOrTy::Var(stream_var))?;
+                self.infer_expression(base, None, Some(StreamVarOrTy::Var(stream_var)))?;
 
                 let ty = self.unifier.get_type(self.value_vars[&base.id]).expect("should have type at this point");
                 let infered = ty.normalize_ty(&mut self.unifier);
@@ -666,15 +660,30 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
                 self.unifier.unify_var_var(var, target_var).map_err(|err| self.handle_error(err, span))?;
             }
 
-            // We currently restrict discrete offsets to event streams
-            // TODO: lift this restriction
-            self.stream_unifier
-                .unify_var_ty(stream_var, StreamTy::new(TimingInfo::Event))
-                .map_err(|err| self.handle_error(err, span))?;
+            let target_stream_condition = match self.stream_unifier.get_normalized_type(stream_var) {
+                None => {
+                    self.handler.error_with_span(
+                        &format!("Need more type information to compute offset",),
+                        LabeledSpan::new(
+                            span,
+                            &format!("consider giving @ Frequency / @ Activation type annotation"),
+                            true,
+                        ),
+                    );
+                    return Err(());
+                }
+                Some(StreamTy::Event(_)) => StreamVarOrTy::Var(stream_var),
+                Some(StreamTy::RealTime(freq)) => {
+                    // target stream type
+                    let target_stream_ty = StreamTy::new_periodic(freq.multiply_by(offset));
+                    StreamVarOrTy::Ty(target_stream_ty)
+                }
+                Some(StreamTy::Infer(_)) => unreachable!(),
+            };
 
             // recursion
             // stream types have to match
-            self.infer_expression(expr, Some(ValueTy::Infer(target_var)), StreamVarOrTy::Var(stream_var))
+            self.infer_expression(expr, Some(ValueTy::Infer(target_var)), Some(target_stream_condition))
         } else if let Some(time_spec) = offset.parse_timespec() {
             // time-based offset
 
@@ -689,186 +698,20 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
             }
 
             // target stream type
-            let target_stream_ty = StreamTy::new(TimingInfo::RealTime(Freq::new(
+            let target_stream_ty = StreamTy::new_periodic(Freq::new(
                 &format!("{:?}", time_spec.period),
                 time_spec.exact_period.abs().clone(),
-            )));
+            ));
 
             // recursion
             // stream types have to match
-            self.infer_expression(expr, Some(ValueTy::Infer(target_value_var)), StreamVarOrTy::Ty(target_stream_ty))
+            self.infer_expression(
+                expr,
+                Some(ValueTy::Infer(target_value_var)),
+                Some(StreamVarOrTy::Ty(target_stream_ty)),
+            )
         } else {
             unreachable!("offsets are either discrete or time-based");
-        }
-    }
-
-    fn infer_lookup_expr(
-        &mut self,
-        var: ValueVar,
-        stream_var: StreamVar,
-        span: Span,
-        stream: &'a StreamInstance,
-        offset: &'a Offset,
-        window_op: Option<WindowOperation>,
-    ) -> Result<(), ()> {
-        match (offset, window_op) {
-            (Offset::DiscreteOffset(off_expr), None) => {
-                // recursion
-                self.infer_expression(
-                    off_expr,
-                    Some(ValueTy::Constr(TypeConstraint::Integer)),
-                    StreamVarOrTy::Ty(StreamTy::new(TimingInfo::Event)),
-                )?;
-
-                let offset: i32 = off_expr.parse_literal().expect("offset expressions have to be integers");
-                let negative_offset = offset.is_negative();
-
-                // need to derive "inner" type
-                let decl = self.declarations[&stream.id];
-                let decl_id: NodeId = match decl {
-                    Declaration::In(input) => input.id,
-                    Declaration::Out(output) => output.id,
-                    _ => unreachable!(),
-                };
-                let decl_stream_var: StreamVar = self.stream_vars[&decl_id];
-                let decl_stream_type = self.stream_unifier.get_type(decl_stream_var).unwrap();
-
-                if decl_stream_type.parameters.len() != stream.arguments.len() {
-                    self.handler.error_with_span(
-                        &format!(
-                            "this stream takes {} parameters but {} parameters were supplied",
-                            decl_stream_type.parameters.len(),
-                            stream.arguments.len()
-                        ),
-                        LabeledSpan::new(
-                            span,
-                            &format!("expected {} parameters", decl_stream_type.parameters.len()),
-                            true,
-                        ),
-                    );
-                    return Err(());
-                }
-
-                assert_eq!(decl_stream_type.parameters.len(), stream.arguments.len(),);
-
-                let mut params = Vec::with_capacity(stream.arguments.len());
-                for (arg_expr, target) in stream.arguments.iter().zip(decl_stream_type.parameters) {
-                    self.infer_expression(
-                        arg_expr,
-                        Some(target.clone()),
-                        StreamVarOrTy::Ty(StreamTy::new(TimingInfo::Event)),
-                    )?;
-                    params.push(target);
-                }
-                let target = if params.is_empty() {
-                    StreamTy::new(TimingInfo::Event)
-                } else {
-                    StreamTy::new_parametric(params, TimingInfo::Event)
-                };
-
-                // stream type
-
-                // ?decl_stream_var = target
-                self.stream_unifier
-                    .unify_var_ty(decl_stream_var, target)
-                    .map_err(|err| self.handle_error(err, stream.span))?;
-                // ?stream_var = Non-parametric Event
-                self.stream_unifier
-                    .unify_var_ty(stream_var, StreamTy::new(TimingInfo::Event))
-                    .map_err(|err| self.handle_error(err, stream.span))?;
-
-                // value type
-                // constraints
-                // off_expr = {integer}
-                // stream = ?inner
-                // if negative_offset || parametric { expr = Option<?inner> } else { expr = ?inner }
-                let decl_var: ValueVar = self.value_vars[&decl_id];
-                if negative_offset || !stream.arguments.is_empty() {
-                    self.unifier
-                        .unify_var_ty(var, ValueTy::Option(ValueTy::Infer(decl_var).into()))
-                        .map_err(|err| self.handle_error(err, span))
-                } else {
-                    self.unifier.unify_var_var(var, decl_var).map_err(|err| self.handle_error(err, span))
-                }
-            }
-            (Offset::RealTimeOffset(time_spec), None) => {
-                assert!(stream.arguments.is_empty(), "parameterized timed streams currently not implemented");
-
-                // need to derive "inner" type
-                let decl = self.declarations[&stream.id];
-                let decl_id: NodeId = match decl {
-                    Declaration::In(input) => input.id,
-                    Declaration::Out(output) => output.id,
-                    _ => unreachable!(),
-                };
-                let decl_stream_var: StreamVar = self.stream_vars[&decl_id];
-                let decl_stream_type = self.stream_unifier.get_type(decl_stream_var).unwrap();
-
-                assert_eq!(
-                    decl_stream_type.parameters.len(),
-                    stream.arguments.len(),
-                    "TODO: transform into error message"
-                );
-                let target = StreamTy::new(TimingInfo::RealTime(Freq::new(
-                    &format!("{:?}", time_spec.period),
-                    time_spec.exact_period.abs().clone(),
-                )));
-
-                // stream type
-
-                let target_var = self.stream_unifier.new_var();
-                self.stream_unifier.unify_var_ty(target_var, target).expect("cannot fail since `target_var` is fresh");
-
-                // verify that accessed stream is compatible
-                self.stream_unifier
-                    .unify_var_var(target_var, decl_stream_var)
-                    .map_err(|err| self.handle_error(err, stream.span))?;
-                // an offset expression does not pose restrictions on `stream_var`
-
-                // value type
-                let negative_offset = time_spec.exact_period.is_negative();
-
-                let decl_var: ValueVar = self.value_vars[&decl_id];
-                if negative_offset || !stream.arguments.is_empty() {
-                    self.unifier
-                        .unify_var_ty(var, ValueTy::Option(ValueTy::Infer(decl_var).into()))
-                        .map_err(|err| self.handle_error(err, span))
-                } else {
-                    self.unifier.unify_var_var(var, decl_var).map_err(|err| self.handle_error(err, span))
-                }
-            }
-            (Offset::RealTimeOffset(_), Some(_window_op)) => {
-                assert!(stream.arguments.is_empty(), "parameterized timed streams currently not implemented");
-
-                // need to derive "inner" type
-                let decl = self.declarations[&stream.id];
-                let decl_id: NodeId = match decl {
-                    Declaration::In(input) => input.id,
-                    Declaration::Out(output) => output.id,
-                    _ => unreachable!(),
-                };
-
-                // stream type
-                let decl_var: StreamVar = self.stream_vars[&decl_id];
-                assert!(!self.stream_unifier.get_type(decl_var).unwrap().is_parametric());
-                match self.stream_unifier.get_type(stream_var).expect("type has to be known at this point").timing {
-                    TimingInfo::RealTime(_) => {}
-                    _ => {
-                        self.handler.error_with_span(
-                            "Sliding windows are only allowed in real-time streams",
-                            LabeledSpan::new(span, "unexpected sliding window", true),
-                        );
-                        return Err(());
-                    }
-                }
-
-                // value type
-                let decl_var: ValueVar = self.value_vars[&decl_id];
-                self.unifier
-                    .unify_var_ty(var, ValueTy::Option(ValueTy::Infer(decl_var).into()))
-                    .map_err(|err| self.handle_error(err, span))
-            }
-            _ => unreachable!("lookup {:?} {:?}", offset, window_op),
         }
     }
 
@@ -881,11 +724,9 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
         duration: &'a Expression,
         window_op: &'a WindowOperation,
     ) -> Result<(), ()> {
-        let fresh_target_var = self.stream_unifier.new_var();
-
         // the stream variable has to be real-time
-        match self.stream_unifier.get_type(stream_var).expect("type has to be known at this point").timing {
-            TimingInfo::RealTime(_) => {}
+        match self.stream_unifier.get_normalized_type(stream_var).expect("type has to be known at this point") {
+            StreamTy::RealTime(_) => {}
             _ => {
                 self.handler.error_with_span(
                     "Sliding windows are only allowed in real-time streams",
@@ -895,12 +736,13 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
             }
         }
 
-        // value type
+        // value type depends on the aggregation function
+        // stream type is not restricted
         use WindowOperation::*;
         match window_op {
             Count => {
                 // The value type of the inner stream is not restricted
-                self.infer_expression(expr, None, StreamVarOrTy::Var(fresh_target_var))?;
+                self.infer_expression(expr, None, None)?;
                 // resulting type is a integer value
                 self.unifier
                     .unify_var_ty(var, ValueTy::Option(ValueTy::Constr(TypeConstraint::Integer).into()))
@@ -908,11 +750,7 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
             }
             Average | Sum | Product | Integral => {
                 // The value type of the inner stream has to be numeric
-                self.infer_expression(
-                    expr,
-                    Some(ValueTy::Constr(TypeConstraint::Numeric)),
-                    StreamVarOrTy::Var(fresh_target_var),
-                )?;
+                self.infer_expression(expr, Some(ValueTy::Constr(TypeConstraint::Numeric)), None)?;
                 // resulting type depends on the inner type
                 let inner_var = self.value_vars[&expr.id];
                 self.unifier
@@ -966,7 +804,7 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
                 self.unifier.unify_var_ty(param_var, ty).map_err(|err| self.handle_error(err, parameter.span))?;
             } else {
                 // otherwise, we have to check it now
-                self.infer_expression(parameter, Some(ty), StreamVarOrTy::Var(stream_var))?;
+                self.infer_expression(parameter, Some(ty), Some(StreamVarOrTy::Var(stream_var)))?;
             }
         }
         // return type
@@ -1376,13 +1214,9 @@ impl UnifiableTy for StreamTy {
     fn coerces_with<U: Unifier<Var = Self::V, Ty = Self>>(&self, _unifier: &mut U, right: &Self) -> bool {
         debug!("coerce {} {}", self, right);
 
-        if self.is_parametric() || right.is_parametric() {
-            return false;
-        }
-
         // RealTime<freq_self> -> RealTime<freq_right> if freq_left is multiple of freq_right
-        match (&self.timing, &right.timing) {
-            (TimingInfo::RealTime(target), TimingInfo::RealTime(other)) => other.is_multiple_of(target),
+        match (&self, &right) {
+            (StreamTy::RealTime(target), StreamTy::RealTime(other)) => other.is_multiple_of(target),
             _ => false,
         }
     }

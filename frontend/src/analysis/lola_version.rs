@@ -3,7 +3,7 @@ use crate::ast::*;
 use crate::parse::{NodeId, Span};
 use crate::reporting::Handler;
 use crate::reporting::LabeledSpan;
-use crate::ty::TimingInfo;
+use crate::ty::StreamTy;
 use std::collections::HashMap;
 
 pub(crate) type LolaVersionTable = HashMap<NodeId, LanguageSpec>;
@@ -102,9 +102,10 @@ impl<'a> LolaVersionAnalysis<'a> {
             Some((output.name.span, String::from("Parameterized stream")))
         };
 
-        let is_timed: Option<WhyNot> = match &self.type_table.get_stream_type(output.id).timing {
-            TimingInfo::Event => None,
-            TimingInfo::RealTime(_frequ) => Some((output.name.span, String::from("Stream has frequency"))),
+        let is_timed: Option<WhyNot> = match &self.type_table.get_stream_type(output.id) {
+            StreamTy::Event(_) => None,
+            StreamTy::RealTime(_frequ) => Some((output.name.span, String::from("Stream has frequency"))),
+            _ => unreachable!(),
         };
 
         let mut version_tracker = VersionTracker::from_stream(is_parameterized, is_timed);
@@ -124,11 +125,12 @@ impl<'a> LolaVersionAnalysis<'a> {
     }
 
     fn analyse_trigger(&mut self, trigger: &'a Trigger) {
-        let is_timed: Option<WhyNot> = match &self.type_table.get_stream_type(trigger.id).timing {
-            TimingInfo::Event => None,
-            TimingInfo::RealTime(_frequ) => {
+        let is_timed: Option<WhyNot> = match &self.type_table.get_stream_type(trigger.id) {
+            StreamTy::Event(_) => None,
+            StreamTy::RealTime(_frequ) => {
                 Some((trigger.expression.span, String::from("Trigger expression has a frequency")))
             }
+            _ => unreachable!(),
         };
 
         let mut version_tracker = VersionTracker::from_stream(None, is_timed);
