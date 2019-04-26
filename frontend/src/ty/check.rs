@@ -236,10 +236,12 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
         assert!(param_types.is_empty(), "Parametric outputs are currently not supported by type checker");
 
         // determine whether stream is timed or event based or should be infered
-        let stream_ty: StreamTy =
-            if let Some(f) = frequency { StreamTy::new_periodic(f) } else { StreamTy::new_infered() };
-
-        self.stream_unifier.unify_var_ty(stream_var, stream_ty).map_err(|err| self.handle_error(err, output.name.span))
+        if let Some(f) = frequency {
+            self.stream_unifier
+                .unify_var_ty(stream_var, StreamTy::new_periodic(f))
+                .map_err(|err| self.handle_error(err, output.name.span))?;
+        }
+        Ok(())
     }
 
     fn infer_type(&mut self, ast_ty: &'a Type) -> Result<(), ()> {
@@ -655,30 +657,10 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
                 self.unifier.unify_var_var(var, target_var).map_err(|err| self.handle_error(err, span))?;
             }
 
-            let target_stream_condition = match self.stream_unifier.get_normalized_type(stream_var) {
-                None => {
-                    self.handler.error_with_span(
-                        &format!("Need more type information to compute offset",),
-                        LabeledSpan::new(
-                            span,
-                            &format!("consider giving @ Frequency / @ Activation type annotation"),
-                            true,
-                        ),
-                    );
-                    return Err(());
-                }
-                Some(StreamTy::Event(_)) => StreamVarOrTy::Var(stream_var),
-                Some(StreamTy::RealTime(freq)) => {
-                    // target stream type
-                    let target_stream_ty = StreamTy::new_periodic(freq.multiply_by(offset));
-                    StreamVarOrTy::Ty(target_stream_ty)
-                }
-                Some(StreamTy::Infer(_)) => unreachable!(),
-            };
-
             // recursion
             // stream types have to match
-            self.infer_expression(expr, Some(ValueTy::Infer(target_var)), Some(target_stream_condition))
+            self.infer_expression(expr, Some(ValueTy::Infer(target_var)), Some(StreamVarOrTy::Var(stream_var)))?;
+            Ok(())
         } else if let Some(time_spec) = offset.parse_timespec() {
             // time-based offset
 
@@ -1182,6 +1164,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore] // paramertic streams need new design after syntax revision
     fn test_invoke_type() {
         let spec = "input in: Int8\n output a<p1: Int8>: Int8 { invoke in } := 3";
         assert_eq!(0, num_type_errors(spec));
@@ -1189,6 +1172,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore] // paramertic streams need new design after syntax revision
     fn test_invoke_type_two_params() {
         let spec = "input in: Int8\n output a<p1: Int8, p2: Int8>: Int8 { invoke (in, in) } := 3";
         assert_eq!(0, num_type_errors(spec));
@@ -1196,12 +1180,14 @@ mod tests {
     }
 
     #[test]
+    #[ignore] // paramertic streams need new design after syntax revision
     fn test_invoke_type_faulty() {
         let spec = "input in: Bool\n output a<p1: Int8>: Int8 { invoke in } := 3";
         assert_eq!(1, num_type_errors(spec));
     }
 
     #[test]
+    #[ignore] // paramertic streams need new design after syntax revision
     fn test_extend_type() {
         let spec = "input in: Bool\n output a: Int8 { extend in } := 3";
         assert_eq!(0, num_type_errors(spec));
@@ -1209,12 +1195,14 @@ mod tests {
     }
 
     #[test]
+    #[ignore] // paramertic streams need new design after syntax revision
     fn test_extend_type_faulty() {
         let spec = "input in: Int8\n output a: Int8 { extend in } := 3";
         assert_eq!(1, num_type_errors(spec));
     }
 
     #[test]
+    #[ignore] // paramertic streams need new design after syntax revision
     fn test_terminate_type() {
         let spec = "input in: Bool\n output a: Int8 { terminate in } := 3";
         assert_eq!(0, num_type_errors(spec));
@@ -1222,6 +1210,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore] // paramertic streams need new design after syntax revision
     fn test_terminate_type_faulty() {
         let spec = "input in: Int8\n output a: Int8 { terminate in } := 3";
         assert_eq!(1, num_type_errors(spec));

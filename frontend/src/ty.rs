@@ -23,10 +23,8 @@ pub enum StreamTy {
     Event(Activation),
     // A real-time stream with given frequency
     RealTime(Freq),
-    /// The type of the stream should be inferred.
-    /// In contrast to `ValueTy`, the `StreamTy` may depend on multiple stream variables.
-    /// In this case, the resulting type is the conjunction of the dependent stream variable types.
-    Infer(Vec<StreamVar>),
+    /// The type of the stream should be inferred
+    Infer(StreamVar),
 }
 
 /// The `value` type, storing information about the stored values (`Bool`, `UInt8`, etc.)
@@ -103,8 +101,8 @@ impl StreamTy {
         StreamTy::RealTime(freq)
     }
 
-    pub(crate) fn new_infered() -> StreamTy {
-        StreamTy::Infer(Vec::new())
+    pub(crate) fn new_inferred(var: StreamVar) -> StreamTy {
+        StreamTy::Infer(var)
     }
 }
 
