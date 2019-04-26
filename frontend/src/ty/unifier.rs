@@ -336,9 +336,7 @@ impl UnifiableTy for StreamTy {
                     None
                 }
             }
-            (StreamTy::Event(_), StreamTy::Event(_)) => {
-                unimplemented!();
-            }
+            (StreamTy::Event(cond_l), StreamTy::Event(cond_r)) => Some(StreamTy::Event(cond_l.conjunction(cond_r))),
             (StreamTy::RealTime(f_l), StreamTy::RealTime(f_r)) => {
                 if f_l == f_r {
                     Some(self.clone())
@@ -407,6 +405,15 @@ impl std::fmt::Display for ValueVar {
 /// Representation of key for unification of `StreamTy`
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Copy, Clone)]
 pub struct StreamVar(u32);
+
+/// Only used in tests to be able to use equality over `StreamTy`.
+/// Stream vars are only created within unifier otherwise.
+#[cfg(test)]
+impl StreamVar {
+    pub(crate) fn new(index: u32) -> Self {
+        Self(index)
+    }
+}
 
 impl UnifyKey for StreamVar {
     type Value = ValueVarVal<StreamTy>;

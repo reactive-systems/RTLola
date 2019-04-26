@@ -150,7 +150,7 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
     }
 
     fn infer_constant(&mut self, constant: &'a Constant) -> Result<(), ()> {
-        trace!("infer type for {}", constant);
+        trace!("infer type for {} (NodeId = {})", constant, constant.id);
         let var = self.new_value_var(constant.id);
 
         if let Some(ast_ty) = &constant.ty {
@@ -167,7 +167,7 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
     }
 
     fn infer_input(&mut self, input: &'a Input) -> Result<(), ()> {
-        trace!("infer type for {}", input);
+        trace!("infer type for {} (NodeId = {})", input, input.id);
 
         // value type
         let var = self.new_value_var(input.id);
@@ -198,7 +198,7 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
     }
 
     fn infer_output(&mut self, output: &'a Output) -> Result<(), ()> {
-        trace!("infer type for {}", output);
+        trace!("infer type for {} (NodeId = {})", output, output.id);
 
         // value type
         let var = self.new_value_var(output.id);
@@ -1416,5 +1416,22 @@ mod tests {
         // expression `a > 50` has NodeId = 3
         assert_eq!(type_table.get_value_type(NodeId::new(3)), &ValueTy::Bool);
         assert_eq!(type_table.get_func_arg_types(NodeId::new(3)), &vec![ValueTy::Int(IntTy::I32)]);
+    }
+
+    #[test]
+    fn test_conjunctive_stream_types() {
+        let spec = "input a: Int32\ninput b: Int32\noutput x := a + b";
+        let type_table = type_check(spec);
+        // input `a` has NodeId = 0, StreamVar = 0
+        // input `b` has NodeId = 2, StreamVar = 1
+        // output `x` has NodeId = 4
+        assert_eq!(type_table.get_value_type(NodeId::new(4)), &ValueTy::Int(IntTy::I32));
+        assert_eq!(
+            type_table.get_stream_type(NodeId::new(4)),
+            &StreamTy::Event(Activation::Conjunction(vec![
+                Activation::Stream(StreamVar::new(0)),
+                Activation::Stream(StreamVar::new(1))
+            ]))
+        );
     }
 }

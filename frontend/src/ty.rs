@@ -132,6 +132,23 @@ impl Activation {
     pub(crate) fn implies_valid(&self, other: &Activation, unifier: ValueUnifier<StreamTy>) -> bool {
         true
     }
+
+    pub(crate) fn conjunction(&self, other: &Activation) -> Activation {
+        use Activation::*;
+        match (self, other) {
+            (Conjunction(c_l), Conjunction(c_r)) => {
+                let mut con = c_l.clone();
+                con.extend(c_r.iter().cloned());
+                Activation::Conjunction(con)
+            }
+            (Conjunction(c), other) | (other, Conjunction(c)) => {
+                let mut con = c.clone();
+                con.push(other.clone());
+                Activation::Conjunction(con)
+            }
+            (_, _) => Activation::Conjunction(vec![self.clone(), other.clone()]),
+        }
+    }
 }
 
 lazy_static! {
