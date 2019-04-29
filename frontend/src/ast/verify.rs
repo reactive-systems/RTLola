@@ -23,147 +23,119 @@ impl<'a, 'b> Verifier<'a, 'b> {
     }
 
     fn check_expression(&self, expr: &Expression) {
-        self.check_missing_paranthesis(expr);
-        self.check_missing_expression(expr);
-        self.check_offsets_are_literals(expr);
+        self.expression_walker(expr, &Self::check_missing_paranthesis);
+        self.expression_walker(expr, &Self::check_missing_expression);
+        self.expression_walker(expr, &Self::check_offsets_are_literals);
+        self.expression_walker(expr, &Self::check_offsets_direct_access);
     }
 
-    fn check_missing_paranthesis(&self, expr: &Expression) {
+    /// Iterates over the `Expression` AST and calls `check` on every node
+    fn expression_walker<F>(&self, expr: &Expression, check: &F)
+    where
+        F: Fn(&Handler, &Expression) -> (),
+    {
+        check(self.handler, expr);
+
+        // Recursion
         use ExpressionKind::*;
         match &expr.kind {
             Lit(_) | Ident(_) | MissingExpression => {}
-            Unary(_, inner) | Field(inner, _) | StreamAccess(inner, _) => {
-                self.check_missing_paranthesis(&inner);
+            Unary(_, inner)
+            | Field(inner, _)
+            | StreamAccess(inner, _)
+            | ParenthesizedExpression(_, inner, _) => {
+                self.expression_walker(&inner, check);
             }
             Binary(_, left, right)
             | Default(left, right)
             | Offset(left, right)
             | SlidingWindowAggregation { expr: left, duration: right, .. } => {
-                self.check_missing_paranthesis(&left);
-                self.check_missing_paranthesis(&right);
+                self.expression_walker(&left, check);
+                self.expression_walker(&right, check);
             }
             Ite(cond, normal, alternative) => {
-                self.check_missing_paranthesis(&cond);
-                self.check_missing_paranthesis(&normal);
-                self.check_missing_paranthesis(&alternative);
-            }
-            ParenthesizedExpression(left, inner, right) => {
-                if left.is_none() {
-                    self.handler.warn_with_span(
-                        "missing opening parenthesis",
-                        LabeledSpan::new(expr.span, "This expression is missing an opening parenthesis.", true),
-                    )
-                }
-                self.check_missing_paranthesis(&inner);
-                if right.is_none() {
-                    self.handler.warn_with_span(
-                        "missing closing parenthesis",
-                        LabeledSpan::new(expr.span, "This expression is missing a closing parenthesis.", true),
-                    )
-                }
+                self.expression_walker(&cond, check);
+                self.expression_walker(&normal, check);
+                self.expression_walker(&alternative, check);
             }
             Tuple(entries) | Function(_, _, entries) => {
-                entries.iter().for_each(|entry| self.check_missing_paranthesis(entry));
+                entries.iter().for_each(|entry| self.expression_walker(entry, check));
             }
             Method(base, _, _, arguments) => {
-                arguments.iter().for_each(|entry| self.check_missing_paranthesis(entry));
-                self.check_missing_paranthesis(&base);
+                self.expression_walker(&base, check);
+                arguments.iter().for_each(|entry| self.expression_walker(entry, check));
             }
         }
     }
 
-    fn check_missing_expression(&self, expr: &Expression) {
+    fn check_missing_paranthesis(handler: &Handler, expr: &Expression) {
         use ExpressionKind::*;
-        match &expr.kind {
-            Lit(_) | Ident(_) => {}
-            MissingExpression => {
-                self.handler.error_with_span(
-                    "missing expression",
-                    LabeledSpan::new(expr.span, "We expected an expression here.", true),
-                );
+        if let ParenthesizedExpression(left, _, right) = &expr.kind {
+            if left.is_none() {
+                handler.warn_with_span(
+                    "missing opening parenthesis",
+                    LabeledSpan::new(expr.span, "this expression is missing an opening parenthesis", true),
+                )
             }
-            Unary(_, inner) | Field(inner, _) | StreamAccess(inner, _) => {
-                self.check_missing_expression(&inner);
-            }
-            Binary(_, left, right)
-            | Default(left, right)
-            | Offset(left, right)
-            | SlidingWindowAggregation { expr: left, duration: right, .. } => {
-                self.check_missing_expression(&left);
-                self.check_missing_expression(&right);
-            }
-            Ite(cond, normal, alternative) => {
-                self.check_missing_expression(&cond);
-                self.check_missing_expression(&normal);
-                self.check_missing_expression(&alternative);
-            }
-            ParenthesizedExpression(_, inner, _) => self.check_missing_expression(&inner),
-            Tuple(entries) | Function(_, _, entries) => {
-                entries.iter().for_each(|entry| self.check_missing_expression(entry))
-            }
-            Method(base, _, _, arguments) => {
-                arguments.iter().for_each(|entry| self.check_missing_expression(entry));
-                self.check_missing_expression(&base);
+            if right.is_none() {
+                handler.warn_with_span(
+                    "missing closing parenthesis",
+                    LabeledSpan::new(expr.span, "this expression is missing a closing parenthesis", true),
+                )
             }
         }
     }
 
-    fn check_offsets_are_literals(&self, expr: &Expression) {
+    fn check_missing_expression(handler: &Handler, expr: &Expression) {
+        use ExpressionKind::*;
+        if let MissingExpression = &expr.kind {
+            handler.error_with_span(
+                "missing expression",
+                LabeledSpan::new(expr.span, "we expected an expression here.", true),
+            );
+        }
+    }
+
+    fn check_offsets_are_literals(handler: &Handler, expr: &Expression) {
         use ExpressionKind::*;
         match &expr.kind {
-            Lit(_) | Ident(_) => {}
-            MissingExpression => {}
-            Unary(_, inner) | Field(inner, _) | StreamAccess(inner, _) => {
-                self.check_missing_expression(&inner);
-            }
-            Binary(_, left, right) | Default(left, right) => {
-                self.check_missing_expression(&left);
-                self.check_missing_expression(&right);
-            }
-            Offset(expr, offset) => {
-                self.check_missing_expression(&expr);
-                match &offset.kind {
-                    ExpressionKind::Lit(l) => match l.kind {
-                        LitKind::Numeric(_, _) => {
-                            return;
-                        }
-                        _ => {}
-                    },
-                    _ => {}
+            Offset(_, offset) => {
+                if let ExpressionKind::Lit(l) = &offset.kind {
+                    if let LitKind::Numeric(_, _) = l.kind {
+                        return;
+                    }
                 }
-                self.handler.error_with_span(
-                    "Offsets have to be numeric constants, like `42` or `10sec`",
-                    LabeledSpan::new(expr.span, "Expected a numeric value", true),
+                handler.error_with_span(
+                    "offsets have to be numeric constants, like `42` or `10sec`",
+                    LabeledSpan::new(expr.span, "expected a numeric value", true),
                 );
             }
-            SlidingWindowAggregation { expr, duration, .. } => {
-                self.check_missing_expression(&expr);
-                match &duration.kind {
-                    ExpressionKind::Lit(l) => match l.kind {
-                        LitKind::Numeric(_, Some(_)) => {
-                            return;
-                        }
-                        _ => {}
-                    },
-                    _ => {}
+            SlidingWindowAggregation { duration, .. } => {
+                if let ExpressionKind::Lit(l) = &duration.kind {
+                    if let LitKind::Numeric(_, Some(_)) = l.kind {
+                        return;
+                    }
                 }
-                self.handler.error_with_span(
-                    "Only durations are allowed in sliding windows",
-                    LabeledSpan::new(expr.span, "Expected a duration", true),
+                handler.error_with_span(
+                    "only durations are allowed in sliding windows",
+                    LabeledSpan::new(expr.span, "expected a duration", true),
                 );
             }
-            Ite(cond, normal, alternative) => {
-                self.check_missing_expression(&cond);
-                self.check_missing_expression(&normal);
-                self.check_missing_expression(&alternative);
-            }
-            ParenthesizedExpression(_, inner, _) => self.check_missing_expression(&inner),
-            Tuple(entries) | Function(_, _, entries) => {
-                entries.iter().for_each(|entry| self.check_missing_expression(entry))
-            }
-            Method(base, _, _, arguments) => {
-                arguments.iter().for_each(|entry| self.check_missing_expression(entry));
-                self.check_missing_expression(&base);
+            _ => {}
+        }
+    }
+
+    /// Currently, offsets are only allowed on direct stream access
+    fn check_offsets_direct_access(handler: &Handler, expr: &Expression) {
+        use ExpressionKind::*;
+        if let Offset(inner, _) = &expr.kind {
+            if let Ident(_) = inner.kind {
+                // is a direct access
+            } else {
+                handler.error_with_span(
+                    "offsets can be only applied to streams directly",
+                    LabeledSpan::new(inner.span, "expected a stream variable", true),
+                );
             }
         }
     }
@@ -218,5 +190,11 @@ mod tests {
         assert_eq!(1, number_of_errors("output a := x.offset(by: y)"));
         assert_eq!(0, number_of_errors("output a := x.aggregate(over: 1h, using: avg)"));
         assert_eq!(1, number_of_errors("output a := x.aggregate(over: y, using: avg)"));
+    }
+
+    #[test]
+    fn test_offsets_direct_access() {
+        assert_eq!(0, number_of_errors("output a := x.offest(by: 1)"));
+        assert_eq!(1, number_of_errors("output a := x.hold().offset(by: 1)"));
     }
 }
