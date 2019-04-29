@@ -124,31 +124,35 @@ impl Evaluator {
                     Neg | Not => 1,
                     Add | Sub | Mul | Div | Rem | Pow | And | Or | Eq | Lt | Le | Ne | Ge | Gt => 2,
                 };
-                if arity == 1 {
-                    let operand = self.get(stmt.args[0], inst);
-                    self.write(stmt.target, !operand, inst)
-                } else if arity == 2 {
-                    let lhs = self.get(stmt.args[0], inst);
-                    let rhs = self.get(stmt.args[1], inst);
+                match arity {
+                    1 => {
+                        let operand = self.get(stmt.args[0], inst);
+                        self.write(stmt.target, !operand, inst)
+                    }
+                    2 => {
+                        let lhs = self.get(stmt.args[0], inst);
+                        let rhs = self.get(stmt.args[1], inst);
 
-                    let res = match op {
-                        Add => lhs + rhs,
-                        Sub => lhs - rhs,
-                        Mul => lhs * rhs,
-                        Div => lhs / rhs,
-                        Rem => lhs % rhs,
-                        Pow => unimplemented!(),
-                        And => lhs & rhs,
-                        Or => lhs | rhs,
-                        Eq => Value::Bool(lhs == rhs),
-                        Lt => Value::Bool(lhs <= rhs),
-                        Le => Value::Bool(lhs < rhs),
-                        Ne => Value::Bool(lhs != rhs),
-                        Ge => Value::Bool(lhs >= rhs),
-                        Gt => Value::Bool(lhs > rhs),
-                        Neg | Not => panic!(),
-                    };
-                    self.write(stmt.target, res, inst);
+                        let res = match op {
+                            Add => lhs + rhs,
+                            Sub => lhs - rhs,
+                            Mul => lhs * rhs,
+                            Div => lhs / rhs,
+                            Rem => lhs % rhs,
+                            Pow => unimplemented!(),
+                            And => lhs & rhs,
+                            Or => lhs | rhs,
+                            Eq => Value::Bool(lhs == rhs),
+                            Lt => Value::Bool(lhs <= rhs),
+                            Le => Value::Bool(lhs < rhs),
+                            Ne => Value::Bool(lhs != rhs),
+                            Ge => Value::Bool(lhs >= rhs),
+                            Gt => Value::Bool(lhs > rhs),
+                            Neg | Not => panic!(),
+                        };
+                        self.write(stmt.target, res, inst);
+                    }
+                    _ => unreachable!(),
                 }
             }
             Op::SyncStreamLookup(tar_inst) => {
