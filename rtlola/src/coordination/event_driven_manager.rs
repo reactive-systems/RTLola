@@ -101,6 +101,7 @@ impl EventDrivenManager {
         mut self,
         offline: bool,
         work_queue: Sender<WorkItem>,
+        send_time: bool,
         time_chan: Sender<SystemTime>,
         ack_chan: Receiver<()>,
     ) -> ! {
@@ -123,11 +124,13 @@ impl EventDrivenManager {
                     let _ = work_queue.send(WorkItem::Start(time));
                 }
 
-                // Inform the time driven manager first.
-                if let Err(e) = time_chan.send(time) {
-                    panic!("Problem with TDM! {:?}", e)
+                if send_time {
+                    // Inform the time driven manager first.
+                    if let Err(e) = time_chan.send(time) {
+                        panic!("Problem with TDM! {:?}", e)
+                    }
+                    let _ = ack_chan.recv(); // Wait until be get the acknowledgement.
                 }
-                let _ = ack_chan.recv(); // Wait until be get the acknowledgement.
             }
 
             match work_queue.send(WorkItem::Event(event, time)) {

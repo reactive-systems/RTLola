@@ -50,20 +50,11 @@ pub(crate) struct TimeDrivenManager {
 impl TimeDrivenManager {
     /// Creates a new TimeDrivenManager managing time-driven output streams.
     pub(crate) fn setup(ir: LolaIR, config: EvalConfig) -> TimeDrivenManager {
+        assert!(!ir.time_driven.is_empty());
+
         let handler = OutputHandler::new(&config);
 
-        if ir.time_driven.is_empty() {
-            return TimeDrivenManager {
-                last_state: None,
-                deadlines: Vec::new(),
-                hyper_period: Duration::from_secs(100_000), // Actual value does not matter.
-                start_time: None,
-                handler,
-            };
-        }
-
         let schedule = Schedule::from(&ir);
-
         // TODO: Sort by evaluation order!
 
         TimeDrivenManager {
@@ -118,13 +109,6 @@ impl TimeDrivenManager {
         time_chan: Receiver<SystemTime>,
         time_ack_chan: Sender<()>,
     ) -> ! {
-        if self.deadlines.is_empty() {
-            // spec is not timed.
-            loop {
-                sleep(Duration::new(u64::max_value(), 0));
-            }
-        }
-
         match time_chan.recv() {
             Err(e) => panic!("TDM crashed. {}", e),
             Ok(time) => {
@@ -161,12 +145,6 @@ impl TimeDrivenManager {
     }
 
     pub fn start_online(mut self, time: Option<SystemTime>, work_chan: Sender<WorkItem>) -> ! {
-        if self.deadlines.is_empty() {
-            // spec is not timed.
-            loop {
-                sleep(Duration::new(u64::max_value(), 0));
-            }
-        }
         self.start_time = time.or_else(|| Some(SystemTime::now()));
         loop {
             let (sleepy_time, due_streams) = self.get_current_deadline(None);

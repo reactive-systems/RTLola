@@ -33,24 +33,27 @@ impl Controller {
         let (time_tx, time_rx) = mpsc::channel();
         let (ack_tx, ack_rx) = mpsc::channel();
 
-        let ir_clone_1 = ir.clone();
-        let ir_clone_2 = ir.clone();
-        let cfg_clone_1 = config.clone();
-        let cfg_clone_2 = config.clone();
-        let work_tx_clone = work_tx.clone();
+        let has_time_driven = !ir.time_driven.is_empty();
+        if has_time_driven {
+            let work_tx_clone = work_tx.clone();
+            let ir_clone = ir.clone();
+            let cfg_clone = config.clone();
+            let _ = thread::Builder::new().name("TimeDrivenManager".into()).spawn(move || {
+                let time_manager = TimeDrivenManager::setup(ir_clone, cfg_clone);
+                if offline {
+                    time_manager.start_offline(work_tx_clone, time_rx, ack_tx);
+                } else {
+                    time_manager.start_online(Some(SystemTime::now()), work_tx_clone);
+                }
+            });
+        };
 
+        let ir_clone = ir.clone();
+        let cfg_clone = config.clone();
         // TODO: Wait until all events have been read.
-        let _event = thread::Builder::new().name("EventDrivenManager".to_string()).spawn(move || {
-            let event_manager = EventDrivenManager::setup(ir_clone_1, cfg_clone_1);
-            event_manager.start(offline, work_tx_clone, time_tx, ack_rx);
-        });
-        let _ = thread::Builder::new().name("TimeDrivenManager".to_string()).spawn(move || {
-            let time_manager = TimeDrivenManager::setup(ir_clone_2, cfg_clone_2);
-            if offline {
-                time_manager.start_offline(work_tx, time_rx, ack_tx);
-            } else {
-                time_manager.start_online(Some(SystemTime::now()), work_tx);
-            }
+        let _event = thread::Builder::new().name("EventDrivenManager".into()).spawn(move || {
+            let event_manager = EventDrivenManager::setup(ir_clone, cfg_clone);
+            event_manager.start(offline, work_tx, has_time_driven, time_tx, ack_rx);
         });
 
         let output_handler = OutputHandler::new(&config);
