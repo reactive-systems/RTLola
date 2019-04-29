@@ -27,8 +27,8 @@ fn analyse_expression(version_tracker: &mut VersionTracker, expr: &Expression, t
     match &expr.kind {
         ExpressionKind::Lit(_) | ExpressionKind::Ident(_) => {}
         ExpressionKind::Default(target, default) => {
-            analyse_expression(version_tracker, &*target, false);
-            analyse_expression(version_tracker, &*default, false);
+            analyse_expression(version_tracker, target, false);
+            analyse_expression(version_tracker, default, false);
         }
         ExpressionKind::StreamAccess(expr, _access) => {
             let span = expr.span;
@@ -36,34 +36,36 @@ fn analyse_expression(version_tracker: &mut VersionTracker, expr: &Expression, t
             version_tracker.cannot_be_classic = Some((span, String::from("Sample and hold – no ClassicLola")));
             analyse_expression(version_tracker, expr.as_ref(), false);
         }
-        ExpressionKind::Offset(_, _) => unimplemented!(),
-        ExpressionKind::SlidingWindowAggregation { expr: _expr, duration: _duration, aggregation: _aggregation } => {
-            unimplemented!()
+        ExpressionKind::Offset(expr, _) => {
+            analyse_expression(version_tracker, expr, false);
+        }
+        ExpressionKind::SlidingWindowAggregation { expr, .. } => {
+            analyse_expression(version_tracker, expr, false);
         }
         ExpressionKind::Binary(_, left, right) => {
-            analyse_expression(version_tracker, &*left, false);
-            analyse_expression(version_tracker, &*right, false);
+            analyse_expression(version_tracker, left, false);
+            analyse_expression(version_tracker, right, false);
         }
         ExpressionKind::Unary(_, nested) => {
-            analyse_expression(version_tracker, &*nested, false);
+            analyse_expression(version_tracker, nested, false);
         }
         ExpressionKind::Ite(condition, if_case, else_case) => {
-            analyse_expression(version_tracker, &*condition, false);
-            analyse_expression(version_tracker, &*if_case, false);
-            analyse_expression(version_tracker, &*else_case, false);
+            analyse_expression(version_tracker, condition, false);
+            analyse_expression(version_tracker, if_case, false);
+            analyse_expression(version_tracker, else_case, false);
         }
         ExpressionKind::ParenthesizedExpression(_, nested, _) => {
-            analyse_expression(version_tracker, &*nested, false);
+            analyse_expression(version_tracker, nested, false);
         }
         ExpressionKind::MissingExpression => {}
         ExpressionKind::Tuple(nested_exprs) => {
             nested_exprs.iter().for_each(|nested| {
-                analyse_expression(version_tracker, &*nested, false);
+                analyse_expression(version_tracker, nested, false);
             });
         }
         ExpressionKind::Function(_, _, arguments) => {
             arguments.iter().for_each(|arg| {
-                analyse_expression(version_tracker, &*arg, false);
+                analyse_expression(version_tracker, arg, false);
             });
         }
         ExpressionKind::Field(expr, _) => analyse_expression(version_tracker, expr, false),
@@ -326,6 +328,7 @@ mod tests {
 
     // TODO: implement test cases
     #[test]
+    #[ignore] // parameterization was removed from type checking
     fn parameterized_output_stream_causes_lola2() {
         check_version(
             "output test<ab: Int8, c: Int8>: Int8 := 3",
@@ -369,6 +372,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore] // parameterization was removed from type checking
     fn parameterized_input_stream_causes_lola2() {
         check_version(
             "input test<ab: Int8, c: Int8> : Int8",
