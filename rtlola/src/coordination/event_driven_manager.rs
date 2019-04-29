@@ -129,7 +129,10 @@ impl EventDrivenManager {
                     if let Err(e) = time_chan.send(time) {
                         panic!("Problem with TDM! {:?}", e)
                     }
-                    let _ = ack_chan.recv(); // Wait until be get the acknowledgement.
+                    // Wait for the acknowledgement.
+                    if let Err(e) = ack_chan.recv() {
+                        panic!("Problem with TDM! {:?}", e)
+                    }
                 }
             }
 
