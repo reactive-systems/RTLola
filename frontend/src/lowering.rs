@@ -427,18 +427,11 @@ impl<'a> Lowering<'a> {
         ir::Expression { stmts, temporaries }
     }
 
-    fn lower_subexpression(&mut self, expr: &ast::Expression, mut state: LoweringState) -> LoweringState {
-        use crate::ir::{Op, Statement};
-
+    fn lower_subexpression(&mut self, expr: &ast::Expression, mut state: LoweringState) -> ir::Expression {
         let result_type = self.lower_value_type(expr.id);
 
         match &expr.kind {
-            ExpressionKind::Lit(l) => {
-                let op = Op::LoadConstant(self.lower_literal(l));
-                let args = Vec::new();
-                let stmt = Statement { target: state.temp_for_type(&result_type), op, args };
-                state.with_stmt(stmt)
-            }
+            ExpressionKind::Lit(l) => ir::Expression::LoadConstant(self.lower_literal(l)),
             ExpressionKind::Ident(_) => {
                 let sr = self.get_ref_for_ident(expr.id);
                 self.lower_sync_lookup(state, sr)
@@ -636,19 +629,14 @@ impl<'a> Lowering<'a> {
         state.with_stmt(ir::Statement { target, op: ir::Op::Convert, args: vec![source] })
     }
 
-    fn lower_sync_lookup(&self, mut state: LoweringState, lu_target_ref: StreamReference) -> LoweringState {
+    fn lower_sync_lookup(&self, mut state: LoweringState, lu_target_ref: StreamReference) -> ir::Expression {
         let lu_target = ir::StreamInstance { reference: lu_target_ref, arguments: Vec::new() };
         let lu_type = match lu_target_ref {
             StreamReference::InRef(_) => &self.ir.get_in(lu_target_ref).ty,
             StreamReference::OutRef(_) => &self.ir.get_out(lu_target_ref).ty,
         };
 
-        let lu_target_temp = state.temp_for_type(lu_type);
-
-        let lu_stmt =
-            ir::Statement { target: lu_target_temp, op: ir::Op::SyncStreamLookup(lu_target), args: Vec::new() };
-
-        state.with_stmt(lu_stmt)
+        ir::Expression::SyncStreamLookup(lu_target)
     }
 
     fn lower_expression_list(

@@ -139,36 +139,9 @@ pub struct Parameter {
     pub ty: Type,
 }
 
-/// An expression in the IR is a list of executable statements
+/// The expressions of the IR
 #[derive(Debug, PartialEq, Clone)]
-pub struct Expression {
-    /// A list of statements where the last statement represents the result of the expression
-    pub stmts: Vec<Statement>,
-    /// A list of temporary values, used in the statements
-    pub temporaries: Vec<Type>,
-}
-
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
-pub struct Temporary(pub usize);
-
-impl From<u32> for Temporary {
-    fn from(u: u32) -> Temporary {
-        Temporary(u as usize)
-    }
-}
-
-/// A statement is of the form `target = op <arguments>`
-#[derive(Debug, PartialEq, Clone)]
-pub struct Statement {
-    /// the name of the temporary
-    pub target: Temporary,
-    pub op: Op,
-    pub args: Vec<Temporary>,
-}
-
-/// the operations (instruction set) of the IR
-#[derive(Debug, PartialEq, Clone)]
-pub enum Op {
+pub enum Expression {
     /// Loading a constant
     /// 1st argument -> Constant.
     LoadConstant(Constant),
@@ -176,7 +149,7 @@ pub enum Op {
     /// Unary: 1st argument -> operand
     /// Binary: 1st argument -> lhs, 2nd argument -> rhs
     /// n-ary: kth argument -> kth operand
-    ArithLog(ArithLogOp),
+    ArithLog(ArithLogOp, Box<[Expression]>),
     /// Accessing another stream
     /// 1st argument -> default
     /// StreamInstance contains further arguments.
@@ -192,19 +165,16 @@ pub enum Op {
     WindowLookup(WindowReference),
     /// An if-then-else expression
     /// One argument: The register with the condition.
-    Ite { consequence: Vec<Statement>, alternative: Vec<Statement> },
+    Ite { condition: Box<Expression>, consequence: Box<Expression>, alternative: Box<Expression> },
     /// A tuple expression
     /// Arguments: values of the tuple.
-    Tuple,
+    Tuple(Box<[Expression]>),
     /// A function call
     /// Arguments in statement in proper order.
-    Function(String),
+    Function(String, Box<[Expression]>),
     /// Converts a value to a different type.
     /// One arguments containing the value to convert.
-    Convert,
-    /// Moves the value of a temporary to a different one.
-    /// One argument, the source temporary.
-    Move,
+    Convert { from: Type, to: Type, expr: Box<Expression> },
 }
 
 /// Represents a constant value of a certain kind.
