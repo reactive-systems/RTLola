@@ -10,8 +10,8 @@ use super::unifier::{InferError, StreamVar, StreamVarOrTy, UnifiableTy, Unifier,
 use super::{Activation, Freq, StreamTy, TypeConstraint, ValueTy};
 use crate::analysis::naming::{Declaration, DeclarationTable};
 use crate::ast::{
-    Constant, Expression, ExpressionKind, Input, Literal, LolaSpec, Offset, Output, StreamAccessKind,
-    StreamInstance, TimeSpec, Trigger, Type, TypeKind, WindowOperation,
+    Constant, Expression, Input, Literal, LolaSpec, Output, StreamAccessKind, TimeSpec, Trigger, Type,
+    TypeKind, WindowOperation,
 };
 use crate::parse::{NodeId, Span};
 use crate::reporting::{Handler, LabeledSpan};

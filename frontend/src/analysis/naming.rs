@@ -1,6 +1,5 @@
 //! This module provides naming analysis for a given Lola AST.
 
-use crate::ast::Offset;
 use crate::ast::*;
 use crate::parse::{Ident, NodeId, Span};
 use crate::reporting::{Handler, LabeledSpan};
@@ -274,45 +273,6 @@ impl<'a, 'b> NamingAnalysis<'a, 'b> {
             self.declarations.add_decl_for("self", Declaration::Out(output));
             self.check_expression(&output.expression);
             self.declarations.pop();
-        }
-    }
-
-    fn check_stream_instance(&mut self, instance: &'a StreamInstance) {
-        if let Some(decl) = self.declarations.get_decl_for(&instance.stream_identifier.name) {
-            if decl.is_lookup_target() {
-                self.result.insert(instance.id, decl);
-            } else {
-                // not a stream
-                let mut builder = self.handler.build_error_with_span(
-                    &format!("the name `{}` is not a stream", instance.stream_identifier.name),
-                    LabeledSpan::new(instance.span, "expected a stream here", true),
-                );
-                if let Some(span) = decl.get_span() {
-                    builder.add_span_with_label(
-                        span,
-                        &format!("definition of `{}` here", instance.stream_identifier.name),
-                        false,
-                    );
-                }
-                builder.emit();
-            }
-        } else {
-            // it does not exist
-            self.handler.error_with_span(
-                &format!("name `{}` does not exist in current scope", &instance.stream_identifier.name),
-                LabeledSpan::new(instance.span, "does not exist", true),
-            );
-        }
-        // check paramterization
-        instance.arguments.iter().for_each(|param| {
-            self.check_expression(param);
-        });
-    }
-
-    fn check_offset(&mut self, offset: &'a Offset) {
-        match offset {
-            Offset::DiscreteOffset(off) => self.check_expression(off),
-            Offset::RealTimeOffset(_) => {}
         }
     }
 

@@ -182,15 +182,6 @@ pub struct TypeDeclField {
     pub(crate) span: Span,
 }
 
-#[allow(clippy::vec_box)]
-#[derive(Debug, Clone)]
-pub struct StreamInstance {
-    pub stream_identifier: Ident,
-    pub arguments: Vec<Box<Expression>>,
-    pub(crate) id: NodeId,
-    pub(crate) span: Span,
-}
-
 #[derive(Debug, Clone)]
 pub struct Parenthesis {
     pub(crate) id: NodeId,
@@ -395,15 +386,6 @@ pub enum UnOp {
     Not,
     /// The `-` operator for negation
     Neg,
-}
-
-/// Offset used in the lookup expression
-#[derive(Debug, Clone)]
-pub enum Offset {
-    /// A discrete offset, e.g., `0`, `-4`, or `42`
-    DiscreteOffset(Box<Expression>),
-    /// A real-time offset, e.g., `3ms`, `4min`, `2.3h`
-    RealTimeOffset(TimeSpec),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

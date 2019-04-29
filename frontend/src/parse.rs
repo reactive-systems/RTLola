@@ -396,16 +396,6 @@ fn parse_literal(pair: Pair<'_, Rule>) -> Literal {
     }
 }
 
-fn parse_stream_instance(spec: &mut LolaSpec, instance: Pair<'_, Rule>) -> StreamInstance {
-    let span = instance.as_span().into();
-    let mut children = instance.into_inner();
-    // Parse the stream identifier in isolation.
-    let stream_ident = parse_ident(&children.next().unwrap());
-    // Parse remaining children, aka the arguments.
-    let args = parse_vec_of_expressions(spec, children);
-    StreamInstance { stream_identifier: stream_ident, arguments: args, id: NodeId::DUMMY, span }
-}
-
 #[allow(clippy::vec_box)]
 fn parse_vec_of_expressions(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>) -> Vec<Box<Expression>> {
     pairs

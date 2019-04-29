@@ -722,28 +722,6 @@ impl<'a> Lowering<'a> {
         }*/
     }
 
-    fn lower_offset(&self, offset: &ast::Offset) -> ir::Offset {
-        match offset {
-            ast::Offset::RealTimeOffset(time_spec) => {
-                if time_spec.signum > 0 {
-                    ir::Offset::FutureRealTimeOffset(time_spec.period)
-                } else {
-                    ir::Offset::PastRealTimeOffset(time_spec.period)
-                }
-            }
-            ast::Offset::DiscreteOffset(e) => match self.extract_literal(e) {
-                ir::Constant::Int(i) => {
-                    if i > 0 {
-                        ir::Offset::FutureDiscreteOffset(i as u128)
-                    } else {
-                        ir::Offset::PastDiscreteOffset(i.abs() as u128)
-                    }
-                }
-                _ => unreachable!("Eradicated in preceding step."),
-            },
-        }
-    }
-
     fn extract_literal(&self, e: &ast::Expression) -> ir::Constant {
         match &e.kind {
             ExpressionKind::Lit(l) => self.lower_literal(l),

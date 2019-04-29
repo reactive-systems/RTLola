@@ -281,26 +281,6 @@ impl Display for FunctionName {
     }
 }
 
-impl Display for StreamInstance {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        write!(f, "{}", self.stream_identifier)?;
-        if self.arguments.is_empty() {
-            Ok(())
-        } else {
-            write_delim_list(f, &self.arguments, "(", ")", ", ")
-        }
-    }
-}
-
-impl Display for Offset {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        match self {
-            Offset::DiscreteOffset(e) => write!(f, "{}", e),
-            Offset::RealTimeOffset(time_spec) => write!(f, "{}", time_spec),
-        }
-    }
-}
-
 impl Display for WindowOperation {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         write!(
