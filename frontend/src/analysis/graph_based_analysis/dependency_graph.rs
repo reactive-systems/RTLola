@@ -1,7 +1,7 @@
 use super::{DependencyGraph, EIx, Location, NIx, Offset, StreamDependency, StreamNode, TimeOffset};
 use crate::analysis::lola_version::LolaVersionTable;
 use crate::analysis::naming::{Declaration, DeclarationTable};
-use crate::ast::{ExpressionKind, LanguageSpec, LitKind, LolaSpec, Output, TemplateSpec, UnOp};
+use crate::ast::{Expression, ExpressionKind, LanguageSpec, LolaSpec, Output, TemplateSpec};
 use crate::parse::{NodeId, Span};
 use crate::reporting::{DiagnosticBuilder, Handler, LabeledSpan, Level};
 use num::Signed;
@@ -241,53 +241,19 @@ impl<'a> DependencyAnalyser<'a> {
         }
     }
 
-    fn evaluate_discrete(&self, expr: &crate::ast::Expression, naming_table: &'a DeclarationTable) -> i32 {
-        // TODO need typing information
-        match &expr.kind {
-            ExpressionKind::Lit(lit) => match &lit.kind {
-                //LitKind::Int(int) => *int as i32,
-                _ => unimplemented!(),
-            },
-            ExpressionKind::Ident(_) => match &naming_table[&expr.id] {
-                _ => unimplemented!(),
-            },
-            ExpressionKind::StreamAccess(_, _) => unimplemented!(),
-            ExpressionKind::Default(_, _) => unreachable!(),
-            ExpressionKind::Offset(_, _) => unimplemented!(),
-            ExpressionKind::SlidingWindowAggregation {
-                expr: _expr,
-                duration: _duration,
-                aggregation: _aggregation,
-            } => unimplemented!(),
-            ExpressionKind::Binary(_, _, _) => unimplemented!(),
-            ExpressionKind::Unary(op, expr) => {
-                assert_eq!(UnOp::Neg, *op);
-                -self.evaluate_discrete(expr, naming_table)
-            }
-            ExpressionKind::Ite(_, _, _) => unreachable!(),
-            ExpressionKind::ParenthesizedExpression(_, expr, _) => self.evaluate_discrete(expr, naming_table),
-            ExpressionKind::MissingExpression => unreachable!(),
-            ExpressionKind::Tuple(_) => unimplemented!(),
-            ExpressionKind::Function(_, _, _) => unimplemented!(),
-            ExpressionKind::Field(_, _) => unimplemented!(),
-            ExpressionKind::Method(_, _, _, _) => unimplemented!(),
-        }
-    }
-
-    fn translate_offset(&self, offset: &crate::ast::Offset, naming_table: &'a DeclarationTable) -> Offset {
+    // Tranforms an offset expression into `Offset` representation
+    fn translate_offset(&self, offset: &Expression) -> Offset {
         // TODO replace the evaluate_discrete/float
-        match offset {
-            crate::ast::Offset::DiscreteOffset(expr) => {
-                let offset = self.evaluate_discrete(expr, naming_table);
-                Offset::Discrete(offset)
+        if let Some(offset) = offset.parse_literal::<i32>() {
+            Offset::Discrete(offset)
+        } else if let Some(time_spec) = offset.parse_timespec() {
+            if time_spec.signum <= 0 {
+                Offset::Time(TimeOffset::UpToNow(time_spec.period, time_spec.exact_period.abs()))
+            } else {
+                Offset::Time(TimeOffset::Future(time_spec.period, time_spec.exact_period.abs()))
             }
-            crate::ast::Offset::RealTimeOffset(time_spec) => {
-                if time_spec.signum <= 0 {
-                    Offset::Time(TimeOffset::UpToNow(time_spec.period, time_spec.exact_period.abs()))
-                } else {
-                    Offset::Time(TimeOffset::Future(time_spec.period, time_spec.exact_period.abs()))
-                }
-            }
+        } else {
+            panic!("Offsets have to be either integer or durations");
         }
     }
 
@@ -346,7 +312,27 @@ impl<'a> DependencyAnalyser<'a> {
                 }
             },
             ExpressionKind::StreamAccess(_, _) => unimplemented!(),
-            ExpressionKind::Offset(_, _) => unimplemented!(),
+            ExpressionKind::Offset(expr, offset) => {
+                if let ExpressionKind::Ident(_) = &expr.kind {
+
+                } else {
+                    panic!("Offsets can only be applied on direct stream access");
+                }
+                let target_stream_id = match &self.naming_table[&expr.id] {
+                    Declaration::Out(output) => output.id,
+                    Declaration::In(input) => input.id,
+                    _ => unreachable!(),
+                };
+                let target_stream_entry = mapping[&target_stream_id];
+                let target_stream_index = target_stream_entry.normal_time_index;
+
+                let offset = self.translate_offset(offset);
+                self.dependency_graph.add_edge(
+                    current_node,
+                    target_stream_index,
+                    StreamDependency::Access(location, offset, expr.span),
+                );
+            }
             ExpressionKind::SlidingWindowAggregation {
                 expr: _expr,
                 duration: _duration,
@@ -878,18 +864,18 @@ mod tests {
 
     #[test]
     fn negative_cycle_should_be_no_problem() {
-        check_graph("output a: Int8 := a[-1]?0", 0, 0)
+        check_graph("output a: Int8 := a[-1].defaults(to: 0)", 0, 0)
     }
 
     #[test]
     #[ignore] // real time analysis is not yet implemented
     fn self_sliding_window_should_be_no_problem() {
-        check_graph("output a: Int8 := a[1s,sum]?0", 0, 0)
+        check_graph("output a: Int8 := a.aggregate(over: 1s, using: sum).defaults(to: 0)", 0, 0)
     }
 
     #[test]
     fn positive_cycle_should_cause_a_warning() {
-        check_graph("output a: Int8 := a[1]?0", 0, 1)
+        check_graph("output a: Int8 := a[1]", 0, 1)
     }
 
     #[test]

@@ -308,8 +308,14 @@ impl UnifyKey for ValueVar {
 impl UnifiableTy for StreamTy {
     type V = StreamVar;
 
-    fn normalize_ty<U: Unifier<Var = Self::V, Ty = Self>>(&self, _unifier: &mut U) -> Self {
-        self.clone()
+    fn normalize_ty<U: Unifier<Var = Self::V, Ty = Self>>(&self, unifier: &mut U) -> Self {
+        match self {
+            StreamTy::Infer(var) => match unifier.get_type(*var) {
+                None => self.clone(),
+                Some(other_ty) => other_ty.normalize_ty(unifier),
+            },
+            _ => self.clone(),
+        }
     }
 
     fn coerces_with<U: Unifier<Var = Self::V, Ty = Self>>(&self, _unifier: &mut U, right: &Self) -> bool {

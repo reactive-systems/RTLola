@@ -3,11 +3,10 @@ use crate::analysis::graph_based_analysis::space_requirements::TrackingRequireme
 use crate::analysis::graph_based_analysis::MemoryBound;
 use crate::analysis::graph_based_analysis::TrackingRequirement;
 use crate::analysis::graph_based_analysis::{SpaceRequirements, StorageRequirement};
-use crate::analysis::naming::Declaration;
 use crate::analysis::DeclarationTable;
 use crate::analysis::TypeTable;
 use crate::ast;
-use crate::ast::{ExpressionKind, LolaSpec, Offset, StreamAccessKind, WindowOperation};
+use crate::ast::{ExpressionKind, LolaSpec, StreamAccessKind, WindowOperation};
 use crate::ty::StreamTy;
 use num::{BigRational, ToPrimitive};
 use std::cmp::min;

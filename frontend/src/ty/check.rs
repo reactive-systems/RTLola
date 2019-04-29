@@ -862,8 +862,12 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
 
     pub(crate) fn get_stream_type(&mut self, id: NodeId) -> Option<StreamTy> {
         match self.stream_vars.get(&id) {
-            Some(&var) => self.stream_unifier.get_normalized_type(var),
-            None => None,
+            Some(&var) => match self.stream_unifier.get_normalized_type(var) {
+                // make stream types default to event stream with empty conjunction, i.e., true
+                Some(StreamTy::Infer(_)) | None => Some(StreamTy::Event(Activation::Conjunction(Vec::new()))),
+                t => t,
+            },
+            None => Some(StreamTy::Event(Activation::Conjunction(Vec::new()))),
         }
     }
 }
