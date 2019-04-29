@@ -11,7 +11,9 @@ pub(crate) struct TempStore {
 
 impl TempStore {
     pub(crate) fn new(expr: &Expression) -> TempStore {
-        let mut offsets = Vec::new();
+        let n = expr.temporaries.len();
+        let mut offsets = Vec::with_capacity(n);
+        let mut types = Vec::with_capacity(n);
         let mut size = 0;
         for ty in expr.temporaries.iter() {
             offsets.push(size as usize);
@@ -19,20 +21,11 @@ impl TempStore {
                 Type::Option(t) => t, // We don't store options but resolve during lookup.
                 _ => ty,
             };
+            types.push(ty.clone());
             size += ty.size().unwrap().0;
         }
 
-        let offsets = offsets;
-        let size = size as usize;
-
-        let data = vec![0; size];
-
-        let types = expr
-            .temporaries
-            .clone()
-            .into_iter()
-            .map(|ty| if let Type::Option(t) = ty { *t.clone() } else { ty })
-            .collect();
+        let data = vec![0; size as usize];
 
         TempStore { offsets, data, types }
     }
