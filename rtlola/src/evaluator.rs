@@ -215,6 +215,7 @@ impl Evaluator {
         is.and_then(|is| is.get_value(offset))
     }
 
+    #[cfg(test)]
     fn __peek_value(&self, sr: StreamReference, args: &[Value], offset: i16) -> Option<Value> {
         match sr {
             StreamReference::InRef(_) => {
