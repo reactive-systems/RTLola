@@ -28,7 +28,7 @@ impl lola_parser::LolaBackend for Controller {
 impl Controller {
     /// Starts the evaluation process, i.e. periodically computes outputs for time-driven streams
     /// and fetches/expects events from specified input source.
-    pub fn evaluate(ir: LolaIR, config: EvalConfig, online: bool) -> ! {
+    pub fn evaluate(ir: LolaIR, config: EvalConfig, offline: bool) -> ! {
         let (work_tx, work_rx) = mpsc::channel();
         let (time_tx, time_rx) = mpsc::channel();
         let (ack_tx, ack_rx) = mpsc::channel();
@@ -42,18 +42,14 @@ impl Controller {
         // TODO: Wait until all events have been read.
         let _event = thread::Builder::new().name("EventDrivenManager".to_string()).spawn(move || {
             let event_manager = EventDrivenManager::setup(ir_clone_1, cfg_clone_1);
-            if online {
-                event_manager.start_online(work_tx_clone)
-            } else {
-                event_manager.start_offline(work_tx_clone, time_tx, ack_rx);
-            }
+            event_manager.start(offline, work_tx_clone, time_tx, ack_rx);
         });
         let _ = thread::Builder::new().name("TimeDrivenManager".to_string()).spawn(move || {
             let time_manager = TimeDrivenManager::setup(ir_clone_2, cfg_clone_2);
-            if online {
-                time_manager.start_online(Some(SystemTime::now()), work_tx);
-            } else {
+            if offline {
                 time_manager.start_offline(work_tx, time_rx, ack_tx);
+            } else {
+                time_manager.start_online(Some(SystemTime::now()), work_tx);
             }
         });
 
@@ -63,9 +59,7 @@ impl Controller {
         let layers = ir.get_event_driven_layers();
         output_handler.debug(|| format!("Evaluation layers: {:?}", layers));
 
-        let e = if online {
-            Evaluator::new(ir, SystemTime::now(), config.clone())
-        } else {
+        let evaluator = if offline {
             match work_rx.recv() {
                 Err(e) => panic!("Both producers hung up! {}", e),
                 Ok(wi) => match wi {
@@ -73,9 +67,11 @@ impl Controller {
                     _ => panic!("Did not receive a start event in offline mode!"),
                 },
             }
+        } else {
+            Evaluator::new(ir, SystemTime::now(), config.clone())
         };
 
-        let mut ctrl = Controller { output_handler, evaluator: e };
+        let mut ctrl = Controller { output_handler, evaluator };
 
         loop {
             match work_rx.recv() {

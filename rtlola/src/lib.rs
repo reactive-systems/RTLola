@@ -9,11 +9,11 @@ use crate::coordination::Controller;
 use lola_parser::ir::LolaIR;
 
 pub fn start_evaluation_online(ir: LolaIR, cfg: EvalConfig) -> ! {
-    Controller::evaluate(ir, cfg, true);
+    Controller::evaluate(ir, cfg, false);
 }
 
 pub fn start_evaluation_offline(ir: LolaIR, cfg: EvalConfig) -> ! {
-    Controller::evaluate(ir, cfg, false);
+    Controller::evaluate(ir, cfg, true);
 }
 
 // Public export.

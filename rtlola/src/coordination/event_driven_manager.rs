@@ -51,26 +51,6 @@ impl EventDrivenManager {
         EDM { current_cycle: 0.into(), out_handler, input_reader, in_types }
     }
 
-    pub(crate) fn start_online(mut self, work_queue: Sender<WorkItem>) -> ! {
-        loop {
-            if !self.read_event() {
-                let _ = work_queue.send(WorkItem::End); // Whether it fails or not, we really don't care.
-                                                        // Sleep until you slowly fade into nothingness...
-                loop {
-                    std::thread::sleep(std::time::Duration::new(u64::max_value(), 0))
-                }
-            }
-            let event = self.get_event();
-
-            let event = event.into_iter().flatten().collect(); // Remove non-existing values.
-            match work_queue.send(WorkItem::Event(event, SystemTime::now())) {
-                Ok(_) => {}
-                Err(e) => self.out_handler.runtime_warning(|| format!("Error when sending work item. {}", e)),
-            }
-            self.current_cycle += 1;
-        }
-    }
-
     fn read_event(&mut self) -> bool {
         self.input_reader.read_blocking().unwrap_or_else(|e| panic!("Error reading data. {}", e))
     }
@@ -119,8 +99,9 @@ impl EventDrivenManager {
         }
     }
 
-    pub(crate) fn start_offline(
+    pub(crate) fn start(
         mut self,
+        offline: bool,
         work_queue: Sender<WorkItem>,
         time_chan: Sender<SystemTime>,
         ack_chan: Receiver<()>,
@@ -135,18 +116,21 @@ impl EventDrivenManager {
                 }
             }
             let event = self.get_event();
-            let time = self.get_time();
 
-            if start_time.is_none() {
-                start_time = Some(time);
-                let _ = work_queue.send(WorkItem::Start(time));
-            }
+            let time = if offline { self.get_time() } else { SystemTime::now() };
 
-            // Inform the time driven manager first.
-            if let Err(e) = time_chan.send(time) {
-                panic!("Problem with TDM! {:?}", e)
+            if offline {
+                if start_time.is_none() {
+                    start_time = Some(time);
+                    let _ = work_queue.send(WorkItem::Start(time));
+                }
+
+                // Inform the time driven manager first.
+                if let Err(e) = time_chan.send(time) {
+                    panic!("Problem with TDM! {:?}", e)
+                }
+                let _ = ack_chan.recv(); // Wait until be get the acknowledgement.
             }
-            let _ = ack_chan.recv(); // Wait until be get the acknowledgement.
 
             let event = event.into_iter().flatten().collect(); // Remove non-existing entries.
             match work_queue.send(WorkItem::Event(event, time)) {
