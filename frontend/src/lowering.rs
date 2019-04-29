@@ -5,10 +5,7 @@ use crate::analysis::naming::Declaration;
 use crate::ast;
 use crate::ast::{ExpressionKind, LolaSpec};
 use crate::ir;
-use crate::ir::{
-    EventDrivenStream, LolaIR, MemorizationBound, ParametrizedStream, StreamReference, TimeDrivenStream,
-    WindowReference,
-};
+use crate::ir::{EventDrivenStream, LolaIR, MemorizationBound, StreamReference, TimeDrivenStream, WindowReference};
 use crate::parse::NodeId;
 use crate::ty::StreamTy;
 use std::collections::HashMap;
@@ -47,7 +44,6 @@ impl<'a> Lowering<'a> {
             outputs: Vec::new(),
             time_driven: Vec::new(),
             event_driven: Vec::new(),
-            parametrized: Vec::new(),
             sliding_windows: Vec::new(),
             triggers: Vec::new(),
             feature_flags: Vec::new(),
@@ -115,7 +111,7 @@ impl<'a> Lowering<'a> {
             ty: self.lower_value_type(nid),
             dependent_streams: trackings,
             dependent_windows: Vec::new(),
-            layer, // Not necessarily 0 when parametrized inputs exist.
+            layer,
             memory_bound,
             reference,
         };
@@ -188,7 +184,6 @@ impl<'a> Lowering<'a> {
         let layer = self.get_layer(nid);
         let reference = self.get_ref_for_stream(nid);
         let time_driven = self.check_time_driven(ast_output.id, reference);
-        let parametrized = self.check_parametrized(&ast_output, reference);
 
         let trackings = self.collect_tracking_info(nid, time_driven);
         let outgoing_dependencies = self.find_dependencies(&ast_output.expression);
@@ -227,10 +222,6 @@ impl<'a> Lowering<'a> {
             self.ir.time_driven.push(td_ref)
         } else {
             self.ir.event_driven.push(EventDrivenStream { reference })
-        }
-
-        if let Some(param_ref) = parametrized {
-            self.ir.parametrized.push(param_ref);
         }
     }
 
@@ -369,35 +360,6 @@ impl<'a> Lowering<'a> {
             ast::WindowOperation::Product => ir::WindowOperation::Product,
             ast::WindowOperation::Sum => ir::WindowOperation::Sum,
         }
-    }
-
-    fn check_parametrized(
-        &mut self,
-        ast_output: &ast::Output,
-        reference: StreamReference,
-    ) -> Option<ParametrizedStream> {
-        if let Some(temp_spec) = ast_output.template_spec.as_ref() {
-            // Check if it is merely timed, not parametrized.
-            if temp_spec.ext.is_none() && temp_spec.inv.is_none() && temp_spec.ter.is_none() {
-                None
-            } else {
-                // TODO: Finalize and implement parametrization.
-                Some(ParametrizedStream {
-                    reference,
-                    params: ast_output.params.iter().map(|p| self.lower_param(p)).collect(),
-                    invoke: None,
-                    extend: None,
-                    terminate: None,
-                })
-            }
-        } else {
-            assert!(ast_output.params.is_empty());
-            None
-        }
-    }
-
-    fn lower_param(&mut self, param: &ast::Parameter) -> ir::Parameter {
-        ir::Parameter { name: param.name.name.clone(), ty: self.lower_value_type(param.id) }
     }
 
     fn lower_storage_req(&self, req: StorageRequirement) -> MemorizationBound {
@@ -926,7 +888,6 @@ mod tests {
         outputs: usize,
         time: usize,
         event: usize,
-        param: usize,
         sliding: usize,
         triggers: usize,
     ) {
@@ -934,7 +895,6 @@ mod tests {
         assert_eq!(ir.outputs.len(), outputs);
         assert_eq!(ir.time_driven.len(), time);
         assert_eq!(ir.event_driven.len(), event);
-        assert_eq!(ir.parametrized.len(), param);
         assert_eq!(ir.sliding_windows.len(), sliding);
         assert_eq!(ir.triggers.len(), triggers);
     }
@@ -942,38 +902,38 @@ mod tests {
     #[test]
     fn lower_one_input() {
         let ir = spec_to_ir("input a: Int32");
-        check_stream_number(&ir, 1, 0, 0, 0, 0, 0, 0);
+        check_stream_number(&ir, 1, 0, 0, 0, 0, 0);
     }
 
     #[test]
     fn lower_triggers() {
         let ir = spec_to_ir("input a: Int32\ntrigger a > 50\ntrigger a < 30 \"So low...\"");
         // Note: Each trigger needs to be accounted for as an output stream.
-        check_stream_number(&ir, 1, 2, 0, 2, 0, 0, 2);
+        check_stream_number(&ir, 1, 2, 0, 2, 0, 2);
     }
 
     #[test]
     fn lower_one_output_event() {
         let ir = spec_to_ir("output a: Int32 := 34");
-        check_stream_number(&ir, 0, 1, 0, 1, 0, 0, 0);
+        check_stream_number(&ir, 0, 1, 0, 1, 0, 0);
     }
 
     #[test]
     fn lower_one_output_event_float() {
         let ir = spec_to_ir("output a: Float64 := 34.");
-        check_stream_number(&ir, 0, 1, 0, 1, 0, 0, 0);
+        check_stream_number(&ir, 0, 1, 0, 1, 0, 0);
     }
 
     #[test]
     fn lower_one_output_time() {
         let ir = spec_to_ir("output a: Int32 @1Hz := 34");
-        check_stream_number(&ir, 0, 1, 1, 0, 0, 0, 0);
+        check_stream_number(&ir, 0, 1, 1, 0, 0, 0);
     }
 
     #[test]
     fn lower_one_sliding() {
         let ir = spec_to_ir("input a: Int32 output b: Int64 @1Hz := a.aggregate(over: 3s, using: sum).defaults(to: 4)");
-        check_stream_number(&ir, 1, 1, 1, 0, 0, 1, 0);
+        check_stream_number(&ir, 1, 1, 1, 0, 1, 0);
     }
 
     #[test]
@@ -991,7 +951,7 @@ mod tests {
              trigger g > 17.0 \
              ",
         );
-        check_stream_number(&ir, 2, 6, 5, 1, 0, 2, 1);
+        check_stream_number(&ir, 2, 6, 5, 1, 2, 1);
     }
 
     #[test]

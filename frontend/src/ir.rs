@@ -12,8 +12,6 @@ pub struct LolaIR {
     pub time_driven: Vec<TimeDrivenStream>,
     /// References to all event-driven streams.
     pub event_driven: Vec<EventDrivenStream>,
-    /// References to all parametrized streams.
-    pub parametrized: Vec<ParametrizedStream>,
     /// A collection of all sliding windows.
     pub sliding_windows: Vec<SlidingWindow>,
     /// A collection of triggers
@@ -22,19 +20,19 @@ pub struct LolaIR {
     pub feature_flags: Vec<FeatureFlag>,
 }
 
-/// Represents a type.
+/// Represents a value type. Stream types are no longer relevant.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Type {
     Bool,
     Int(IntTy),
     UInt(UIntTy),
     Float(FloatTy),
-    // an abstract data type, e.g., structs, enums, etc.
-    //Adt(AdtDef),
     String,
     Tuple(Vec<Type>),
     /// an optional value type, e.g., resulting from accessing a stream with offset -1
     Option(Box<Type>),
+    /// A type describing a function. Resolve ambiguities in polymorphic functions and operations.
+    Function(Vec<Type>, Box<Type>),
 }
 
 impl From<&ValueTy> for Type {
@@ -118,62 +116,43 @@ pub struct EventDrivenStream {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub struct ParametrizedStream {
-    pub reference: StreamReference,
-    pub params: Vec<Parameter>,
-    pub invoke: Option<StreamReference>,
-    pub extend: Option<StreamReference>,
-    pub terminate: Option<StreamReference>,
-}
-
-#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Trigger {
     pub message: Option<String>,
     pub reference: StreamReference,
 }
 
-/// Represents a parameter, i.e. a name and a type.
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub struct Parameter {
-    pub name: String,
-    pub ty: Type,
-}
-
-/// The expressions of the IR
+/// The expressions of the IR.
 #[derive(Debug, PartialEq, Clone)]
 pub enum Expression {
     /// Loading a constant
-    /// 1st argument -> Constant.
+    /// 1st argument -> Constant
     LoadConstant(Constant),
-    /// Applying arithmetic or logic operation
+    /// Applying arithmetic or logic operation and its monomorphic type
+    /// Arguments never need to be coerced, @see `Expression::Convert`.
     /// Unary: 1st argument -> operand
     /// Binary: 1st argument -> lhs, 2nd argument -> rhs
     /// n-ary: kth argument -> kth operand
-    ArithLog(ArithLogOp, Box<[Expression]>),
-    /// Accessing another stream
+    ArithLog(ArithLogOp, Box<[Expression]>, Type),
+    /// Accessing another stream with a potentially 0 offset
     /// 1st argument -> default
-    /// StreamInstance contains further arguments.
-    StreamLookup { instance: StreamInstance, offset: Offset },
+    OffsetLookup { target: StreamReference, offset: Offset },
+    /// TODO!
     /// Accessing another stream under sample and hold semantics
     /// 1st argument -> default
     /// StreamInstance contains further arguments.
-    SampleAndHoldStreamLookup { instance: StreamInstance, offset: Offset },
+    SampleAndHoldStreamLookup { target: StreamReference, offset: Offset, ty: Type },
     /// Accessing another stream synchronously
-    /// No arguments; StreamInstance contains further arguments.
-    SyncStreamLookup(StreamInstance),
+    SyncStreamLookup(StreamReference),
     /// A window expression over a duration
     WindowLookup(WindowReference),
     /// An if-then-else expression
-    /// One argument: The register with the condition.
     Ite { condition: Box<Expression>, consequence: Box<Expression>, alternative: Box<Expression> },
     /// A tuple expression
-    /// Arguments: values of the tuple.
     Tuple(Box<[Expression]>),
-    /// A function call
-    /// Arguments in statement in proper order.
-    Function(String, Box<[Expression]>),
-    /// Converts a value to a different type.
-    /// One arguments containing the value to convert.
+    /// A function call with its monomorphic type
+    /// Argumentes never need to be coerced, @see `Expression::Convert`.
+    Function(String, Box<[Expression]>, Type),
+    /// Converting a value to a different type
     Convert { from: Type, to: Type, expr: Box<Expression> },
 }
 
@@ -186,14 +165,6 @@ pub enum Constant {
     Float(f64),
 }
 
-/// Represents a single instance of a stream. The stream template is accessible by the reference,
-/// the specific instance by the arguments.
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub struct StreamInstance {
-    pub reference: StreamReference,
-    pub arguments: Vec<Temporary>,
-}
-
 ///TODO
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Dependency {
@@ -204,13 +175,13 @@ pub struct Dependency {
 /// Offset used in the lookup expression
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum Offset {
-    /// A positive discrete offset, e.g., `4`, or `42`
+    /// A strictly positive discrete offset, e.g., `4`, or `42`
     FutureDiscreteOffset(u128),
-    /// A non-positive discrete offset, e.g., `0`, `-4`, or `-42`
+    /// A non-negative discrete offset, e.g., `0`, `-4`, or `-42`
     PastDiscreteOffset(u128),
     /// A positive real-time offset, e.g., `-3ms`, `-4min`, `-2.3h`
     FutureRealTimeOffset(Duration),
-    /// A non-positive real-time offset, e.g., `0`, `4min`, `2.3h`
+    /// A non-negative real-time offset, e.g., `0`, `4min`, `2.3h`
     PastRealTimeOffset(Duration),
 }
 
@@ -442,10 +413,6 @@ impl LolaIR {
 
     pub fn get_time_driven(&self) -> Vec<&OutputStream> {
         self.time_driven.iter().map(|t| self.get_out(t.reference)).collect()
-    }
-
-    pub fn get_parametrized(&self) -> Vec<&OutputStream> {
-        self.parametrized.iter().map(|t| self.get_out(t.reference)).collect()
     }
 
     pub fn get_window(&self, window: WindowReference) -> &SlidingWindow {
