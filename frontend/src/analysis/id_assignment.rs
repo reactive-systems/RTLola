@@ -127,6 +127,9 @@ where
     E: FnMut() -> NodeId,
 {
     extend.id = next_id();
+    if let Some(expr) = extend.expr.as_mut() {
+        assign_ids_expr(expr, next_id);
+    }
 }
 
 fn assign_ids_expr<E>(exp: &mut Expression, next_id: &mut E)

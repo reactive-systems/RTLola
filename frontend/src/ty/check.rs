@@ -10,8 +10,8 @@ use super::unifier::{InferError, StreamVar, StreamVarOrTy, UnifiableTy, Unifier,
 use super::{Activation, Freq, StreamTy, TypeConstraint, ValueTy};
 use crate::analysis::naming::{Declaration, DeclarationTable};
 use crate::ast::{
-    Constant, Expression, Input, Literal, LolaSpec, Output, StreamAccessKind, TimeSpec, Trigger, Type,
-    TypeKind, WindowOperation,
+    BinOp, Constant, Expression, ExpressionKind, Input, Literal, LolaSpec, Output, StreamAccessKind,
+    TimeSpec, Trigger, Type, TypeKind, WindowOperation,
 };
 use crate::parse::{NodeId, Span};
 use crate::reporting::{Handler, LabeledSpan};
@@ -224,12 +224,15 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
 
         // check if stream has timing infos
         let mut frequency = None;
+        let mut activation = None;
         if let Some(expr) = &output.extend.expr {
             if let Some(time_spec) = expr.parse_timespec() {
                 let time_spec: TimeSpec = time_spec;
                 frequency = Some(Freq::new(&format!("{}", time_spec), time_spec.exact_period.clone()));
+            } else if let Some(act) = self.parse_activation_condition(expr) {
+                activation = Some(act)
             } else {
-                unimplemented!("only frequency annotations are currently implemented for activation conditions");
+                unreachable!("only frequency annotations are currently implemented for activation conditions");
             }
         }
 
@@ -241,7 +244,36 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
                 .unify_var_ty(stream_var, StreamTy::new_periodic(f))
                 .map_err(|err| self.handle_error(err, output.name.span))?;
         }
+        if let Some(act) = activation {
+            self.stream_unifier
+                .unify_var_ty(stream_var, StreamTy::new_event(act))
+                .map_err(|err| self.handle_error(err, output.name.span))?;
+        }
         Ok(())
+    }
+
+    fn parse_activation_condition(&mut self, expr: &Expression) -> Option<Activation> {
+        match &expr.kind {
+            ExpressionKind::Ident(_) => match self.declarations[&expr.id] {
+                Declaration::In(input) => Some(Activation::Stream(self.stream_vars[&input.id])),
+                Declaration::Out(output) => Some(Activation::Stream(self.stream_vars[&output.id])),
+                _ => None,
+            },
+            ExpressionKind::Binary(op, left, right) => {
+                let (left, right) =
+                    match (self.parse_activation_condition(left), self.parse_activation_condition(right)) {
+                        (Some(left), Some(right)) => (left, right),
+                        _ => return None,
+                    };
+                match op {
+                    BinOp::And => Some(Activation::Conjunction(vec![left, right])),
+                    BinOp::Or => Some(Activation::Disjunction(vec![left, right])),
+                    _ => None,
+                }
+            }
+            ExpressionKind::ParenthesizedExpression(_, expr, _) => self.parse_activation_condition(expr),
+            _ => None,
+        }
     }
 
     fn infer_type(&mut self, ast_ty: &'a Type) -> Result<(), ()> {
@@ -1433,6 +1465,23 @@ mod tests {
         assert_eq!(
             type_table.get_stream_type(NodeId::new(4)),
             &StreamTy::Event(Activation::Conjunction(vec![
+                Activation::Stream(StreamVar::new(0)),
+                Activation::Stream(StreamVar::new(1))
+            ]))
+        );
+    }
+
+    #[test]
+    fn test_activation_condition() {
+        let spec = "input a: Int32\ninput b: Int32\noutput x @(a | b) := 1";
+        let type_table = type_check(spec);
+        // input `a` has NodeId = 0, StreamVar = 0
+        // input `b` has NodeId = 2, StreamVar = 1
+        // output `x` has NodeId = 4
+        assert_eq!(type_table.get_value_type(NodeId::new(4)), &ValueTy::Int(IntTy::I32));
+        assert_eq!(
+            type_table.get_stream_type(NodeId::new(4)),
+            &StreamTy::Event(Activation::Disjunction(vec![
                 Activation::Stream(StreamVar::new(0)),
                 Activation::Stream(StreamVar::new(1))
             ]))

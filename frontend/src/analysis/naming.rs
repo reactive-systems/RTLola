@@ -270,6 +270,9 @@ impl<'a, 'b> NamingAnalysis<'a, 'b> {
                     self.check_expression(&terminate.target);
                 }
             }
+            if let Some(expr) = output.extend.expr.as_ref() {
+                self.check_expression(expr);
+            }
             self.declarations.add_decl_for("self", Declaration::Out(output));
             self.check_expression(&output.expression);
             self.declarations.pop();
