@@ -132,15 +132,12 @@ pub enum Expression {
     /// Unary: 1st argument -> operand
     /// Binary: 1st argument -> lhs, 2nd argument -> rhs
     /// n-ary: kth argument -> kth operand
-    ArithLog(ArithLogOp, Box<[Expression]>, Type),
+    ArithLog(ArithLogOp, Box<Vec<Expression>>, Type),
     /// Accessing another stream with a potentially 0 offset
     /// 1st argument -> default
     OffsetLookup { target: StreamReference, offset: Offset },
-    /// TODO!
     /// Accessing another stream under sample and hold semantics
-    /// 1st argument -> default
-    /// StreamInstance contains further arguments.
-    SampleAndHoldStreamLookup { target: StreamReference, offset: Offset, ty: Type },
+    SampleAndHoldStreamLookup(StreamReference),
     /// Accessing another stream synchronously
     SyncStreamLookup(StreamReference),
     /// A window expression over a duration
@@ -148,12 +145,14 @@ pub enum Expression {
     /// An if-then-else expression
     Ite { condition: Box<Expression>, consequence: Box<Expression>, alternative: Box<Expression> },
     /// A tuple expression
-    Tuple(Box<[Expression]>),
+    Tuple(Box<Vec<Expression>>),
     /// A function call with its monomorphic type
     /// Argumentes never need to be coerced, @see `Expression::Convert`.
-    Function(String, Box<[Expression]>, Type),
+    Function(String, Box<Vec<Expression>>, Type),
     /// Converting a value to a different type
     Convert { from: Type, to: Type, expr: Box<Expression> },
+    /// Transforms an optional value into a "normal" one
+    Default { expr: Box<Expression>, default: Box<Expression> },
 }
 
 /// Represents a constant value of a certain kind.
@@ -489,12 +488,13 @@ impl Type {
             Type::UInt(UIntTy::U64) => Some(ValSize(8)),
             Type::Float(FloatTy::F32) => Some(ValSize(4)),
             Type::Float(FloatTy::F64) => Some(ValSize(8)),
-            Type::Option(_) => panic!("Should not be used directly!"),
+            Type::Option(_) => unimplemented!("Size of option not determined, yet."),
             Type::Tuple(t) => {
                 let size = t.iter().map(|t| Type::size(t).unwrap().0).sum();
                 Some(ValSize(size))
             }
-            Type::String => panic!("Strings are not properly handled yet."),
+            Type::String => unimplemented!("Size of Strings not determined, yet."),
+            Type::Function(_, _) => None,
         }
     }
 }
