@@ -1,7 +1,7 @@
 use streamlab_frontend::ir::*;
 
 use crate::basics::{EvalConfig, OutputHandler};
-use crate::storage::{GlobalStore, TempStore, Value};
+use crate::storage::{GlobalStore, Value};
 
 pub(crate) type OutInstance = (usize, Vec<Value>);
 pub(crate) type Window = (usize, Vec<Value>);
@@ -11,8 +11,6 @@ use std::time::SystemTime;
 
 pub(crate) struct Evaluator {
     // Indexed by stream reference.
-    temp_stores: Vec<TempStore>,
-    // Indexed by stream reference.
     exprs: Vec<Expression>,
     global_store: GlobalStore,
     ir: LolaIR,
@@ -21,22 +19,24 @@ pub(crate) struct Evaluator {
 
 impl Evaluator {
     pub(crate) fn new(ir: LolaIR, ts: SystemTime, config: EvalConfig) -> Evaluator {
-        let temp_stores = ir.outputs.iter().map(|o| TempStore::new(&o.expr)).collect();
+        //        let temp_stores = ir.outputs.iter().map(|o| TempStore::new(&o.expr)).collect();
         let global_store = GlobalStore::new(&ir, ts);
         let exprs = ir.outputs.iter().map(|o| o.expr.clone()).collect();
         let handler = OutputHandler::new(&config);
-        Evaluator { temp_stores, exprs, global_store, ir, handler }
+        Evaluator { exprs, global_store, ir, handler }
     }
 
     pub(crate) fn eval_stream(&mut self, inst: OutInstance, ts: SystemTime) {
         self.handler.debug(|| {
             format!("Evaluating stream {}: {}.", inst.0, self.ir.get_out(StreamReference::OutRef(inst.0)).name)
         });
+
         let (ix, _) = inst;
-        for stmt in self.exprs[ix].stmts.clone() {
-            self.eval_stmt(&stmt, &inst, ts);
-        }
-        let res = self.get(self.exprs[ix].stmts.last().unwrap().target, &inst);
+        //        for stmt in self.exprs[ix].stmts.clone() {
+        //            self.eval_stmt(&stmt, &inst, ts);
+        //        }
+        //        let res = self.get(self.exprs[ix].stmts.last().unwrap().target, &inst);
+        let res: Value = unimplemented!("Adapt to new Lowering"); // TODO!
 
         // Register value in global store.
         self.global_store.get_out_instance_mut(inst.clone()).unwrap().push_value(res.clone()); // TODO: unsafe unwrap.
@@ -72,143 +72,148 @@ impl Evaluator {
         }
     }
 
-    fn get_bool(&self, temp: Temporary, inst: &OutInstance) -> bool {
-        self.temp_stores[inst.0].get_bool(temp)
+    fn get_bool(&self, inst: &OutInstance) -> bool {
+        // TODO
+        unimplemented!("Adapt to new lowering!")
+        //        self.temp_stores[inst.0].get_bool(temp)
     }
 
-    fn get(&self, temp: Temporary, inst: &OutInstance) -> Value {
-        self.temp_stores[inst.0].get_value(temp)
+    fn get(&self, inst: &OutInstance) -> Value {
+        // TODO
+        unimplemented!("Adapt to new lowering!")
+        //        self.temp_stores[inst.0].get_value(temp)
     }
 
-    fn write(&mut self, temp: Temporary, value: Value, inst: &OutInstance) {
-        self.temp_stores[inst.0].write_value(temp, value);
+    fn write(&mut self, value: Value, inst: &OutInstance) {
+        // TODO
+        unimplemented!("Adapt to new lowering!")
+        //        self.temp_stores[inst.0].write_value(temp, value);
     }
 
-    fn write_forcefully(&mut self, temp: Temporary, value: Value, inst: &OutInstance) {
-        self.temp_stores[inst.0].write_value_forcefully(temp, value);
+    fn write_forcefully(&mut self, value: Value, inst: &OutInstance) {
+        // TODO
+        unimplemented!("Adapt to new lowering!")
+        //        self.temp_stores[inst.0].write_value_forcefully(temp, value);
     }
 
-    fn eval_stmt(&mut self, stmt: &Statement, inst: &OutInstance, ts: SystemTime) {
-        match &stmt.op {
-            Op::Convert => {
-                let arg = stmt.args[0];
-                let v = self.get(arg, inst);
-                self.write_forcefully(stmt.target, v, inst);
-            }
-            Op::Move => {
-                let arg = stmt.args[0];
-                let v = self.get(arg, inst);
-                self.write(stmt.target, v, inst);
-            }
-            Op::Ite { consequence, alternative } => {
-                let cont_with = if self.get_bool(stmt.args[0], inst) { consequence } else { alternative };
-                for stmt in cont_with {
-                    self.eval_stmt(stmt, inst, ts);
-                }
-            }
-            Op::LoadConstant(c) => {
-                let val = match c {
-                    Constant::Bool(b) => Value::Bool(*b),
-                    Constant::Int(i) if *i >= 0 => Value::Unsigned(*i as u128),
-                    Constant::Int(i) => Value::Signed(*i),
-                    Constant::Float(f) => Value::Float((*f).into()),
-                    Constant::Str(_) => unimplemented!(),
-                };
-                self.write(stmt.target, val, inst);
-            }
-            Op::ArithLog(op) => {
-                use streamlab_frontend::ir::ArithLogOp::*;
-                // The explicit match here enables a compiler warning when a case was missed.
-                // Useful when the list in the parser is extended.
-                let arity = match op {
-                    Neg | Not => 1,
-                    Add | Sub | Mul | Div | Rem | Pow | And | Or | Eq | Lt | Le | Ne | Ge | Gt => 2,
-                };
-                match arity {
-                    1 => {
-                        let operand = self.get(stmt.args[0], inst);
-                        self.write(stmt.target, !operand, inst)
-                    }
-                    2 => {
-                        let lhs = self.get(stmt.args[0], inst);
-                        let rhs = self.get(stmt.args[1], inst);
-
-                        let res = match op {
-                            Add => lhs + rhs,
-                            Sub => lhs - rhs,
-                            Mul => lhs * rhs,
-                            Div => lhs / rhs,
-                            Rem => lhs % rhs,
-                            Pow => unimplemented!(),
-                            And => lhs & rhs,
-                            Or => lhs | rhs,
-                            Eq => Value::Bool(lhs == rhs),
-                            Lt => Value::Bool(lhs <= rhs),
-                            Le => Value::Bool(lhs < rhs),
-                            Ne => Value::Bool(lhs != rhs),
-                            Ge => Value::Bool(lhs >= rhs),
-                            Gt => Value::Bool(lhs > rhs),
-                            Neg | Not => panic!(),
-                        };
-                        self.write(stmt.target, res, inst);
-                    }
-                    _ => unreachable!(),
-                }
-            }
-            Op::SyncStreamLookup(tar_inst) => {
-                let res = self.perform_lookup(inst, tar_inst, 0);
-                self.write(stmt.target, res.unwrap(), inst); // Unwrap sound in sync lookups.
-            }
-            Op::StreamLookup { instance: tar_inst, offset }
-            | Op::SampleAndHoldStreamLookup { instance: tar_inst, offset } => {
-                let res = match offset {
-                    Offset::FutureDiscreteOffset(_) | Offset::FutureRealTimeOffset(_) => unimplemented!(),
-                    Offset::PastDiscreteOffset(u) => self.perform_lookup(inst, tar_inst, -(*u as i16)),
-                    Offset::PastRealTimeOffset(_dur) => unimplemented!(),
-                };
-                let v = res.unwrap_or_else(|| self.get(stmt.args[0], inst));
-                self.write(stmt.target, v, inst);
-            }
-            Op::WindowLookup(window_ref) => {
-                let window: Window = (window_ref.ix, Vec::new() /*, self.window_ops[window_ref.ix]*/);
-                let res = self.global_store.get_window_mut(window).get_value(ts);
-                self.write(stmt.target, res, inst);
-            }
-            Op::Function(name) => {
-                let arg = self.get(stmt.args[0], inst);
-                match arg {
-                    Value::Float(f) => {
-                        let res = match name.as_ref() {
-                            "sqrt" => f.sqrt(),
-                            "sin" => f.sin(),
-                            "cos" => f.cos(),
-                            "arctan" => f.atan(),
-                            "abs" => f.abs(),
-                            _ => panic!("Unknown function."),
-                        };
-                        let res = Value::Float(NotNan::new(res).expect("TODO: Handle"));
-                        self.write(stmt.target, res, inst);
-                    }
-                    Value::Signed(i) => {
-                        let res = match name.as_ref() {
-                            "abs" => i.abs(),
-                            _ => panic!("Unknown function."),
-                        };
-                        self.write(stmt.target, Value::Signed(res), inst);
-                    }
-                    _ => panic!("Unknown function."),
-                }
-            }
-            Op::Tuple => unimplemented!("Who needs tuples, anyway?"),
-        }
+    fn eval_stmt(&mut self, inst: &OutInstance, ts: SystemTime) {
+        // TODO
+        unimplemented!("Adapt to new lowering!")
+        //        match &stmt.op {
+        //            Op::Convert => {
+        //                let arg = stmt.args[0];
+        //                let v = self.get(arg, inst);
+        //                self.write_forcefully(stmt.target, v, inst);
+        //            }
+        //            Op::Move => {
+        //                let arg = stmt.args[0];
+        //                let v = self.get(arg, inst);
+        //                self.write(stmt.target, v, inst);
+        //            }
+        //            Op::Ite { consequence, alternative } => {
+        //                let cont_with = if self.get_bool(stmt.args[0], inst) { consequence } else { alternative };
+        //                for stmt in cont_with {
+        //                    self.eval_stmt(stmt, inst, ts);
+        //                }
+        //            }
+        //            Op::LoadConstant(c) => {
+        //                let val = match c {
+        //                    Constant::Bool(b) => Value::Bool(*b),
+        //                    Constant::Int(i) if *i >= 0 => Value::Unsigned(*i as u128),
+        //                    Constant::Int(i) => Value::Signed(*i),
+        //                    Constant::Float(f) => Value::Float((*f).into()),
+        //                    Constant::Str(_) => unimplemented!(),
+        //                };
+        //                self.write(stmt.target, val, inst);
+        //            }
+        //            Op::ArithLog(op) => {
+        //                use streamlab_frontend::ir::ArithLogOp::*;
+        //                // The explicit match here enables a compiler warning when a case was missed.
+        //                // Useful when the list in the parser is extended.
+        //                let arity = match op {
+        //                    Neg | Not => 1,
+        //                    Add | Sub | Mul | Div | Rem | Pow | And | Or | Eq | Lt | Le | Ne | Ge | Gt => 2,
+        //                };
+        //                if arity == 1 {
+        //                    let operand = self.get(stmt.args[0], inst);
+        //                    self.write(stmt.target, !operand, inst)
+        //                } else if arity == 2 {
+        //                    let lhs = self.get(stmt.args[0], inst);
+        //                    let rhs = self.get(stmt.args[1], inst);
+        //
+        //                    let res = match op {
+        //                        Add => lhs + rhs,
+        //                        Sub => lhs - rhs,
+        //                        Mul => lhs * rhs,
+        //                        Div => lhs / rhs,
+        //                        Rem => lhs % rhs,
+        //                        Pow => unimplemented!(),
+        //                        And => lhs & rhs,
+        //                        Or => lhs | rhs,
+        //                        Eq => Value::Bool(lhs == rhs),
+        //                        Lt => Value::Bool(lhs <= rhs),
+        //                        Le => Value::Bool(lhs < rhs),
+        //                        Ne => Value::Bool(lhs != rhs),
+        //                        Ge => Value::Bool(lhs >= rhs),
+        //                        Gt => Value::Bool(lhs > rhs),
+        //                        Neg | Not => panic!(),
+        //                    };
+        //                    self.write(stmt.target, res, inst);
+        //                }
+        //            }
+        //            Op::SyncStreamLookup(tar_inst) => {
+        //                let res = self.perform_lookup(inst, tar_inst, 0);
+        //                self.write(stmt.target, res.unwrap(), inst); // Unwrap sound in sync lookups.
+        //            }
+        //            Op::StreamLookup { instance: tar_inst, offset }
+        //            | Op::SampleAndHoldStreamLookup { instance: tar_inst, offset } => {
+        //                let res = match offset {
+        //                    Offset::FutureDiscreteOffset(_) | Offset::FutureRealTimeOffset(_) => unimplemented!(),
+        //                    Offset::PastDiscreteOffset(u) => self.perform_lookup(inst, tar_inst, -(*u as i16)),
+        //                    Offset::PastRealTimeOffset(_dur) => unimplemented!(),
+        //                };
+        //                let v = res.unwrap_or_else(|| self.get(stmt.args[0], inst));
+        //                self.write(stmt.target, v, inst);
+        //            }
+        //            Op::WindowLookup(window_ref) => {
+        //                let window: Window = (window_ref.ix, Vec::new() /*, self.window_ops[window_ref.ix]*/);
+        //                let res = self.global_store.get_window_mut(window).get_value(ts);
+        //                self.write(stmt.target, res, inst);
+        //            }
+        //            Op::Function(name) => {
+        //                let arg = self.get(stmt.args[0], inst);
+        //                match arg {
+        //                    Value::Float(f) => {
+        //                        let res = match name.as_ref() {
+        //                            "sqrt" => f.sqrt(),
+        //                            "sin" => f.sin(),
+        //                            "cos" => f.cos(),
+        //                            "arctan" => f.atan(),
+        //                            "abs" => f.abs(),
+        //                            _ => panic!("Unknown function."),
+        //                        };
+        //                        let res = Value::Float(NotNan::new(res).expect("TODO: Handle"));
+        //                        self.write(stmt.target, res, inst);
+        //                    }
+        //                    Value::Signed(i) => {
+        //                        let res = match name.as_ref() {
+        //                            "abs" => i.abs(),
+        //                            _ => panic!("Unknown function."),
+        //                        };
+        //                        self.write(stmt.target, Value::Signed(res), inst);
+        //                    }
+        //                    _ => panic!("Unknown function."),
+        //                }
+        //            }
+        //            Op::Tuple => unimplemented!("Who needs tuples, anyway?"),
+        //        }
     }
 
-    fn perform_lookup(&self, inst: &OutInstance, tar_inst: &StreamInstance, offset: i16) -> Option<Value> {
-        let is = match tar_inst.reference {
-            StreamReference::InRef(_) => Some(self.global_store.get_in_instance(tar_inst.reference)),
+    fn perform_lookup(&self, inst: &OutInstance, tar_inst: &StreamReference, offset: i16) -> Option<Value> {
+        let is = match tar_inst {
+            StreamReference::InRef(_) => Some(self.global_store.get_in_instance(*tar_inst)),
             StreamReference::OutRef(i) => {
-                let args = tar_inst.arguments.iter().map(|a| self.get(*a, inst)).collect();
-                let target: OutInstance = (i, args);
+                let target: OutInstance = (*i, Vec::new());
                 self.global_store.get_out_instance(target)
             }
         };

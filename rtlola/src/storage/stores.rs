@@ -19,9 +19,6 @@ pub(crate) struct GlobalStore {
     /// Non-parametrized outputs. Access by index.
     np_outputs: Vec<InstanceStore>,
 
-    /// Parametrized outputs. Access by index, followed by parameters.
-    p_outputs: Vec<HashMap<Parameter, InstanceStore>>,
-
     /// Non-parametrized windows, access by WindowReference.
     np_windows: Vec<SlidingWindow>,
 }
@@ -29,10 +26,6 @@ pub(crate) struct GlobalStore {
 impl GlobalStore {
     pub(crate) fn new(ir: &LolaIR, ts: SystemTime) -> GlobalStore {
         let mut index_map: Vec<Option<usize>> = vec![None; ir.outputs.len()];
-
-        for (p_ix, o) in ir.parametrized.iter().enumerate() {
-            index_map[o.reference.out_ix()] = Some(p_ix);
-        }
 
         let nps: Vec<&OutputStream> = index_map
             .iter()
@@ -49,11 +42,10 @@ impl GlobalStore {
 
         let index_map = index_map.into_iter().flatten().collect();
         let np_outputs = nps.iter().map(|o| InstanceStore::new(&o.ty)).collect();
-        let p_outputs = vec![HashMap::new(); ir.parametrized.len()];
         let inputs = ir.inputs.iter().map(|i| InstanceStore::new(&i.ty)).collect();
         let np_windows = ir.sliding_windows.iter().map(|w| SlidingWindow::new(w.duration, w.op, ts, &w.ty)).collect();
 
-        GlobalStore { inputs, index_map, np_outputs, p_outputs, np_windows }
+        GlobalStore { inputs, index_map, np_outputs, np_windows }
     }
 
     pub(crate) fn get_in_instance(&self, sr: StreamReference) -> &InstanceStore {
@@ -69,7 +61,7 @@ impl GlobalStore {
         if p.is_empty() {
             Some(&self.np_outputs[self.index_map[ix]])
         } else {
-            self.p_outputs[self.index_map[ix]].get(&p)
+            unimplemented!("Parametrized streams not implemented.")
         }
     }
 
@@ -78,7 +70,7 @@ impl GlobalStore {
         if p.is_empty() {
             Some(&mut self.np_outputs[self.index_map[ix]])
         } else {
-            self.p_outputs[self.index_map[ix]].get_mut(&p)
+            unimplemented!("Parametrized streams not implemented.")
         }
     }
 
