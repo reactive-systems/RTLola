@@ -1,4 +1,5 @@
 use super::{Expression, ExpressionKind, LitKind, NodeId, TimeSpec};
+use crate::ast::Literal;
 use num::{BigInt, BigRational, FromPrimitive, One, Signed, ToPrimitive};
 use std::str::FromStr;
 use std::time::Duration;
@@ -292,20 +293,30 @@ fn parse_rational(repr: &str) -> BigRational {
 }
 
 impl Expression {
+    /// Attempts to extract the numeric, constant, unit-less value out of an `Expression::Lit`.
     pub(crate) fn parse_literal<T>(&self) -> Option<T>
     where
         T: FromStr,
     {
         match &self.kind {
-            ExpressionKind::Lit(l) => match &l.kind {
-                LitKind::Numeric(val, unit) => {
-                    if unit.is_some() {
-                        return None;
-                    }
-                    val.parse::<T>().ok()
+            ExpressionKind::Lit(l) => l.parse_numeric(),
+            _ => None,
+        }
+    }
+}
+
+impl Literal {
+    pub(crate) fn parse_numeric<T>(&self) -> Option<T>
+    where
+        T: FromStr,
+    {
+        match &self.kind {
+            LitKind::Numeric(val, unit) => {
+                if unit.is_some() {
+                    return None;
                 }
-                _ => None,
-            },
+                val.parse::<T>().ok()
+            }
             _ => None,
         }
     }

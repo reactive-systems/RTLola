@@ -404,3 +404,111 @@ impl FunctionName {
         format!("{}", self)
     }
 }
+
+use crate::ir;
+
+impl Display for ir::Expression {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        match self {
+            ir::Expression::LoadConstant(c) => write!(f, "{}", c),
+            ir::Expression::Function(name, args, ty) => {
+                write!(f, "{}(", name)?;
+                if let ir::Type::Function(arg_tys, res) = ty {
+                    let zipped: Vec<(&ir::Type, &ir::Expression)> = arg_tys.iter().zip(args.iter()).collect();
+                    if let Some((last, prefix)) = zipped.split_last() {
+                        prefix.iter().fold(Ok(()), |accu, (t, a)| accu.and_then(|()| write!(f, "{}: {}, ", a, t)))?;
+                        write!(f, "{}: {}", last.1, last.0)?;
+                    }
+                    write!(f, ") -> {}", res)
+                } else {
+                    panic!("The type of a function needs to be a function.")
+                }
+            }
+            ir::Expression::Convert { from, to, expr } => write!(f, "{}.cast::<{},{}>()", expr, from, to),
+            ir::Expression::Tuple(elems) => write_delim_list(f, elems, "(", ")", ","),
+            ir::Expression::Ite { condition, consequence, alternative } => {
+                write!(f, "if {} then {} else {}", condition, consequence, alternative)
+            }
+            ir::Expression::ArithLog(op, args, ty) => {
+                write_delim_list(f, args, &format!("{}(", op), &format!(") -> {}", ty), ",")
+            }
+            ir::Expression::WindowLookup(wr) => write!(f, "{}", wr),
+            ir::Expression::Default { expr, default } => write!(f, "{}.default({})", expr, default),
+            ir::Expression::OffsetLookup { target, offset } => write!(f, "{}.offset({})", target, offset),
+            ir::Expression::SampleAndHoldStreamLookup(sr) | ir::Expression::SyncStreamLookup(sr) => write!(f, "{}", sr),
+        }
+    }
+}
+
+impl Display for ir::Constant {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        match self {
+            ir::Constant::Bool(b) => write!(f, "{}", b),
+            ir::Constant::Int(i) => write!(f, "{}", i),
+            ir::Constant::Float(fl) => write!(f, "{}", fl),
+            ir::Constant::Str(s) => write!(f, "{}", s),
+        }
+    }
+}
+
+impl Display for ir::Offset {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        match self {
+            ir::Offset::PastDiscreteOffset(u) => write!(f, "{}", u),
+            _ => unimplemented!(),
+        }
+    }
+}
+
+impl Display for ir::ArithLogOp {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        match self {
+            ir::ArithLogOp::Not => writeln!(f, "!"),
+            ir::ArithLogOp::Neg => writeln!(f, "~"),
+            ir::ArithLogOp::Add => writeln!(f, "+"),
+            ir::ArithLogOp::Sub => writeln!(f, "-"),
+            ir::ArithLogOp::Mul => writeln!(f, "%"),
+            ir::ArithLogOp::Div => writeln!(f, "/"),
+            ir::ArithLogOp::Rem => writeln!(f, "%"),
+            ir::ArithLogOp::Pow => writeln!(f, "^"),
+            ir::ArithLogOp::And => writeln!(f, "∧"),
+            ir::ArithLogOp::Or => writeln!(f, "∨"),
+            ir::ArithLogOp::Eq => writeln!(f, "="),
+            ir::ArithLogOp::Lt => writeln!(f, "<"),
+            ir::ArithLogOp::Le => writeln!(f, "≤"),
+            ir::ArithLogOp::Ne => writeln!(f, "≠"),
+            ir::ArithLogOp::Ge => writeln!(f, "≥"),
+            ir::ArithLogOp::Gt => writeln!(f, ">"),
+        }
+    }
+}
+
+impl Display for ir::Type {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        match self {
+            ir::Type::Float(_) => write!(f, "Float{}", self.size().expect("Floats are sized.").0 * 8),
+            ir::Type::UInt(_) => write!(f, "UInt{}", self.size().expect("UInts are sized.").0 * 8),
+            ir::Type::Int(_) => write!(f, "Int{}", self.size().expect("Ints are sized.").0 * 8),
+            ir::Type::Function(args, res) => write_delim_list(f, args, "(", &format!(") -> {}", res), ","),
+            ir::Type::Tuple(elems) => write_delim_list(f, elems, "(", ")", ","),
+            ir::Type::String => write!(f, "String"),
+            ir::Type::Option(inner) => write!(f, "Option<{}>", inner),
+            ir::Type::Bool => write!(f, "Bool"),
+        }
+    }
+}
+
+impl Display for ir::WindowReference {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        write!(f, "Win({})", self.ix)
+    }
+}
+
+impl Display for ir::StreamReference {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        match self {
+            ir::StreamReference::OutRef(ix) => write!(f, "Out({})", ix),
+            ir::StreamReference::InRef(ix) => write!(f, "In({})", ix),
+        }
+    }
+}
