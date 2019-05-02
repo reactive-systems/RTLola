@@ -132,7 +132,7 @@ pub enum Expression {
     /// Unary: 1st argument -> operand
     /// Binary: 1st argument -> lhs, 2nd argument -> rhs
     /// n-ary: kth argument -> kth operand
-    ArithLog(ArithLogOp, Box<Vec<Expression>>, Type),
+    ArithLog(ArithLogOp, Vec<Expression>, Type),
     /// Accessing another stream with a potentially 0 offset
     /// 1st argument -> default
     OffsetLookup { target: StreamReference, offset: Offset },
@@ -145,10 +145,10 @@ pub enum Expression {
     /// An if-then-else expression
     Ite { condition: Box<Expression>, consequence: Box<Expression>, alternative: Box<Expression> },
     /// A tuple expression
-    Tuple(Box<Vec<Expression>>),
+    Tuple(Vec<Expression>),
     /// A function call with its monomorphic type
     /// Argumentes never need to be coerced, @see `Expression::Convert`.
-    Function(String, Box<Vec<Expression>>, Type),
+    Function(String, Vec<Expression>, Type),
     /// Converting a value to a different type
     Convert { from: Type, to: Type, expr: Box<Expression> },
     /// Transforms an optional value into a "normal" one

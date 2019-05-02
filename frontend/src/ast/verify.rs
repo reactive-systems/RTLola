@@ -131,15 +131,28 @@ impl<'a, 'b> Verifier<'a, 'b> {
     /// Currently, offsets are only allowed on direct stream access
     fn check_offsets_direct_access(handler: &Handler, expr: &Expression) {
         use ExpressionKind::*;
-        if let Offset(inner, _) = &expr.kind {
-            if let Ident(_) = inner.kind {
-                // is a direct access
-            } else {
-                handler.error_with_span(
-                    "offsets can be only applied to streams directly",
-                    LabeledSpan::new(inner.span, "expected a stream variable", true),
-                );
+        match &expr.kind {
+            Offset(inner, _) => {
+                if let Ident(_) = inner.kind {
+                    // is a direct access
+                } else {
+                    handler.error_with_span(
+                        "offsets can be only applied to streams directly",
+                        LabeledSpan::new(inner.span, "expected a stream variable", true),
+                    );
+                }
             }
+            SlidingWindowAggregation { expr: inner, .. } => {
+                if let Ident(_) = inner.kind {
+                    // is a direct access
+                } else {
+                    handler.error_with_span(
+                        "sliding windows can be only applied to streams directly",
+                        LabeledSpan::new(inner.span, "expected a stream variable", true),
+                    );
+                }
+            }
+            _ => {}
         }
     }
 }

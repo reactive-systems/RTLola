@@ -314,7 +314,6 @@ impl<'a> DependencyAnalyser<'a> {
             ExpressionKind::StreamAccess(_, _) => unimplemented!(),
             ExpressionKind::Offset(expr, offset) => {
                 if let ExpressionKind::Ident(_) = &expr.kind {
-
                 } else {
                     panic!("Offsets can only be applied on direct stream access");
                 }
@@ -333,11 +332,26 @@ impl<'a> DependencyAnalyser<'a> {
                     StreamDependency::Access(location, offset, expr.span),
                 );
             }
-            ExpressionKind::SlidingWindowAggregation {
-                expr: _expr,
-                duration: _duration,
-                aggregation: _aggregation,
-            } => unimplemented!(),
+            ExpressionKind::SlidingWindowAggregation { expr, duration: _duration, aggregation: _aggregation } => {
+                if let ExpressionKind::Ident(_) = &expr.kind {
+                } else {
+                    panic!("Sliding Windows can only be applied on direct stream access");
+                }
+                let target_stream_id = match &self.naming_table[&expr.id] {
+                    Declaration::Out(output) => output.id,
+                    Declaration::In(input) => input.id,
+                    _ => unreachable!(),
+                };
+                let target_stream_entry = mapping[&target_stream_id];
+                let target_stream_index = target_stream_entry.normal_time_index;
+
+                let offset = Offset::SlidingWindow;
+                self.dependency_graph.add_edge(
+                    current_node,
+                    target_stream_index,
+                    StreamDependency::Access(location, offset, expr.span),
+                );
+            }
             /*ExpressionKind::Lookup(instance, offset, op) => {
                 let target_stream_id = match &self.naming_table[&instance.id] {
                     Declaration::Out(output) => output.id,

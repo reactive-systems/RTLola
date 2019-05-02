@@ -41,12 +41,12 @@ fn add_sliding_windows<'a>(
     match &expr.kind {
         ExpressionKind::Lit(_) | ExpressionKind::Ident(_) => {}
         ExpressionKind::Binary(_op, left, right) => {
-            match add_sliding_windows(&*left, type_table, declaration_table) {
+            match add_sliding_windows(left, type_table, declaration_table) {
                 MemoryBound::Bounded(u) => required_memory += u,
                 MemoryBound::Unbounded => return MemoryBound::Unbounded,
                 MemoryBound::Unknown => unknown_size = true,
             };
-            match add_sliding_windows(&*right, type_table, declaration_table) {
+            match add_sliding_windows(right, type_table, declaration_table) {
                 MemoryBound::Bounded(u) => required_memory += u,
                 MemoryBound::Unbounded => return MemoryBound::Unbounded,
                 MemoryBound::Unknown => unknown_size = true,
@@ -57,7 +57,7 @@ fn add_sliding_windows<'a>(
             StreamAccessKind::Hold => {
                 unimplemented!();
                 /*if let ExpressionKind::Lookup(_, _, _) = &e.kind {
-                    match add_sliding_windows(&*e, type_table, declaration_table) {
+                    match add_sliding_windows(e, type_table, declaration_table) {
                         MemoryBound::Bounded(u) => required_memory += u,
                         MemoryBound::Unbounded => return MemoryBound::Unbounded,
                         MemoryBound::Unknown => unknown_size = true,
@@ -65,7 +65,7 @@ fn add_sliding_windows<'a>(
                 } else {
                     // A "stray" sample and hold expression such as `5.hold()` is valid, but a no-op.
                     // Thus, print a warning. Evaluating the expression is necessary, the dft can be skipped.
-                    match add_sliding_windows(&*e, type_table, declaration_table) {
+                    match add_sliding_windows(e, type_table, declaration_table) {
                         MemoryBound::Bounded(u) => required_memory += u,
                         MemoryBound::Unbounded => return MemoryBound::Unbounded,
                         MemoryBound::Unknown => unknown_size = true,
@@ -77,51 +77,60 @@ fn add_sliding_windows<'a>(
             }
         },
         ExpressionKind::Default(e, dft) => {
-            unimplemented!();
-            /*if let ExpressionKind::Lookup(_, _, _) = &e.kind {
-                match add_sliding_windows(&*e, type_table, declaration_table) {
-                    MemoryBound::Bounded(u) => required_memory += u,
-                    MemoryBound::Unbounded => return MemoryBound::Unbounded,
-                    MemoryBound::Unknown => unknown_size = true,
-                };
-                match add_sliding_windows(&*dft, type_table, declaration_table) {
-                    MemoryBound::Bounded(u) => required_memory += u,
-                    MemoryBound::Unbounded => return MemoryBound::Unbounded,
-                    MemoryBound::Unknown => unknown_size = true,
-                };
-            } else {
-                // A "stray" sample and hold expression such as `5 ! 3` is valid, but a no-op.
-                // Thus, print a warning. Evaluating the expression is necessary, the dft can be skipped.
-                match add_sliding_windows(&*e, type_table, declaration_table) {
-                    MemoryBound::Bounded(u) => required_memory += u,
-                    MemoryBound::Unbounded => return MemoryBound::Unbounded,
-                    MemoryBound::Unknown => unknown_size = true,
-                };
-            }*/
+            match add_sliding_windows(e, type_table, declaration_table) {
+                MemoryBound::Bounded(u) => required_memory += u,
+                MemoryBound::Unbounded => return MemoryBound::Unbounded,
+                MemoryBound::Unknown => unknown_size = true,
+            };
+            match add_sliding_windows(dft, type_table, declaration_table) {
+                MemoryBound::Bounded(u) => required_memory += u,
+                MemoryBound::Unbounded => return MemoryBound::Unbounded,
+                MemoryBound::Unknown => unknown_size = true,
+            };
         }
-        ExpressionKind::Offset(_, _) => unimplemented!(),
-        ExpressionKind::SlidingWindowAggregation { expr: _expr, duration: _duration, aggregation: _aggregation } => {
-            unimplemented!()
+        ExpressionKind::Offset(expr, offset) => {
+            match add_sliding_windows(expr, type_table, declaration_table) {
+                MemoryBound::Bounded(u) => required_memory += u,
+                MemoryBound::Unbounded => return MemoryBound::Unbounded,
+                MemoryBound::Unknown => unknown_size = true,
+            };
+            match add_sliding_windows(offset, type_table, declaration_table) {
+                MemoryBound::Bounded(u) => required_memory += u,
+                MemoryBound::Unbounded => return MemoryBound::Unbounded,
+                MemoryBound::Unknown => unknown_size = true,
+            };
+        }
+        ExpressionKind::SlidingWindowAggregation { expr, duration, .. } => {
+            match add_sliding_windows(expr, type_table, declaration_table) {
+                MemoryBound::Bounded(u) => required_memory += u,
+                MemoryBound::Unbounded => return MemoryBound::Unbounded,
+                MemoryBound::Unknown => unknown_size = true,
+            };
+            match add_sliding_windows(duration, type_table, declaration_table) {
+                MemoryBound::Bounded(u) => required_memory += u,
+                MemoryBound::Unbounded => return MemoryBound::Unbounded,
+                MemoryBound::Unknown => unknown_size = true,
+            };
         }
         ExpressionKind::Unary(_, inner) | ExpressionKind::ParenthesizedExpression(_, inner, _) => {
-            match add_sliding_windows(&*inner, type_table, declaration_table) {
+            match add_sliding_windows(inner, type_table, declaration_table) {
                 MemoryBound::Bounded(u) => required_memory += u,
                 MemoryBound::Unbounded => return MemoryBound::Unbounded,
                 MemoryBound::Unknown => unknown_size = true,
             };
         }
         ExpressionKind::Ite(condition, ifcase, elsecase) => {
-            match add_sliding_windows(&*condition, type_table, declaration_table) {
+            match add_sliding_windows(condition, type_table, declaration_table) {
                 MemoryBound::Bounded(u) => required_memory += u,
                 MemoryBound::Unbounded => return MemoryBound::Unbounded,
                 MemoryBound::Unknown => unknown_size = true,
             };
-            match add_sliding_windows(&*ifcase, type_table, declaration_table) {
+            match add_sliding_windows(ifcase, type_table, declaration_table) {
                 MemoryBound::Bounded(u) => required_memory += u,
                 MemoryBound::Unbounded => return MemoryBound::Unbounded,
                 MemoryBound::Unknown => unknown_size = true,
             };
-            match add_sliding_windows(&*elsecase, type_table, declaration_table) {
+            match add_sliding_windows(elsecase, type_table, declaration_table) {
                 MemoryBound::Bounded(u) => required_memory += u,
                 MemoryBound::Unbounded => return MemoryBound::Unbounded,
                 MemoryBound::Unknown => unknown_size = true,
@@ -129,7 +138,7 @@ fn add_sliding_windows<'a>(
         }
         ExpressionKind::Function(_, _, elements) | ExpressionKind::Tuple(elements) => {
             for expr in elements {
-                match add_sliding_windows(&*expr, type_table, declaration_table) {
+                match add_sliding_windows(expr, type_table, declaration_table) {
                     MemoryBound::Bounded(u) => required_memory += u,
                     MemoryBound::Unbounded => return MemoryBound::Unbounded,
                     MemoryBound::Unknown => unknown_size = true,

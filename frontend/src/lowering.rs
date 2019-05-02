@@ -253,7 +253,7 @@ impl<'a> Lowering<'a> {
                 ExpressionKind::Default(e, dft) => {
                     pre.chain(recursion(e)).chain(recursion(dft)).chain(post()).collect()
                 }
-                ExpressionKind::Offset(_, _) => unimplemented!(),
+                ExpressionKind::Offset(e, off) => pre.chain(recursion(e)).chain(recursion(off)).chain(post()).collect(),
                 ExpressionKind::SlidingWindowAggregation { expr, duration, .. } => {
                     pre.chain(recursion(expr)).chain(recursion(duration)).chain(post()).collect()
                 }
@@ -412,7 +412,7 @@ impl<'a> Lowering<'a> {
                 let offset = self.lower_offset(offset);
                 ir::Expression::OffsetLookup { target, offset }
             }
-            ExpressionKind::SlidingWindowAggregation { expr, .. } => {
+            ExpressionKind::SlidingWindowAggregation { .. } => {
                 let win_ref = self.lower_window(expr);
                 ir::Expression::WindowLookup(win_ref)
             }
@@ -424,7 +424,7 @@ impl<'a> Lowering<'a> {
                     let arg_ty = match ast_op {
                         Add | Sub | Mul | Div | Rem | Pow | Eq | Lt | Le | Ne | Ge | Gt => {
                             assert_eq!(resolved_poly_types.len(), 1);
-                            resolved_poly_types[0].clone().into()
+                            resolved_poly_types[0].clone()
                         }
                         And | Or => ir::Type::Bool,
                     };
@@ -438,7 +438,7 @@ impl<'a> Lowering<'a> {
                     vec![match ast_op {
                         ast::UnOp::Neg => {
                             assert_eq!(resolved_poly_types.len(), 1);
-                            resolved_poly_types[0].clone().into()
+                            resolved_poly_types[0].clone()
                         }
                         ast::UnOp::Not => ir::Type::Bool,
                     }]
@@ -458,7 +458,7 @@ impl<'a> Lowering<'a> {
             ExpressionKind::MissingExpression => panic!("How wasn't this caught in a preceding step‽"),
             ExpressionKind::Tuple(exprs) => {
                 let exprs = exprs.iter().map(|e| self.lower_expression(e).0).collect();
-                ir::Expression::Tuple(Box::new(exprs))
+                ir::Expression::Tuple(exprs)
             }
             ExpressionKind::Function(name, _, args) => {
                 let args: Vec<&ast::Expression> = args.iter().map(Box::as_ref).collect();
@@ -481,7 +481,7 @@ impl<'a> Lowering<'a> {
 
                 let args = self.handle_func_args(&req_types, &args[..]);
                 let fun_ty = ir::Type::Function(req_types, Box::new(result_type.clone()));
-                ir::Expression::Function(name.name.name.clone(), Box::new(args), fun_ty)
+                ir::Expression::Function(name.name.name.clone(), args, fun_ty)
             }
             ExpressionKind::Field(_, _) => unimplemented!(),
             ExpressionKind::Method(_, _, _, _) => unimplemented!(),
@@ -512,7 +512,7 @@ impl<'a> Lowering<'a> {
         let arg_types = f(resolved_poly_types);
         let args = self.handle_func_args(&arg_types, args);
         let fun_ty = ir::Type::Function(arg_types, Box::new(result_type));
-        ir::Expression::ArithLog(op, Box::new(args), fun_ty)
+        ir::Expression::ArithLog(op, args, fun_ty)
     }
 
     fn handle_func_args(&mut self, types: &[ir::Type], args: &[&ast::Expression]) -> Vec<ir::Expression> {
@@ -799,7 +799,7 @@ mod tests {
         assert_eq!(stream.ty, ty);
 
         let expr = &stream.expr;
-        assert_eq!("cast(In(0): Float64)", format!("{}", expr))
+        assert_eq!("cast(In(0): Float64) -> Float32", format!("{}", expr))
     }
 
     #[ignore]
