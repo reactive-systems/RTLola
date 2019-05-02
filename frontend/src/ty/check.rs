@@ -517,19 +517,25 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
                 )?;
                 self.infer_expression(right, Some(ValueTy::Infer(var)), Some(StreamVarOrTy::Var(stream_var)))?
             }
-            StreamAccess(expr, access_type) => match access_type {
-                StreamAccessKind::Hold => {
-                    // result type is an optional value
-                    let target_var = self.unifier.new_var();
-                    self.unifier
-                        .unify_var_ty(var, ValueTy::Option(ValueTy::Infer(target_var).into()))
-                        .map_err(|err| self.handle_error(err, expr.span))?;
+            StreamAccess(expr, access_type) => {
+                // result type is an optional value
+                let target_var = self.unifier.new_var();
+                self.unifier
+                    .unify_var_ty(var, ValueTy::Option(ValueTy::Infer(target_var).into()))
+                    .map_err(|err| self.handle_error(err, expr.span))?;
 
-                    // the stream type of `expr` is unconstrained
-                    self.infer_expression(expr, Some(ValueTy::Infer(var)), None)?;
+                // the stream type of `expr` is unconstrained
+                self.infer_expression(expr, Some(ValueTy::Infer(var)), None)?;
+
+                match access_type {
+                    StreamAccessKind::Hold => {
+                        // for hold access, verify that stream types are incompatible and emit a warning otherwise
+                    }
+                    StreamAccessKind::Optional => {
+                        // for get access, verify that stream types are partially overlapping and emit a warning otherwise
+                    }
                 }
-                StreamAccessKind::Optional => unimplemented!(),
-            },
+            }
             Function(_name, types, params) => {
                 let decl = self.declarations[&expr.id];
                 let fun_decl = match decl {
@@ -1474,6 +1480,23 @@ mod tests {
     #[test]
     fn test_activation_condition() {
         let spec = "input a: Int32\ninput b: Int32\noutput x @(a | b) := 1";
+        let type_table = type_check(spec);
+        // input `a` has NodeId = 0, StreamVar = 0
+        // input `b` has NodeId = 2, StreamVar = 1
+        // output `x` has NodeId = 4
+        assert_eq!(type_table.get_value_type(NodeId::new(4)), &ValueTy::Int(IntTy::I32));
+        assert_eq!(
+            type_table.get_stream_type(NodeId::new(4)),
+            &StreamTy::Event(Activation::Disjunction(vec![
+                Activation::Stream(StreamVar::new(0)),
+                Activation::Stream(StreamVar::new(1))
+            ]))
+        );
+    }
+
+    #[test]
+    fn test_get() {
+        let spec = "input a: Int32\ninput b: Int32\noutput x @(a | b) := a.get().defaults(to: 0)";
         let type_table = type_check(spec);
         // input `a` has NodeId = 0, StreamVar = 0
         // input `b` has NodeId = 2, StreamVar = 1

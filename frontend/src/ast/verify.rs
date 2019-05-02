@@ -15,6 +15,9 @@ impl<'a, 'b> Verifier<'a, 'b> {
 
     pub(crate) fn check(&self) {
         for output in &self.spec.outputs {
+            if let Some(extend) = output.extend.expr.as_ref() {
+                self.check_expression(extend);
+            }
             self.check_expression(&output.expression);
         }
         for trigger in &self.spec.trigger {
