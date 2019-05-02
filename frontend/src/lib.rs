@@ -6,7 +6,6 @@
 mod analysis;
 mod ast;
 pub mod ir;
-mod lowering;
 mod parse;
 mod reporting;
 mod stdlib;
@@ -34,7 +33,7 @@ pub fn parse(spec_str: &str) -> LolaIR {
     let handler = reporting::Handler::new(mapper);
     let analysis_result = analysis::analyze(&spec, &handler);
     if analysis_result.is_success() {
-        lowering::Lowering::new(&spec, &analysis_result).lower()
+        ir::lowering::Lowering::new(&spec, &analysis_result).lower()
     } else {
         panic!("Error in analysis.")
     }

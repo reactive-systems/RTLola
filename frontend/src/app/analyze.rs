@@ -12,7 +12,7 @@ use simplelog::*;
 
 use super::super::analysis;
 use super::super::parse::{LolaParser, Rule};
-use crate::lowering::Lowering;
+use crate::ir::lowering::Lowering;
 use crate::parse::SourceMapper;
 use crate::reporting::Handler;
 
