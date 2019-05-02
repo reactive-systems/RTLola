@@ -6,8 +6,10 @@ pub(crate) mod check;
 pub(crate) mod unifier;
 
 use lazy_static::lazy_static;
-use num::{BigInt, BigRational, Zero};
+use num::{BigInt, BigRational, Integer, Zero};
 use unifier::{StreamVar, ValueUnifier, ValueVar};
+use uom::si::bigrational::Frequency;
+use uom::si::frequency::hertz;
 
 /// The type of an expression consists of both, a value type (`Bool`, `String`, etc.) and
 /// a stream type (periodic or event-based).
@@ -75,8 +77,7 @@ use self::FloatTy::*;
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Hash)]
 pub struct Freq {
-    repr: String,
-    pub(crate) ns: BigRational,
+    pub(crate) freq: Frequency,
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Hash)]
@@ -88,7 +89,11 @@ pub enum Activation {
 
 impl std::fmt::Display for Freq {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}", self.repr)
+        write!(
+            f,
+            "{}",
+            self.freq.clone().into_format_args(uom::si::frequency::hertz, uom::fmt::DisplayStyle::Abbreviation)
+        )
     }
 }
 
@@ -107,20 +112,28 @@ impl StreamTy {
 }
 
 impl Freq {
-    pub(crate) fn new(repr: &str, ns: BigRational) -> Self {
-        Freq { repr: repr.to_string(), ns }
+    pub(crate) fn new(freq: Frequency) -> Self {
+        Freq { freq }
     }
 
     pub(crate) fn is_multiple_of(&self, other: &Freq) -> bool {
-        if self.ns > other.ns {
+        if self.freq.get::<hertz>() < other.freq.get::<hertz>() {
             return false;
         }
-        (&other.ns % &self.ns).is_zero()
+        (self.freq.get::<hertz>() % other.freq.get::<hertz>()).is_zero()
     }
 
     pub(crate) fn conjunction(&self, other: &Freq) -> Freq {
         println!("WARNING: conjunction of frequencies is currently not possible");
-        Freq { repr: format!("lcm({}, {})", self, other), ns: self.ns.clone() }
+        let numer_left = self.freq.get::<hertz>().numer().clone();
+        let numer_right = other.freq.get::<hertz>().numer().clone();
+        let denom_left = self.freq.get::<hertz>().denom().clone();
+        let denom_right = other.freq.get::<hertz>().denom().clone();
+        // lcm(self, other) = lcm(numer_left, numer_right) / gcd(denom_left, denom_right)
+        // only works if rational numbers are reduced, which ist the default for `BigRational`
+        Freq {
+            freq: Frequency::new::<hertz>(BigRational::new(numer_left.lcm(&numer_right), denom_left.gcd(&denom_right))),
+        }
     }
 }
 
@@ -330,5 +343,19 @@ impl std::fmt::Display for TypeConstraint {
             Comparable => write!(f, "comparable type"),
             Unconstrained => write!(f, "unconstrained type"),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use num::traits::cast::FromPrimitive;
+
+    #[test]
+    fn test_freq_conjunction() {
+        let a = Freq::new(Frequency::new::<hertz>(BigRational::from_i64(2).unwrap()));
+        let b = Freq::new(Frequency::new::<hertz>(BigRational::from_i64(3).unwrap()));
+        let c = Freq::new(Frequency::new::<hertz>(BigRational::from_i64(6).unwrap()));
+        assert_eq!(a.conjunction(&b), c)
     }
 }

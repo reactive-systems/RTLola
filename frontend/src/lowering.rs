@@ -18,6 +18,8 @@ use crate::analysis::graph_based_analysis::space_requirements::{
 use crate::analysis::graph_based_analysis::{ComputeStep, RequiredInputs, StorageRequirement, TrackingRequirement};
 
 use crate::analysis::AnalysisResult;
+use num::traits::ops::inv::Inv;
+use uom::si::frequency::gigahertz;
 
 use num::ToPrimitive;
 
@@ -595,7 +597,12 @@ impl<'a> Lowering<'a> {
             StreamTy::RealTime(f) => Some(TimeDrivenStream {
                 reference,
                 extend_rate: Duration::from_nanos(
-                    f.ns.to_integer().to_u64().expect("extend duration [ns] does not fit in u64"),
+                    f.freq
+                        .get::<gigahertz>()
+                        .inv()
+                        .to_integer()
+                        .to_u64()
+                        .expect("extend duration [ns] does not fit in u64"),
                 ),
             }),
             _ => None,

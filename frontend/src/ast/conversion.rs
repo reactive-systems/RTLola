@@ -322,6 +322,22 @@ impl Literal {
     }
 }
 
+impl Expression {
+    /// Attempts to extract the numeric, constant, unit-less value out of an `Expression::Lit`.
+    pub(crate) fn to_uom_string(&self) -> Option<String> {
+        match &self.kind {
+            ExpressionKind::Lit(l) => match &l.kind {
+                LitKind::Numeric(val, Some(unit)) => {
+                    let parsed = parse_rational(val);
+                    Some(format!("{} {}", parsed, unit))
+                }
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -17,8 +17,13 @@ use crate::parse::{NodeId, Span};
 use crate::reporting::{Handler, LabeledSpan};
 use crate::stdlib::{FuncDecl, MethodLookup};
 use log::{debug, trace};
+use num::traits::ops::inv::Inv;
 use num::Signed;
 use std::collections::HashMap;
+use std::str::FromStr as _;
+use uom::si::bigrational::{Frequency, Time};
+use uom::si::frequency::hertz;
+use uom::si::time::second;
 
 pub(crate) struct TypeAnalysis<'a, 'b> {
     handler: &'b Handler,
@@ -228,7 +233,10 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
         if let Some(expr) = &output.extend.expr {
             if let Some(time_spec) = expr.parse_timespec() {
                 let time_spec: TimeSpec = time_spec;
-                frequency = Some(Freq::new(&format!("{}", time_spec), time_spec.exact_period.clone()));
+                frequency = Some(Freq::new(
+                    Frequency::from_str(expr.to_uom_string().expect("offsets have been checked before").as_str())
+                        .expect("valid frequency has been checked before"),
+                ));
             } else if let Some(act) = self.parse_activation_condition(expr) {
                 activation = Some(act)
             } else {
@@ -703,11 +711,21 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
                 self.unifier.unify_var_var(var, target_value_var).map_err(|err| self.handle_error(err, span))?;
             }
 
+            // get frequency
+            let freq = if let Ok(time) =
+                Time::from_str(offset.to_uom_string().expect("offsets have been checked before").as_str())
+            {
+                Frequency::new::<hertz>(time.get::<second>().inv())
+            } else if let Ok(freq) =
+                Frequency::from_str(offset.to_uom_string().expect("offsets have been checked before").as_str())
+            {
+                freq
+            } else {
+                unreachable!("{} is neither time nor frequency", offset);
+            };
+
             // target stream type
-            let target_stream_ty = StreamTy::new_periodic(Freq::new(
-                &format!("{:?}", time_spec.period),
-                time_spec.exact_period.abs().clone(),
-            ));
+            let target_stream_ty = StreamTy::new_periodic(Freq::new(freq));
 
             // recursion
             // stream types have to match
@@ -1393,24 +1411,24 @@ mod tests {
 
     #[test]
     fn test_rt_offset() {
-        let spec = "output a: Int8 @1s := 1\noutput b: Int8 @1s := a[-1s].defaults(to: 0)";
+        let spec = "output a: Int8 @1Hz := 1\noutput b: Int8 @1Hz := a[-1s].defaults(to: 0)";
         assert_eq!(0, num_type_errors(spec));
     }
 
     #[test]
     fn test_rt_offset_skip() {
-        let spec = "output a: Int8 @1s := 1\noutput b: Int8 @2s := a[-1s].defaults(to: 0)";
+        let spec = "output a: Int8 @1Hz := 1\noutput b: Int8 @0.5Hz := a[-1s].defaults(to: 0)";
         assert_eq!(0, num_type_errors(spec));
     }
     #[test]
     fn test_rt_offset_skip2() {
-        let spec = "output a: Int8 @1s := 1\noutput b: Int8 @2s := a[-2s].defaults(to: 0)";
+        let spec = "output a: Int8 @1Hz := 1\noutput b: Int8 @0.5Hz := a[-2s].defaults(to: 0)";
         assert_eq!(0, num_type_errors(spec));
     }
 
     #[test]
     fn test_rt_offset_fail() {
-        let spec = "output a: Int8 @2s := 1\noutput b: Int8 @1s := a[-1s].defaults(to: 0)";
+        let spec = "output a: Int8 @0.5Hz := 1\noutput b: Int8 @1Hz := a[-1s].defaults(to: 0)";
         assert_eq!(1, num_type_errors(spec));
     }
 

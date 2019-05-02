@@ -14,6 +14,9 @@ use std::cmp::max;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::time::Duration;
+use uom::si::bigrational::Time as SITime;
+use uom::si::frequency::hertz;
+use uom::si::time::{nanosecond, second};
 
 pub(crate) type SpaceRequirements = HashMap<NodeId, StorageRequirement>;
 
@@ -104,7 +107,9 @@ pub(crate) fn determine_tracking_size(
                     if this_is_time_based {
                         let out_timing = &type_table.get_stream_type(id);
                         if let StreamTy::RealTime(freq) = out_timing {
-                            let result: BigRational = exact_offset_duration / &freq.ns;
+                            let result: BigRational = SITime::new::<nanosecond>(exact_offset_duration.clone())
+                                .get::<second>()
+                                / &freq.freq.get::<hertz>();
                             let needed_space: u16 = if result.is_integer() {
                                 result.trunc().to_integer().to_u16().expect("buffer size does not fit in u16")
                             } else {
@@ -121,7 +126,9 @@ pub(crate) fn determine_tracking_size(
                                 tracking_requirements.push((src_id, TrackingRequirement::Unbounded));
                             }
                             StreamTy::RealTime(freq) => {
-                                let result: BigRational = exact_offset_duration / &freq.ns;
+                                let result: BigRational = SITime::new::<nanosecond>(exact_offset_duration.clone())
+                                    .get::<second>()
+                                    / &freq.freq.get::<hertz>();
                                 let needed_space: u16 = if result.is_integer() {
                                     result.trunc().to_integer().to_u16().expect("buffer size does not fit in u16")
                                 } else {
