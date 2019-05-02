@@ -23,8 +23,8 @@ pub enum StreamTy {
     Event(Activation),
     // A real-time stream with given frequency
     RealTime(Freq),
-    /// The type of the stream should be inferred
-    Infer(StreamVar),
+    /// The type of the stream should be inferred as the conjunction of the given `StreamTy`
+    Infer(Vec<StreamVar>),
 }
 
 /// The `value` type, storing information about the stored values (`Bool`, `UInt8`, etc.)
@@ -101,8 +101,8 @@ impl StreamTy {
         StreamTy::RealTime(freq)
     }
 
-    pub(crate) fn new_inferred(var: StreamVar) -> StreamTy {
-        StreamTy::Infer(var)
+    pub(crate) fn new_inferred() -> StreamTy {
+        StreamTy::Infer(Vec::new())
     }
 }
 
@@ -125,29 +125,10 @@ impl Freq {
             ns: self.ns.clone() * BigRational::new(BigInt::from(1), BigInt::from(val.abs())),
         }
     }
-}
 
-impl Activation {
-    /// Checks whether `self -> other` is valid
-    pub(crate) fn implies_valid(&self, other: &Activation, unifier: ValueUnifier<StreamTy>) -> bool {
-        true
-    }
-
-    pub(crate) fn conjunction(&self, other: &Activation) -> Activation {
-        use Activation::*;
-        match (self, other) {
-            (Conjunction(c_l), Conjunction(c_r)) => {
-                let mut con = c_l.clone();
-                con.extend(c_r.iter().cloned());
-                Activation::Conjunction(con)
-            }
-            (Conjunction(c), other) | (other, Conjunction(c)) => {
-                let mut con = c.clone();
-                con.push(other.clone());
-                Activation::Conjunction(con)
-            }
-            (_, _) => Activation::Conjunction(vec![self.clone(), other.clone()]),
-        }
+    pub(crate) fn conjunction(&self, other: &Freq) -> Freq {
+        println!("WARNING: conjunction of frequencies is currently not possible");
+        Freq { repr: format!("lcm({}, {})", self, other), ns: self.ns.clone() }
     }
 }
 

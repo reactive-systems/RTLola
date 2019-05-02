@@ -242,14 +242,17 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
         if let Some(f) = frequency {
             self.stream_unifier
                 .unify_var_ty(stream_var, StreamTy::new_periodic(f))
-                .map_err(|err| self.handle_error(err, output.name.span))?;
-        }
-        if let Some(act) = activation {
+                .map_err(|err| self.handle_error(err, output.name.span))
+        } else if let Some(act) = activation {
             self.stream_unifier
                 .unify_var_ty(stream_var, StreamTy::new_event(act))
-                .map_err(|err| self.handle_error(err, output.name.span))?;
+                .map_err(|err| self.handle_error(err, output.name.span))
+        } else {
+            // stream type should be inferred
+            self.stream_unifier
+                .unify_var_ty(stream_var, StreamTy::new_inferred())
+                .map_err(|err| self.handle_error(err, output.name.span))
         }
-        Ok(())
     }
 
     fn parse_activation_condition(&mut self, expr: &Expression) -> Option<Activation> {
@@ -1509,5 +1512,11 @@ mod tests {
                 Activation::Stream(StreamVar::new(1))
             ]))
         );
+    }
+
+    #[test]
+    fn test_no_direct_access_possible() {
+        let spec = "input a: Int32\ninput b: Int32\noutput x @(a | b) := a";
+        assert_eq!(1, num_type_errors(spec));
     }
 }

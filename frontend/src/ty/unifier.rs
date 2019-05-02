@@ -309,21 +309,25 @@ impl UnifiableTy for StreamTy {
     type V = StreamVar;
 
     fn normalize_ty<U: Unifier<Var = Self::V, Ty = Self>>(&self, unifier: &mut U) -> Self {
-        match self {
-            StreamTy::Infer(var) => match unifier.get_type(*var) {
-                None => self.clone(),
-                Some(other_ty) => other_ty.normalize_ty(unifier),
-            },
-            _ => self.clone(),
-        }
+        self.concretize(unifier).expect("unification table should be always consitent")
     }
 
-    fn coerces_with<U: Unifier<Var = Self::V, Ty = Self>>(&self, _unifier: &mut U, right: &Self) -> bool {
+    fn coerces_with<U: Unifier<Var = Self::V, Ty = Self>>(&self, unifier: &mut U, right: &Self) -> bool {
         debug!("coerce {} {}", self, right);
 
         // RealTime<freq_self> -> RealTime<freq_right> if freq_left is multiple of freq_right
         match (&self, &right) {
-            (StreamTy::RealTime(target), StreamTy::RealTime(other)) => other.is_multiple_of(target),
+            (StreamTy::RealTime(target), StreamTy::RealTime(other)) => {
+                // coercion is only valid if `other` is a multiple of `target`,
+                // for example, `target = 3Hz` and `other = 12Hz`
+                other.is_multiple_of(target)
+            }
+            (StreamTy::Event(target), StreamTy::Event(other)) => {
+                // coercion is only valid if the implication `target -> other` is valid,
+                // for example, `target = a & b` and `other = b` is valid while
+                //              `target = a | b` and `other = b` is invalid.
+                target.implies_valid(other, unifier)
+            }
             _ => false,
         }
     }
@@ -331,18 +335,30 @@ impl UnifiableTy for StreamTy {
     fn equal_to<U: Unifier<Var = Self::V, Ty = Self>>(&self, unifier: &mut U, right: &Self) -> Option<Self> {
         trace!("comp {} {}", self, right);
         match (self, right) {
-            (StreamTy::Infer(_), StreamTy::Infer(_)) => {
-                unimplemented!();
+            (StreamTy::Infer(vars_l), StreamTy::Infer(vars_r)) => {
+                let mut vars = vars_l.clone();
+                vars.extend(vars_r);
+                Some(StreamTy::Infer(vars))
             }
-            (&StreamTy::Infer(var), ty) | (ty, &StreamTy::Infer(var)) => {
-                // try to unify
-                if unifier.unify_var_ty(var, ty.clone()).is_ok() {
-                    Some(StreamTy::Infer(var))
+            (StreamTy::Infer(vars), ty) | (ty, StreamTy::Infer(vars)) => {
+                let mut vars = vars.clone();
+                let new_var = unifier.new_var();
+                unifier.unify_var_ty(new_var, ty.clone()).expect("unification with fresh var cannot fail");
+                vars.push(new_var);
+                let result = StreamTy::Infer(vars);
+                if result.concretize(unifier).is_none() {
+                    None
+                } else {
+                    Some(result)
+                }
+            }
+            (StreamTy::Event(cond_l), StreamTy::Event(cond_r)) => {
+                if cond_l == cond_r {
+                    Some(self.clone())
                 } else {
                     None
                 }
             }
-            (StreamTy::Event(cond_l), StreamTy::Event(cond_r)) => Some(StreamTy::Event(cond_l.conjunction(cond_r))),
             (StreamTy::RealTime(f_l), StreamTy::RealTime(f_r)) => {
                 if f_l == f_r {
                     Some(self.clone())
@@ -357,7 +373,7 @@ impl UnifiableTy for StreamTy {
     fn contains_var<U: Unifier<Var = Self::V, Ty = Self>>(&self, unifier: &mut U, var: Self::V) -> bool {
         trace!("check occurrence {} {}", var, self);
         match self {
-            StreamTy::Infer(v) => unifier.vars_equal(var, *v),
+            StreamTy::Infer(vars) => vars.iter().any(|v| unifier.vars_equal(var, *v)),
             _ => false,
         }
     }
@@ -368,6 +384,78 @@ impl UnifiableTy for StreamTy {
 
     fn conflicts_with(self, other: Self) -> InferError {
         InferError::StreamTypeMismatch(self, other)
+    }
+}
+
+impl StreamTy {
+    /// Tries to concretize a type, that is, resolve the inferred variables.
+    /// Returns `None` if this is no longer possible, that is, some streams are event-based and some periodic.
+    fn concretize<U: Unifier<Var = StreamVar, Ty = Self>>(&self, unifier: &mut U) -> Option<StreamTy> {
+        match self {
+            StreamTy::RealTime(_) | StreamTy::Event(_) => Some(self.clone()),
+            StreamTy::Infer(vars) => {
+                if vars.is_empty() {
+                    return Some(StreamTy::Event(Activation::Conjunction(Vec::new())));
+                }
+                let mut stream_ty = None;
+                for &var in vars {
+                    stream_ty = match (stream_ty.as_mut(), unifier.get_type(var).as_ref()) {
+                        (None, Some(ty)) => Some(ty.clone()),
+                        (_, None) => {
+                            // if the right hand side cannot be inferred, we fail
+                            // TODO: check if this is correct
+                            return None;
+                        }
+                        (Some(StreamTy::Event(l)), Some(StreamTy::Event(r))) => Some(StreamTy::Event(l.conjunction(r))),
+                        (Some(StreamTy::RealTime(l)), Some(StreamTy::RealTime(r))) => {
+                            Some(StreamTy::RealTime(l.conjunction(r)))
+                        }
+                        (Some(_), Some(_)) => {
+                            // Incompatible types
+                            return None;
+                        }
+                    }
+                }
+                stream_ty
+            }
+        }
+    }
+}
+
+impl Activation {
+    /// Checks whether `self -> other` is valid
+    pub(crate) fn implies_valid<U: Unifier<Var = StreamVar, Ty = StreamTy>>(
+        &self,
+        other: &Activation,
+        unifier: &mut U,
+    ) -> bool {
+        match (self, other) {
+            (Activation::Conjunction(left), Activation::Conjunction(right)) => {
+                right.iter().all(|cond| left.contains(cond))
+            }
+            (Activation::Conjunction(left), _) => left.contains(other),
+            _ => {
+                // there are possible many more cases that we want to look at in order to make analysis more precise
+                false
+            }
+        }
+    }
+
+    pub(crate) fn conjunction(&self, other: &Activation) -> Activation {
+        use Activation::*;
+        match (self, other) {
+            (Conjunction(c_l), Conjunction(c_r)) => {
+                let mut con = c_l.clone();
+                con.extend(c_r.iter().cloned());
+                Activation::Conjunction(con)
+            }
+            (Conjunction(c), other) | (other, Conjunction(c)) => {
+                let mut con = c.clone();
+                con.push(other.clone());
+                Activation::Conjunction(con)
+            }
+            (_, _) => Activation::Conjunction(vec![self.clone(), other.clone()]),
+        }
     }
 }
 
