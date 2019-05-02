@@ -267,26 +267,26 @@ impl<'a> DependencyAnalyser<'a> {
         match &expr.kind {
             ExpressionKind::Tuple(elements) | ExpressionKind::Function(_, _, elements) => {
                 elements.iter().for_each(|element| {
-                    self.add_edges_for_expression(current_node, &*element, location, mapping)
+                    self.add_edges_for_expression(current_node, element, location, mapping)
                 });
             }
             ExpressionKind::MissingExpression | ExpressionKind::Lit(_) => {}
             ExpressionKind::Default(stream, default) => {
-                self.add_edges_for_expression(current_node, &*stream, location, mapping);
-                self.add_edges_for_expression(current_node, &*default, location, mapping);
+                self.add_edges_for_expression(current_node, stream, location, mapping);
+                self.add_edges_for_expression(current_node, default, location, mapping);
             }
             ExpressionKind::ParenthesizedExpression(_, expr, _)
             | ExpressionKind::Unary(_, expr) => {
-                self.add_edges_for_expression(current_node, &*expr, location, mapping);
+                self.add_edges_for_expression(current_node, expr, location, mapping);
             }
             ExpressionKind::Ite(cond, if_case, else_case) => {
-                self.add_edges_for_expression(current_node, &*cond, location, mapping);
-                self.add_edges_for_expression(current_node, &*if_case, location, mapping);
-                self.add_edges_for_expression(current_node, &*else_case, location, mapping);
+                self.add_edges_for_expression(current_node, cond, location, mapping);
+                self.add_edges_for_expression(current_node, if_case, location, mapping);
+                self.add_edges_for_expression(current_node, else_case, location, mapping);
             }
             ExpressionKind::Binary(_, left, right) => {
-                self.add_edges_for_expression(current_node, &*left, location, mapping);
-                self.add_edges_for_expression(current_node, &*right, location, mapping);
+                self.add_edges_for_expression(current_node, left, location, mapping);
+                self.add_edges_for_expression(current_node, right, location, mapping);
             }
             ExpressionKind::Ident(_) => match &self.naming_table[&expr.id] {
                 Declaration::Type(_) | Declaration::Func(_) | Declaration::Param(_) | Declaration::Const(_) => {}

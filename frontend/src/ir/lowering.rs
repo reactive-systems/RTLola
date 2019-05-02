@@ -144,7 +144,8 @@ impl<'a> Lowering<'a> {
         let ty = ir::Type::Bool;
         let expr = self.lower_stream_expression(&trigger.expression, &ty);
         let reference = StreamReference::OutRef(self.ir.outputs.len());
-        let outgoing_dependencies = self.find_dependencies(&trigger.expression);
+        let mut outgoing_dependencies = Vec::new();
+        self.find_dependencies(&trigger.expression, &mut outgoing_dependencies);
         let input_dependencies = self.gather_dependent_inputs(trigger.id);
         let output = ir::OutputStream {
             name,
@@ -190,7 +191,8 @@ impl<'a> Lowering<'a> {
         let time_driven = self.check_time_driven(ast_output.id, reference);
 
         let trackings = self.collect_tracking_info(nid, time_driven);
-        let outgoing_dependencies = self.find_dependencies(&ast_output.expression);
+        let mut outgoing_dependencies = Vec::new();
+        self.find_dependencies(&ast_output.expression, &mut outgoing_dependencies);
         let mut dep_map: HashMap<StreamReference, Vec<ir::Offset>> = HashMap::new();
         outgoing_dependencies.into_iter().for_each(|dep| {
             dep_map.entry(dep.stream).or_insert_with(Vec::new).extend_from_slice(dep.offsets.as_slice())
@@ -248,8 +250,8 @@ impl<'a> Lowering<'a> {
         if filter(expr) {
             match &expr.kind {
                 ExpressionKind::Lit(_) => pre.chain(post()).collect(),
-                ExpressionKind::StreamAccess(_, _) => unimplemented!(),
                 ExpressionKind::Ident(_) => pre.chain(post()).collect(),
+                ExpressionKind::StreamAccess(e, _) => pre.chain(recursion(e)).chain(post()).collect(),
                 ExpressionKind::Default(e, dft) => {
                     pre.chain(recursion(e)).chain(recursion(dft)).chain(post()).collect()
                 }
@@ -285,25 +287,56 @@ impl<'a> Lowering<'a> {
     }
 
     /// Finds all streams the expression accesses, excluding windows.
-    fn find_dependencies(&self, expr: &ast::Expression) -> Vec<ir::Dependency> {
-        let map = |e: &ast::Expression| -> Vec<ir::Dependency> {
-            match &e.kind {
-                ExpressionKind::Ident(_ident) => {
-                    let sr = self.get_ref_for_ident(e.id);
-                    let offset = ir::Offset::PastDiscreteOffset(0);
-                    vec![ir::Dependency { stream: sr, offsets: vec![offset] }]
+    fn find_dependencies(&self, expr: &ast::Expression, deps: &mut Vec<ir::Dependency>) {
+        use ExpressionKind::*;
+        match &expr.kind {
+            Offset(inner, offset) => match &inner.kind {
+                Ident(_ident) => {
+                    let sr = self.get_ref_for_ident(inner.id);
+                    let offset = if let Some(offset) = offset.parse_literal::<i32>() {
+                        // discrete offset
+                        if offset <= 0 {
+                            ir::Offset::PastDiscreteOffset(offset.abs() as u128)
+                        } else {
+                            ir::Offset::FutureDiscreteOffset(offset as u128)
+                        }
+                    } else if let Some(_time_spec) = offset.parse_timespec() {
+                        unimplemented!();
+                    } else {
+                        unreachable!("Verified in type checker");
+                    };
+                    deps.push(ir::Dependency { stream: sr, offsets: vec![offset] })
                 }
-                _ => Vec::new(),
+                _ => {
+                    unreachable!("checked in AST verification");
+                }
+            },
+            Lit(_) => {}
+            Ident(_) => {
+                let sr = self.get_ref_for_ident(expr.id);
+                deps.push(ir::Dependency { stream: sr, offsets: vec![ir::Offset::PastDiscreteOffset(0)] })
             }
-        };
-        let filter = |e: &ast::Expression| -> bool {
-            if let ExpressionKind::SlidingWindowAggregation { .. } = &e.kind {
-                false
-            } else {
-                true
+            StreamAccess(e, _) | Unary(_, e) | ParenthesizedExpression(_, e, _) | Field(e, _) => {
+                self.find_dependencies(e, deps)
             }
-        };
-        Lowering::collect_expression(expr, &map, &filter, true)
+            Default(left, right) | Binary(_, left, right) => {
+                self.find_dependencies(left, deps);
+                self.find_dependencies(right, deps);
+            }
+            SlidingWindowAggregation { .. } => {
+                // ignore sliding windows
+            }
+            Ite(cond, cons, alt) => {
+                self.find_dependencies(cond, deps);
+                self.find_dependencies(cons, deps);
+                self.find_dependencies(alt, deps);
+            }
+            MissingExpression => unreachable!("checked in AST verification"),
+            Tuple(exprs) | Function(_, _, exprs) => {
+                exprs.iter().for_each(|e| self.find_dependencies(e, deps));
+            }
+            Method(_, _, _, _) => unimplemented!("Methods not supported, yet."),
+        }
     }
 
     fn lower_tracking_req(
@@ -327,12 +360,7 @@ impl<'a> Lowering<'a> {
     fn lower_window(&mut self, win_expr: &ast::Expression) -> WindowReference {
         if let ExpressionKind::SlidingWindowAggregation { expr, duration, aggregation } = &win_expr.kind {
             if let ExpressionKind::Ident(_) = &expr.kind {
-                let target_id = match self.get_decl(expr.id) {
-                    Declaration::In(i) => i.id,
-                    Declaration::Out(o) => o.id,
-                    _ => unreachable!("Verified in naming analysis"),
-                };
-                let target = self.get_ref_for_stream(target_id);
+                let target = self.get_ref_for_ident(expr.id);
                 let duration = self.lower_duration(duration.as_ref());
                 let op = self.lower_window_op(*aggregation);
                 let reference = WindowReference { ix: self.ir.sliding_windows.len() };
@@ -518,8 +546,8 @@ impl<'a> Lowering<'a> {
     fn handle_func_args(&mut self, types: &[ir::Type], args: &[&ast::Expression]) -> Vec<ir::Expression> {
         assert_eq!(types.len(), args.len());
         types
-            .into_iter()
-            .zip(args.into_iter())
+            .iter()
+            .zip(args.iter())
             .map(|(req_ty, a)| {
                 let (arg, actual_ty) = self.lower_expression(a);
                 if req_ty != &actual_ty {
@@ -884,7 +912,7 @@ mod tests {
     #[test]
     fn dependency_test() {
         let ir = spec_to_ir(
-            "input a: Int32\ninput b: Int32\ninput c: Int32\noutput d: Int32 := a + b + (b[-1]?0) + (a[-2]?0) + c",
+            "input a: Int32\ninput b: Int32\ninput c: Int32\noutput d: Int32 := a + b + b[-1].defaults(to: 0) + a[-2].defaults(to: 0) + c",
         );
         let mut in_refs: [StreamReference; 3] =
             [StreamReference::InRef(5), StreamReference::InRef(5), StreamReference::InRef(5)];
@@ -901,9 +929,9 @@ mod tests {
         }
         let out_dep = &ir.outputs[0].outgoing_dependencies;
         assert_eq!(out_dep.len(), 3);
-        let a_dep = out_dep.into_iter().find(|&x| x.stream == in_refs[0]).expect("a dependencies not found");
-        let b_dep = out_dep.into_iter().find(|&x| x.stream == in_refs[1]).expect("b dependencies not found");
-        let c_dep = out_dep.into_iter().find(|&x| x.stream == in_refs[2]).expect("c dependencies not found");
+        let a_dep = out_dep.iter().find(|&x| x.stream == in_refs[0]).expect("a dependencies not found");
+        let b_dep = out_dep.iter().find(|&x| x.stream == in_refs[1]).expect("b dependencies not found");
+        let c_dep = out_dep.iter().find(|&x| x.stream == in_refs[2]).expect("c dependencies not found");
         assert_eq!(a_dep.offsets.len(), 2);
         assert_eq!(b_dep.offsets.len(), 2);
         assert_eq!(c_dep.offsets.len(), 1);
