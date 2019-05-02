@@ -433,6 +433,9 @@ impl Activation {
         other: &Activation,
         unifier: &mut U,
     ) -> bool {
+        if self == other {
+            return true;
+        }
         match (self, other) {
             (Activation::Conjunction(left), Activation::Conjunction(right)) => {
                 right.iter().all(|cond| left.contains(cond))

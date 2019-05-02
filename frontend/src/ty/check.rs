@@ -528,23 +528,44 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
                 )?;
                 self.infer_expression(right, Some(ValueTy::Infer(var)), Some(StreamVarOrTy::Var(stream_var)))?
             }
-            StreamAccess(expr, access_type) => {
+            StreamAccess(inner, access_type) => {
                 // result type is an optional value
                 let target_var = self.unifier.new_var();
                 self.unifier
                     .unify_var_ty(var, ValueTy::Option(ValueTy::Infer(target_var).into()))
-                    .map_err(|err| self.handle_error(err, expr.span))?;
+                    .map_err(|err| self.handle_error(err, inner.span))?;
 
-                // the stream type of `expr` is unconstrained
-                self.infer_expression(expr, Some(ValueTy::Infer(var)), None)?;
+                // the stream type of `inner` is unconstrained
+                self.infer_expression(inner, Some(ValueTy::Infer(var)), None)?;
 
-                match access_type {
-                    StreamAccessKind::Hold => {
-                        // for hold access, verify that stream types are incompatible and emit a warning otherwise
+                let function = match access_type {
+                    StreamAccessKind::Hold => "hold()",
+                    StreamAccessKind::Optional => "get()",
+                };
+
+                // check that stream types are not compatible
+                let inner_var = self.stream_vars[&inner.id];
+                match (
+                    self.stream_unifier.get_type(stream_var).map(|ty| ty.normalize_ty(&mut self.stream_unifier)),
+                    self.stream_unifier.get_type(inner_var),
+                ) {
+                    (Some(StreamTy::Event(left)), Some(StreamTy::Event(right))) => {
+                        if left.implies_valid(&right, &mut self.stream_unifier) {
+                            self.handler.warn_with_span(
+                                &format!("Unnecessary `.{}`", function),
+                                LabeledSpan::new(expr.span, &format!("remove `.{}`", function), true),
+                            )
+                        }
                     }
-                    StreamAccessKind::Optional => {
-                        // for get access, verify that stream types are partially overlapping and emit a warning otherwise
+                    (Some(StreamTy::RealTime(left)), Some(StreamTy::RealTime(right))) => {
+                        if right.is_multiple_of(&left) {
+                            self.handler.warn_with_span(
+                                &format!("Unnecessary `.{}`", function),
+                                LabeledSpan::new(expr.span, &format!("remove `.{}`", function), true),
+                            )
+                        }
                     }
+                    _ => {}
                 }
             }
             Function(_name, types, params) => {
@@ -958,6 +979,21 @@ mod tests {
         let mut type_analysis = TypeAnalysis::new(&handler, &decl_table);
         type_analysis.check(&spec);
         handler.emitted_errors()
+    }
+
+    fn num_type_warnings(spec: &str) -> usize {
+        let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
+
+        let spec = match parse(spec) {
+            Err(e) => panic!("Spec {} cannot be parsed: {}.", spec, e),
+            Ok(s) => s,
+        };
+        let mut na = NamingAnalysis::new(&handler);
+        let decl_table = na.check(&spec);
+        assert!(!handler.contains_error(), "Spec produces errors in naming analysis.");
+        let mut type_analysis = TypeAnalysis::new(&handler, &decl_table);
+        type_analysis.check(&spec);
+        handler.emitted_warnings()
     }
 
     /// Returns the type of the last output of the given spec
@@ -1540,5 +1576,14 @@ mod tests {
     fn test_no_direct_access_possible() {
         let spec = "input a: Int32\ninput b: Int32\noutput x @(a | b) := a";
         assert_eq!(1, num_type_errors(spec));
+    }
+
+    #[test]
+    fn test_warn_not_needed_hold() {
+        let spec = "input a: Int32\noutput x @a := a.hold().defaults(to: 0)";
+        assert_eq!(1, num_type_warnings(spec));
+
+        let spec = "output x: Int32 @ 2Hz := 1\noutput y: Int32 @1Hz := x.hold().defaults(to: 0)";
+        assert_eq!(1, num_type_warnings(spec));
     }
 }
