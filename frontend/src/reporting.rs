@@ -199,6 +199,7 @@ impl StderrEmitter {
             }
 
             let mut prev_line_number = None;
+            let mut num_messages = 0;
 
             for (snippet, label, primary) in snippets {
                 fn render_source_line(snippet: &CodeLine) -> ColoredLine {
@@ -240,12 +241,6 @@ impl StderrEmitter {
                 }
                 prev_line_number = Some(snippet.line_number);
 
-                let mut rendered_line = ColoredLine::new();
-                rendered_line.push(
-                    &format!("{} | ", " ".repeat(line_number_length)),
-                    ColorSpec::new().set_fg(Some(Color::Blue)).clone(),
-                );
-                let highlight_char = if primary { "^" } else { "-" };
                 let color = if primary {
                     diagnostic.level.to_color()
                 } else {
@@ -253,6 +248,26 @@ impl StderrEmitter {
                     colorspec.set_intense(true).set_bold(true).set_fg(Some(Color::Blue));
                     colorspec
                 };
+
+                if num_messages > 0 {
+                    // add an empty line
+                    let mut empty_line = ColoredLine::new();
+                    empty_line.push(
+                        &format!("{} | ", " ".repeat(line_number_length)),
+                        ColorSpec::new().set_fg(Some(Color::Blue)).clone(),
+                    );
+                    empty_line.push(&format!("{}|", " ".repeat(snippet.highlight.start)), color.clone());
+                    lines.push(empty_line);
+                }
+
+                let mut rendered_line = ColoredLine::new();
+                rendered_line.push(
+                    &format!("{} | ", " ".repeat(line_number_length)),
+                    ColorSpec::new().set_fg(Some(Color::Blue)).clone(),
+                );
+                let highlight_char: String =
+                    if primary && num_messages == 0 { String::from("^") } else { "-".repeat(num_messages + 1) };
+
                 rendered_line.push(
                     &format!(
                         "{}{}",
@@ -265,6 +280,7 @@ impl StderrEmitter {
                     rendered_line.push(&format!(" {}", label), color);
                 }
                 lines.push(rendered_line);
+                num_messages += 1;
             }
         }
 

@@ -383,7 +383,11 @@ impl UnifiableTy for StreamTy {
     }
 
     fn conflicts_with(self, other: Self) -> InferError {
-        InferError::StreamTypeMismatch(self, other)
+        let hint = match (&self, &other) {
+            (StreamTy::Event(_), StreamTy::Event(_)) => Some(String::from("try using `.hold()` or `.get()`")),
+            _ => None,
+        };
+        InferError::StreamTypeMismatch(self, other, hint)
     }
 }
 
@@ -542,7 +546,8 @@ type InferResult = Result<(), InferError>;
 #[derive(Debug)]
 pub enum InferError {
     ValueTypeMismatch(ValueTy, ValueTy),
-    StreamTypeMismatch(StreamTy, StreamTy),
+    // the last element can be an optional hint
+    StreamTypeMismatch(StreamTy, StreamTy, Option<String>),
     ConflictingConstraint(TypeConstraint, TypeConstraint),
     CyclicDependency,
 }

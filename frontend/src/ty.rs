@@ -118,14 +118,6 @@ impl Freq {
         (&other.ns % &self.ns).is_zero()
     }
 
-    pub(crate) fn multiply_by(&self, val: i32) -> Self {
-        // TODO: check that this multiplication is correct w.r.t. intended meaning in typing.rs
-        Freq {
-            repr: format!("{} * {}", val, self.repr),
-            ns: self.ns.clone() * BigRational::new(BigInt::from(1), BigInt::from(val.abs())),
-        }
-    }
-
     pub(crate) fn conjunction(&self, other: &Freq) -> Freq {
         println!("WARNING: conjunction of frequencies is currently not possible");
         Freq { repr: format!("lcm({}, {})", self, other), ns: self.ns.clone() }

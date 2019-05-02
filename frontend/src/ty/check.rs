@@ -880,11 +880,15 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
                     LabeledSpan::new(span, "consider using a type annotation", true),
                 );
             }
-            InferError::StreamTypeMismatch(ty_l, ty_r) => {
-                self.handler.error_with_span(
+            InferError::StreamTypeMismatch(ty_l, ty_r, hint) => {
+                let mut diagnostics = self.handler.build_error_with_span(
                     &format!("Type mismatch between `{}` and `{}`", ty_l, ty_r),
                     LabeledSpan::new(span, &format!("expected `{}`, found `{}`", ty_l, ty_r), true),
                 );
+                if let Some(hint) = hint {
+                    diagnostics.add_labeled_span(LabeledSpan::new(span, &format!("hint: {}", hint), false))
+                }
+                diagnostics.emit();
             }
         }
     }
