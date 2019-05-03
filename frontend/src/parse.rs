@@ -524,7 +524,7 @@ fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>, span: Span)
                                 }
                                 _ => ExpressionKind::Method(Box::new(lhs), name, types, args),
                             };
-                            return Expression::new(kind, span);
+                            return Expression::new(kind, rhs.span);
                         }
                         _ => panic!("expected method call or tuple access, found {}", rhs),
                     }
