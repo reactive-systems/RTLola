@@ -109,37 +109,26 @@ impl TimeDrivenManager {
         time_chan: Receiver<SystemTime>,
         time_ack_chan: Sender<()>,
     ) -> ! {
-        match time_chan.recv() {
-            Err(e) => panic!("TDM crashed. {}", e),
-            Ok(time) => {
-                self.start_time = Some(time);
-            }
-        }
+        self.start_time = Some(get_time(&time_chan));
         let _ = time_ack_chan.send(()); // Should be fine...
 
-        assert!(self.start_time.is_some());
         let (sleepy_time, due) = self.get_current_deadline(self.start_time);
         let mut due_streams: Vec<StreamReference> = due;
         let mut next_deadline: SystemTime = self.start_time.unwrap() + sleepy_time;
 
         loop {
-            match time_chan.recv() {
-                Err(e) => panic!("TDM crashed. {}", e),
-                Ok(time) => {
-                    if time > next_deadline {
-                        // Go back in time, evaluate, acknowledge other thread.
-                        let item = WorkItem::Time(due_streams, next_deadline);
-                        if work_chan.send(item).is_err() {
-                            self.handler.runtime_warning(|| "TDM: Sending failed; evaluation cycle lost.");
-                        }
-                        let (sleepy_time, due) = self.get_current_deadline(Some(next_deadline));
-                        next_deadline += sleepy_time;
-                        due_streams = due;
-                    } else {
-                        // Receive next timestamp.
-                    }
+            let time = get_time(&time_chan);
+            while time >= next_deadline {
+                // Go back in time, evaluate,...
+                let item = WorkItem::Time(due_streams, next_deadline);
+                if work_chan.send(item).is_err() {
+                    self.handler.runtime_warning(|| "TDM: Sending failed; evaluation cycle lost.");
                 }
+                let (sleepy_time, due) = self.get_current_deadline(Some(next_deadline));
+                next_deadline += sleepy_time;
+                due_streams = due;
             }
+            // ...acknowledge other thread.
             let _ = time_ack_chan.send(()); // Should be fine...
         }
     }
@@ -313,4 +302,11 @@ impl TimeDrivenManager {
     }
 
     */
+}
+
+fn get_time(time_chan: &Receiver<SystemTime>) -> SystemTime {
+    match time_chan.recv() {
+        Err(e) => panic!("TDM crashed. {}", e),
+        Ok(time) => time,
+    }
 }
