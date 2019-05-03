@@ -55,23 +55,21 @@ impl EventDrivenManager {
         self.input_reader.read_blocking().unwrap_or_else(|e| panic!("Error reading data. {}", e))
     }
 
-    fn get_event(&self) -> Vec<Option<(StreamReference, Value)>> {
-        self.in_types.iter()
-                .enumerate()
-                .map(|(ix, t)| {
-                    let s = self.input_reader.str_ref_for_stream_ix(ix);
-                    if s == "#" {
-                        //TODO(marvin): we could also change the return type and ignore non-value streams
-                        None
-                    } else {
-                        let v = Value::try_from(s, t)
-                            .unwrap_or_else(|| panic!("Failed to parse {} as value of type {:?}.", s, t));
-                        Some((ix, v))
-                    }
-                })
-                .map(|opt| opt.map(|(ix, v)| (StreamReference::InRef(ix), v)))
-                //TODO(marvin): merge this into map from above? Check if done by compiler.
-                .collect()
+    fn get_event(&self) -> Vec<(StreamReference, Value)> {
+        self.in_types
+            .iter()
+            .enumerate()
+            .flat_map(|(ix, t)| {
+                let s = self.input_reader.str_ref_for_stream_ix(ix);
+                if s == "#" {
+                    None
+                } else {
+                    let v = Value::try_from(s, t)
+                        .unwrap_or_else(|| panic!("Failed to parse {} as value of type {:?}.", s, t));
+                    Some((StreamReference::InRef(ix), v))
+                }
+            })
+            .collect()
     }
 
     fn get_time(&self) -> SystemTime {
@@ -132,7 +130,6 @@ impl EventDrivenManager {
                 let _ = ack_chan.recv(); // Wait until be get the acknowledgement.
             }
 
-            let event = event.into_iter().flatten().collect(); // Remove non-existing entries.
             match work_queue.send(WorkItem::Event(event, time)) {
                 Ok(_) => {}
                 Err(e) => self.out_handler.runtime_warning(|| format!("Error when sending work item. {}", e)),
