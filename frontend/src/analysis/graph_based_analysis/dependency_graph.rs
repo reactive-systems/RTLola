@@ -276,7 +276,8 @@ impl<'a> DependencyAnalyser<'a> {
                 self.add_edges_for_expression(current_node, default, location, mapping);
             }
             ExpressionKind::ParenthesizedExpression(_, expr, _)
-            | ExpressionKind::Unary(_, expr) => {
+            | ExpressionKind::Unary(_, expr)
+            | ExpressionKind::StreamAccess(expr, _) => {
                 self.add_edges_for_expression(current_node, expr, location, mapping);
             }
             ExpressionKind::Ite(cond, if_case, else_case) => {
@@ -311,7 +312,6 @@ impl<'a> DependencyAnalyser<'a> {
                     );
                 }
             },
-            ExpressionKind::StreamAccess(_, _) => unimplemented!(),
             ExpressionKind::Offset(expr, offset) => {
                 if let ExpressionKind::Ident(_) = &expr.kind {
                 } else {
@@ -352,33 +352,6 @@ impl<'a> DependencyAnalyser<'a> {
                     StreamDependency::Access(location, offset, expr.span),
                 );
             }
-            /*ExpressionKind::Lookup(instance, offset, op) => {
-                let target_stream_id = match &self.naming_table[&instance.id] {
-                    Declaration::Out(output) => output.id,
-                    Declaration::In(input) => input.id,
-                    _ => unreachable!(),
-                };
-                let target_stream_entry = mapping[&target_stream_id];
-                let target_stream_index = target_stream_entry.normal_time_index;
-                match op {
-                    Some(_) => {
-                        let offset = Offset::SlidingWindow;
-                        self.dependency_graph.add_edge(
-                            current_node,
-                            target_stream_index,
-                            StreamDependency::Access(location, offset, expr.span),
-                        );
-                    }
-                    None => {
-                        let offset = self.translate_offset(offset, self.naming_table);
-                        self.dependency_graph.add_edge(
-                            current_node,
-                            target_stream_index,
-                            StreamDependency::Access(location, offset, expr.span),
-                        );
-                    }
-                }
-            }*/
             ExpressionKind::Field(_, _) => unimplemented!(),
             ExpressionKind::Method(_, _, _, _) => unimplemented!(),
         }

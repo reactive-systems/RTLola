@@ -1,8 +1,7 @@
-use crate::analysis::graph_based_analysis::get_byte_size;
 use crate::analysis::graph_based_analysis::space_requirements::TrackingRequirements;
-use crate::analysis::graph_based_analysis::MemoryBound;
-use crate::analysis::graph_based_analysis::TrackingRequirement;
+use crate::analysis::graph_based_analysis::{get_byte_size, MemoryBound, TrackingRequirement};
 use crate::analysis::graph_based_analysis::{SpaceRequirements, StorageRequirement};
+use crate::analysis::naming::Declaration;
 use crate::analysis::DeclarationTable;
 use crate::analysis::TypeTable;
 use crate::ast;
@@ -10,6 +9,10 @@ use crate::ast::{ExpressionKind, LolaSpec, StreamAccessKind, WindowOperation};
 use crate::ty::StreamTy;
 use num::{BigRational, ToPrimitive};
 use std::cmp::min;
+use std::str::FromStr as _;
+use uom::si::bigrational::{Frequency, Time};
+use uom::si::frequency::hertz;
+use uom::si::time::second;
 
 fn is_efficient_operator(op: WindowOperation) -> bool {
     match op {
@@ -38,9 +41,10 @@ fn add_sliding_windows<'a>(
     let mut required_memory: u128 = 0;
     let mut unknown_size = false;
 
+    use ExpressionKind::*;
     match &expr.kind {
-        ExpressionKind::Lit(_) | ExpressionKind::Ident(_) => {}
-        ExpressionKind::Binary(_op, left, right) => {
+        Lit(_) | Ident(_) => {}
+        Binary(_, left, right) | Default(left, right) | Offset(left, right) => {
             match add_sliding_windows(left, type_table, declaration_table) {
                 MemoryBound::Bounded(u) => required_memory += u,
                 MemoryBound::Unbounded => return MemoryBound::Unbounded,
@@ -52,74 +56,15 @@ fn add_sliding_windows<'a>(
                 MemoryBound::Unknown => unknown_size = true,
             };
         }
-        ExpressionKind::MissingExpression => return MemoryBound::Unknown,
-        ExpressionKind::StreamAccess(e, access_type) => match access_type {
-            StreamAccessKind::Hold => {
-                unimplemented!();
-                /*if let ExpressionKind::Lookup(_, _, _) = &e.kind {
-                    match add_sliding_windows(e, type_table, declaration_table) {
-                        MemoryBound::Bounded(u) => required_memory += u,
-                        MemoryBound::Unbounded => return MemoryBound::Unbounded,
-                        MemoryBound::Unknown => unknown_size = true,
-                    };
-                } else {
-                    // A "stray" sample and hold expression such as `5.hold()` is valid, but a no-op.
-                    // Thus, print a warning. Evaluating the expression is necessary, the dft can be skipped.
-                    match add_sliding_windows(e, type_table, declaration_table) {
-                        MemoryBound::Bounded(u) => required_memory += u,
-                        MemoryBound::Unbounded => return MemoryBound::Unbounded,
-                        MemoryBound::Unknown => unknown_size = true,
-                    };
-                }*/
-            }
-            StreamAccessKind::Optional => {
-                unimplemented!();
-            }
-        },
-        ExpressionKind::Default(e, dft) => {
-            match add_sliding_windows(e, type_table, declaration_table) {
-                MemoryBound::Bounded(u) => required_memory += u,
-                MemoryBound::Unbounded => return MemoryBound::Unbounded,
-                MemoryBound::Unknown => unknown_size = true,
-            };
-            match add_sliding_windows(dft, type_table, declaration_table) {
-                MemoryBound::Bounded(u) => required_memory += u,
-                MemoryBound::Unbounded => return MemoryBound::Unbounded,
-                MemoryBound::Unknown => unknown_size = true,
-            };
-        }
-        ExpressionKind::Offset(expr, offset) => {
-            match add_sliding_windows(expr, type_table, declaration_table) {
-                MemoryBound::Bounded(u) => required_memory += u,
-                MemoryBound::Unbounded => return MemoryBound::Unbounded,
-                MemoryBound::Unknown => unknown_size = true,
-            };
-            match add_sliding_windows(offset, type_table, declaration_table) {
-                MemoryBound::Bounded(u) => required_memory += u,
-                MemoryBound::Unbounded => return MemoryBound::Unbounded,
-                MemoryBound::Unknown => unknown_size = true,
-            };
-        }
-        ExpressionKind::SlidingWindowAggregation { expr, duration, .. } => {
-            match add_sliding_windows(expr, type_table, declaration_table) {
-                MemoryBound::Bounded(u) => required_memory += u,
-                MemoryBound::Unbounded => return MemoryBound::Unbounded,
-                MemoryBound::Unknown => unknown_size = true,
-            };
-            match add_sliding_windows(duration, type_table, declaration_table) {
-                MemoryBound::Bounded(u) => required_memory += u,
-                MemoryBound::Unbounded => return MemoryBound::Unbounded,
-                MemoryBound::Unknown => unknown_size = true,
-            };
-        }
-        ExpressionKind::Unary(_, inner) | ExpressionKind::ParenthesizedExpression(_, inner, _) => {
+        MissingExpression => return MemoryBound::Unknown,
+        Unary(_, inner) | ParenthesizedExpression(_, inner, _) | StreamAccess(inner, _) => {
             match add_sliding_windows(inner, type_table, declaration_table) {
                 MemoryBound::Bounded(u) => required_memory += u,
                 MemoryBound::Unbounded => return MemoryBound::Unbounded,
                 MemoryBound::Unknown => unknown_size = true,
             };
         }
-        ExpressionKind::Ite(condition, ifcase, elsecase) => {
+        Ite(condition, ifcase, elsecase) => {
             match add_sliding_windows(condition, type_table, declaration_table) {
                 MemoryBound::Bounded(u) => required_memory += u,
                 MemoryBound::Unbounded => return MemoryBound::Unbounded,
@@ -136,7 +81,7 @@ fn add_sliding_windows<'a>(
                 MemoryBound::Unknown => unknown_size = true,
             };
         }
-        ExpressionKind::Function(_, _, elements) | ExpressionKind::Tuple(elements) => {
+        Function(_, _, elements) | Tuple(elements) => {
             for expr in elements {
                 match add_sliding_windows(expr, type_table, declaration_table) {
                     MemoryBound::Bounded(u) => required_memory += u,
@@ -145,70 +90,73 @@ fn add_sliding_windows<'a>(
                 };
             }
         }
-        ExpressionKind::Field(_, _) | ExpressionKind::Method(_, _, _, _) => {
-            unimplemented!()
-        } /*ExpressionKind::Lookup(instance, offset, op) => match op {
-              None => {}
-              Some(wop) => {
-                  let node_id = match declaration_table
-                      .get(&instance.id)
-                      .expect("We expect the the declaration-table to contain information about every stream access")
-                  {
-                      Declaration::In(input) => input.id,
-                      Declaration::Out(output) => output.id,
-                      _ => unimplemented!(),
-                  };
+        Field(_, _) | Method(_, _, _, _) => unimplemented!(),
+        SlidingWindowAggregation { expr, duration, aggregation } => {
+            if let Ident(_) = &expr.kind {
+            } else {
+                unreachable!("checked in AST verification");
+            }
 
-                  let timing = &type_table.get_stream_type(node_id).timing;
-                  let value_type = type_table.get_value_type(node_id);
-                  let value_type_size = match get_byte_size(value_type) {
-                      MemoryBound::Bounded(i) => i,
-                      MemoryBound::Unbounded => return MemoryBound::Unbounded,
-                      MemoryBound::Unknown => {
-                          unknown_size = true;
-                          0
-                      }
-                  };
-                  let efficient_operator: bool = is_efficient_operator(*wop);
-                  match (timing, efficient_operator) {
-                      (TimingInfo::Event, false) => {
-                          return MemoryBound::Unbounded;
-                      }
-                      (TimingInfo::RealTime(freq), false) => {
-                          let window_size = match offset {
-                              Offset::DiscreteOffset(_) => unreachable!(),
-                              Offset::RealTimeOffset(time_spec) => &time_spec.exact_period,
-                          };
-                          let number_of_full_periods_in_window: BigRational = window_size / &freq.ns;
-                          required_memory += number_of_full_periods_in_window
-                              .to_integer()
-                              .to_u128()
-                              .expect("Number of complete periods does not fit in u128")
-                              * value_type_size;
-                      }
-                      (TimingInfo::Event, true) => {
-                          let number_of_panes = 64;
-                          required_memory += determine_needed_window_memory(value_type_size, number_of_panes, *wop);
-                      }
-                      (TimingInfo::RealTime(freq), true) => {
-                          let number_of_panes = 64;
-                          let window_size = match offset {
-                              Offset::DiscreteOffset(_) => unreachable!(),
-                              Offset::RealTimeOffset(time_spec) => &time_spec.exact_period,
-                          };
-                          let number_of_full_periods_in_window: BigRational = window_size / &freq.ns;
-                          let number_of_elements = min(
-                              number_of_full_periods_in_window
-                                  .to_integer()
-                                  .to_u128()
-                                  .expect("Number of complete periods does not fit in u128"),
-                              number_of_panes,
-                          );
-                          required_memory += determine_needed_window_memory(value_type_size, number_of_elements, *wop);
-                      }
-                  }
-              }
-          },*/
+            let node_id = match declaration_table
+                .get(&expr.id)
+                .expect("We expect the the declaration-table to contain information about every stream access")
+            {
+                Declaration::In(input) => input.id,
+                Declaration::Out(output) => output.id,
+                _ => unimplemented!(),
+            };
+
+            let stream_ty = &type_table.get_stream_type(node_id);
+            let value_type = type_table.get_value_type(node_id);
+            let value_type_size = match get_byte_size(value_type) {
+                MemoryBound::Bounded(i) => i,
+                MemoryBound::Unbounded => return MemoryBound::Unbounded,
+                MemoryBound::Unknown => {
+                    unknown_size = true;
+                    0
+                }
+            };
+            let efficient_operator: bool = is_efficient_operator(*aggregation);
+            match (stream_ty, efficient_operator) {
+                (StreamTy::Event(_), false) => {
+                    return MemoryBound::Unbounded;
+                }
+                (StreamTy::RealTime(freq), false) => {
+                    let window_size =
+                        Time::from_str(duration.to_uom_string().expect("durations have been checked before").as_str())
+                            .expect("durations have been checked before");
+                    let number_of_full_periods_in_window: BigRational =
+                        window_size.get::<second>() / &freq.freq.get::<hertz>();
+                    required_memory += number_of_full_periods_in_window
+                        .to_integer()
+                        .to_u128()
+                        .expect("Number of complete periods does not fit in u128")
+                        * value_type_size;
+                }
+                (StreamTy::Event(_), true) => {
+                    let number_of_panes = 64;
+                    required_memory += determine_needed_window_memory(value_type_size, number_of_panes, *aggregation);
+                }
+                (StreamTy::RealTime(freq), true) => {
+                    let number_of_panes = 64;
+                    let window_size =
+                        Time::from_str(duration.to_uom_string().expect("durations have been checked before").as_str())
+                            .expect("durations have been checked before");
+                    let number_of_full_periods_in_window: BigRational =
+                        window_size.get::<second>() / &freq.freq.get::<hertz>();
+                    let number_of_elements = min(
+                        number_of_full_periods_in_window
+                            .to_integer()
+                            .to_u128()
+                            .expect("Number of complete periods does not fit in u128"),
+                        number_of_panes,
+                    );
+                    required_memory +=
+                        determine_needed_window_memory(value_type_size, number_of_elements, *aggregation);
+                }
+                _ => unreachable!("checked in type checking"),
+            }
+        }
     }
     if unknown_size {
         MemoryBound::Unknown

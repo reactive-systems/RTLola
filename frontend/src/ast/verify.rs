@@ -29,7 +29,7 @@ impl<'a, 'b> Verifier<'a, 'b> {
         self.expression_walker(expr, &Self::check_missing_paranthesis);
         self.expression_walker(expr, &Self::check_missing_expression);
         self.expression_walker(expr, &Self::check_offsets_are_literals);
-        self.expression_walker(expr, &Self::check_offsets_direct_access);
+        self.expression_walker(expr, &Self::check_direct_access);
     }
 
     /// Iterates over the `Expression` AST and calls `check` on every node
@@ -129,25 +129,15 @@ impl<'a, 'b> Verifier<'a, 'b> {
     }
 
     /// Currently, offsets are only allowed on direct stream access
-    fn check_offsets_direct_access(handler: &Handler, expr: &Expression) {
+    fn check_direct_access(handler: &Handler, expr: &Expression) {
         use ExpressionKind::*;
         match &expr.kind {
-            Offset(inner, _) => {
+            Offset(inner, _) | SlidingWindowAggregation { expr: inner, .. } | StreamAccess(inner, _) => {
                 if let Ident(_) = inner.kind {
                     // is a direct access
                 } else {
                     handler.error_with_span(
-                        "offsets can be only applied to streams directly",
-                        LabeledSpan::new(inner.span, "expected a stream variable", true),
-                    );
-                }
-            }
-            SlidingWindowAggregation { expr: inner, .. } => {
-                if let Ident(_) = inner.kind {
-                    // is a direct access
-                } else {
-                    handler.error_with_span(
-                        "sliding windows can be only applied to streams directly",
+                        "operation can be only applied to streams directly",
                         LabeledSpan::new(inner.span, "expected a stream variable", true),
                     );
                 }
@@ -210,7 +200,9 @@ mod tests {
 
     #[test]
     fn test_offsets_direct_access() {
-        assert_eq!(0, number_of_errors("output a := x.offest(by: 1)"));
+        assert_eq!(0, number_of_errors("output a := x.offset(by: 1)"));
         assert_eq!(1, number_of_errors("output a := x.hold().offset(by: 1)"));
+        assert_eq!(1, number_of_errors("output a := (x+1).hold()"));
+        assert_eq!(1, number_of_errors("output a := (x+1).aggregate(over: 1h, using: avg)"));
     }
 }
