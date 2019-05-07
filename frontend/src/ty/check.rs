@@ -565,7 +565,14 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
                             )
                         }
                     }
-                    _ => {}
+                    _ => {
+                        if let StreamAccessKind::Optional = access_type {
+                            self.handler.error_with_span(
+                                "`get()` can be only used when both streams are event-based or periodic",
+                                LabeledSpan::new(expr.span, "`get()` not possible here", true),
+                            )
+                        }
+                    }
                 }
             }
             Function(_name, types, params) => {
@@ -1585,5 +1592,14 @@ mod tests {
 
         let spec = "output x: Int32 @ 2Hz := 1\noutput y: Int32 @1Hz := x.hold().defaults(to: 0)";
         assert_eq!(1, num_type_warnings(spec));
+    }
+
+    #[test]
+    fn test_get_not_possible() {
+        // it should not be possible to use get with RealTime and EventBased streams
+        let spec = "input a: Int32\noutput x: Int32 @ 1Hz := 0\noutput y:Int32 @ a := x.get().defaults(to: 0)";
+        assert_eq!(1, num_type_errors(spec));
+        let spec = "input a: Int32\noutput x: Int32 @ a := 0\noutput y:Int32 @ 1Hz := x.get().defaults(to: 0)";
+        assert_eq!(1, num_type_errors(spec));
     }
 }
