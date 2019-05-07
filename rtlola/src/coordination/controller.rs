@@ -10,21 +10,21 @@ use crate::evaluator::{Evaluator, EvaluatorData};
 use super::event_driven_manager::{EventDrivenManager, EventEvaluation};
 use super::time_driven_manager::{TimeDrivenManager, TimeEvaluation};
 
-pub struct Controller<'a> {
+pub struct Controller<'e, 'c> {
     /// Handles all kind of output behavior according to config.
     output_handler: OutputHandler,
 
     /// Handles evaluating stream expressions and storage of values.
-    evaluator: Evaluator<'a>,
+    evaluator: Evaluator<'e, 'c>,
 }
 
-impl<'a> streamlab_frontend::LolaBackend for Controller<'a> {
+impl<'e, 'c> streamlab_frontend::LolaBackend for Controller<'e, 'c> {
     fn supported_feature_flags() -> Vec<streamlab_frontend::ir::FeatureFlag> {
         unimplemented!()
     }
 }
 
-impl<'a> Controller<'a> {
+impl<'e, 'c> Controller<'e, 'c> {
     /// Starts the evaluation process, i.e. periodically computes outputs for time-driven streams
     /// and fetches/expects events from specified input source.
     pub fn evaluate(ir: LolaIR, config: EvalConfig, offline: bool) -> ! {

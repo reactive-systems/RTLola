@@ -2,6 +2,7 @@
 //!
 //! See [Building fast intepreters in Rust](https://blog.cloudflare.com/building-fast-interpreters-in-rust/)
 
+use crate::evaluator::EvaluationContext;
 use crate::storage::Value;
 use streamlab_frontend::ir::Expression;
 
@@ -12,12 +13,6 @@ pub(crate) trait Expr<'s> {
 pub(crate) struct CompiledExpr<'s>(Box<dyn 's + Fn(&EvaluationContext<'_>) -> Value>);
 // alternative: using Higher-Rank Trait Bounds (HRTBs)
 // pub(crate) struct CompiledExpr<'s>(Box<dyn 's + for<'a> Fn(&EvaluationContext<'a>) -> Value>);
-
-// Will be provided by the evaluator in the next commit
-#[derive(Debug)]
-pub struct EvaluationContext<'a> {
-    phantom: std::marker::PhantomData<&'a ()>,
-}
 
 impl<'s> CompiledExpr<'s> {
     /// Creates a compiled expression IR from a generic closure.

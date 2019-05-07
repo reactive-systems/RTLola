@@ -1,6 +1,7 @@
-use streamlab_frontend::ir::{Constant, Expression, LolaIR, Offset, StreamReference, Trigger, Type};
+use streamlab_frontend::ir::{Constant, Expression, LolaIR, Offset, StreamReference, Trigger, Type, WindowReference};
 
 use crate::basics::{EvalConfig, OutputHandler};
+use crate::closuregen::{CompiledExpr, Expr};
 use crate::storage::{GlobalStore, Value};
 
 pub(crate) type OutInstance = (usize, Vec<Value>);
@@ -9,46 +10,57 @@ use ordered_float::NotNan;
 
 use std::time::SystemTime;
 
-pub(crate) struct EvaluatorData {
+pub(crate) struct EvaluatorData<'c> {
     // Evaluation order of output streams
     layers: Vec<Vec<StreamReference>>,
     // Indexed by stream reference.
     exprs: Vec<Expression>,
+    // Indexed by stream reference.
+    compiled_exprs: Vec<CompiledExpr<'c>>,
     global_store: GlobalStore,
     ir: LolaIR,
     handler: OutputHandler,
 }
 
-pub(crate) struct Evaluator<'a> {
+pub(crate) struct Evaluator<'e, 'c> {
     // Evaluation order of output streams
-    layers: &'a Vec<Vec<StreamReference>>,
+    layers: &'e Vec<Vec<StreamReference>>,
     // Indexed by stream reference.
-    exprs: &'a Vec<Expression>,
-    global_store: &'a mut GlobalStore,
-    ir: &'a LolaIR,
-    handler: &'a OutputHandler,
+    exprs: &'e Vec<Expression>,
+    // Indexed by stream reference.
+    compiled_exprs: &'e Vec<CompiledExpr<'c>>,
+    global_store: &'e mut GlobalStore,
+    ir: &'e LolaIR,
+    handler: &'e OutputHandler,
 }
 
-struct ExpressionEvaluator<'a> {
-    global_store: &'a GlobalStore,
+pub(crate) struct ExpressionEvaluator<'e> {
+    global_store: &'e GlobalStore,
 }
 
-impl EvaluatorData {
-    pub(crate) fn new(ir: LolaIR, ts: SystemTime, config: EvalConfig) -> EvaluatorData {
+pub(crate) struct EvaluationContext<'e> {
+    global_store: &'e GlobalStore,
+    ts: SystemTime,
+}
+
+impl<'c> EvaluatorData<'c> {
+    pub(crate) fn new(ir: LolaIR, ts: SystemTime, config: EvalConfig) -> EvaluatorData<'c> {
         // Layers of event based output streams
         let layers = ir.get_event_driven_layers();
         let exprs = ir.outputs.iter().map(|o| o.expr.clone()).collect();
+        let compiled_exprs = ir.outputs.iter().map(|o| o.expr.clone().compile()).collect();
         let global_store = GlobalStore::new(&ir, ts);
         let handler = OutputHandler::new(&config);
         handler.debug(|| format!("Evaluation layers: {:?}", layers));
-        EvaluatorData { layers, exprs, global_store, ir, handler }
+        EvaluatorData { layers, exprs, compiled_exprs, global_store, ir, handler }
     }
 
     #[allow(non_snake_case)]
-    pub(crate) fn as_Evaluator<'a>(&'a mut self) -> Evaluator<'a> {
+    pub(crate) fn as_Evaluator<'n>(&'n mut self) -> Evaluator<'n, 'c> {
         Evaluator {
             layers: &self.layers,
             exprs: &self.exprs,
+            compiled_exprs: &self.compiled_exprs,
             global_store: &mut self.global_store,
             ir: &self.ir,
             handler: &self.handler,
@@ -56,7 +68,7 @@ impl EvaluatorData {
     }
 }
 
-impl<'a> Evaluator<'a> {
+impl<'e, 'c> Evaluator<'e, 'c> {
     pub(crate) fn accept_inputs(&mut self, event: &Vec<(StreamReference, Value)>, ts: SystemTime) {
         for (str_ref, v) in event {
             self.accept_input(*str_ref, v.clone(), ts);
@@ -109,8 +121,14 @@ impl<'a> Evaluator<'a> {
         self.handler
             .debug(|| format!("Evaluating stream {}: {}.", ix, self.ir.get_out(StreamReference::OutRef(ix)).name));
 
-        let (expr_evaluator, exprs) = self.as_ExpressionEvaluator();
-        let res = expr_evaluator.eval_expr(&exprs[ix], ts);
+        let closure_based = false; //TODO(marvin): make this a config option
+        let res = if closure_based {
+            let (ctx, compiled_exprs) = self.as_EvaluationContext(ts);
+            compiled_exprs[ix].execute(&ctx)
+        } else {
+            let (expr_eval, exprs) = self.as_ExpressionEvaluator();
+            expr_eval.eval_expr(&exprs[ix], ts)
+        };
 
         // Register value in global store.
         self.global_store.get_out_instance_mut(inst.clone()).unwrap().push_value(res.clone()); // TODO: unsafe unwrap.
@@ -153,8 +171,13 @@ impl<'a> Evaluator<'a> {
     }
 
     #[allow(non_snake_case)]
-    fn as_ExpressionEvaluator<'b>(&'b self) -> (ExpressionEvaluator<'b>, &Vec<Expression>) {
+    fn as_ExpressionEvaluator<'n>(&'n self) -> (ExpressionEvaluator<'n>, &'e Vec<Expression>) {
         (ExpressionEvaluator { global_store: &self.global_store }, &self.exprs)
+    }
+
+    #[allow(non_snake_case)]
+    fn as_EvaluationContext<'n>(&'n self, ts: SystemTime) -> (EvaluationContext<'n>, &'e Vec<CompiledExpr<'c>>) {
+        (EvaluationContext { global_store: &self.global_store, ts }, &self.compiled_exprs)
     }
 }
 
@@ -336,9 +359,36 @@ impl<'a> ExpressionEvaluator<'a> {
             StreamReference::OutRef(i) => {
                 let target: OutInstance = (i, Vec::new());
                 self.global_store.get_out_instance(target)
+                //TODO(marvin): shouldn't this panic if there is no instance?
             }
         };
         is.and_then(|is| is.get_value(offset))
+    }
+}
+
+impl<'e> EvaluationContext<'e> {
+    pub(crate) fn lookup(&self, target: StreamReference) -> Value {
+        self.lookup_with_offset(target, 0)
+    }
+
+    pub(crate) fn lookup_with_offset(&self, stream_ref: StreamReference, offset: i16) -> Value {
+        let inst_opt = match stream_ref {
+            StreamReference::InRef(_) => Some(self.global_store.get_in_instance(stream_ref)),
+            StreamReference::OutRef(i) => {
+                let inst: OutInstance = (i, Vec::new());
+                self.global_store.get_out_instance(inst)
+                //TODO(marvin): shouldn't this panic if there is no instance?
+            }
+        };
+        match inst_opt {
+            Some(inst) => inst.get_value(offset).unwrap_or(Value::None),
+            None => Value::None,
+        }
+    }
+
+    pub(crate) fn lookup_window(&self, window_ref: WindowReference) -> Value {
+        let window: Window = (window_ref.ix, Vec::new());
+        self.global_store.get_window(window).get_value(self.ts)
     }
 }
 
