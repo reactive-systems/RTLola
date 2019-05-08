@@ -1,4 +1,4 @@
-use streamlab_frontend::ir::*;
+use streamlab_frontend::ir::{Constant, Expression, LolaIR, Offset, StreamReference, Trigger, Type};
 
 use crate::basics::{EvalConfig, OutputHandler};
 use crate::storage::{GlobalStore, Value};
@@ -160,147 +160,181 @@ impl<'a> Evaluator<'a> {
 
 impl<'a> ExpressionEvaluator<'a> {
     fn eval_expr(&self, expr: &Expression, ts: SystemTime) -> Value {
-        // TODO
-        unimplemented!("Adapt to new lowering!")
-        //        match &stmt.op {
-        //            Op::Convert => {
-        //                let arg = stmt.args[0];
-        //                let v = self.get(arg, inst);
-        //                self.write_forcefully(stmt.target, v, inst);
-        //            }
-        //            Op::Move => {
-        //                let arg = stmt.args[0];
-        //                let v = self.get(arg, inst);
-        //                self.write(stmt.target, v, inst);
-        //            }
-        //            Op::Ite { consequence, alternative } => {
-        //                let cont_with = if self.get_bool(stmt.args[0], inst) { consequence } else { alternative };
-        //                for stmt in cont_with {
-        //                    self.eval_stmt(stmt, inst, ts);
-        //                }
-        //            }
-        //            Op::LoadConstant(c) => {
-        //                let val = match c {
-        //                    Constant::Bool(b) => Value::Bool(*b),
-        //                    Constant::Int(i) if *i >= 0 => Value::Unsigned(*i as u128),
-        //                    Constant::Int(i) => Value::Signed(*i),
-        //                    Constant::Float(f) => Value::Float((*f).into()),
-        //                    Constant::Str(_) => unimplemented!(),
-        //                };
-        //                self.write(stmt.target, val, inst);
-        //            }
-        //            Op::ArithLog(op) => {
-        //                use streamlab_frontend::ir::ArithLogOp::*;
-        //                // The explicit match here enables a compiler warning when a case was missed.
-        //                // Useful when the list in the parser is extended.
-        //                let arity = match op {
-        //                    Neg | Not => 1,
-        //                    Add | Sub | Mul | Div | Rem | Pow | And | Or | Eq | Lt | Le | Ne | Ge | Gt => 2,
-        //                };
-        //                if arity == 1 {
-        //                    let operand = self.get(stmt.args[0], inst);
-        //                    self.write(stmt.target, !operand, inst)
-        //                } else if arity == 2 {
-        //                    let lhs = self.get(stmt.args[0], inst);
-        //                    let rhs = self.get(stmt.args[1], inst);
-        //
-        //                    let res = match op {
-        //                        Add => lhs + rhs,
-        //                        Sub => lhs - rhs,
-        //                        Mul => lhs * rhs,
-        //                        Div => lhs / rhs,
-        //                        Rem => lhs % rhs,
-        //                        Pow => unimplemented!(),
-        //                        And => lhs & rhs,
-        //                        Or => lhs | rhs,
-        //                        Eq => Value::Bool(lhs == rhs),
-        //                        Lt => Value::Bool(lhs <= rhs),
-        //                        Le => Value::Bool(lhs < rhs),
-        //                        Ne => Value::Bool(lhs != rhs),
-        //                        Ge => Value::Bool(lhs >= rhs),
-        //                        Gt => Value::Bool(lhs > rhs),
-        //                        Neg | Not => panic!(),
-        //                    };
-        //                    self.write(stmt.target, res, inst);
-        //                }
-        //            }
-        //            Op::SyncStreamLookup(tar_inst) => {
-        //                let res = self.perform_lookup(inst, tar_inst, 0);
-        //                self.write(stmt.target, res.unwrap(), inst); // Unwrap sound in sync lookups.
-        //            }
-        //            Op::StreamLookup { instance: tar_inst, offset }
-        //            | Op::SampleAndHoldStreamLookup { instance: tar_inst, offset } => {
-        //                let res = match offset {
-        //                    Offset::FutureDiscreteOffset(_) | Offset::FutureRealTimeOffset(_) => unimplemented!(),
-        //                    Offset::PastDiscreteOffset(u) => self.perform_lookup(inst, tar_inst, -(*u as i16)),
-        //                    Offset::PastRealTimeOffset(_dur) => unimplemented!(),
-        //                };
-        //                let v = res.unwrap_or_else(|| self.get(stmt.args[0], inst));
-        //                self.write(stmt.target, v, inst);
-        //            }
-        //            Op::WindowLookup(window_ref) => {
-        //                let window: Window = (window_ref.ix, Vec::new() /*, self.window_ops[window_ref.ix]*/);
-        //                let res = self.global_store.get_window_mut(window).get_value(ts);
-        //                self.write(stmt.target, res, inst);
-        //            }
-        //            Op::Function(name) => {
-        //                let arg = self.get(stmt.args[0], inst);
-        //                match arg {
-        //                    Value::Float(f) => {
-        //                        let res = match name.as_ref() {
-        //                            "sqrt" => f.sqrt(),
-        //                            "sin" => f.sin(),
-        //                            "cos" => f.cos(),
-        //                            "arctan" => f.atan(),
-        //                            "abs" => f.abs(),
-        //                            _ => panic!("Unknown function."),
-        //                        };
-        //                        let res = Value::Float(NotNan::new(res).expect("TODO: Handle"));
-        //                        self.write(stmt.target, res, inst);
-        //                    }
-        //                    Value::Signed(i) => {
-        //                        let res = match name.as_ref() {
-        //                            "abs" => i.abs(),
-        //                            _ => panic!("Unknown function."),
-        //                        };
-        //                        self.write(stmt.target, Value::Signed(res), inst);
-        //                    }
-        //                    _ => panic!("Unknown function."),
-        //                }
-        //            }
-        //            Op::Tuple => unimplemented!("Who needs tuples, anyway?"),
-        //        }
+        use streamlab_frontend::ir::Expression::*;
+        match expr {
+            LoadConstant(c) => match c {
+                Constant::Bool(b) => Value::Bool(*b),
+                Constant::UInt(u) => Value::Unsigned(*u),
+                Constant::Int(i) => Value::Signed(*i),
+                Constant::Float(f) => Value::Float((*f).into()),
+                Constant::Str(_) => unimplemented!(),
+            },
+
+            ArithLog(op, operands, _ty) => {
+                use streamlab_frontend::ir::ArithLogOp::*;
+                // The explicit match here enables a compiler warning when a case was missed.
+                // Useful when the list in the parser is extended.
+                let arity = match op {
+                    Neg | Not => 1,
+                    Add | Sub | Mul | Div | Rem | Pow | And | Or | Eq | Lt | Le | Ne | Ge | Gt => 2,
+                };
+                match arity {
+                    1 => {
+                        let operand = self.eval_expr(&operands[0], ts);
+                        match *op {
+                            Not => !operand,
+                            Neg => -operand,
+                            _ => unreachable!(),
+                        }
+                    }
+                    2 => {
+                        let lhs = self.eval_expr(&operands[0], ts);
+
+                        if *op == And {
+                            // evaluate lazy
+                            if lhs.get_bool() == false {
+                                return Value::Bool(false);
+                            } else {
+                                let rhs = self.eval_expr(&operands[1], ts);
+                                return rhs;
+                            }
+                        }
+                        if *op == Or {
+                            // evaluate lazy
+                            if lhs.get_bool() == true {
+                                return Value::Bool(true);
+                            } else {
+                                let rhs = self.eval_expr(&operands[1], ts);
+                                return rhs;
+                            }
+                        }
+
+                        let rhs = self.eval_expr(&operands[1], ts);
+
+                        match *op {
+                            Add => lhs + rhs,
+                            Sub => lhs - rhs,
+                            Mul => lhs * rhs,
+                            Div => lhs / rhs,
+                            Rem => lhs % rhs,
+                            Pow => lhs.pow(rhs),
+                            Eq => Value::Bool(lhs == rhs),
+                            Lt => Value::Bool(lhs < rhs),
+                            Le => Value::Bool(lhs <= rhs),
+                            Ne => Value::Bool(lhs != rhs),
+                            Ge => Value::Bool(lhs >= rhs),
+                            Gt => Value::Bool(lhs > rhs),
+                            Not | Neg | And | Or => unreachable!(),
+                        }
+                    }
+                    _ => unreachable!(),
+                }
+            }
+
+            Ite { condition, consequence, alternative } => {
+                if self.eval_expr(condition, ts).get_bool() {
+                    self.eval_expr(consequence, ts)
+                } else {
+                    self.eval_expr(alternative, ts)
+                }
+            }
+
+            SyncStreamLookup(str_ref) => {
+                let res = self.perform_lookup(*str_ref, 0);
+                assert!(res.is_some());
+                // Unwrap sound in sync lookups.
+                res.unwrap()
+            }
+
+            OffsetLookup { target: str_ref, offset } => {
+                let res = match offset {
+                    Offset::FutureDiscreteOffset(_) | Offset::FutureRealTimeOffset(_) => unimplemented!(),
+                    Offset::PastDiscreteOffset(u) => self.perform_lookup(*str_ref, -(*u as i16)),
+                    Offset::PastRealTimeOffset(_dur) => unimplemented!(),
+                };
+                res.unwrap_or(Value::None)
+            }
+
+            SampleAndHoldStreamLookup(str_ref) => {
+                let res = self.perform_lookup(*str_ref, 0);
+                res.unwrap_or(Value::None)
+            }
+
+            WindowLookup(win_ref) => {
+                let window: Window = (win_ref.ix, Vec::new());
+                self.global_store.get_window(window).get_value(ts)
+            }
+
+            Expression::Function(name, args, _ty) => {
+                //TODO(marvin): handle type
+                let arg = self.eval_expr(&args[0], ts);
+                match arg {
+                    Value::Float(f) => {
+                        let res = match name.as_ref() {
+                            "sqrt" => f.sqrt(),
+                            "sin" => f.sin(),
+                            "cos" => f.cos(),
+                            "arctan" => f.atan(),
+                            "abs" => f.abs(),
+                            _ => panic!("Unknown function: {}", name),
+                        };
+                        Value::Float(NotNan::new(res).expect("TODO: Handle"))
+                    }
+                    Value::Signed(i) => {
+                        let res = match name.as_ref() {
+                            "abs" => i.abs(),
+                            _ => panic!("Unknown function: {}", name),
+                        };
+                        Value::Signed(res)
+                    }
+                    _ => panic!("Unknown function: {}", name),
+                }
+            }
+
+            Tuple(_entries) => unimplemented!("Who needs tuples, anyway?"),
+
+            Convert { from, to, expr } => {
+                use Type::*;
+                let v = self.eval_expr(expr, ts);
+                match (from, v) {
+                    (UInt(_), Value::Unsigned(u)) => match to {
+                        UInt(_) => Value::Unsigned(u as u128),
+                        Int(_) => Value::Signed(u as i128),
+                        Float(_) => Value::new_float(u as f64),
+                        _ => unimplemented!(),
+                    },
+                    (Int(_), Value::Signed(i)) => match to {
+                        UInt(_) => Value::Unsigned(i as u128),
+                        Int(_) => Value::Signed(i as i128),
+                        Float(_) => Value::new_float(i as f64),
+                        _ => unimplemented!(),
+                    },
+                    (Float(_), Value::Float(f)) => match to {
+                        UInt(_) => Value::Unsigned(f.into_inner() as u128),
+                        Int(_) => Value::Signed(f.into_inner() as i128),
+                        Float(_) => Value::new_float(f.into_inner() as f64),
+                        _ => unimplemented!(),
+                    },
+                    _ => unimplemented!(),
+                }
+            }
+
+            Default { expr, default } => {
+                let v = self.eval_expr(expr, ts);
+                if let Value::None = v {
+                    self.eval_expr(default, ts)
+                } else {
+                    v
+                }
+            }
+        }
     }
 
-    fn get_bool(&self, inst: &OutInstance) -> bool {
-        // TODO
-        unimplemented!("Adapt to new lowering!")
-        //        self.temp_stores[inst.0].get_bool(temp)
-    }
-
-    fn get(&self, inst: &OutInstance) -> Value {
-        // TODO
-        unimplemented!("Adapt to new lowering!")
-        //        self.temp_stores[inst.0].get_value(temp)
-    }
-
-    fn write(&mut self, value: Value, inst: &OutInstance) {
-        // TODO
-        unimplemented!("Adapt to new lowering!")
-        //        self.temp_stores[inst.0].write_value(temp, value);
-    }
-
-    fn write_forcefully(&mut self, value: Value, inst: &OutInstance) {
-        // TODO
-        unimplemented!("Adapt to new lowering!")
-        //        self.temp_stores[inst.0].write_value_forcefully(temp, value);
-    }
-
-    fn perform_lookup(&self, inst: &OutInstance, tar_inst: &StreamReference, offset: i16) -> Option<Value> {
-        let is = match tar_inst {
-            StreamReference::InRef(_) => Some(self.global_store.get_in_instance(*tar_inst)),
+    fn perform_lookup(&self, str_ref: StreamReference, offset: i16) -> Option<Value> {
+        let is = match str_ref {
+            StreamReference::InRef(_) => Some(self.global_store.get_in_instance(str_ref)),
             StreamReference::OutRef(i) => {
-                let target: OutInstance = (*i, Vec::new());
+                let target: OutInstance = (i, Vec::new());
                 self.global_store.get_out_instance(target)
             }
         };
