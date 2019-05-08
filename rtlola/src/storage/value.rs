@@ -6,6 +6,7 @@ use self::Value::*;
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Hash, Clone)]
 pub(crate) enum Value {
+    None,
     Unsigned(u128),
     Signed(i128),
     Float(NotNan<f64>),
