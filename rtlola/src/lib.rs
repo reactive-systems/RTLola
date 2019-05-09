@@ -1,6 +1,7 @@
 #![deny(unsafe_code)] // disallow unsafe code by default
 
 pub mod basics;
+mod closuregen;
 mod coordination;
 mod evaluator;
 mod storage;
