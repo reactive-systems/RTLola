@@ -141,9 +141,18 @@ impl ops::Not for Value {
     type Output = Value;
     fn not(self) -> Value {
         match self {
+            Bool(v) => Bool(!v),
+            _ => panic!("Incompatible types."),
+        }
+    }
+}
+
+impl ops::Neg for Value {
+    type Output = Value;
+    fn neg(self) -> Value {
+        match self {
             Signed(v) => Signed(-v), // TODO Check
             Float(v) => Float(-v),
-            Bool(v) => Bool(!v),
             _ => panic!("Incompatible types."),
         }
     }
