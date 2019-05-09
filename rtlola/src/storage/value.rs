@@ -117,6 +117,18 @@ impl ops::Rem for Value {
     }
 }
 
+impl Value {
+    pub fn pow(self, exp: Value) -> Value {
+        match (self, exp) {
+            (Unsigned(v1), Unsigned(v2)) => Unsigned(v1.pow(v2 as u32)),
+            (Signed(v1), Signed(v2)) => Signed(v1.pow(v2 as u32)),
+            (Float(v1), Float(v2)) => Value::new_float(v1.powf(v2.into())),
+            (Float(v1), Signed(v2)) => Value::new_float(v1.powi(v2 as i32)),
+            _ => panic!("Incompatible types."),
+        }
+    }
+}
+
 impl ops::BitOr for Value {
     type Output = Value;
     fn bitor(self, other: Value) -> Value {
