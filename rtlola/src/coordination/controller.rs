@@ -1,7 +1,7 @@
 use std::sync::mpsc;
 use std::thread;
 use std::time::SystemTime;
-use streamlab_frontend::ir::{LolaIR, StreamReference};
+use streamlab_frontend::ir::LolaIR;
 
 use crate::basics::EvalConfig;
 use crate::basics::OutputHandler;

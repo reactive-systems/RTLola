@@ -44,6 +44,7 @@ impl EvaluatorData {
         EvaluatorData { layers, exprs, global_store, ir, handler }
     }
 
+    #[allow(non_snake_case)]
     pub(crate) fn as_Evaluator<'a>(&'a mut self) -> Evaluator<'a> {
         Evaluator {
             layers: &self.layers,
@@ -151,6 +152,7 @@ impl<'a> Evaluator<'a> {
         }
     }
 
+    #[allow(non_snake_case)]
     fn as_ExpressionEvaluator<'b>(&'b self) -> (ExpressionEvaluator<'b>, &Vec<Expression>) {
         (ExpressionEvaluator { global_store: &self.global_store }, &self.exprs)
     }

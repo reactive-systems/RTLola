@@ -2,12 +2,9 @@ use super::Value;
 use crate::evaluator::{OutInstance, Window};
 
 use crate::storage::SlidingWindow;
-use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::time::SystemTime;
 use streamlab_frontend::ir::{LolaIR, OutputStream, StreamReference, Type};
-
-pub(crate) type Parameter = Vec<Value>;
 
 pub(crate) struct GlobalStore {
     /// Access by stream reference.
