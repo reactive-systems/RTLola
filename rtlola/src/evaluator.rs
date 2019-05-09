@@ -406,7 +406,7 @@ mod tests {
 
     #[test]
     fn test_oob_lookup() {
-        let (_, mut eval) = setup("input a: UInt8\noutput b: UInt8 @5Hz := a[-1] ! 3");
+        let (_, mut eval) = setup("input a: UInt8\noutput b: UInt8 @5Hz := a[-1].hold().defaults(to: 3)");
         let mut eval = eval.as_Evaluator();
         let out_ref = StreamReference::OutRef(0);
         let in_ref = StreamReference::InRef(0);
@@ -418,7 +418,9 @@ mod tests {
 
     #[test]
     fn test_output_lookup() {
-        let (_, mut eval) = setup("input a: UInt8\noutput mirror: UInt8 := a\noutput c: UInt8 @5Hz := mirror[-1] ! 3");
+        let (_, mut eval) = setup(
+            "input a: UInt8\noutput mirror: UInt8 := a\noutput c: UInt8 @5Hz := mirror[-1].hold().defaults(to: 3)",
+        );
         let mut eval = eval.as_Evaluator();
         let out_ref = StreamReference::OutRef(1);
         let in_ref = StreamReference::InRef(0);
@@ -492,7 +494,7 @@ mod tests {
 
     #[test]
     fn test_regular_lookup() {
-        let (_, mut eval) = setup("input a: UInt8 output b: UInt8 @5Hz := a[-1] ! 3");
+        let (_, mut eval) = setup("input a: UInt8 output b: UInt8 @5Hz := a[-1].hold().defaults(to: 3)");
         let mut eval = eval.as_Evaluator();
         let out_ref = StreamReference::OutRef(0);
         let in_ref = StreamReference::InRef(0);
@@ -508,7 +510,8 @@ mod tests {
 
     #[test]
     fn test_trigger() {
-        let (_, mut eval) = setup("input a: UInt8 output b: UInt8 @5Hz := a[-1] ! 3\n trigger b > 4");
+        let (_, mut eval) =
+            setup("input a: UInt8 output b: UInt8 @5Hz := a[-1].hold().defaults(to: 3)\n trigger b > 4");
         let mut eval = eval.as_Evaluator();
         let out_ref = StreamReference::OutRef(0);
         let trig_ref = StreamReference::OutRef(1);
@@ -533,7 +536,10 @@ mod tests {
     #[test]
     fn test_sum_window() {
         let mut time = SystemTime::now();
-        let (_, mut eval) = setup_time("input a: Int16\noutput b: Int16 @0.25Hz := a[40s, sum].defaults(to: -3)", time);
+        let (_, mut eval) = setup_time(
+            "input a: Int16\noutput b: Int16 @0.25Hz := a.aggregate(over: 40s, using: sum).defaults(to: -3)",
+            time,
+        );
         let mut eval = eval.as_Evaluator();
         time += Duration::from_secs(45);
         let out_ref = StreamReference::OutRef(0);
@@ -553,7 +559,10 @@ mod tests {
     #[test]
     fn test_count_window() {
         let mut time = SystemTime::now();
-        let (_, mut eval) = setup_time("input a: UInt16\noutput b: UInt16 @0.25Hz := a[40s, #].defaults(to: 3)", time);
+        let (_, mut eval) = setup_time(
+            "input a: UInt16\noutput b: UInt16 @0.25Hz := a.aggregate(over: 40s, using: #).defaults(to: 3)",
+            time,
+        );
         let mut eval = eval.as_Evaluator();
         time += Duration::from_secs(45);
         let out_ref = StreamReference::OutRef(0);
@@ -573,8 +582,10 @@ mod tests {
     #[test]
     fn test_integral_window() {
         let mut time = SystemTime::now();
-        let (_, mut eval) =
-            setup_time("input a: Float64\noutput b: Float64 @0.25Hz := a[40s, integral].defaults(to: -3.0)", time);
+        let (_, mut eval) = setup_time(
+            "input a: Float64\noutput b: Float64 @0.25Hz := a.aggregate(over: 40s, using: integral).defaults(to: -3.0)",
+            time,
+        );
         let mut eval = eval.as_Evaluator();
         time += Duration::from_secs(45);
         let out_ref = StreamReference::OutRef(0);
