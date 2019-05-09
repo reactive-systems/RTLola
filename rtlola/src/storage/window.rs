@@ -37,7 +37,21 @@ impl SlidingWindow {
         }
     }
 
-    pub(crate) fn get_value(&mut self, ts: SystemTime) -> Value {
+    pub(crate) fn update(&mut self, ts: SystemTime) {
+        match self {
+            SlidingWindow::SumUnsigned(wi) => wi.update_buckets(ts),
+            SlidingWindow::SumSigned(wi) => wi.update_buckets(ts),
+            SlidingWindow::SumFloat(wi) => wi.update_buckets(ts),
+            SlidingWindow::Integral(wi) => wi.update_buckets(ts),
+            SlidingWindow::Count(wi) => wi.update_buckets(ts),
+            SlidingWindow::AvgUnsigned(wi) => wi.update_buckets(ts),
+            SlidingWindow::AvgSigned(wi) => wi.update_buckets(ts),
+            SlidingWindow::AvgFloat(wi) => wi.update_buckets(ts),
+        }
+    }
+
+    /// You should always call `SlidingWindow::update` before calling `SlidingWindow::get_value()`!
+    pub(crate) fn get_value(&self, ts: SystemTime) -> Value {
         match self {
             SlidingWindow::SumUnsigned(wi) => wi.get_value(ts),
             SlidingWindow::SumSigned(wi) => wi.get_value(ts),
@@ -123,8 +137,8 @@ impl<IV: WindowIV> WindowInstance<IV> {
         WindowInstance { buckets, time_per_bucket, start_time: ts, last_bucket_ix: BIx::new(0, 0) }
     }
 
-    fn get_value(&mut self, ts: SystemTime) -> Value {
-        self.update_buckets(ts);
+    /// You should always call `WindowInstance::update_buckets` before calling `WindowInstance::get_value()`!
+    fn get_value(&self, ts: SystemTime) -> Value {
         // Reversal is essential for non-commutative operations.
         self.buckets.iter().rev().fold(IV::default(ts), |acc, e| acc + e.clone()).into()
     }

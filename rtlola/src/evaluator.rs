@@ -72,12 +72,27 @@ impl<'a> Evaluator<'a> {
     }
 
     pub(crate) fn eval_all_outputs(&mut self, ts: SystemTime) {
+        self.prepare_evaluation(ts);
         for layer in self.layers {
             self.eval_outputs(layer, ts);
         }
     }
 
-    pub(crate) fn eval_outputs(&mut self, streams: &Vec<StreamReference>, ts: SystemTime) {
+    pub(crate) fn eval_some_outputs(&mut self, streams: &Vec<StreamReference>, ts: SystemTime) {
+        self.prepare_evaluation(ts);
+        self.eval_outputs(streams, ts);
+    }
+
+    fn prepare_evaluation(&mut self, ts: SystemTime) {
+        // We need to copy the references first because updating needs exclusive access to `self`.
+        let windows = &self.ir.sliding_windows;
+        for win in windows {
+            let ix = win.reference.ix;
+            self.global_store.get_window_mut((ix, Vec::new())).update(ts);
+        }
+    }
+
+    fn eval_outputs(&mut self, streams: &Vec<StreamReference>, ts: SystemTime) {
         for str_ref in streams {
             self.eval_output(*str_ref, ts);
         }

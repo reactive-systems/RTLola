@@ -93,7 +93,7 @@ impl<'a> Controller<'a> {
     }
 
     fn evaluate_timed_item(&mut self, t: TimeEvaluation, ts: SystemTime) {
-        self.evaluator.eval_outputs(&t, ts);
+        self.evaluator.eval_some_outputs(&t, ts);
     }
 
     fn evaluate_event_item(&mut self, e: EventEvaluation, ts: SystemTime) {
