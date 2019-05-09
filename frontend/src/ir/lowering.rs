@@ -419,18 +419,18 @@ impl<'a> Lowering<'a> {
         let expr = match &expr.kind {
             ExpressionKind::Lit(l) => ir::Expression::LoadConstant(self.lower_literal(l, expr.id)),
             ExpressionKind::Ident(_) => ir::Expression::SyncStreamLookup(self.get_ref_for_ident(expr.id)),
-            ExpressionKind::StreamAccess(expr, kind) => {
-                if let ExpressionKind::Ident(_) = &expr.kind {
+            ExpressionKind::StreamAccess(expr, kind) => match &expr.kind {
+                ExpressionKind::Ident(_) => {
                     let target = self.get_ref_for_ident(expr.id);
                     use ast::StreamAccessKind::*;
                     match kind {
                         Hold => ir::Expression::SampleAndHoldStreamLookup(target),
                         Optional => ir::Expression::OffsetLookup { target, offset: ir::Offset::PastDiscreteOffset(0) },
                     }
-                } else {
-                    panic!("Ruled out by TypeChecker.")
                 }
-            }
+                ExpressionKind::Offset(stream, offset) => unimplemented!(),
+                _ => unreachable!("checked by by AST verifier"),
+            },
             ExpressionKind::Default(e, dft) => ir::Expression::Default {
                 expr: Box::new(self.lower_expression(e).0),
                 default: Box::new(self.lower_expression(dft).0),
@@ -560,10 +560,9 @@ impl<'a> Lowering<'a> {
     }
 
     fn lower_offset(&self, offset: &ast::Expression) -> ir::Offset {
-        if let ast::ExpressionKind::Lit(lit) = &offset.kind {
-            let val = lit.parse_numeric::<i128>().expect("Only numeric offsets are allowed so far.");
+        if let Some(val) = offset.parse_literal::<i128>() {
             assert!(val < 0); // Should be checked by type checker, though.
-            ir::Offset::PastDiscreteOffset(val as u128)
+            ir::Offset::PastDiscreteOffset(val.abs() as u128)
         } else {
             unimplemented!()
         }
