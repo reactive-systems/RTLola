@@ -85,6 +85,9 @@ fn main() -> Result<(), Box<dyn Error>> {
                         .long("offline")
                         .help("Use the timestamps from the input.\nThe column name must be one of [time,timestamp,ts].\nThe column must produce a monotonically increasing sequence of values.")
                 )
+                .arg(
+                    Arg::with_name("INTERPRETED").long("interpreted").help("Interpret expressions instead of compilation")
+                )
                 .group(
                     ArgGroup::with_name("MODE")
                         .required(true)
@@ -149,7 +152,9 @@ fn main() -> Result<(), Box<dyn Error>> {
                 _ => unreachable!(),
             };
 
-            let cfg = EvalConfig::new(src, verbosity, out);
+            let closure_based_evaluator = !parse_matches.is_present("INTERPRETED");
+
+            let cfg = EvalConfig::new(src, verbosity, out, closure_based_evaluator);
 
             if parse_matches.is_present("OFFLINE") {
                 rtlola::start_evaluation_offline(ir, cfg);

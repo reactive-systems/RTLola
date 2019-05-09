@@ -20,6 +20,7 @@ pub(crate) struct EvaluatorData<'c> {
     global_store: GlobalStore,
     ir: LolaIR,
     handler: OutputHandler,
+    config: EvalConfig,
 }
 
 pub(crate) struct Evaluator<'e, 'c> {
@@ -32,6 +33,7 @@ pub(crate) struct Evaluator<'e, 'c> {
     global_store: &'e mut GlobalStore,
     ir: &'e LolaIR,
     handler: &'e OutputHandler,
+    config: &'e EvalConfig,
 }
 
 pub(crate) struct ExpressionEvaluator<'e> {
@@ -52,7 +54,7 @@ impl<'c> EvaluatorData<'c> {
         let global_store = GlobalStore::new(&ir, ts);
         let handler = OutputHandler::new(&config);
         handler.debug(|| format!("Evaluation layers: {:?}", layers));
-        EvaluatorData { layers, exprs, compiled_exprs, global_store, ir, handler }
+        EvaluatorData { layers, exprs, compiled_exprs, global_store, ir, handler, config }
     }
 
     #[allow(non_snake_case)]
@@ -64,6 +66,7 @@ impl<'c> EvaluatorData<'c> {
             global_store: &mut self.global_store,
             ir: &self.ir,
             handler: &self.handler,
+            config: &self.config,
         }
     }
 }
@@ -121,8 +124,7 @@ impl<'e, 'c> Evaluator<'e, 'c> {
         self.handler
             .debug(|| format!("Evaluating stream {}: {}.", ix, self.ir.get_out(StreamReference::OutRef(ix)).name));
 
-        let closure_based = false; //TODO(marvin): make this a config option
-        let res = if closure_based {
+        let res = if self.config.closure_based_evaluator {
             let (ctx, compiled_exprs) = self.as_EvaluationContext(ts);
             compiled_exprs[ix].execute(&ctx)
         } else {
