@@ -39,6 +39,22 @@ impl Value {
     pub(crate) fn new_float(f: f64) -> Value {
         Value::Float(NotNan::new(f).unwrap())
     }
+
+    pub(crate) fn is_bool(&self) -> bool {
+        if let Value::Bool(_) = self {
+            true
+        } else {
+            false
+        }
+    }
+
+    pub(crate) fn get_bool(&self) -> bool {
+        if let Value::Bool(b) = *self {
+            b
+        } else {
+            panic!("failed to extract value")
+        }
+    }
 }
 
 impl ops::Add for Value {
