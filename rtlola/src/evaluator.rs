@@ -30,7 +30,7 @@ pub(crate) struct Evaluator<'a> {
 }
 
 struct ExpressionEvaluator<'a> {
-    global_store: &'a mut GlobalStore,
+    global_store: &'a GlobalStore,
 }
 
 impl EvaluatorData {
@@ -108,7 +108,7 @@ impl<'a> Evaluator<'a> {
         self.handler
             .debug(|| format!("Evaluating stream {}: {}.", ix, self.ir.get_out(StreamReference::OutRef(ix)).name));
 
-        let (mut expr_evaluator, exprs) = self.as_ExpressionEvaluator();
+        let (expr_evaluator, exprs) = self.as_ExpressionEvaluator();
         let res = expr_evaluator.eval_expr(&exprs[ix], ts);
 
         // Register value in global store.
@@ -151,13 +151,13 @@ impl<'a> Evaluator<'a> {
         }
     }
 
-    fn as_ExpressionEvaluator<'b>(&'b mut self) -> (ExpressionEvaluator<'b>, &Vec<Expression>) {
-        (ExpressionEvaluator { global_store: &mut self.global_store }, &self.exprs)
+    fn as_ExpressionEvaluator<'b>(&'b self) -> (ExpressionEvaluator<'b>, &Vec<Expression>) {
+        (ExpressionEvaluator { global_store: &self.global_store }, &self.exprs)
     }
 }
 
 impl<'a> ExpressionEvaluator<'a> {
-    fn eval_expr(&mut self, expr: &Expression, ts: SystemTime) -> Value {
+    fn eval_expr(&self, expr: &Expression, ts: SystemTime) -> Value {
         // TODO
         unimplemented!("Adapt to new lowering!")
         //        match &stmt.op {
