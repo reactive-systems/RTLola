@@ -398,6 +398,7 @@ impl<'e> EvaluationContext<'e> {
 mod tests {
 
     use super::*;
+    use crate::storage::Value::*;
     use std::time::{Duration, SystemTime};
     use streamlab_frontend::ir::LolaIR;
 
@@ -411,27 +412,107 @@ mod tests {
         (ir, eval)
     }
 
+    macro_rules! peek_assert_eq {
+        ($eval:expr,$str_ref:expr,$value:expr) => {
+            assert_eq!($eval.__peek_value(StreamReference::OutRef($str_ref), &Vec::new(), 0).unwrap(), $value);
+        };
+    }
+
     #[test]
     fn test_empty_outputs() {
         setup("input a: UInt8");
     }
 
     #[test]
-    fn test_const_output() {
-        let (_, mut eval) = setup("output a: UInt8 := 3");
+    fn test_const_output_literals() {
+        let (_, mut eval) = setup(
+            r#"
+        output o_0: Bool := true
+        output o_1: UInt8 := 3
+        output o_2: Int8 := -5
+        output o_3: Float32 := -123.456
+        "#,
+        );
         let mut eval = eval.as_Evaluator();
-        let inst = (0, Vec::new());
-        eval.eval_stream(inst.clone(), SystemTime::now());
-        assert_eq!(eval.__peek_value(StreamReference::OutRef(0), &Vec::new(), 0).unwrap(), Value::Unsigned(3))
+        eval.eval_all_outputs(SystemTime::now());
+        peek_assert_eq!(eval, 0, Bool(true));
+        peek_assert_eq!(eval, 1, Unsigned(3));
+        peek_assert_eq!(eval, 2, Signed(-5));
+        peek_assert_eq!(eval, 3, Value::new_float(-123.456));
     }
 
     #[test]
-    fn test_const_output_arith() {
-        let (_, mut eval) = setup("output a: UInt8 := 3 + 5");
+    fn test_const_output_arithlog() {
+        let (_, mut eval) = setup(
+            r#"
+        output o_0:   Bool := !false
+        output o_1:   Bool := !true
+        output o_2:  UInt8 := 8 + 3
+        output o_3:  UInt8 := 8 - 3
+        output o_4:  UInt8 := 8 * 3
+        output o_5:  UInt8 := 8 / 3
+        output o_6:  UInt8 := 8 % 3
+        output o_7:  UInt8 := 8 ** 3
+        output o_8:   Bool := false || false
+        output o_9:   Bool := false || true
+        output o_10:  Bool := true  || false
+        output o_11:  Bool := true  || true
+        output o_12:  Bool := false && false
+        output o_13:  Bool := false && true
+        output o_14:  Bool := true  && false
+        output o_15:  Bool := true  && true
+        output o_16:  Bool := 0 < 1
+        output o_17:  Bool := 0 < 0
+        output o_18:  Bool := 1 < 0
+        output o_19:  Bool := 0 <= 1
+        output o_20:  Bool := 0 <= 0
+        output o_21:  Bool := 1 <= 0
+        output o_22:  Bool := 0 >= 1
+        output o_23:  Bool := 0 >= 0
+        output o_24:  Bool := 1 >= 0
+        output o_25:  Bool := 0 > 1
+        output o_26:  Bool := 0 > 0
+        output o_27:  Bool := 1 > 0
+        output o_28:  Bool := 0 == 0
+        output o_29:  Bool := 0 == 1
+        output o_30:  Bool := 0 != 0
+        output o_31:  Bool := 0 != 1
+        "#,
+        );
         let mut eval = eval.as_Evaluator();
-        let inst = (0, Vec::new());
-        eval.eval_stream(inst.clone(), SystemTime::now());
-        assert_eq!(eval.__peek_value(StreamReference::OutRef(0), &Vec::new(), 0).unwrap(), Value::Unsigned(8))
+        eval.eval_all_outputs(SystemTime::now());
+        peek_assert_eq!(eval, 0, Bool(!false));
+        peek_assert_eq!(eval, 1, Bool(!true));
+        peek_assert_eq!(eval, 2, Unsigned(8 + 3));
+        peek_assert_eq!(eval, 3, Unsigned(8 - 3));
+        peek_assert_eq!(eval, 4, Unsigned(8 * 3));
+        peek_assert_eq!(eval, 5, Unsigned(8 / 3));
+        peek_assert_eq!(eval, 6, Unsigned(8 % 3));
+        peek_assert_eq!(eval, 7, Unsigned(8 * 8 * 8));
+        peek_assert_eq!(eval, 8, Bool(false || false));
+        peek_assert_eq!(eval, 9, Bool(false || true));
+        peek_assert_eq!(eval, 10, Bool(true || false));
+        peek_assert_eq!(eval, 11, Bool(true || true));
+        peek_assert_eq!(eval, 12, Bool(false && false));
+        peek_assert_eq!(eval, 13, Bool(false && true));
+        peek_assert_eq!(eval, 14, Bool(true && false));
+        peek_assert_eq!(eval, 15, Bool(true && true));
+        peek_assert_eq!(eval, 16, Bool(0 < 1));
+        peek_assert_eq!(eval, 17, Bool(0 < 0));
+        peek_assert_eq!(eval, 18, Bool(1 < 0));
+        peek_assert_eq!(eval, 19, Bool(0 <= 1));
+        peek_assert_eq!(eval, 20, Bool(0 <= 0));
+        peek_assert_eq!(eval, 21, Bool(1 <= 0));
+        peek_assert_eq!(eval, 22, Bool(0 >= 1));
+        peek_assert_eq!(eval, 23, Bool(0 >= 0));
+        peek_assert_eq!(eval, 24, Bool(1 >= 0));
+        peek_assert_eq!(eval, 25, Bool(0 > 1));
+        peek_assert_eq!(eval, 26, Bool(0 > 0));
+        peek_assert_eq!(eval, 27, Bool(1 > 0));
+        peek_assert_eq!(eval, 28, Bool(0 == 0));
+        peek_assert_eq!(eval, 29, Bool(0 == 1));
+        peek_assert_eq!(eval, 30, Bool(0 != 0));
+        peek_assert_eq!(eval, 31, Bool(0 != 1));
     }
 
     #[test]
