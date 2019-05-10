@@ -424,6 +424,20 @@ impl StreamTy {
             }
         }
     }
+
+    pub(crate) fn simplify(&mut self) {
+        let ac = match self {
+            StreamTy::Event(ac) => ac,
+            _ => return,
+        };
+        match ac {
+            Activation::Conjunction(args) | Activation::Disjunction(args) => {
+                args.sort();
+                args.dedup();
+            }
+            _ => {}
+        }
+    }
 }
 
 impl Activation {

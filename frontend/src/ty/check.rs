@@ -956,9 +956,40 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
             Some(&var) => match self.stream_unifier.get_normalized_type(var) {
                 // make stream types default to event stream with empty conjunction, i.e., true
                 Some(StreamTy::Infer(_)) | None => Some(StreamTy::Event(Activation::Conjunction(Vec::new()))),
-                t => t,
+                Some(mut stream_ty) => {
+                    stream_ty.simplify();
+                    Some(stream_ty)
+                }
             },
             None => Some(StreamTy::Event(Activation::Conjunction(Vec::new()))),
+        }
+    }
+
+    fn normalize_stream_ty_to_inputs(&mut self, ty: &mut StreamTy) {
+        match ty {
+            StreamTy::Event(ac) => self.normalize_activation_condition(ac),
+            StreamTy::RealTime(_) => {}
+            StreamTy::Infer(_vecs) => unreachable!(),
+        }
+    }
+
+    fn normalize_activation_condition(&mut self, ac: &mut Activation) {
+        match ac {
+            Activation::Conjunction(args) | Activation::Disjunction(args) => {
+                args.iter_mut().for_each(|arg| self.normalize_activation_condition(arg))
+            }
+            Activation::Stream(var) => {
+                *ac = match self.stream_unifier.get_normalized_type(*var) {
+                    // make stream types default to event stream with empty conjunction, i.e., true
+                    Some(StreamTy::Infer(_)) | None => Activation::Conjunction(Vec::new()),
+                    Some(StreamTy::Event(Activation::Stream(v))) if *var == v => {
+                        return;
+                    }
+                    Some(StreamTy::Event(ac)) => ac,
+                    _ => unreachable!(),
+                };
+                self.normalize_activation_condition(ac);
+            }
         }
     }
 }
@@ -1601,5 +1632,34 @@ mod tests {
         assert_eq!(1, num_type_errors(spec));
         let spec = "input a: Int32\noutput x: Int32 @ a := 0\noutput y:Int32 @ 1Hz := x.get().defaults(to: 0)";
         assert_eq!(1, num_type_errors(spec));
+    }
+
+    #[test]
+    fn test_normalization_event_streams() {
+        let spec = "input a: Int32\ninput b: Int32\ninput c: Int32\noutput x := a + b\noutput y := x + x + c";
+        let type_table = type_check(spec);
+        //  input `a` has NodeId =  0, StreamVar = 0
+        //  input `b` has NodeId =  2, StreamVar = 1
+        //  input `c` has NodeId =  4, StreamVar = 2
+        // output `x` has NodeId =  6, StreamVar = 3
+        // output `y` has NodeId = 12, StreamVar = 4
+        let stream_ty_x = type_table.get_stream_type(NodeId::new(6));
+        assert_eq!(
+            stream_ty_x,
+            &StreamTy::Event(Activation::Conjunction(vec![
+                Activation::Stream(StreamVar::new(0)),
+                Activation::Stream(StreamVar::new(1))
+            ]))
+        );
+
+        let stream_ty_y = type_table.get_stream_type(NodeId::new(12));
+        assert_eq!(
+            stream_ty_y,
+            &StreamTy::Event(Activation::Conjunction(vec![
+                Activation::Stream(StreamVar::new(0)),
+                Activation::Stream(StreamVar::new(1)),
+                Activation::Stream(StreamVar::new(2))
+            ]))
+        );
     }
 }

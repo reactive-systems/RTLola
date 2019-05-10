@@ -132,7 +132,7 @@ impl<'a, 'b> Verifier<'a, 'b> {
     fn check_direct_access(handler: &Handler, expr: &Expression) {
         use ExpressionKind::*;
         match &expr.kind {
-            Offset(inner, _) | SlidingWindowAggregation { expr: inner, .. } => {
+            Offset(inner, _) | SlidingWindowAggregation { expr: inner, .. } | StreamAccess(inner, _) => {
                 if let Ident(_) = inner.kind {
                     // is a direct access
                 } else {
@@ -142,16 +142,6 @@ impl<'a, 'b> Verifier<'a, 'b> {
                     );
                 }
             }
-            StreamAccess(inner, _) => match inner.kind {
-                Ident(_) => {}
-                Offset(_, _) => {}
-                _ => {
-                    handler.error_with_span(
-                        "operation can be only applied to streams directly or offset extressions",
-                        LabeledSpan::new(inner.span, "expected a stream variable/offset expression", true),
-                    );
-                }
-            },
             _ => {}
         }
     }

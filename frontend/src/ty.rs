@@ -124,7 +124,6 @@ impl Freq {
     }
 
     pub(crate) fn conjunction(&self, other: &Freq) -> Freq {
-        println!("WARNING: conjunction of frequencies is currently not possible");
         let numer_left = self.freq.get::<hertz>().numer().clone();
         let numer_right = other.freq.get::<hertz>().numer().clone();
         let denom_left = self.freq.get::<hertz>().denom().clone();
