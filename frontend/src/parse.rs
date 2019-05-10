@@ -21,8 +21,8 @@ lazy_static! {
         use self::Rule::*;
 
         PrecClimber::new(vec![
-            Operator::new(Or, Left),
-            Operator::new(And, Left),
+            Operator::new(Or, Right),
+            Operator::new(And, Right),
             Operator::new(Equal, Left) | Operator::new(NotEqual, Left),
             Operator::new(LessThan, Left) | Operator::new(LessThanOrEqual, Left) | Operator::new(MoreThan, Left) | Operator::new(MoreThanOrEqual, Left),
             Operator::new(Add, Left) | Operator::new(Subtract, Left),
