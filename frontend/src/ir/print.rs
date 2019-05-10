@@ -25,7 +25,7 @@ impl Display for Expression {
                 write!(f, "if {} then {} else {}", condition, consequence, alternative)
             }
             Expression::ArithLog(op, args, ty) => {
-                write_delim_list(f, args, &format!("{}(", op), &format!(") -> {}", ty), ",")
+                write_delim_list(f, args, &format!("{}(", op), &format!(") : [{}]", ty), ",")
             }
             Expression::WindowLookup(wr) => write!(f, "{}", wr),
             Expression::Default { expr, default } => write!(f, "{}.default({})", expr, default),

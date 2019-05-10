@@ -799,7 +799,7 @@ mod tests {
         assert_eq!(stream.ty, ty);
 
         let tar = &ir.outputs[0];
-        assert_eq!("+(3, *(4, 7))", format!("{}", tar.expr))
+        assert_eq!("+(3,*(4,7) : [(Int32,Int32) -> Int32]) : [(Int32,Int32) -> Int32]", format!("{}", tar.expr))
     }
 
     #[test]
