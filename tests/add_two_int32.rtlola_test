@@ -1,0 +1,10 @@
+{
+  "spec_file": ["tests", "specs","add_two_streams.lola"],
+  "input_file": ["traces","tests","two_int32_streams.csv"],
+  "rationale": "Add two Int32 streams that have holes. The trigger should only fire once.",
+  "triggers": {
+    "c is too large": {
+      "expected_count" : 1
+    }
+  }
+}

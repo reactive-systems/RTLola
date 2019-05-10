@@ -1,0 +1,5 @@
+{
+  "spec_file": ["traces","spec_offline.lola"],
+  "input_file": ["traces","timed","trace_0.csv"],
+  "rationale": "Check the CAV specification."
+}
