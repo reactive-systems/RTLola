@@ -808,7 +808,7 @@ mod tests {
         let stream = &ir.outputs[0];
 
         let expr = &stream.expr;
-        assert_eq!("a.cast::<UInt8, UInt16>()", format!("{}", expr))
+        assert_eq!("In(0).cast::<UInt8, UInt16>()", format!("{}", expr))
     }
 
     #[test]
@@ -821,7 +821,7 @@ mod tests {
         assert_eq!(stream.ty, ty);
 
         let expr = &stream.expr;
-        assert_eq!("sqrt(a.cast::<Float32, Float64>(): Float64) -> Float64", format!("{}", expr))
+        assert_eq!("sqrt(In(0).cast::<Float32, Float64>(): Float64) -> Float64", format!("{}", expr))
     }
 
     #[test]
