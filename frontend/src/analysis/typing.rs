@@ -1561,6 +1561,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore] // parametric streams need new design after syntax revision
     fn parametric_input() {
         let spec = "input i<a: Int8, b: Bool>: Int8\noutput o := i(1,false)[0].defaults(to: 42)";
         assert_eq!(0, num_type_errors(spec));
@@ -1827,6 +1828,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore] // parametric streams need new design after syntax revision
     fn test_param_spec() {
         let spec =
             "input in: Int8\n output a<p1: Int8>: Int8 { invoke in } := 3\n output b: Int8 := a(3)[-2].defaults(to: 1)";
@@ -1835,18 +1837,21 @@ mod tests {
     }
 
     #[test]
+    #[ignore] // parametric streams need new design after syntax revision
     fn test_param_spec_faulty() {
         let spec = "input in: Int8\n output a<p1: Int8>: Int8 { invoke in } := 3\n output b: Int8 := a(true)[-2].defaults(to: 1)";
         assert_eq!(1, num_type_errors(spec));
     }
 
     #[test]
+    #[ignore] // parametric streams need new design after syntax revision
     fn test_param_spec_wrong_parameters() {
         let spec = "input in<a: Int8, b: Int8>: Int8\noutput x := in(1)[0]";
         assert_eq!(1, num_type_errors(spec));
     }
 
     #[test]
+    #[ignore] // parametric streams need new design after syntax revision
     fn test_lookup_incomp() {
         let spec =
             "input in: Int8\n output a<p1: Int8>: Int8 { invoke in } := 3\n output b: UInt8 := a(3)[2].defaults(to: 1)";
