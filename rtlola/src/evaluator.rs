@@ -458,31 +458,35 @@ mod tests {
 
     #[test]
     fn test_oob_lookup() {
-        let (_, mut eval) = setup("input a: UInt8\noutput b: UInt8 @5Hz := a[-1].hold().defaults(to: 3)");
+        let (_, mut eval) =
+            setup("input a: UInt8\noutput b := a.offset(by: -1)\noutput x: UInt8 @5Hz := b.hold().defaults(to: 3)");
         let mut eval = eval.as_Evaluator();
-        let out_ref = StreamReference::OutRef(0);
+        let out_ref = StreamReference::OutRef(1);
         let in_ref = StreamReference::InRef(0);
         let v1 = Value::Unsigned(1);
         eval.accept_input(in_ref, v1, SystemTime::now());
         eval.eval_stream((0, Vec::new()), SystemTime::now());
+        eval.eval_stream((1, Vec::new()), SystemTime::now());
         assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), Value::Unsigned(3));
     }
 
     #[test]
     fn test_output_lookup() {
         let (_, mut eval) = setup(
-            "input a: UInt8\noutput mirror: UInt8 := a\noutput c: UInt8 @5Hz := mirror[-1].hold().defaults(to: 3)",
+            "input a: UInt8\noutput mirror: UInt8 := a\noutput mirror_offset := mirror.offset(by: -1)\noutput c: UInt8 @5Hz := mirror_offset.hold().defaults(to: 3)",
         );
         let mut eval = eval.as_Evaluator();
-        let out_ref = StreamReference::OutRef(1);
+        let out_ref = StreamReference::OutRef(2);
         let in_ref = StreamReference::InRef(0);
         let v1 = Value::Unsigned(1);
         let v2 = Value::Unsigned(2);
         eval.accept_input(in_ref, v1.clone(), SystemTime::now());
         eval.eval_stream((0, Vec::new()), SystemTime::now());
+        eval.eval_stream((1, Vec::new()), SystemTime::now());
         eval.accept_input(in_ref, v2, SystemTime::now());
         eval.eval_stream((0, Vec::new()), SystemTime::now());
         eval.eval_stream((1, Vec::new()), SystemTime::now());
+        eval.eval_stream((2, Vec::new()), SystemTime::now());
         assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), v1);
     }
 
@@ -546,9 +550,10 @@ mod tests {
 
     #[test]
     fn test_regular_lookup() {
-        let (_, mut eval) = setup("input a: UInt8 output b: UInt8 @5Hz := a[-1].hold().defaults(to: 3)");
+        let (_, mut eval) =
+            setup("input a: UInt8 output b := a.offset(by: -1) output x: UInt8 @5Hz := b.hold().defaults(to: 3)");
         let mut eval = eval.as_Evaluator();
-        let out_ref = StreamReference::OutRef(0);
+        let out_ref = StreamReference::OutRef(1);
         let in_ref = StreamReference::InRef(0);
         let v1 = Value::Unsigned(1);
         let v2 = Value::Unsigned(2);
@@ -557,30 +562,34 @@ mod tests {
         eval.accept_input(in_ref, v2.clone(), SystemTime::now());
         eval.accept_input(in_ref, v3, SystemTime::now());
         eval.eval_stream((0, Vec::new()), SystemTime::now());
+        eval.eval_stream((1, Vec::new()), SystemTime::now());
         assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), v2)
     }
 
     #[test]
     fn test_trigger() {
         let (_, mut eval) =
-            setup("input a: UInt8 output b: UInt8 @5Hz := a[-1].hold().defaults(to: 3)\n trigger b > 4");
+            setup("input a: UInt8 output b := a.offset(by: -1) output x: UInt8 @5Hz := b.hold().defaults(to: 3)\n trigger x > 4");
         let mut eval = eval.as_Evaluator();
-        let out_ref = StreamReference::OutRef(0);
-        let trig_ref = StreamReference::OutRef(1);
+        let out_ref = StreamReference::OutRef(1);
+        let trig_ref = StreamReference::OutRef(2);
         let in_ref = StreamReference::InRef(0);
         let v1 = Value::Unsigned(8);
         eval.eval_stream((0, Vec::new()), SystemTime::now());
         eval.eval_stream((1, Vec::new()), SystemTime::now());
+        eval.eval_stream((2, Vec::new()), SystemTime::now());
         assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), Value::Unsigned(3));
         assert_eq!(eval.__peek_value(trig_ref, &Vec::new(), 0).unwrap(), Value::Bool(false));
         eval.accept_input(in_ref, v1.clone(), SystemTime::now());
         eval.eval_stream((0, Vec::new()), SystemTime::now());
         eval.eval_stream((1, Vec::new()), SystemTime::now());
+        eval.eval_stream((2, Vec::new()), SystemTime::now());
         assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), Value::Unsigned(3));
         assert_eq!(eval.__peek_value(trig_ref, &Vec::new(), 0).unwrap(), Value::Bool(false));
         eval.accept_input(in_ref, Value::Unsigned(17), SystemTime::now());
         eval.eval_stream((0, Vec::new()), SystemTime::now());
         eval.eval_stream((1, Vec::new()), SystemTime::now());
+        eval.eval_stream((2, Vec::new()), SystemTime::now());
         assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), v1);
         assert_eq!(eval.__peek_value(trig_ref, &Vec::new(), 0).unwrap(), Value::Bool(true));
     }
