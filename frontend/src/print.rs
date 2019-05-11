@@ -444,6 +444,7 @@ impl Display for ir::Constant {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         match self {
             ir::Constant::Bool(b) => write!(f, "{}", b),
+            ir::Constant::UInt(u) => write!(f, "{}", u),
             ir::Constant::Int(i) => write!(f, "{}", i),
             ir::Constant::Float(fl) => write!(f, "{}", fl),
             ir::Constant::Str(s) => write!(f, "{}", s),

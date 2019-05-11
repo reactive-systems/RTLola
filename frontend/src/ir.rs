@@ -160,6 +160,7 @@ pub enum Expression {
 pub enum Constant {
     Str(String),
     Bool(bool),
+    UInt(u128),
     Int(i128),
     Float(f64),
 }

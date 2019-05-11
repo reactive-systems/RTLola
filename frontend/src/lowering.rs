@@ -551,12 +551,12 @@ impl<'a> Lowering<'a> {
                         ir::Constant::Float(lit.parse_numeric::<f64>().expect("Checked by TypeChecker."))
                     }
                     ir::Type::UInt(_) => {
-                        ir::Constant::Int(lit.parse_numeric::<u128>().expect("Checked by TypeChecker.") as i128)
+                        ir::Constant::UInt(lit.parse_numeric::<u128>().expect("Checked by TypeChecker."))
                     }
                     ir::Type::Int(_) => {
                         ir::Constant::Int(lit.parse_numeric::<i128>().expect("Checked by TypeChecker."))
                     }
-                    _ => panic!("Checked by TypeChecker"),
+                    _ => panic!("Checked by TypeChecker."),
                 }
             }
             LitKind::Bool(b) => ir::Constant::Bool(*b),
