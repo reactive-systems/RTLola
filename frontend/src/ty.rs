@@ -268,7 +268,7 @@ impl std::fmt::Display for StreamTy {
 
 impl std::fmt::Display for Activation {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        use crate::print::write_delim_list;
+        use crate::ast::print::write_delim_list;
         match self {
             Activation::Conjunction(con) => {
                 if con.is_empty() {

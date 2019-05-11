@@ -1,3 +1,5 @@
+mod print;
+
 use crate::ty::ValueTy;
 pub use crate::ty::{FloatTy, IntTy, UIntTy}; // Re-export needed for IR
 use std::time::Duration;

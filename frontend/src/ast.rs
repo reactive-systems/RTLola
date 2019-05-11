@@ -1,13 +1,14 @@
 //! This module contains the AST data structures for the Lola Language.
 
+pub(crate) mod conversion;
+pub(crate) mod print;
+pub(crate) mod verify;
+
 use super::parse::Ident;
 use crate::parse::NodeId;
 use crate::parse::Span;
 use num::BigRational;
 use std::time::Duration;
-
-pub(crate) mod conversion;
-pub(crate) mod verify;
 
 /// The root Lola specification
 #[derive(Debug, Default, Clone)]

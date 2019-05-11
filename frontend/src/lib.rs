@@ -8,7 +8,6 @@ mod ast;
 pub mod ir;
 mod lowering;
 mod parse;
-mod print;
 mod reporting;
 mod stdlib;
 mod ty;
