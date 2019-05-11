@@ -6,9 +6,9 @@ use std::error::Error;
 use std::ops::AddAssign;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use streamlab_frontend::ir::{FloatTy, LolaIR, StreamReference, Type, UIntTy};
+use streamlab_frontend::ir::{FloatTy, LolaIR, Type, UIntTy};
 
-pub(crate) type EventEvaluation = Vec<(StreamReference, Value)>;
+pub(crate) type EventEvaluation = Vec<Value>;
 
 /// Represents the current cycle count for event-driven events.
 //TODO(marvin): u128? wouldn't u64 suffice?
@@ -46,34 +46,31 @@ impl EventDrivenManager {
             Err(e) => panic!("Cannot create input reader: {}", e),
         };
 
-        let in_types = ir.inputs.iter().map(|i| i.ty.clone()).collect();
+        let in_types: Vec<Type> = ir.inputs.iter().map(|i| i.ty.clone()).collect();
 
         EDM { current_cycle: 0.into(), out_handler, input_reader, in_types }
     }
 
-    fn read_event(&mut self) -> bool {
+    fn has_event(&mut self) -> bool {
         self.input_reader.read_blocking().unwrap_or_else(|e| panic!("Error reading data. {}", e))
     }
 
-    fn get_event(&self) -> Vec<(StreamReference, Value)> {
-        self.in_types
-            .iter()
-            .enumerate()
-            .flat_map(|(ix, t)| {
-                let s = self.input_reader.str_ref_for_stream_ix(ix);
-                if s == "#" {
-                    None
-                } else {
-                    let v = Value::try_from(s, t)
-                        .unwrap_or_else(|| panic!("Failed to parse {} as value of type {:?}.", s, t));
-                    Some((StreamReference::InRef(ix), v))
+    fn read_event(&self) -> Vec<Value> {
+        let mut buffer = vec![Value::None; self.in_types.len()];
+        for (col_ix, s) in self.input_reader.record.iter().enumerate() {
+            if let Some(str_ix) = self.input_reader.mapping.col2str[col_ix] {
+                if s != "#" {
+                    let t = &self.in_types[str_ix];
+                    buffer[str_ix] = Value::try_from(s, t)
+                        .unwrap_or_else(|| panic!("Failed to parse {} as value of type {:?}.", s, t))
                 }
-            })
-            .collect()
+            }
+        }
+        buffer
     }
 
     fn get_time(&self) -> SystemTime {
-        let s = self.input_reader.str_ref_for_time();
+        let s = self.input_reader.str_for_time();
         //TODO(marvin): fix this typing issue
         let mut v = Value::try_from(s, &Type::Float(FloatTy::F64));
         if v.is_none() {
@@ -99,14 +96,14 @@ impl EventDrivenManager {
 
     pub(crate) fn start_online(mut self, work_queue: Sender<WorkItem>) -> ! {
         loop {
-            if !self.read_event() {
+            if !self.has_event() {
                 let _ = work_queue.send(WorkItem::End); // Whether it fails or not, we really don't care.
                                                         // Sleep until you slowly fade into nothingness...
                 loop {
                     std::thread::sleep(std::time::Duration::new(u64::max_value(), 0))
                 }
             }
-            let event = self.get_event();
+            let event = self.read_event();
             let time = SystemTime::now();
             match work_queue.send(WorkItem::Event(event, time)) {
                 Ok(_) => {}
@@ -119,11 +116,11 @@ impl EventDrivenManager {
     pub(crate) fn start_offline(mut self, work_queue: Sender<WorkItem>) -> Result<(), Box<dyn Error>> {
         let mut start_time: Option<SystemTime> = None;
         loop {
-            if !self.read_event() {
+            if !self.has_event() {
                 let _ = work_queue.send(WorkItem::End);
                 return Ok(());
             }
-            let event = self.get_event();
+            let event = self.read_event();
             let time = self.get_time();
             if start_time.is_none() {
                 start_time = Some(time);

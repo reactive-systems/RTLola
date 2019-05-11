@@ -35,11 +35,11 @@ impl InputSource {
     }
 }
 
-struct ColumnMapping {
+pub(crate) struct ColumnMapping {
     /// Mapping from stream index/reference to input column index
     str2col: Vec<usize>,
     /// Mapping from column index to input stream index/reference
-    col2str: Vec<Option<usize>>,
+    pub(crate) col2str: Vec<Option<usize>>,
 
     /// Column index of time (if existent)
     time_ix: Option<usize>,
@@ -111,8 +111,8 @@ impl ReaderWrapper {
 
 pub(crate) struct InputReader {
     reader: ReaderWrapper,
-    mapping: ColumnMapping,
-    record: StringRecord,
+    pub(crate) mapping: ColumnMapping,
+    pub(crate) record: StringRecord,
     reading_delay: Option<Duration>,
 }
 
@@ -160,16 +160,12 @@ impl InputReader {
         Ok(true)
     }
 
-    pub(crate) fn str_ref_for_stream_ix(&self, stream_ix: usize) -> &str {
-        &self.record[self.mapping.str2col[stream_ix]]
-    }
-
-    pub(crate) fn str_ref_for_time(&self) -> &str {
+    pub(crate) fn str_for_time(&self) -> &str {
         assert!(self.time_index().is_some());
         &self.record[self.time_index().unwrap()]
     }
 
-    pub(crate) fn time_index(&self) -> Option<usize> {
+    fn time_index(&self) -> Option<usize> {
         self.mapping.time_ix
     }
 }

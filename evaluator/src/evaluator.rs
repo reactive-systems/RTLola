@@ -147,15 +147,18 @@ impl<'e, 'c> Evaluator<'e, 'c> {
         self.eval_event(e, ts)
     }
 
-    pub(crate) fn eval_event(&mut self, event: &Vec<(StreamReference, Value)>, ts: SystemTime) {
+    pub(crate) fn eval_event(&mut self, event: &Vec<Value>, ts: SystemTime) {
         self.clear_freshness();
         self.accept_inputs(event, ts);
         self.eval_all_event_driven_outputs(ts);
     }
 
-    fn accept_inputs(&mut self, event: &Vec<(StreamReference, Value)>, ts: SystemTime) {
-        for (str_ref, v) in event {
-            self.accept_input(*str_ref, v.clone(), ts);
+    fn accept_inputs(&mut self, event: &Vec<Value>, ts: SystemTime) {
+        for (ix, v) in event.iter().enumerate() {
+            match v {
+                Value::None => {}
+                v => self.accept_input(StreamReference::InRef(ix), v.clone(), ts),
+            }
         }
     }
 

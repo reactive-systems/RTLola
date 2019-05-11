@@ -173,6 +173,51 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_event() {
+        let spec = r#"
+            input bool: Bool
+            input unsigned: UInt8
+            input signed: Int8
+            input float: Float32
+            input str: String
+
+            trigger bool = true
+            trigger unsigned = 3
+            trigger signed = -5
+            trigger float = -123.456
+            trigger str = "foobar"
+        "#;
+        let ir = streamlab_frontend::parse(spec);
+        let mut file = NamedTempFile::new().expect("failed to create temporary file");
+        write!(
+            file,
+            r#"float,bool,time,signed,str,unsigned
+-123.456,true,1547627523.600536,-5,"foobar",3"#
+        )
+        .expect("writing tempfile failed");
+
+        let cfg = EvalConfig::new(
+            InputSource::for_file(file.path().to_str().unwrap().to_string(), None),
+            Verbosity::Progress,
+            OutputChannel::StdErr,
+            true, // closure
+            true, // offline
+        );
+        let config = Config { cfg, ir };
+        let ctrl = config.run().unwrap_or_else(|e| panic!("E2E test failed: {}", e));
+        macro_rules! assert_eq_num_trigger {
+            ($ix:expr, $num:expr) => {
+                assert_eq!(ctrl.output_handler.statistics.as_ref().unwrap().get_num_trigger($ix), $num);
+            };
+        }
+        assert_eq_num_trigger!(0, 1);
+        assert_eq_num_trigger!(1, 1);
+        assert_eq_num_trigger!(2, 1);
+        assert_eq_num_trigger!(3, 1);
+        assert_eq_num_trigger!(4, 1);
+    }
+
+    #[test]
     fn add_two_i32_streams() {
         let spec = r#"
             input a: Int32
