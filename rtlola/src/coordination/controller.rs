@@ -52,7 +52,11 @@ impl<'e, 'c> Controller<'e, 'c> {
         // TODO: Wait until all events have been read.
         let _event = thread::Builder::new().name("EventDrivenManager".into()).spawn(move || {
             let event_manager = EventDrivenManager::setup(ir_clone, cfg_clone);
-            event_manager.start(offline, work_tx, has_time_driven, time_tx, ack_rx);
+            if offline {
+                event_manager.start_offline(work_tx, has_time_driven, time_tx, ack_rx);
+            } else {
+                event_manager.start_online(work_tx);
+            }
         });
 
         let mut evaluatordata = if offline {
