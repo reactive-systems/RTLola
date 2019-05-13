@@ -3,6 +3,7 @@ use ena::unify::{
     EqUnifyValue, InPlace, InPlaceUnificationTable, Snapshot, UnificationStore, UnificationTable, UnifyKey, UnifyValue,
 };
 use log::{debug, trace};
+use std::collections::HashSet;
 
 /// Main data structure for the type unfication.
 /// Implemented using a union-find data structure where the keys (`ValueVar`)
@@ -58,6 +59,13 @@ impl<T: UnifiableTy> Unifier for ValueUnifier<T> {
         debug!("unify var var {} {}", left, right);
         match (self.table.probe_value(left), self.table.probe_value(right)) {
             (ValueVarVal::Known(ty_l), ValueVarVal::Known(ty_r)) => {
+                // check if left type can be concretized
+                if let Some(ty) = ty_l.can_be_concretized(self, &ty_r, &right) {
+                    self.table
+                        .unify_var_value(left, ValueVarVal::Concretize(ty.clone()))
+                        .expect("overwrite cannot fail");
+                    return Ok(());
+                }
                 // if both variables have values, we try to unify them recursively
                 if let Some(ty) = ty_l.equal_to(self, &ty_r) {
                     // proceed with unification
@@ -101,6 +109,7 @@ impl<T: UnifiableTy> Unifier for ValueUnifier<T> {
             return Err(InferError::CyclicDependency);
         }
         if let ValueVarVal::Known(val) = self.table.probe_value(var) {
+            // otherwise unify recursively
             if let Some(ty) = val.equal_to(self, &ty) {
                 self.table.unify_var_value(var, ValueVarVal::Concretize(ty))
             } else if val.coerces_with(self, &ty) {
@@ -145,6 +154,12 @@ pub trait UnifiableTy: std::marker::Sized + std::fmt::Display + Clone + std::cmp
     fn contains_var<U: Unifier<Var = Self::V, Ty = Self>>(&self, unifier: &mut U, var: Self::V) -> bool;
     fn is_inferred(&self) -> Option<Self::V>;
     fn conflicts_with(self, other: Self) -> InferError;
+    fn can_be_concretized<U: Unifier<Var = Self::V, Ty = Self>>(
+        &self,
+        unifier: &mut U,
+        right: &Self,
+        right_var: &Self::V,
+    ) -> Option<Self>;
 }
 
 impl UnifiableTy for ValueTy {
@@ -285,6 +300,15 @@ impl UnifiableTy for ValueTy {
     fn conflicts_with(self, other: Self) -> InferError {
         InferError::ValueTypeMismatch(self, other)
     }
+
+    fn can_be_concretized<U: Unifier<Var = Self::V, Ty = Self>>(
+        &self,
+        _unifier: &mut U,
+        _right: &ValueTy,
+        _right_var: &ValueVar,
+    ) -> Option<ValueTy> {
+        None
+    }
 }
 
 /// Representation of key for unification of `ValueTy`
@@ -389,6 +413,28 @@ impl UnifiableTy for StreamTy {
         };
         InferError::StreamTypeMismatch(self, other, hint)
     }
+
+    fn can_be_concretized<U: Unifier<Var = Self::V, Ty = Self>>(
+        &self,
+        unifier: &mut U,
+        right: &StreamTy,
+        right_var: &StreamVar,
+    ) -> Option<StreamTy> {
+        trace!("can_be_conretized {:?} {:?}", self, right_var);
+        match (self, right) {
+            (StreamTy::Infer(vars_l), _) => {
+                let mut vars = vars_l.clone();
+                vars.push(*right_var);
+                let result = StreamTy::Infer(vars);
+                if result.concretize(unifier).is_none() {
+                    None
+                } else {
+                    Some(result)
+                }
+            }
+            _ => None,
+        }
+    }
 }
 
 impl StreamTy {
@@ -401,27 +447,51 @@ impl StreamTy {
                 if vars.is_empty() {
                     return Some(StreamTy::Event(Activation::Conjunction(Vec::new())));
                 }
-                let mut stream_ty = None;
-                for &var in vars {
-                    stream_ty = match (stream_ty.as_mut(), unifier.get_type(var).as_ref()) {
-                        (None, Some(ty)) => Some(ty.clone()),
-                        (_, None) => {
-                            // if the right hand side cannot be inferred, we fail
-                            // TODO: check if this is correct
-                            return None;
-                        }
-                        (Some(StreamTy::Event(l)), Some(StreamTy::Event(r))) => Some(StreamTy::Event(l.conjunction(r))),
-                        (Some(StreamTy::RealTime(l)), Some(StreamTy::RealTime(r))) => {
+                let mut seen_vars = HashSet::new();
+                let stream_types: Vec<StreamTy> =
+                    vars.iter().map(|&svar| Self::get_grounded(svar, unifier, &mut seen_vars)).flatten().collect();
+                let mut result_ty = None;
+                for stream_ty in stream_types {
+                    result_ty = match (result_ty.as_mut(), &stream_ty) {
+                        (None, ty) => Some(ty.clone()),
+                        (Some(StreamTy::Event(l)), StreamTy::Event(r)) => Some(StreamTy::Event(l.conjunction(r))),
+                        (Some(StreamTy::RealTime(l)), StreamTy::RealTime(r)) => {
                             Some(StreamTy::RealTime(l.conjunction(r)))
                         }
-                        (Some(_), Some(_)) => {
+                        (Some(_), _) => {
                             // Incompatible types
                             return None;
                         }
                     }
                 }
-                stream_ty
+                result_ty
             }
+        }
+    }
+
+    /// Returns a vector of (non-inferred) StreamTy from a stream variable
+    ///
+    /// Precondition: every stream variable contained has a StreamTy
+    /// In order to prevent infinite recursion, `seen_vars` is used to record already seen `var`s
+    fn get_grounded<U: Unifier<Var = StreamVar, Ty = Self>>(
+        var: StreamVar,
+        unifier: &mut U,
+        seen_vars: &mut HashSet<StreamVar>,
+    ) -> Vec<StreamTy> {
+        match unifier.get_type(var).as_ref() {
+            Some(StreamTy::Infer(vars)) => vars
+                .iter()
+                .flat_map(|&svar| {
+                    if seen_vars.insert(svar) {
+                        Some(Self::get_grounded(svar, unifier, seen_vars))
+                    } else {
+                        None
+                    }
+                })
+                .flatten()
+                .collect(),
+            Some(t) => vec![t.clone()],
+            None => unreachable!(),
         }
     }
 
