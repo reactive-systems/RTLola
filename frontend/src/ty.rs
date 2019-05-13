@@ -22,7 +22,7 @@ pub struct Ty {
 #[derive(Debug, PartialEq, Eq, PartialOrd, Clone, Hash)]
 pub enum StreamTy {
     /// An event stream with the given dependencies
-    Event(Activation),
+    Event(Activation<StreamVar>),
     // A real-time stream with given frequency
     RealTime(Freq),
     /// The type of the stream should be inferred as the conjunction of the given `StreamTy`
@@ -81,10 +81,10 @@ pub struct Freq {
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Hash)]
-pub enum Activation {
-    Conjunction(Vec<Activation>),
-    Disjunction(Vec<Activation>),
-    Stream(StreamVar),
+pub enum Activation<Var> {
+    Conjunction(Vec<Self>),
+    Disjunction(Vec<Self>),
+    Stream(Var),
 }
 
 impl std::fmt::Display for Freq {
@@ -98,7 +98,7 @@ impl std::fmt::Display for Freq {
 }
 
 impl StreamTy {
-    pub(crate) fn new_event(activation: Activation) -> StreamTy {
+    pub(crate) fn new_event(activation: Activation<StreamVar>) -> StreamTy {
         StreamTy::Event(activation)
     }
 
@@ -265,7 +265,7 @@ impl std::fmt::Display for StreamTy {
     }
 }
 
-impl std::fmt::Display for Activation {
+impl std::fmt::Display for Activation<StreamVar> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         use crate::ast::print::write_delim_list;
         match self {

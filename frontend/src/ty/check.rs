@@ -42,6 +42,7 @@ pub(crate) struct TypeTable {
     value_tt: HashMap<NodeId, ValueTy>,
     stream_tt: HashMap<NodeId, StreamTy>,
     func_tt: HashMap<NodeId, Vec<ValueTy>>,
+    acti_cond: HashMap<NodeId, Activation<crate::ir::StreamReference>>,
 }
 
 impl TypeTable {
@@ -55,6 +56,10 @@ impl TypeTable {
 
     pub(crate) fn get_func_arg_types(&self, nid: NodeId) -> &Vec<ValueTy> {
         &self.func_tt[&nid]
+    }
+
+    pub(crate) fn get_acti_cond(&self, nid: NodeId) -> &Activation<crate::ir::StreamReference> {
+        &self.acti_cond[&nid]
     }
 }
 
@@ -80,17 +85,17 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
 
         self.assign_types(spec);
 
-        Some(self.extract_type_table())
+        Some(self.extract_type_table(spec))
     }
 
-    fn extract_type_table(&mut self) -> TypeTable {
+    fn extract_type_table(&mut self, spec: &'a LolaSpec) -> TypeTable {
         let value_nids: Vec<NodeId> = self.value_vars.keys().cloned().collect();
         let vtt: HashMap<NodeId, ValueTy> = value_nids.into_iter().map(|nid| (nid, self.get_type(nid))).collect();
 
         // Note: If there is a `None` for a stream, `get_stream_type` would report the error.
         let stream_nids: Vec<NodeId> = self.stream_vars.keys().cloned().collect();
         let stt: HashMap<NodeId, StreamTy> =
-            stream_nids.into_iter().flat_map(|nid| self.get_stream_type(nid).map(|ty| (nid, ty))).collect();
+            stream_nids.iter().flat_map(|&nid| self.get_stream_type(nid).map(|ty| (nid, ty))).collect();
 
         let mut func_tt = HashMap::with_capacity(self.generic_function_vars.len());
         let source = &self.generic_function_vars;
@@ -104,7 +109,10 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
             );
         }
 
-        TypeTable { value_tt: vtt, stream_tt: stt, func_tt }
+        let acti_cond =
+            stream_nids.iter().flat_map(|&nid| self.get_activation_condition(spec, nid).map(|ac| (nid, ac))).collect();
+
+        TypeTable { value_tt: vtt, stream_tt: stt, func_tt, acti_cond }
     }
 
     fn infer_types(&mut self, spec: &'a LolaSpec) {
@@ -263,7 +271,7 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
         }
     }
 
-    fn parse_activation_condition(&mut self, expr: &Expression) -> Option<Activation> {
+    fn parse_activation_condition(&mut self, expr: &Expression) -> Option<Activation<StreamVar>> {
         match &expr.kind {
             ExpressionKind::Ident(_) => match self.declarations[&expr.id] {
                 Declaration::In(input) => Some(Activation::Stream(self.stream_vars[&input.id])),
@@ -965,15 +973,34 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
         }
     }
 
+    /// Returns the activation condition (AC) to be used in Lowering/Evaluator.
+    /// The resulting AC is a Boolean Condition over Inpuut Stream References.
+    pub(crate) fn get_activation_condition(
+        &mut self,
+        spec: &'a LolaSpec,
+        id: NodeId,
+    ) -> Option<Activation<crate::ir::StreamReference>> {
+        let mut stream_ty = if let Some(stream_ty) = self.get_stream_type(id) {
+            stream_ty
+        } else {
+            return None;
+        };
+        self.normalize_stream_ty_to_inputs(&mut stream_ty);
+        match &stream_ty {
+            StreamTy::Event(ac) => Some(self.translate_activation_condition(spec, ac)),
+            _ => None,
+        }
+    }
+
     fn normalize_stream_ty_to_inputs(&mut self, ty: &mut StreamTy) {
         match ty {
             StreamTy::Event(ac) => self.normalize_activation_condition(ac),
             StreamTy::RealTime(_) => {}
-            StreamTy::Infer(_vecs) => unreachable!(),
+            StreamTy::Infer(_) => unreachable!(),
         }
     }
 
-    fn normalize_activation_condition(&mut self, ac: &mut Activation) {
+    fn normalize_activation_condition(&mut self, ac: &mut Activation<StreamVar>) {
         match ac {
             Activation::Conjunction(args) | Activation::Disjunction(args) => {
                 args.iter_mut().for_each(|arg| self.normalize_activation_condition(arg))
@@ -989,6 +1016,31 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
                     _ => unreachable!(),
                 };
                 self.normalize_activation_condition(ac);
+            }
+        }
+    }
+
+    fn translate_activation_condition(
+        &self,
+        spec: &'a LolaSpec,
+        ac: &Activation<StreamVar>,
+    ) -> Activation<crate::ir::StreamReference> {
+        match ac {
+            Activation::Conjunction(args) => {
+                Activation::Conjunction(args.iter().map(|ac| self.translate_activation_condition(spec, ac)).collect())
+            }
+            Activation::Disjunction(args) => {
+                Activation::Disjunction(args.iter().map(|ac| self.translate_activation_condition(spec, ac)).collect())
+            }
+            Activation::Stream(var) => {
+                let idx = spec
+                    .inputs
+                    .iter()
+                    .enumerate()
+                    .find(|(_, val)| self.stream_vars[&val.id] == *var)
+                    .expect("activation condition is assumed to be over input-streams only")
+                    .0;
+                Activation::Stream(crate::ir::StreamReference::InRef(idx))
             }
         }
     }
@@ -1062,7 +1114,7 @@ mod tests {
         assert!(!handler.contains_error(), "Spec produces errors in naming analysis.");
         let mut type_analysis = TypeAnalysis::new(&handler, &decl_table);
         type_analysis.check(&spec);
-        type_analysis.extract_type_table()
+        type_analysis.extract_type_table(&spec)
     }
 
     #[test]
@@ -1660,6 +1712,23 @@ mod tests {
                 Activation::Stream(StreamVar::new(1)),
                 Activation::Stream(StreamVar::new(2))
             ]))
+        );
+
+        use crate::ir::StreamReference;
+        assert_eq!(
+            type_table.get_acti_cond(NodeId::new(6)),
+            &Activation::Conjunction(vec![
+                Activation::Stream(StreamReference::InRef(0)),
+                Activation::Stream(StreamReference::InRef(1)),
+            ])
+        );
+        assert_eq!(
+            type_table.get_acti_cond(NodeId::new(12)),
+            &Activation::Conjunction(vec![
+                Activation::Stream(StreamReference::InRef(0)),
+                Activation::Stream(StreamReference::InRef(1)),
+                Activation::Stream(StreamReference::InRef(2)),
+            ])
         );
     }
 }

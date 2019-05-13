@@ -510,11 +510,11 @@ impl StreamTy {
     }
 }
 
-impl Activation {
+impl Activation<StreamVar> {
     /// Checks whether `self -> other` is valid
     pub(crate) fn implies_valid<U: Unifier<Var = StreamVar, Ty = StreamTy>>(
         &self,
-        other: &Activation,
+        other: &Self,
         _unifier: &mut U,
     ) -> bool {
         if self == other {
@@ -532,7 +532,7 @@ impl Activation {
         }
     }
 
-    pub(crate) fn conjunction(&self, other: &Activation) -> Activation {
+    pub(crate) fn conjunction(&self, other: &Self) -> Self {
         use Activation::*;
         match (self, other) {
             (Conjunction(c_l), Conjunction(c_r)) => {
