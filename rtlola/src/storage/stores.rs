@@ -86,6 +86,7 @@ impl GlobalStore {
 
 #[derive(Clone, Debug)]
 pub(crate) struct InstanceStore {
+    // New elements get stored at the front
     buffer: VecDeque<Value>,
 }
 
@@ -99,19 +100,18 @@ impl InstanceStore {
 
     pub(crate) fn get_value(&self, offset: i16) -> Option<Value> {
         assert!(offset <= 0);
-        let offset = offset.abs() as usize;
-        if self.buffer.len() < (offset + 1) {
-            None
+        if offset == 0 {
+            self.buffer.front().cloned()
         } else {
-            let ix = self.buffer.len() - offset - 1;
-            self.buffer.get(ix).cloned()
+            let offset = offset.abs() as usize;
+            self.buffer.get(offset).cloned()
         }
     }
 
     pub(crate) fn push_value(&mut self, v: Value) {
         if self.buffer.len() == SIZE {
-            self.buffer.pop_front();
+            self.buffer.pop_back();
         }
-        self.buffer.push_back(v);
+        self.buffer.push_front(v);
     }
 }
