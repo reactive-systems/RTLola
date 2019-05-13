@@ -2,7 +2,7 @@ pub(crate) mod lowering;
 mod print;
 
 use crate::ty::ValueTy;
-pub use crate::ty::{FloatTy, IntTy, UIntTy}; // Re-export needed for IR
+pub use crate::ty::{Activation, FloatTy, IntTy, UIntTy}; // Re-export needed for IR
 use std::time::Duration;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -105,6 +105,7 @@ pub struct OutputStream {
     pub(crate) memory_bound: MemorizationBound,
     pub(crate) layer: u32,
     pub reference: StreamReference,
+    pub ac: Option<Activation<StreamReference>>,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]

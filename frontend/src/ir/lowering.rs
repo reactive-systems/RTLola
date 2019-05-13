@@ -147,6 +147,10 @@ impl<'a> Lowering<'a> {
         let mut outgoing_dependencies = Vec::new();
         self.find_dependencies(&trigger.expression, &mut outgoing_dependencies);
         let input_dependencies = self.gather_dependent_inputs(trigger.id);
+        let ac = match self.check_time_driven(trigger.id, reference) {
+            None => Some(self.tt.get_acti_cond(trigger.id).clone()),
+            Some(_tds) => None,
+        };
         let output = ir::OutputStream {
             name,
             ty,
@@ -158,6 +162,7 @@ impl<'a> Lowering<'a> {
             reference,
             outgoing_dependencies,
             input_dependencies,
+            ac,
         };
         self.ir.outputs.push(output);
         let trig = ir::Trigger { message: trigger.message.clone(), reference };
@@ -203,6 +208,10 @@ impl<'a> Lowering<'a> {
 
         let output_type = self.lower_node_type(nid);
         let input_dependencies = self.gather_dependent_inputs(nid);
+        let ac = match self.check_time_driven(ast_output.id, reference) {
+            None => Some(self.tt.get_acti_cond(ast_output.id).clone()),
+            Some(_tds) => None,
+        };
         let output = ir::OutputStream {
             name: ast_output.name.name.clone(),
             ty: output_type.clone(),
@@ -214,6 +223,7 @@ impl<'a> Lowering<'a> {
             layer,
             reference,
             input_dependencies,
+            ac,
         };
 
         let debug_clone = output.clone();
