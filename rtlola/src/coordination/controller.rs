@@ -86,8 +86,8 @@ impl<'e, 'c> Controller<'e, 'c> {
     fn eval_workitem(&mut self, wi: WorkItem) {
         self.output_handler.debug(|| format!("Received {:?}.", wi));
         match wi {
-            WorkItem::Event(e, ts) => self.evaluate_event_item(e, ts),
-            WorkItem::Time(t, ts) => self.evaluate_timed_item(t, ts),
+            WorkItem::Event(e, ts) => self.evaluate_event_item(&e, ts),
+            WorkItem::Time(t, ts) => self.evaluate_timed_item(&t, ts),
             WorkItem::Start(_) => panic!("Received spurious start command."),
             WorkItem::End => {
                 self.output_handler.output(|| "Finished entire input. Terminating.");
@@ -96,12 +96,12 @@ impl<'e, 'c> Controller<'e, 'c> {
         }
     }
 
-    fn evaluate_timed_item(&mut self, t: TimeEvaluation, ts: SystemTime) {
-        self.evaluator.eval_some_outputs(&t, ts);
+    fn evaluate_timed_item(&mut self, t: &TimeEvaluation, ts: SystemTime) {
+        self.evaluator.eval_some_outputs(t, ts);
     }
 
-    fn evaluate_event_item(&mut self, e: EventEvaluation, ts: SystemTime) {
-        self.evaluator.accept_inputs(&e, ts);
+    fn evaluate_event_item(&mut self, e: &EventEvaluation, ts: SystemTime) {
+        self.evaluator.accept_inputs(e, ts);
         self.evaluator.eval_all_outputs(ts);
     }
 }
