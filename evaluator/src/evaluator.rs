@@ -381,39 +381,31 @@ impl<'a> ExpressionEvaluator<'a> {
                 }
             }
 
-            SyncStreamLookup(str_ref) => {
-                let res = self.perform_lookup(*str_ref, 0);
-                assert!(res.is_some());
-                // Unwrap sound in sync lookups.
-                res.unwrap()
-            }
+            SyncStreamLookup(str_ref) => self.lookup(*str_ref),
 
-            OffsetLookup { target: str_ref, offset } => {
-                let res = match offset {
-                    Offset::FutureDiscreteOffset(_) | Offset::FutureRealTimeOffset(_) => unimplemented!(),
-                    Offset::PastDiscreteOffset(u) => self.perform_lookup(*str_ref, -(*u as i16)),
-                    Offset::PastRealTimeOffset(_dur) => unimplemented!(),
-                };
-                res.unwrap_or(Value::None)
-            }
+            OffsetLookup { target: str_ref, offset } => match offset {
+                Offset::FutureDiscreteOffset(_) | Offset::FutureRealTimeOffset(_) => unimplemented!(),
+                Offset::PastDiscreteOffset(u) => self.lookup_with_offset(*str_ref, -(*u as i16)),
+                Offset::PastRealTimeOffset(_dur) => unimplemented!(),
+            },
 
             StreamAccess(str_ref, kind) => {
                 use StreamAccessKind::*;
                 match kind {
-                    Hold => self.perform_lookup(*str_ref, 0).unwrap_or(Value::None),
+                    Hold => self.lookup(*str_ref),
                     Optional => {
                         use StreamReference::*;
                         match *str_ref {
                             InRef(ix) => {
                                 if self.fresh_inputs.contains(ix) {
-                                    self.perform_lookup(*str_ref, 0).expect("value must be there")
+                                    self.lookup(*str_ref)
                                 } else {
                                     Value::None
                                 }
                             }
                             OutRef(ix) => {
                                 if self.fresh_outputs.contains(ix) {
-                                    self.perform_lookup(*str_ref, 0).expect("value must be there")
+                                    self.lookup(*str_ref)
                                 } else {
                                     Value::None
                                 }
@@ -423,12 +415,9 @@ impl<'a> ExpressionEvaluator<'a> {
                 }
             }
 
-            WindowLookup(win_ref) => {
-                let window: Window = (win_ref.ix, Vec::new());
-                self.global_store.get_window(window).get_value(ts)
-            }
+            WindowLookup(win_ref) => self.lookup_window(*win_ref, ts),
 
-            Expression::Function(name, args, _ty) => {
+            Function(name, args, _ty) => {
                 //TODO(marvin): handle type
                 let arg = self.eval_expr(&args[0], ts);
                 match arg {
@@ -501,16 +490,23 @@ impl<'a> ExpressionEvaluator<'a> {
         }
     }
 
-    fn perform_lookup(&self, str_ref: StreamReference, offset: i16) -> Option<Value> {
-        let is = match str_ref {
-            StreamReference::InRef(_) => Some(self.global_store.get_in_instance(str_ref)),
-            StreamReference::OutRef(i) => {
-                let target: OutInstance = (i, Vec::new());
-                self.global_store.get_out_instance(target)
-                //TODO(marvin): shouldn't this panic if there is no instance?
+    fn lookup(&self, target: StreamReference) -> Value {
+        self.lookup_with_offset(target, 0)
+    }
+
+    fn lookup_with_offset(&self, stream_ref: StreamReference, offset: i16) -> Value {
+        let inst = match stream_ref {
+            StreamReference::InRef(_) => self.global_store.get_in_instance(stream_ref),
+            StreamReference::OutRef(ix) => {
+                self.global_store.get_out_instance((ix, Vec::new())).expect("no out instance")
             }
         };
-        is.and_then(|is| is.get_value(offset))
+        inst.get_value(offset).unwrap_or(Value::None)
+    }
+
+    fn lookup_window(&self, window_ref: WindowReference, ts: SystemTime) -> Value {
+        let window: Window = (window_ref.ix, Vec::new());
+        self.global_store.get_window(window).get_value(ts)
     }
 }
 
@@ -520,18 +516,13 @@ impl<'e> EvaluationContext<'e> {
     }
 
     pub(crate) fn lookup_with_offset(&self, stream_ref: StreamReference, offset: i16) -> Value {
-        let inst_opt = match stream_ref {
-            StreamReference::InRef(_) => Some(self.global_store.get_in_instance(stream_ref)),
-            StreamReference::OutRef(i) => {
-                let inst: OutInstance = (i, Vec::new());
-                self.global_store.get_out_instance(inst)
-                //TODO(marvin): shouldn't this panic if there is no instance?
+        let inst = match stream_ref {
+            StreamReference::InRef(_) => self.global_store.get_in_instance(stream_ref),
+            StreamReference::OutRef(ix) => {
+                self.global_store.get_out_instance((ix, Vec::new())).expect("no out instance")
             }
         };
-        match inst_opt {
-            Some(inst) => inst.get_value(offset).unwrap_or(Value::None),
-            None => Value::None,
-        }
+        inst.get_value(offset).unwrap_or(Value::None)
     }
 
     pub(crate) fn lookup_window(&self, window_ref: WindowReference) -> Value {
