@@ -4,7 +4,7 @@ use crate::evaluator::{OutInstance, Window};
 use crate::storage::SlidingWindow;
 use std::collections::VecDeque;
 use std::time::SystemTime;
-use streamlab_frontend::ir::{LolaIR, OutputStream, StreamReference, Type};
+use streamlab_frontend::ir::{LolaIR, MemorizationBound, OutputStream, StreamReference, Type};
 
 pub(crate) struct GlobalStore {
     /// Access by stream reference.
@@ -38,8 +38,8 @@ impl GlobalStore {
         assert!(index_map.iter().all(Option::is_some));
 
         let index_map = index_map.into_iter().flatten().collect();
-        let np_outputs = nps.iter().map(|o| InstanceStore::new(&o.ty)).collect();
-        let inputs = ir.inputs.iter().map(|i| InstanceStore::new(&i.ty)).collect();
+        let np_outputs = nps.iter().map(|o| InstanceStore::new(&o.ty, &o.memory_bound)).collect();
+        let inputs = ir.inputs.iter().map(|i| InstanceStore::new(&i.ty, &i.memory_bound)).collect();
         let np_windows = ir.sliding_windows.iter().map(|w| SlidingWindow::new(w.duration, w.op, ts, &w.ty)).collect();
 
         GlobalStore { inputs, index_map, np_outputs, np_windows }
@@ -88,14 +88,20 @@ impl GlobalStore {
 pub(crate) struct InstanceStore {
     // New elements get stored at the front
     buffer: VecDeque<Value>,
+    bound: MemorizationBound,
 }
 
-const SIZE: usize = 256; // TODO!
+const SIZE: usize = 256;
 
 impl InstanceStore {
     // _for type might be used later.
-    pub(crate) fn new(_for_type: &Type) -> InstanceStore {
-        InstanceStore { buffer: VecDeque::with_capacity(SIZE) }
+    pub(crate) fn new(_for_type: &Type, bound: &MemorizationBound) -> InstanceStore {
+        match bound {
+            MemorizationBound::Bounded(limit) => {
+                InstanceStore { buffer: VecDeque::with_capacity(*limit as usize), bound: *bound }
+            }
+            MemorizationBound::Unbounded => InstanceStore { buffer: VecDeque::with_capacity(SIZE), bound: *bound },
+        }
     }
 
     pub(crate) fn get_value(&self, offset: i16) -> Option<Value> {
@@ -109,8 +115,10 @@ impl InstanceStore {
     }
 
     pub(crate) fn push_value(&mut self, v: Value) {
-        if self.buffer.len() == SIZE {
-            self.buffer.pop_back();
+        if let MemorizationBound::Bounded(limit) = self.bound {
+            if self.buffer.len() == limit as usize {
+                self.buffer.pop_back();
+            }
         }
         self.buffer.push_front(v);
     }

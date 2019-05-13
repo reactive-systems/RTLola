@@ -88,7 +88,7 @@ pub struct InputStream {
     pub dependent_streams: Vec<Tracking>,
     pub dependent_windows: Vec<WindowReference>,
     pub(crate) layer: u32,
-    pub(crate) memory_bound: MemorizationBound,
+    pub memory_bound: MemorizationBound,
     pub reference: StreamReference,
 }
 
@@ -102,7 +102,7 @@ pub struct OutputStream {
     pub outgoing_dependencies: Vec<Dependency>,
     pub dependent_streams: Vec<Tracking>,
     pub dependent_windows: Vec<WindowReference>,
-    pub(crate) memory_bound: MemorizationBound,
+    pub memory_bound: MemorizationBound,
     pub(crate) layer: u32,
     pub reference: StreamReference,
     pub ac: Option<Activation<StreamReference>>,
