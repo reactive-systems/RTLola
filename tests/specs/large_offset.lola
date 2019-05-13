@@ -1,5 +1,11 @@
 input a: Int32
 
-output b := a.offset(by:-260).defaults(to:10)
+output b := a.offset(by:-256).defaults(to:0)
 
-trigger b == 1 "b is 1"
+trigger b == 0 "default used"
+trigger b == 260 "b is 260"
+trigger b == 259 "b is 259"
+trigger b == 258 "b is 258"
+trigger b == 257 "b is 257"
+trigger b == 256 "b is 256"
+trigger b == 255 "b is 255"

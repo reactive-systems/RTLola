@@ -1,10 +1,28 @@
 {
   "spec_file": ["tests", "specs","large_offset.lola"],
   "input_file": ["traces","tests","long_int32.csv"],
-  "rationale": "Large offset of 260 which is larger than the initially used fixed buffer size of 256.\nThe trigger should only fire once.",
+  "rationale": "Large offset of 260 which is larger than the initially used fixed buffer size of 256.",
   "triggers": {
-    "b is 1": {
-      "expected_count" : 1
+    "default used": {
+      "expected_count": 256
+    },
+    "b is 260": {
+      "expected_count": 1
+    },
+    "b is 259": {
+      "expected_count": 1
+    },
+    "b is 258": {
+      "expected_count": 1
+    },
+    "b is 257": {
+      "expected_count": 1
+    },
+    "b is 256": {
+      "expected_count": 1
+    },
+    "b is 255": {
+      "expected_count": 0
     }
   }
 }
