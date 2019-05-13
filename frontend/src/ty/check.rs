@@ -805,10 +805,17 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
                 self.infer_expression(expr, None, None)?;
                 // resulting type is a integer value
                 self.unifier
-                    .unify_var_ty(var, ValueTy::Option(ValueTy::Constr(TypeConstraint::UnsignedInteger).into()))
+                    .unify_var_ty(var, ValueTy::Constr(TypeConstraint::UnsignedInteger))
                     .map_err(|err| self.handle_error(err, span))
             }
-            Average | Sum | Product | Integral => {
+            Sum => {
+                // The value type of the inner stream has to be numeric
+                self.infer_expression(expr, Some(ValueTy::Constr(TypeConstraint::Numeric)), None)?;
+                // resulting type depends on the inner type
+                let inner_var = self.value_vars[&expr.id];
+                self.unifier.unify_var_ty(var, ValueTy::Infer(inner_var)).map_err(|err| self.handle_error(err, span))
+            }
+            Average | Product | Integral => {
                 // The value type of the inner stream has to be numeric
                 self.infer_expression(expr, Some(ValueTy::Constr(TypeConstraint::Numeric)), None)?;
                 // resulting type depends on the inner type
