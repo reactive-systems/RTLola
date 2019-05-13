@@ -1,0 +1,16 @@
+{
+  "spec_file": ["tests", "specs","medium_offset.lola"],
+  "input_file": ["traces","tests","long_int32.csv"],
+  "rationale": "Medium offset of 100 which is less than the initially used fixed buffer size of 256.\nWe should see the default value 100 times.",
+  "triggers": {
+    "b is 100": {
+      "expected_count": 1
+    },
+    "b is 99": {
+      "expected_count": 0
+    },
+    "default used": {
+      "expected_count": 100
+    }
+  }
+}

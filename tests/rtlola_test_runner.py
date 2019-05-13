@@ -58,7 +58,7 @@ running_on_windows = platform.system() == "Windows"
 executable_name = "stream_lab.exe" if running_on_windows else "stream_lab"
 
 # TODO get build_version from command line an check against BUILD_VERSIONS
-build_version = "release"
+build_version = "debug" # debug build is used during development so probably already build
 
 repo_base_dir = Path(".").resolve().parent
 rtlola_executable_path = repo_base_dir / "target" / build_version / executable_name
@@ -71,10 +71,16 @@ else:
 if cargo_build.returncode != 0:
     sys.exit(EXIT_FAILURE)
 
+total_number_of_tests = 0
+crashed_tests = 0
+wrong_tests = 0
+tests_passed = 0
+
 test_dir = Path('.')
 tests = [test_file for test_file in test_dir.iterdir() if test_file.is_file() and test_file.suffix == ".rtlola_test"]
 return_code = 0
 for test_file in tests:
+    total_number_of_tests += 1
     print("========================================================================")
     print_bold(str(test_file))
     with test_file.open() as fd:
@@ -118,7 +124,10 @@ for test_file in tests:
                 else:
                     print_additional_trigger(trigger, triggers_in_output[trigger])
                     something_wrong = True
+            if something_wrong:
+                wrong_tests += 1
         else:
+            crashed_tests += 1
             print_fail("Returned with error code")
             something_wrong = True
 
@@ -130,8 +139,16 @@ for test_file in tests:
             print_fail("FAIL: " + str(test_file) + "\n" + test_json["rationale"])
             return_code = 1
         else:
+            tests_passed +=1
             print_pass("PASS:" + str(test_file))
 
         print("")
-
+print("========================================================================")
+print("Total tests: {}".format(total_number_of_tests))
+print_pass("Tests passed: {}".format(tests_passed))
+print_fail("Tests crashed: {}".format(crashed_tests))
+print_fail("Tests with wrong output: {}".format(wrong_tests))
+print("")
+print_bold("Passing rate: {:05.2f}%".format((100.0*tests_passed/total_number_of_tests)))
+print("========================================================================")
 sys.exit(return_code)

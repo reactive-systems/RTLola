@@ -1,0 +1,5 @@
+input a: Int32
+
+output b := a.offset(by:-260).defaults(to:10)
+
+trigger b == 1 "b is 1"
