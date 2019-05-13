@@ -112,6 +112,7 @@ for test_file in tests:
             # TODO allow for specifying a tolerance in the JSON
             expected_triggers = list(test_json["triggers"].keys())
             trigger_names = list(set(list(triggers_in_output.keys()) + expected_triggers))
+            trigger_names.sort()
             for trigger in trigger_names:
                 if trigger in expected_triggers:
                     actual = triggers_in_output[trigger] if trigger in triggers_in_output else 0
@@ -132,8 +133,9 @@ for test_file in tests:
             something_wrong = True
 
         if something_wrong:
-            print("STDOUT")
-            print(run_result.stdout)
+            if False:
+                print("STDOUT")
+                print(run_result.stdout)
             print("STDERR")
             print(run_result.stderr)
             print_fail("FAIL: " + str(test_file) + "\n" + test_json["rationale"])
