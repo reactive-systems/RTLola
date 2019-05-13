@@ -757,4 +757,18 @@ mod tests {
         let expected = Value::Float(NotNan::new(-106.5).unwrap());
         assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), expected);
     }
+
+    #[test]
+    fn test_window_types() {
+        let (_, mut eval) = setup_time(
+            "input a: Int32\noutput b @ 10Hz := a.aggregate(over: 0.1s, using: count).defaults(to: 10)",
+            SystemTime::now(),
+        );
+        let mut eval = eval.as_Evaluator();
+        let out_ref = StreamReference::OutRef(0);
+        let a = StreamReference::InRef(0);
+        let expected = Value::Signed(10);
+        eval.eval_stream((0, Vec::new()), SystemTime::now());
+        assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), expected);
+    }
 }
