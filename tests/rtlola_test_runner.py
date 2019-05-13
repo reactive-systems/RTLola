@@ -75,12 +75,13 @@ test_dir = Path('.')
 tests = [test_file for test_file in test_dir.iterdir() if test_file.is_file() and test_file.suffix == ".rtlola_test"]
 return_code = 0
 for test_file in tests:
+    print("========================================================================")
     print_bold(str(test_file))
     with test_file.open() as fd:
         test_json = json.load(fd)
         spec_file = build_path(repo_base_dir, test_json["spec_file"])
         input_file = build_path(repo_base_dir, test_json["input_file"])
-        run_result = subprocess.run([rtlola_executable_path_string, "monitor", "--offline", "--stdout", "--verbosity", "triggers", str(spec_file), "--csv-in", str(input_file)], stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=str(repo_base_dir), universal_newlines=True)
+        run_result = subprocess.run([rtlola_executable_path_string, "monitor", "--offline", "--stdout", "--verbosity", "outputs", str(spec_file), "--csv-in", str(input_file)], stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=str(repo_base_dir), universal_newlines=True)
         something_wrong = False
         if run_result.returncode == 0:
             lines = iter(run_result.stdout.split("\n"))
@@ -98,8 +99,8 @@ for test_file in tests:
                     trigger_warning = line[len("Trigger: "):]
                     triggers_in_output.setdefault(trigger_warning, 0)
                     triggers_in_output[trigger_warning] += 1
-                else:
-                    print("Unexpected line: {}".format(line))
+                # else:
+                #     print("Unexpected line: {}".format(line))
 
             # print diff in triggers
             # TODO allow for specifying a tolerance in the JSON
@@ -107,12 +108,12 @@ for test_file in tests:
             trigger_names = list(set(list(triggers_in_output.keys()) + expected_triggers))
             for trigger in trigger_names:
                 if trigger in expected_triggers:
-                    actual = triggers_in_output[trigger]
+                    actual = triggers_in_output[trigger] if trigger in triggers_in_output else 0
                     expected = 0
                     if trigger in expected_triggers:
                         expected = test_json["triggers"][trigger]["expected_count"]
                     if actual != expected:
-                        print_trigger(trigger, actual, expected)
+                        print_trigger(trigger, expected, actual)
                         something_wrong = True
                 else:
                     print_additional_trigger(trigger, triggers_in_output[trigger])
@@ -122,6 +123,10 @@ for test_file in tests:
             something_wrong = True
 
         if something_wrong:
+            print("STDOUT")
+            print(run_result.stdout)
+            print("STDERR")
+            print(run_result.stderr)
             print_fail("FAIL: " + str(test_file) + "\n" + test_json["rationale"])
             return_code = 1
         else:
