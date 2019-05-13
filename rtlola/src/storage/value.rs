@@ -64,7 +64,7 @@ impl ops::Add for Value {
             (Unsigned(v1), Unsigned(v2)) => Unsigned(v1 + v2),
             (Signed(v1), Signed(v2)) => Signed(v1 + v2),
             (Float(v1), Float(v2)) => Float(v1 + v2),
-            _ => panic!("Incompatible types."),
+            (a, b) => panic!("Incompatible types: ({:?},{:?})", a, b),
         }
     }
 }
@@ -76,7 +76,7 @@ impl ops::Sub for Value {
             (Unsigned(v1), Unsigned(v2)) => Unsigned(v1 - v2),
             (Signed(v1), Signed(v2)) => Signed(v1 - v2),
             (Float(v1), Float(v2)) => Float(v1 - v2),
-            _ => panic!("Incompatible types."),
+            (a, b) => panic!("Incompatible types: ({:?},{:?})", a, b),
         }
     }
 }
@@ -88,7 +88,7 @@ impl ops::Mul for Value {
             (Unsigned(v1), Unsigned(v2)) => Unsigned(v1 * v2),
             (Signed(v1), Signed(v2)) => Signed(v1 * v2),
             (Float(v1), Float(v2)) => Float(v1 * v2),
-            _ => panic!("Incompatible types."),
+            (a, b) => panic!("Incompatible types: ({:?},{:?})", a, b),
         }
     }
 }
@@ -100,7 +100,7 @@ impl ops::Div for Value {
             (Unsigned(v1), Unsigned(v2)) => Unsigned(v1 / v2),
             (Signed(v1), Signed(v2)) => Signed(v1 / v2),
             (Float(v1), Float(v2)) => Float(v1 / v2),
-            _ => panic!("Incompatible types."),
+            (a, b) => panic!("Incompatible types: ({:?},{:?})", a, b),
         }
     }
 }
@@ -112,7 +112,7 @@ impl ops::Rem for Value {
             (Unsigned(v1), Unsigned(v2)) => Unsigned(v1 % v2),
             (Signed(v1), Signed(v2)) => Signed(v1 % v2),
             (Float(v1), Float(v2)) => Float(v1 % v2),
-            _ => panic!("Incompatible types."),
+            (a, b) => panic!("Incompatible types: ({:?},{:?})", a, b),
         }
     }
 }
@@ -124,7 +124,7 @@ impl Value {
             (Signed(v1), Signed(v2)) => Signed(v1.pow(v2 as u32)),
             (Float(v1), Float(v2)) => Value::new_float(v1.powf(v2.into())),
             (Float(v1), Signed(v2)) => Value::new_float(v1.powi(v2 as i32)),
-            _ => panic!("Incompatible types."),
+            (a, b) => panic!("Incompatible types: ({:?},{:?})", a, b),
         }
     }
 }
@@ -134,7 +134,7 @@ impl ops::BitOr for Value {
     fn bitor(self, other: Value) -> Value {
         match (self, other) {
             (Bool(v1), Bool(v2)) => Bool(v1 || v2),
-            _ => panic!("Incompatible types."),
+            (a, b) => panic!("Incompatible types: ({:?},{:?})", a, b),
         }
     }
 }
@@ -144,7 +144,7 @@ impl ops::BitAnd for Value {
     fn bitand(self, other: Value) -> Value {
         match (self, other) {
             (Bool(v1), Bool(v2)) => Bool(v1 && v2),
-            _ => panic!("Incompatible types."),
+            (a, b) => panic!("Incompatible types: ({:?},{:?})", a, b),
         }
     }
 }
@@ -154,7 +154,7 @@ impl ops::Not for Value {
     fn not(self) -> Value {
         match self {
             Bool(v) => Bool(!v),
-            _ => panic!("Incompatible types."),
+            a => panic!("Incompatible type: {:?}", a),
         }
     }
 }
@@ -165,7 +165,7 @@ impl ops::Neg for Value {
         match self {
             Signed(v) => Signed(-v), // TODO Check
             Float(v) => Float(-v),
-            _ => panic!("Incompatible types."),
+            a => panic!("Incompatible type: {:?}", a),
         }
     }
 }
