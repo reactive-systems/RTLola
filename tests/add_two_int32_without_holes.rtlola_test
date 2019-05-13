@@ -1,10 +1,10 @@
 {
-  "spec_file": ["tests", "specs","add_two_streams.lola"],
-  "input_file": ["traces","tests","two_int32_streams_no_holes.csv"],
+  "spec_file": "../tests/specs/add_two_streams.lola",
+  "input_file": "../traces/tests/two_int32_streams_no_holes.csv",
   "rationale": "Add two Int32 streams that have no holes.",
   "triggers": {
     "c is too large": {
-      "expected_count" : 5
+      "expected_count": 5
     }
   }
 }

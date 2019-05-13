@@ -85,8 +85,8 @@ for test_file in tests:
     print_bold(str(test_file))
     with test_file.open() as fd:
         test_json = json.load(fd)
-        spec_file = build_path(repo_base_dir, test_json["spec_file"])
-        input_file = build_path(repo_base_dir, test_json["input_file"])
+        spec_file = build_path(repo_base_dir, test_json["spec_file"].split('/')[1:])
+        input_file = build_path(repo_base_dir, test_json["input_file"].split('/')[1:])
         run_result = subprocess.run([rtlola_executable_path_string, "monitor", "--offline", "--stdout", "--verbosity", "outputs", str(spec_file), "--csv-in", str(input_file)], stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=str(repo_base_dir), universal_newlines=True)
         something_wrong = False
         if run_result.returncode == 0:
