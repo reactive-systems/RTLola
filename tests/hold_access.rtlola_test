@@ -1,0 +1,16 @@
+{
+  "spec_file": ["tests", "specs","hold_access.lola"],
+  "input_file": ["traces","tests","three_int32_streams.csv"],
+  "rationale": "Check that the hold access works",
+  "triggers": {
+    "2 used": {
+      "expected_count" : 1
+    },
+    "3 used": {
+      "expected_count" : 5
+    },
+    "default used": {
+      "expected_count" : 1
+    }
+  }
+}
