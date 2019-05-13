@@ -297,7 +297,7 @@ impl<'s> Expr<'s> for Expression {
                 let f_default = default.compile();
                 CompiledExpr::new(move |ctx| {
                     let v = f_expr.execute(ctx);
-                    if v == Value::None {
+                    if let Value::None = v {
                         f_default.execute(ctx)
                     } else {
                         v
