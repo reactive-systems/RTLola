@@ -805,7 +805,7 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
                 self.infer_expression(expr, None, None)?;
                 // resulting type is a integer value
                 self.unifier
-                    .unify_var_ty(var, ValueTy::Option(ValueTy::Constr(TypeConstraint::Integer).into()))
+                    .unify_var_ty(var, ValueTy::Option(ValueTy::Constr(TypeConstraint::UnsignedInteger).into()))
                     .map_err(|err| self.handle_error(err, span))
             }
             Average | Sum | Product | Integral => {

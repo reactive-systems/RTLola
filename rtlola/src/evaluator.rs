@@ -767,7 +767,7 @@ mod tests {
         let mut eval = eval.as_Evaluator();
         let out_ref = StreamReference::OutRef(0);
         let a = StreamReference::InRef(0);
-        let expected = Value::Signed(10);
+        let expected = Value::Unsigned(10);
         eval.eval_stream((0, Vec::new()), SystemTime::now());
         assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), expected);
     }
