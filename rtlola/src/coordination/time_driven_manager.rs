@@ -1,7 +1,7 @@
 use super::WorkItem;
 use crate::basics::{EvalConfig, OutputHandler};
 
-use std::sync::mpsc::{Receiver, Sender};
+use std::sync::mpsc::Sender;
 use std::thread::sleep;
 use std::time::{Duration, SystemTime};
 use streamlab_frontend::ir::{LolaIR, StreamReference};
@@ -43,16 +43,25 @@ pub(crate) struct TimeDrivenManager {
     last_state: Option<TDMState>,
     deadlines: Vec<Deadline>,
     hyper_period: Duration,
-    start_time: Option<SystemTime>,
+    start_time: SystemTime,
     handler: OutputHandler,
 }
 
 impl TimeDrivenManager {
     /// Creates a new TimeDrivenManager managing time-driven output streams.
-    pub(crate) fn setup(ir: LolaIR, config: EvalConfig) -> TimeDrivenManager {
-        assert!(!ir.time_driven.is_empty());
-
+    pub(crate) fn setup(ir: LolaIR, config: EvalConfig, start_time: SystemTime) -> TimeDrivenManager {
         let handler = OutputHandler::new(&config);
+
+        if ir.time_driven.is_empty() {
+            // return dummy
+            return TimeDrivenManager {
+                last_state: None,
+                deadlines: vec![],
+                hyper_period: Duration::default(),
+                start_time,
+                handler,
+            };
+        }
 
         let schedule = Schedule::from(&ir);
         // TODO: Sort by evaluation order!
@@ -61,12 +70,12 @@ impl TimeDrivenManager {
             last_state: None,
             deadlines: schedule.deadlines,
             hyper_period: schedule.hyper_period,
-            start_time: None,
+            start_time,
             handler,
         }
     }
 
-    fn get_current_deadline(&self, ts: SystemTime) -> (Duration, Vec<StreamReference>) {
+    pub(crate) fn get_current_deadline(&self, ts: SystemTime) -> (Duration, Vec<StreamReference>) {
         let earliest_deadline_state = self.earliest_deadline_state(ts);
         let current_deadline = &self.deadlines[earliest_deadline_state.deadline];
         let time_of_deadline = earliest_deadline_state.time + current_deadline.pause;
@@ -78,7 +87,7 @@ impl TimeDrivenManager {
     /// Example: If this function is called immediately after setup, it returns
     /// a state containing the start time and deadline 0.
     fn earliest_deadline_state(&self, time: SystemTime) -> TDMState {
-        let start_time = self.start_time.unwrap();
+        let start_time = self.start_time;
         assert!(start_time <= time);
         let hyper_nanos = dur_as_nanos(self.hyper_period);
         let time_since_start =
@@ -102,37 +111,8 @@ impl TimeDrivenManager {
         unreachable!()
     }
 
-    pub fn start_offline(
-        mut self,
-        work_chan: Sender<WorkItem>,
-        time_chan: Receiver<SystemTime>,
-        time_ack_chan: Sender<()>,
-    ) -> ! {
-        self.start_time = Some(get_time(&time_chan));
-        let _ = time_ack_chan.send(()); // Should be fine...
-
-        let (wait_time, mut due_streams) = self.get_current_deadline(self.start_time.unwrap());
-        let mut next_deadline: SystemTime = self.start_time.unwrap() + wait_time;
-
-        loop {
-            let time = get_time(&time_chan);
-            while time >= next_deadline {
-                // Go back in time, evaluate,...
-                let item = WorkItem::Time(due_streams, next_deadline);
-                if work_chan.send(item).is_err() {
-                    self.handler.runtime_warning(|| "TDM: Sending failed; evaluation cycle lost.");
-                }
-                let (wait_time, due) = self.get_current_deadline(next_deadline);
-                next_deadline += wait_time;
-                due_streams = due;
-            }
-            // ...acknowledge other thread.
-            let _ = time_ack_chan.send(()); // Should be fine...
-        }
-    }
-
-    pub fn start_online(mut self, time: Option<SystemTime>, work_chan: Sender<WorkItem>) -> ! {
-        self.start_time = time.or_else(|| Some(SystemTime::now()));
+    pub fn start_online(self, work_chan: Sender<WorkItem>) -> ! {
+        assert!(!self.deadlines.is_empty());
         loop {
             let (wait_time, due_streams) = self.get_current_deadline(SystemTime::now());
             sleep(wait_time);
@@ -300,11 +280,4 @@ impl TimeDrivenManager {
     }
 
     */
-}
-
-fn get_time(time_chan: &Receiver<SystemTime>) -> SystemTime {
-    match time_chan.recv() {
-        Err(e) => panic!("TDM crashed. {}", e),
-        Ok(time) => time,
-    }
 }

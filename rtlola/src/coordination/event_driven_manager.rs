@@ -3,7 +3,7 @@ use crate::coordination::WorkItem;
 use crate::storage::Value;
 
 use std::ops::AddAssign;
-use std::sync::mpsc::{Receiver, Sender};
+use std::sync::mpsc::{Sender, SyncSender};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use streamlab_frontend::ir::{FloatTy, LolaIR, StreamReference, Type, UIntTy};
 
@@ -97,49 +97,6 @@ impl EventDrivenManager {
         }
     }
 
-    pub(crate) fn start_offline(
-        mut self,
-        work_queue: Sender<WorkItem>,
-        send_time: bool,
-        time_chan: Sender<SystemTime>,
-        ack_chan: Receiver<()>,
-    ) -> ! {
-        let mut start_time: Option<SystemTime> = None;
-        loop {
-            if !self.read_event() {
-                let _ = work_queue.send(WorkItem::End); // Whether it fails or not, we really don't care.
-                                                        // Sleep until you slowly fade into nothingness...
-                loop {
-                    std::thread::sleep(std::time::Duration::new(u64::max_value(), 0))
-                }
-            }
-            let event = self.get_event();
-            let time = self.get_time();
-
-            if start_time.is_none() {
-                start_time = Some(time);
-                let _ = work_queue.send(WorkItem::Start(time));
-            }
-
-            if send_time {
-                // Inform the time driven manager first.
-                if let Err(e) = time_chan.send(time) {
-                    panic!("Problem with TDM! {:?}", e)
-                }
-                // Wait for the acknowledgement.
-                if let Err(e) = ack_chan.recv() {
-                    panic!("Problem with TDM! {:?}", e)
-                }
-            }
-
-            match work_queue.send(WorkItem::Event(event, time)) {
-                Ok(_) => {}
-                Err(e) => self.out_handler.runtime_warning(|| format!("Error when sending work item. {}", e)),
-            }
-            self.current_cycle += 1;
-        }
-    }
-
     pub(crate) fn start_online(mut self, work_queue: Sender<WorkItem>) -> ! {
         loop {
             if !self.read_event() {
@@ -151,6 +108,30 @@ impl EventDrivenManager {
             }
             let event = self.get_event();
             let time = SystemTime::now();
+            match work_queue.send(WorkItem::Event(event, time)) {
+                Ok(_) => {}
+                Err(e) => self.out_handler.runtime_warning(|| format!("Error when sending work item. {}", e)),
+            }
+            self.current_cycle += 1;
+        }
+    }
+
+    pub(crate) fn start_offline(mut self, work_queue: SyncSender<WorkItem>) -> ! {
+        let mut start_time: Option<SystemTime> = None;
+        loop {
+            if !self.read_event() {
+                let _ = work_queue.send(WorkItem::End); // Whether it fails or not, we really don't care.
+                                                        // Sleep until you slowly fade into nothingness...
+                loop {
+                    std::thread::sleep(std::time::Duration::new(u64::max_value(), 0))
+                }
+            }
+            let event = self.get_event();
+            let time = self.get_time();
+            if start_time.is_none() {
+                start_time = Some(time);
+                let _ = work_queue.send(WorkItem::Start(time));
+            }
 
             match work_queue.send(WorkItem::Event(event, time)) {
                 Ok(_) => {}
