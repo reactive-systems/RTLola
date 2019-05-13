@@ -408,7 +408,9 @@ mod tests {
 
     fn setup_time(spec: &str, ts: SystemTime) -> (LolaIR, EvaluatorData) {
         let ir = streamlab_frontend::parse(spec);
-        let eval = EvaluatorData::new(ir.clone(), ts, EvalConfig::default());
+        let mut config = EvalConfig::default();
+        config.verbosity = crate::basics::Verbosity::WarningsOnly;
+        let eval = EvaluatorData::new(ir.clone(), ts, config);
         (ir, eval)
     }
 
