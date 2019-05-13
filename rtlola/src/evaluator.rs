@@ -52,7 +52,7 @@ impl<'c> EvaluatorData<'c> {
         let exprs = ir.outputs.iter().map(|o| o.expr.clone()).collect();
         let compiled_exprs = ir.outputs.iter().map(|o| o.expr.clone().compile()).collect();
         let global_store = GlobalStore::new(&ir, ts);
-        let handler = OutputHandler::new(&config);
+        let handler = OutputHandler::new(&config, false);
         handler.debug(|| format!("Evaluation layers: {:?}", layers));
         EvaluatorData { layers, exprs, compiled_exprs, global_store, ir, handler, config }
     }

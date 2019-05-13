@@ -1,4 +1,5 @@
 #![deny(unsafe_code)] // disallow unsafe code by default
+#![forbid(unused_must_use)] // disallow discarding errors
 
 pub mod basics;
 mod closuregen;

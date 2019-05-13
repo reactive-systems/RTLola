@@ -1,5 +1,4 @@
 use super::{InputSource, OutputChannel};
-use std::cmp::Ordering;
 
 #[derive(Clone, Debug)]
 pub struct EvalConfig {
@@ -9,44 +8,22 @@ pub struct EvalConfig {
     pub closure_based_evaluator: bool,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub enum Verbosity {
-    /// Prints fine-grained debug information. Not suitable for production.
-    Debug,
-    /// Prints information about all or a subset of output streams whenever they produce a new
-    /// value.
-    Outputs,
-    /// Prints only triggers and runtime warnings.
-    Triggers,
+    /// Suppresses any kind of logging.
+    Silent,
+    /// Prints statistical information like number of events, triggers, etc.
+    Progress,
     /// Prints nothing but runtime warnings about potentially critical states, e.g. dropped
     /// evaluation cycles.
     WarningsOnly,
-    /// Suppresses any kind of logging.
-    Silent,
-}
-
-impl Verbosity {
-    fn as_num(self) -> u8 {
-        match self {
-            Verbosity::Debug => 4,
-            Verbosity::Outputs => 3,
-            Verbosity::Triggers => 2,
-            Verbosity::WarningsOnly => 1,
-            Verbosity::Silent => 0,
-        }
-    }
-}
-
-impl PartialOrd for Verbosity {
-    fn partial_cmp(&self, other: &Verbosity) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Ord for Verbosity {
-    fn cmp(&self, other: &Verbosity) -> Ordering {
-        self.as_num().cmp(&other.as_num())
-    }
+    /// Prints only triggers and runtime warnings.
+    Triggers,
+    /// Prints information about all or a subset of output streams whenever they produce a new
+    /// value.
+    Outputs,
+    /// Prints fine-grained debug information. Not suitable for production.
+    Debug,
 }
 
 impl EvalConfig {

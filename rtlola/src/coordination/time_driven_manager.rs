@@ -50,7 +50,7 @@ pub(crate) struct TimeDrivenManager {
 impl TimeDrivenManager {
     /// Creates a new TimeDrivenManager managing time-driven output streams.
     pub(crate) fn setup(ir: LolaIR, config: EvalConfig, start_time: SystemTime) -> TimeDrivenManager {
-        let handler = OutputHandler::new(&config);
+        let handler = OutputHandler::new(&config, false);
 
         if ir.time_driven.is_empty() {
             // return dummy

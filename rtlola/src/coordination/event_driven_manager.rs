@@ -38,7 +38,7 @@ pub struct EventDrivenManager {
 impl EventDrivenManager {
     /// Creates a new EventDrivenManager managing event-driven output streams.
     pub(crate) fn setup(ir: LolaIR, config: EvalConfig) -> EventDrivenManager {
-        let out_handler = OutputHandler::new(&config);
+        let out_handler = OutputHandler::new(&config, false);
         let stream_names: Vec<&str> = ir.inputs.iter().map(|i| i.name.as_str()).collect();
         let input_reader = InputReader::from(config.source, stream_names.as_slice());
         let input_reader = match input_reader {

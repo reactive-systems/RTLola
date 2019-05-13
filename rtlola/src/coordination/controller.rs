@@ -52,7 +52,7 @@ impl<'e, 'c> Controller<'e, 'c> {
 
         let mut evaluatordata = EvaluatorData::new(ir, SystemTime::now(), config.clone());
 
-        let output_handler = OutputHandler::new(&config);
+        let output_handler = OutputHandler::new(&config, true);
         let evaluator = evaluatordata.as_Evaluator();
         let mut ctrl = Controller { output_handler, evaluator };
 
@@ -95,7 +95,7 @@ impl<'e, 'c> Controller<'e, 'c> {
 
         let mut evaluatordata = EvaluatorData::new(ir, start_time, config.clone());
 
-        let output_handler = OutputHandler::new(&config);
+        let output_handler = OutputHandler::new(&config, true);
         let evaluator = evaluatordata.as_Evaluator();
         let mut ctrl = Controller { output_handler, evaluator };
 
@@ -119,6 +119,7 @@ impl<'e, 'c> Controller<'e, 'c> {
                 WorkItem::Start(_) => panic!("Received spurious start command."),
                 WorkItem::End => {
                     ctrl.output_handler.output(|| "Finished entire input. Terminating.");
+                    ctrl.output_handler.terminate();
                     std::process::exit(0);
                 }
             }
@@ -139,10 +140,12 @@ impl<'e, 'c> Controller<'e, 'c> {
     }
 
     fn evaluate_timed_item(&mut self, t: &TimeEvaluation, ts: SystemTime) {
+        self.output_handler.new_event();
         self.evaluator.eval_some_outputs(t, ts);
     }
 
     fn evaluate_event_item(&mut self, e: &EventEvaluation, ts: SystemTime) {
+        self.output_handler.new_event();
         self.evaluator.accept_inputs(e, ts);
         self.evaluator.eval_all_outputs(ts);
     }

@@ -72,7 +72,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     Arg::with_name("VERBOSITY")
                         .short("l")
                         .long("verbosity")
-                        .possible_values(&["debug", "outputs", "triggers", "warnings", "silent"])
+                        .possible_values(&["debug", "outputs", "triggers", "warnings", "progress", "silent"])
                         .default_value("triggers")
                 )
                 .arg(
@@ -148,6 +148,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 "outputs" => rtlola::Verbosity::Outputs,
                 "triggers" => rtlola::Verbosity::Triggers,
                 "warnings" => rtlola::Verbosity::WarningsOnly,
+                "progress" => rtlola::Verbosity::Progress,
                 "silent" => rtlola::Verbosity::Silent,
                 _ => unreachable!(),
             };
