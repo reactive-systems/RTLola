@@ -1,16 +1,17 @@
 use ordered_float::NotNan;
+use std::cmp::Ordering;
 use std::ops;
 use streamlab_frontend::ir::Type;
 
 use self::Value::*;
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Hash, Clone)]
+#[derive(Debug, Eq, Hash, Clone)]
 pub(crate) enum Value {
     None,
+    Bool(bool),
     Unsigned(u128),
     Signed(i128),
     Float(NotNan<f64>),
-    Bool(bool),
     #[allow(dead_code)]
     Str(String),
 }
@@ -166,6 +167,37 @@ impl ops::Neg for Value {
             Signed(v) => Signed(-v), // TODO Check
             Float(v) => Float(-v),
             a => panic!("Incompatible type: {:?}", a),
+        }
+    }
+}
+
+impl PartialEq for Value {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Bool(b1), Bool(b2)) => b1.eq(b2),
+            (Unsigned(u1), Unsigned(u2)) => u1.eq(u2),
+            (Signed(i1), Signed(i2)) => i1.eq(i2),
+            (Float(f1), Float(f2)) => f1.eq(f2),
+            (Str(s1), Str(s2)) => s1.eq(s2),
+            (a, b) => panic!("Incompatible types: ({:?},{:?})", a, b),
+        }
+    }
+}
+
+impl PartialOrd for Value {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Value {
+    fn cmp(&self, other: &Self) -> Ordering {
+        match (self, other) {
+            (Unsigned(u1), Unsigned(u2)) => u1.cmp(u2),
+            (Signed(i1), Signed(i2)) => i1.cmp(i2),
+            (Float(f1), Float(f2)) => f1.cmp(f2),
+            (Str(s1), Str(s2)) => s1.cmp(s2),
+            (a, b) => panic!("Incompatible types: ({:?},{:?})", a, b),
         }
     }
 }
