@@ -66,8 +66,7 @@ impl TimeDrivenManager {
         }
     }
 
-    fn get_current_deadline(&self, ts: Option<SystemTime>) -> (Duration, Vec<StreamReference>) {
-        let ts = ts.unwrap_or_else(SystemTime::now);
+    fn get_current_deadline(&self, ts: SystemTime) -> (Duration, Vec<StreamReference>) {
         let earliest_deadline_state = self.earliest_deadline_state(ts);
         let current_deadline = &self.deadlines[earliest_deadline_state.deadline];
         let time_of_deadline = earliest_deadline_state.time + current_deadline.pause;
@@ -112,9 +111,8 @@ impl TimeDrivenManager {
         self.start_time = Some(get_time(&time_chan));
         let _ = time_ack_chan.send(()); // Should be fine...
 
-        let (sleepy_time, due) = self.get_current_deadline(self.start_time);
-        let mut due_streams: Vec<StreamReference> = due;
-        let mut next_deadline: SystemTime = self.start_time.unwrap() + sleepy_time;
+        let (wait_time, mut due_streams) = self.get_current_deadline(self.start_time.unwrap());
+        let mut next_deadline: SystemTime = self.start_time.unwrap() + wait_time;
 
         loop {
             let time = get_time(&time_chan);
@@ -124,8 +122,8 @@ impl TimeDrivenManager {
                 if work_chan.send(item).is_err() {
                     self.handler.runtime_warning(|| "TDM: Sending failed; evaluation cycle lost.");
                 }
-                let (sleepy_time, due) = self.get_current_deadline(Some(next_deadline));
-                next_deadline += sleepy_time;
+                let (wait_time, due) = self.get_current_deadline(next_deadline);
+                next_deadline += wait_time;
                 due_streams = due;
             }
             // ...acknowledge other thread.
@@ -136,8 +134,8 @@ impl TimeDrivenManager {
     pub fn start_online(mut self, time: Option<SystemTime>, work_chan: Sender<WorkItem>) -> ! {
         self.start_time = time.or_else(|| Some(SystemTime::now()));
         loop {
-            let (sleepy_time, due_streams) = self.get_current_deadline(None);
-            sleep(sleepy_time);
+            let (wait_time, due_streams) = self.get_current_deadline(SystemTime::now());
+            sleep(wait_time);
             // TODO: Check if overslept.
             let item = WorkItem::Time(due_streams, SystemTime::now());
             if work_chan.send(item).is_err() {
