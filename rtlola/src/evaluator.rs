@@ -422,6 +422,7 @@ mod tests {
 
     macro_rules! peek_assert_eq {
         ($eval:expr,$str_ref:expr,$value:expr) => {
+            $eval.eval_stream(($str_ref, Vec::new()), SystemTime::now());
             assert_eq!($eval.__peek_value(StreamReference::OutRef($str_ref), &Vec::new(), 0).unwrap(), $value);
         };
     }
@@ -442,7 +443,6 @@ mod tests {
         "#,
         );
         let mut eval = eval.as_Evaluator();
-        eval.eval_all_outputs(SystemTime::now());
         peek_assert_eq!(eval, 0, Bool(true));
         peek_assert_eq!(eval, 1, Unsigned(3));
         peek_assert_eq!(eval, 2, Signed(-5));
@@ -488,7 +488,6 @@ mod tests {
         "#,
         );
         let mut eval = eval.as_Evaluator();
-        eval.eval_all_outputs(SystemTime::now());
         peek_assert_eq!(eval, 0, Bool(!false));
         peek_assert_eq!(eval, 1, Bool(!true));
         peek_assert_eq!(eval, 2, Unsigned(8 + 3));
