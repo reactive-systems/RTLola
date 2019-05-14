@@ -1,4 +1,6 @@
-use streamlab_frontend::ir::{Constant, Expression, LolaIR, Offset, StreamReference, Trigger, Type, WindowReference};
+use streamlab_frontend::ir::{
+    Activation, Constant, Expression, LolaIR, Offset, StreamReference, Trigger, Type, WindowReference,
+};
 
 use crate::basics::{EvalConfig, OutputHandler};
 use crate::closuregen::{CompiledExpr, Expr};
@@ -11,9 +13,17 @@ use ordered_float::NotNan;
 
 use std::time::SystemTime;
 
+enum ActivationCondition {
+    //TODO(marvin): implement fast path for conjunctions
+    TimeDriven,
+    General(Activation<StreamReference>),
+}
+
 pub(crate) struct EvaluatorData<'c> {
     // Evaluation order of output streams
     layers: Vec<Vec<StreamReference>>,
+    // Indexed by stream reference.
+    activation_conditions: Vec<ActivationCondition>,
     // Indexed by stream reference.
     exprs: Vec<Expression>,
     // Indexed by stream reference.
@@ -27,6 +37,8 @@ pub(crate) struct EvaluatorData<'c> {
 pub(crate) struct Evaluator<'e, 'c> {
     // Evaluation order of output streams
     layers: &'e Vec<Vec<StreamReference>>,
+    // Indexed by stream reference.
+    activation_conditions: &'e Vec<ActivationCondition>,
     // Indexed by stream reference.
     exprs: &'e Vec<Expression>,
     // Indexed by stream reference.
@@ -55,17 +67,23 @@ impl<'c> EvaluatorData<'c> {
     ) -> EvaluatorData<'c> {
         // Layers of event based output streams
         let layers = ir.get_event_driven_layers();
+        let activation_conditions = ir
+            .outputs
+            .iter()
+            .map(|o| if let Some(ac) = &o.ac { ac.clone().into() } else { ActivationCondition::TimeDriven })
+            .collect();
         let exprs = ir.outputs.iter().map(|o| o.expr.clone()).collect();
         let compiled_exprs = ir.outputs.iter().map(|o| o.expr.clone().compile()).collect();
         let global_store = GlobalStore::new(&ir, ts);
         handler.debug(|| format!("Evaluation layers: {:?}", layers));
-        EvaluatorData { layers, exprs, compiled_exprs, global_store, ir, handler, config }
+        EvaluatorData { layers, activation_conditions, exprs, compiled_exprs, global_store, ir, handler, config }
     }
 
     #[allow(non_snake_case)]
     pub(crate) fn as_Evaluator<'n>(&'n mut self) -> Evaluator<'n, 'c> {
         Evaluator {
             layers: &self.layers,
+            activation_conditions: &self.activation_conditions,
             exprs: &self.exprs,
             compiled_exprs: &self.compiled_exprs,
             global_store: &mut self.global_store,
@@ -77,7 +95,14 @@ impl<'c> EvaluatorData<'c> {
 }
 
 impl<'e, 'c> Evaluator<'e, 'c> {
-    pub(crate) fn accept_inputs(&mut self, event: &Vec<(StreamReference, Value)>, ts: SystemTime) {
+    pub(crate) fn eval_event(&mut self, event: &Vec<(StreamReference, Value)>, ts: SystemTime) {
+        self.accept_inputs(event, ts);
+        //TODO(marvin): optimize
+        let (inputs, _): (Vec<_>, Vec<_>) = event.iter().cloned().unzip();
+        self.eval_all_event_driven_outputs(&inputs, ts);
+    }
+
+    fn accept_inputs(&mut self, event: &Vec<(StreamReference, Value)>, ts: SystemTime) {
         for (str_ref, v) in event {
             self.accept_input(*str_ref, v.clone(), ts);
         }
@@ -92,16 +117,18 @@ impl<'e, 'c> Evaluator<'e, 'c> {
         }
     }
 
-    pub(crate) fn eval_all_outputs(&mut self, ts: SystemTime) {
+    pub fn eval_all_event_driven_outputs(&mut self, inputs: &Vec<StreamReference>, ts: SystemTime) {
         self.prepare_evaluation(ts);
         for layer in self.layers {
-            self.eval_outputs(layer, ts);
+            self.eval_event_driven_outputs(layer, inputs, ts);
         }
     }
 
-    pub(crate) fn eval_some_outputs(&mut self, streams: &Vec<StreamReference>, ts: SystemTime) {
+    pub(crate) fn eval_time_driven_outputs(&mut self, streams: &Vec<StreamReference>, ts: SystemTime) {
         self.prepare_evaluation(ts);
-        self.eval_outputs(streams, ts);
+        for str_ref in streams {
+            self.eval_output(*str_ref, ts);
+        }
     }
 
     fn prepare_evaluation(&mut self, ts: SystemTime) {
@@ -113,9 +140,20 @@ impl<'e, 'c> Evaluator<'e, 'c> {
         }
     }
 
-    fn eval_outputs(&mut self, streams: &Vec<StreamReference>, ts: SystemTime) {
+    fn eval_event_driven_outputs(
+        &mut self,
+        streams: &Vec<StreamReference>,
+        inputs: &Vec<StreamReference>,
+        ts: SystemTime,
+    ) {
         for str_ref in streams {
-            self.eval_output(*str_ref, ts);
+            self.eval_event_driven_output(*str_ref, inputs, ts);
+        }
+    }
+
+    fn eval_event_driven_output(&mut self, stream: StreamReference, inputs: &Vec<StreamReference>, ts: SystemTime) {
+        if self.activation_conditions[stream.out_ix()].eval(inputs) {
+            self.eval_output(stream, ts);
         }
     }
 
@@ -396,6 +434,30 @@ impl<'e> EvaluationContext<'e> {
     pub(crate) fn lookup_window(&self, window_ref: WindowReference) -> Value {
         let window: Window = (window_ref.ix, Vec::new());
         self.global_store.get_window(window).get_value(self.ts)
+    }
+}
+
+impl From<Activation<StreamReference>> for ActivationCondition {
+    fn from(ac: Activation<StreamReference>) -> Self {
+        ActivationCondition::General(ac)
+    }
+}
+
+impl ActivationCondition {
+    fn eval(&self, inputs: &Vec<StreamReference>) -> bool {
+        use ActivationCondition::*;
+        match self {
+            General(ac) => Self::eval_(ac, inputs),
+            TimeDriven => panic!(),
+        }
+    }
+    fn eval_(ac: &Activation<StreamReference>, inputs: &Vec<StreamReference>) -> bool {
+        use Activation::*;
+        match ac {
+            Stream(var) => inputs.contains(var),
+            Conjunction(vec) => vec.iter().all(|ac| Self::eval_(ac, inputs)),
+            Disjunction(vec) => vec.iter().any(|ac| Self::eval_(ac, inputs)),
+        }
     }
 }
 

@@ -152,13 +152,12 @@ impl<'e, 'c> Controller<'e, 'c> {
 
     fn evaluate_timed_item(&mut self, t: &TimeEvaluation, ts: SystemTime) {
         self.output_handler.new_event();
-        self.evaluator.eval_some_outputs(t, ts);
+        self.evaluator.eval_time_driven_outputs(t, ts);
     }
 
     fn evaluate_event_item(&mut self, e: &EventEvaluation, ts: SystemTime) {
         self.output_handler.new_event();
-        self.evaluator.accept_inputs(e, ts);
-        self.evaluator.eval_all_outputs(ts);
+        self.evaluator.eval_event(e, ts)
     }
 }
 
