@@ -64,18 +64,18 @@ pub(crate) fn analyze<'a>(
     let tracking_requirements =
         space_requirements::determine_tracking_size(&pruned_graph, type_table, &future_dependent_streams);
 
-    let memory_requirement = memory_analysis::determine_worst_case_memory_consumption(
+    let _memory_requirement = memory_analysis::determine_worst_case_memory_consumption(
         spec,
         &space_requirements,
         &tracking_requirements,
         type_table,
         declaration_table,
     );
-    match memory_requirement {
+    /*match memory_requirement {
         MemoryBound::Unbounded => println!("The specification has no bound on the memory consumption."),
         MemoryBound::Bounded(bytes) => println!("The specification uses at most {} bytes.", bytes),
         MemoryBound::Unknown => println!("Incomplete specification: we cannot determine the memory consumption."),
-    };
+    };*/
 
     let input_dependencies = input_dependencies::determine_required_inputs(&pruned_graph);
 
