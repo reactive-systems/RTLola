@@ -1,0 +1,8 @@
+input a: Int32
+
+output b @ a := a.offset(by:-6).defaults(to:300)
+
+trigger b == 7 "b is 7"
+trigger b == 6 "b is 6"
+trigger b == 5 "b is 5"
+trigger b == 300 "default used"
