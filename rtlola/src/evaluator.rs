@@ -9,6 +9,7 @@ use std::sync::Arc;
 
 pub(crate) type OutInstance = (usize, Vec<Value>);
 pub(crate) type Window = (usize, Vec<Value>);
+use bit_set::BitSet;
 use ordered_float::NotNan;
 
 use std::time::SystemTime;
@@ -29,6 +30,7 @@ pub(crate) struct EvaluatorData<'c> {
     // Indexed by stream reference.
     compiled_exprs: Vec<CompiledExpr<'c>>,
     global_store: GlobalStore,
+    fresh_inputs: BitSet,
     ir: LolaIR,
     handler: Arc<OutputHandler>,
     config: EvalConfig,
@@ -44,6 +46,7 @@ pub(crate) struct Evaluator<'e, 'c> {
     // Indexed by stream reference.
     compiled_exprs: &'e Vec<CompiledExpr<'c>>,
     global_store: &'e mut GlobalStore,
+    fresh_inputs: &'e mut BitSet,
     ir: &'e LolaIR,
     handler: &'e OutputHandler,
     config: &'e EvalConfig,
@@ -51,11 +54,13 @@ pub(crate) struct Evaluator<'e, 'c> {
 
 pub(crate) struct ExpressionEvaluator<'e> {
     global_store: &'e GlobalStore,
+    fresh_inputs: &'e BitSet,
 }
 
 pub(crate) struct EvaluationContext<'e> {
-    global_store: &'e GlobalStore,
     ts: SystemTime,
+    global_store: &'e GlobalStore,
+    fresh_inputs: &'e BitSet,
 }
 
 impl<'c> EvaluatorData<'c> {
@@ -75,8 +80,19 @@ impl<'c> EvaluatorData<'c> {
         let exprs = ir.outputs.iter().map(|o| o.expr.clone()).collect();
         let compiled_exprs = ir.outputs.iter().map(|o| o.expr.clone().compile()).collect();
         let global_store = GlobalStore::new(&ir, ts);
+        let fresh_inputs = BitSet::with_capacity(ir.inputs.len());
         handler.debug(|| format!("Evaluation layers: {:?}", layers));
-        EvaluatorData { layers, activation_conditions, exprs, compiled_exprs, global_store, ir, handler, config }
+        EvaluatorData {
+            layers,
+            activation_conditions,
+            exprs,
+            compiled_exprs,
+            global_store,
+            fresh_inputs,
+            ir,
+            handler,
+            config,
+        }
     }
 
     #[allow(non_snake_case)]
@@ -87,6 +103,7 @@ impl<'c> EvaluatorData<'c> {
             exprs: &self.exprs,
             compiled_exprs: &self.compiled_exprs,
             global_store: &mut self.global_store,
+            fresh_inputs: &mut self.fresh_inputs,
             ir: &self.ir,
             handler: &self.handler,
             config: &self.config,
@@ -96,10 +113,9 @@ impl<'c> EvaluatorData<'c> {
 
 impl<'e, 'c> Evaluator<'e, 'c> {
     pub(crate) fn eval_event(&mut self, event: &Vec<(StreamReference, Value)>, ts: SystemTime) {
+        self.clear_freshness();
         self.accept_inputs(event, ts);
-        //TODO(marvin): optimize
-        let (inputs, _): (Vec<_>, Vec<_>) = event.iter().cloned().unzip();
-        self.eval_all_event_driven_outputs(&inputs, ts);
+        self.eval_all_event_driven_outputs(ts);
     }
 
     fn accept_inputs(&mut self, event: &Vec<(StreamReference, Value)>, ts: SystemTime) {
@@ -110,6 +126,7 @@ impl<'e, 'c> Evaluator<'e, 'c> {
 
     fn accept_input(&mut self, input: StreamReference, v: Value, ts: SystemTime) {
         self.global_store.get_in_instance_mut(input).push_value(v.clone());
+        self.fresh_inputs.insert(input.in_ix());
         self.handler.debug(|| format!("InputStream[{}] := {:?}.", input.in_ix(), v.clone()));
         let extended = self.ir.get_in(input);
         for win in &extended.dependent_windows {
@@ -117,10 +134,22 @@ impl<'e, 'c> Evaluator<'e, 'c> {
         }
     }
 
-    pub fn eval_all_event_driven_outputs(&mut self, inputs: &Vec<StreamReference>, ts: SystemTime) {
+    pub fn eval_all_event_driven_outputs(&mut self, ts: SystemTime) {
         self.prepare_evaluation(ts);
         for layer in self.layers {
-            self.eval_event_driven_outputs(layer, inputs, ts);
+            self.eval_event_driven_outputs(layer, ts);
+        }
+    }
+
+    fn eval_event_driven_outputs(&mut self, streams: &Vec<StreamReference>, ts: SystemTime) {
+        for str_ref in streams {
+            self.eval_event_driven_output(*str_ref, ts);
+        }
+    }
+
+    fn eval_event_driven_output(&mut self, stream: StreamReference, ts: SystemTime) {
+        if self.activation_conditions[stream.out_ix()].eval(self.fresh_inputs) {
+            self.eval_output(stream, ts);
         }
     }
 
@@ -137,23 +166,6 @@ impl<'e, 'c> Evaluator<'e, 'c> {
         for win in windows {
             let ix = win.reference.ix;
             self.global_store.get_window_mut((ix, Vec::new())).update(ts);
-        }
-    }
-
-    fn eval_event_driven_outputs(
-        &mut self,
-        streams: &Vec<StreamReference>,
-        inputs: &Vec<StreamReference>,
-        ts: SystemTime,
-    ) {
-        for str_ref in streams {
-            self.eval_event_driven_output(*str_ref, inputs, ts);
-        }
-    }
-
-    fn eval_event_driven_output(&mut self, stream: StreamReference, inputs: &Vec<StreamReference>, ts: SystemTime) {
-        if self.activation_conditions[stream.out_ix()].eval(inputs) {
-            self.eval_output(stream, ts);
         }
     }
 
@@ -197,6 +209,10 @@ impl<'e, 'c> Evaluator<'e, 'c> {
         // TODO: Dependent streams?
     }
 
+    fn clear_freshness(&mut self) {
+        self.fresh_inputs.clear();
+    }
+
     fn is_trigger(&self, inst: OutInstance) -> Option<&Trigger> {
         self.ir.triggers.iter().find(|t| t.reference.out_ix() == inst.0)
     }
@@ -217,12 +233,15 @@ impl<'e, 'c> Evaluator<'e, 'c> {
 
     #[allow(non_snake_case)]
     fn as_ExpressionEvaluator<'n>(&'n self) -> (ExpressionEvaluator<'n>, &'e Vec<Expression>) {
-        (ExpressionEvaluator { global_store: &self.global_store }, &self.exprs)
+        (ExpressionEvaluator { global_store: &self.global_store, fresh_inputs: &self.fresh_inputs }, &self.exprs)
     }
 
     #[allow(non_snake_case)]
     fn as_EvaluationContext<'n>(&'n self, ts: SystemTime) -> (EvaluationContext<'n>, &'e Vec<CompiledExpr<'c>>) {
-        (EvaluationContext { global_store: &self.global_store, ts }, &self.compiled_exprs)
+        (
+            EvaluationContext { ts, global_store: &self.global_store, fresh_inputs: &self.fresh_inputs },
+            &self.compiled_exprs,
+        )
     }
 }
 
@@ -444,17 +463,17 @@ impl From<Activation<StreamReference>> for ActivationCondition {
 }
 
 impl ActivationCondition {
-    fn eval(&self, inputs: &Vec<StreamReference>) -> bool {
+    fn eval(&self, inputs: &BitSet) -> bool {
         use ActivationCondition::*;
         match self {
             General(ac) => Self::eval_(ac, inputs),
             TimeDriven => panic!(),
         }
     }
-    fn eval_(ac: &Activation<StreamReference>, inputs: &Vec<StreamReference>) -> bool {
+    fn eval_(ac: &Activation<StreamReference>, inputs: &BitSet) -> bool {
         use Activation::*;
         match ac {
-            Stream(var) => inputs.contains(var),
+            Stream(var) => inputs.contains(var.in_ix()),
             Conjunction(vec) => vec.iter().all(|ac| Self::eval_(ac, inputs)),
             Disjunction(vec) => vec.iter().any(|ac| Self::eval_(ac, inputs)),
         }
