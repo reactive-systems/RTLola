@@ -58,7 +58,8 @@ running_on_windows = platform.system() == "Windows"
 executable_name = "stream_lab.exe" if running_on_windows else "stream_lab"
 
 # TODO get build_version from command line an check against BUILD_VERSIONS
-build_version = "debug" # debug build is used during development so probably already build
+# debug build is used during development so probably already build
+build_version = "debug"
 
 repo_base_dir = Path(".").resolve().parent
 rtlola_executable_path = repo_base_dir / "target" / build_version / executable_name
