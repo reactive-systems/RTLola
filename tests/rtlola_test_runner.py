@@ -91,11 +91,7 @@ for test_file in tests:
         something_wrong = False
         if run_result.returncode == 0:
             lines = iter(run_result.stdout.split("\n"))
-            # skip the initial output about needed memory etc.
-            first_line = next(lines)
             triggers_in_output = dict()
-            if not first_line.startswith("The specification uses at most"):
-                print("Header changed")  # TODO
 
             # count triggers
             for line in lines:
