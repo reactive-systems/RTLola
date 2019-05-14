@@ -1,4 +1,5 @@
 use super::{EvalConfig, Verbosity};
+use crossterm::{cursor, terminal, ClearType};
 use csv::{Reader as CSVReader, Result as ReaderResult, StringRecord};
 use std::fs::File;
 use std::io::{stderr, stdin, stdout, Write};
@@ -6,7 +7,6 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, SystemTime};
-use termion::{clear, cursor};
 
 #[derive(Debug, Clone)]
 pub enum OutputChannel {
@@ -331,9 +331,11 @@ impl Statistics {
     }
 
     fn clear_progress_info() {
-        let mut out = std::io::stderr();
+        let terminal = terminal();
         // clear screen as much as written in `print_progress_info`
-        write!(out, "{}{}", cursor::Up(1), clear::CurrentLine).unwrap_or_else(|_| {});
-        write!(out, "{}{}", cursor::Up(1), clear::CurrentLine).unwrap_or_else(|_| {});
+        cursor().move_up(1);
+        terminal.clear(ClearType::CurrentLine).unwrap_or_else(|_| {});
+        cursor().move_up(1);
+        terminal.clear(ClearType::CurrentLine).unwrap_or_else(|_| {});
     }
 }

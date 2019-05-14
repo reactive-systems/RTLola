@@ -24,4 +24,4 @@ itertools = "0.8"
 clap = "2.32.0"  # command line parsing
 byteorder = "1.3.1"
 common = {path = "../common/"}
-termion = "1.5.2"  # terminal output
+crossterm = "0.9.3"  # terminal output
