@@ -1,7 +1,6 @@
 input a: Int32
 
-output b @ 10Hz := a.aggregate(over: 0.1s, using: count).defaults(to:10)
+output b @ 10Hz := a.aggregate(over: 0.1s, using: count)
 
 trigger b == 1 "count is 1"
 trigger b == 2 "count is 2"
-trigger b ==10 "default used"

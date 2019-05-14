@@ -8,9 +8,6 @@
     },
     "count is 2": {
       "expected_count": 1
-    },
-    "default used": {
-      "expected_count": 1
     }
   }
 }
