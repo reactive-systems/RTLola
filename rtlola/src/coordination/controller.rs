@@ -1,4 +1,5 @@
 use std::sync::mpsc;
+use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 use std::time::SystemTime;
@@ -13,7 +14,7 @@ use super::time_driven_manager::{TimeDrivenManager, TimeEvaluation};
 
 pub struct Controller<'e, 'c> {
     /// Handles all kind of output behavior according to config.
-    output_handler: OutputHandler,
+    output_handler: Arc<OutputHandler>,
 
     /// Handles evaluating stream expressions and storage of values.
     evaluator: Evaluator<'e, 'c>,
@@ -31,28 +32,34 @@ impl<'e, 'c> Controller<'e, 'c> {
     pub fn evaluate_online(ir: LolaIR, config: EvalConfig) -> ! {
         let (work_tx, work_rx) = mpsc::channel();
 
+        let output_handler = Arc::new(OutputHandler::new(&config));
+        let copy_output_handler = output_handler.clone();
+
         let has_time_driven = !ir.time_driven.is_empty();
         if has_time_driven {
             let work_tx_clone = work_tx.clone();
             let ir_clone = ir.clone();
             let cfg_clone = config.clone();
             let _ = thread::Builder::new().name("TimeDrivenManager".into()).spawn(move || {
-                let time_manager = TimeDrivenManager::setup(ir_clone, cfg_clone, SystemTime::now());
+                let time_manager =
+                    TimeDrivenManager::setup(ir_clone, cfg_clone, SystemTime::now(), copy_output_handler);
                 time_manager.start_online(work_tx_clone);
             });
         };
+
+        let copy_output_handler = output_handler.clone();
 
         let ir_clone = ir.clone();
         let cfg_clone = config.clone();
         // TODO: Wait until all events have been read.
         let _event = thread::Builder::new().name("EventDrivenManager".into()).spawn(move || {
-            let event_manager = EventDrivenManager::setup(ir_clone, cfg_clone);
+            let event_manager = EventDrivenManager::setup(ir_clone, cfg_clone, copy_output_handler);
             event_manager.start_online(work_tx);
         });
 
-        let mut evaluatordata = EvaluatorData::new(ir, SystemTime::now(), config.clone());
+        let copy_output_handler = output_handler.clone();
+        let mut evaluatordata = EvaluatorData::new(ir, SystemTime::now(), config.clone(), copy_output_handler);
 
-        let output_handler = OutputHandler::new(&config, true);
         let evaluator = evaluatordata.as_Evaluator();
         let mut ctrl = Controller { output_handler, evaluator };
 
@@ -70,10 +77,13 @@ impl<'e, 'c> Controller<'e, 'c> {
         // Use a bounded channel for offline mode, as we "control" time.
         let (work_tx, work_rx) = mpsc::sync_channel(1024);
 
+        let output_handler = Arc::new(OutputHandler::new(&config));
+        let output_copy_handler = output_handler.clone();
+
         let ir_clone = ir.clone();
         let cfg_clone = config.clone();
         let _event = thread::Builder::new().name("EventDrivenManager".into()).spawn(move || {
-            let event_manager = EventDrivenManager::setup(ir_clone, cfg_clone);
+            let event_manager = EventDrivenManager::setup(ir_clone, cfg_clone, output_copy_handler);
             event_manager.start_offline(work_tx);
         });
 
@@ -88,14 +98,15 @@ impl<'e, 'c> Controller<'e, 'c> {
         let has_time_driven = !ir.time_driven.is_empty();
         let ir_clone = ir.clone();
         let cfg_clone = config.clone();
-        let time_manager = TimeDrivenManager::setup(ir_clone, cfg_clone, start_time);
+        let output_copy_handler = output_handler.clone();
+        let time_manager = TimeDrivenManager::setup(ir_clone, cfg_clone, start_time, output_copy_handler);
         let (wait_time, mut due_streams) =
             if has_time_driven { time_manager.get_current_deadline(start_time) } else { (Duration::default(), vec![]) };
         let mut next_deadline = start_time + wait_time;
 
-        let mut evaluatordata = EvaluatorData::new(ir, start_time, config.clone());
+        let output_copy_handler = output_handler.clone();
+        let mut evaluatordata = EvaluatorData::new(ir, start_time, config.clone(), output_copy_handler);
 
-        let output_handler = OutputHandler::new(&config, true);
         let evaluator = evaluatordata.as_Evaluator();
         let mut ctrl = Controller { output_handler, evaluator };
 

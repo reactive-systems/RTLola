@@ -3,6 +3,7 @@ use streamlab_frontend::ir::{Constant, Expression, LolaIR, Offset, StreamReferen
 use crate::basics::{EvalConfig, OutputHandler};
 use crate::closuregen::{CompiledExpr, Expr};
 use crate::storage::{GlobalStore, Value};
+use std::sync::Arc;
 
 pub(crate) type OutInstance = (usize, Vec<Value>);
 pub(crate) type Window = (usize, Vec<Value>);
@@ -19,7 +20,7 @@ pub(crate) struct EvaluatorData<'c> {
     compiled_exprs: Vec<CompiledExpr<'c>>,
     global_store: GlobalStore,
     ir: LolaIR,
-    handler: OutputHandler,
+    handler: Arc<OutputHandler>,
     config: EvalConfig,
 }
 
@@ -46,13 +47,17 @@ pub(crate) struct EvaluationContext<'e> {
 }
 
 impl<'c> EvaluatorData<'c> {
-    pub(crate) fn new(ir: LolaIR, ts: SystemTime, config: EvalConfig) -> EvaluatorData<'c> {
+    pub(crate) fn new(
+        ir: LolaIR,
+        ts: SystemTime,
+        config: EvalConfig,
+        handler: Arc<OutputHandler>,
+    ) -> EvaluatorData<'c> {
         // Layers of event based output streams
         let layers = ir.get_event_driven_layers();
         let exprs = ir.outputs.iter().map(|o| o.expr.clone()).collect();
         let compiled_exprs = ir.outputs.iter().map(|o| o.expr.clone().compile()).collect();
         let global_store = GlobalStore::new(&ir, ts);
-        let handler = OutputHandler::new(&config, false);
         handler.debug(|| format!("Evaluation layers: {:?}", layers));
         EvaluatorData { layers, exprs, compiled_exprs, global_store, ir, handler, config }
     }
@@ -410,7 +415,8 @@ mod tests {
         let ir = streamlab_frontend::parse(spec);
         let mut config = EvalConfig::default();
         config.verbosity = crate::basics::Verbosity::WarningsOnly;
-        let eval = EvaluatorData::new(ir.clone(), ts, config);
+        let handler = Arc::new(OutputHandler::new(&config));
+        let eval = EvaluatorData::new(ir.clone(), ts, config, handler);
         (ir, eval)
     }
 

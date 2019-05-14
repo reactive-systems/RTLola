@@ -4,6 +4,7 @@ use crate::storage::Value;
 
 use std::ops::AddAssign;
 use std::sync::mpsc::{Sender, SyncSender};
+use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use streamlab_frontend::ir::{FloatTy, LolaIR, StreamReference, Type, UIntTy};
 
@@ -30,15 +31,14 @@ impl AddAssign<u128> for EventDrivenCycleCount {
 
 pub struct EventDrivenManager {
     current_cycle: EventDrivenCycleCount,
-    out_handler: OutputHandler,
+    out_handler: Arc<OutputHandler>,
     input_reader: InputReader,
     in_types: Vec<Type>,
 }
 
 impl EventDrivenManager {
     /// Creates a new EventDrivenManager managing event-driven output streams.
-    pub(crate) fn setup(ir: LolaIR, config: EvalConfig) -> EventDrivenManager {
-        let out_handler = OutputHandler::new(&config, false);
+    pub(crate) fn setup(ir: LolaIR, config: EvalConfig, out_handler: Arc<OutputHandler>) -> EventDrivenManager {
         let stream_names: Vec<&str> = ir.inputs.iter().map(|i| i.name.as_str()).collect();
         let input_reader = InputReader::from(config.source, stream_names.as_slice());
         let input_reader = match input_reader {

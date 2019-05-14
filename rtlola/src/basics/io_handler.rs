@@ -182,14 +182,12 @@ pub(crate) struct OutputHandler {
 }
 
 impl OutputHandler {
-    // TODO: the primary flag is just a quick hack to have only one thread drawing progress information
-    // Instead, we need to make sure that there is only ever one OutputHandler
-    pub(crate) fn new(config: &EvalConfig, primary: bool) -> OutputHandler {
+    pub(crate) fn new(config: &EvalConfig) -> OutputHandler {
         OutputHandler {
             verbosity: config.verbosity,
             channel: config.output_channel.clone(),
             file: None,
-            statistics: if primary && config.verbosity == Verbosity::Progress { Some(Statistics::new()) } else { None },
+            statistics: if config.verbosity == Verbosity::Progress { Some(Statistics::new()) } else { None },
         }
     }
 
@@ -247,14 +245,14 @@ impl OutputHandler {
         }; // TODO: Decide how to handle the result.
     }
 
-    pub(crate) fn new_event(&mut self) {
-        if let Some(statistics) = &mut self.statistics {
+    pub(crate) fn new_event(&self) {
+        if let Some(statistics) = &self.statistics {
             statistics.new_event();
         }
     }
 
-    pub(crate) fn terminate(&mut self) {
-        if let Some(statistics) = &mut self.statistics {
+    pub(crate) fn terminate(&self) {
+        if let Some(statistics) = &self.statistics {
             statistics.terminate();
         }
     }
@@ -298,12 +296,12 @@ impl Statistics {
         Statistics { data }
     }
 
-    fn new_event(&mut self) {
+    fn new_event(&self) {
         self.data.num_events.fetch_add(1, Ordering::Relaxed);
     }
 
     fn trigger(&self) {
-        self.data.num_events.fetch_add(1, Ordering::Relaxed);
+        self.data.num_triggers.fetch_add(1, Ordering::Relaxed);
     }
 
     pub(crate) fn terminate(&self) {
@@ -314,7 +312,7 @@ impl Statistics {
     fn print_progress_info(data: &Arc<StatisticsData>, spin_char: char) {
         let mut out = std::io::stderr();
 
-        // write statistics
+        // write event statistics
         let now = SystemTime::now();
         let num_events: u128 = data.num_events.load(Ordering::Relaxed).into();
         let elapsed_total = now.duration_since(data.start).unwrap().as_nanos();
@@ -326,19 +324,16 @@ impl Statistics {
             spin_char, num_events, events_per_second, nanos_per_event
         )
         .unwrap_or_else(|_| {});
-        //let num_triggers = copy.num_triggers.load(Ordering::Relaxed);
-        //writeln!(out, "  {} triggers", num_triggers);
+
+        // write trigger statistics
+        let num_triggers = data.num_triggers.load(Ordering::Relaxed);
+        writeln!(out, "  {} triggers", num_triggers).unwrap_or_else(|_| {});
     }
 
     fn clear_progress_info() {
         let mut out = std::io::stderr();
         // clear screen as much as written in `print_progress_info`
         write!(out, "{}{}", cursor::Up(1), clear::CurrentLine).unwrap_or_else(|_| {});
-    }
-}
-
-impl Default for OutputHandler {
-    fn default() -> OutputHandler {
-        OutputHandler::new(&EvalConfig::default(), false)
+        write!(out, "{}{}", cursor::Up(1), clear::CurrentLine).unwrap_or_else(|_| {});
     }
 }

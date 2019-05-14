@@ -2,6 +2,7 @@ use super::WorkItem;
 use crate::basics::{EvalConfig, OutputHandler};
 
 use std::sync::mpsc::Sender;
+use std::sync::Arc;
 use std::thread::sleep;
 use std::time::{Duration, SystemTime};
 use streamlab_frontend::ir::{LolaIR, StreamReference};
@@ -44,14 +45,17 @@ pub(crate) struct TimeDrivenManager {
     deadlines: Vec<Deadline>,
     hyper_period: Duration,
     start_time: SystemTime,
-    handler: OutputHandler,
+    handler: Arc<OutputHandler>,
 }
 
 impl TimeDrivenManager {
     /// Creates a new TimeDrivenManager managing time-driven output streams.
-    pub(crate) fn setup(ir: LolaIR, config: EvalConfig, start_time: SystemTime) -> TimeDrivenManager {
-        let handler = OutputHandler::new(&config, false);
-
+    pub(crate) fn setup(
+        ir: LolaIR,
+        _config: EvalConfig,
+        start_time: SystemTime,
+        handler: Arc<OutputHandler>,
+    ) -> TimeDrivenManager {
         if ir.time_driven.is_empty() {
             // return dummy
             return TimeDrivenManager {
