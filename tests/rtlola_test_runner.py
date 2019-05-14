@@ -16,27 +16,27 @@ def build_path(base_dir, parts):
 
 
 def print_fail(message, end='\n'):
-    sys.stdout.write('\x1b[1;31m' + message.strip() + '\x1b[0m' + end)
+    sys.stdout.write('\x1b[1;31m' + message.rstrip() + '\x1b[0m' + end)
 
 
 def print_pass(message, end='\n'):
-    sys.stdout.write('\x1b[1;32m' + message.strip() + '\x1b[0m' + end)
+    sys.stdout.write('\x1b[1;32m' + message.rstrip() + '\x1b[0m' + end)
 
 
 def print_warn(message, end='\n'):
-    sys.stdout.write('\x1b[1;33m' + message.strip() + '\x1b[0m' + end)
+    sys.stdout.write('\x1b[1;33m' + message.rstrip() + '\x1b[0m' + end)
 
 
 def print_info(message, end='\n'):
-    sys.stdout.write('\x1b[1;34m' + message.strip() + '\x1b[0m' + end)
+    sys.stdout.write('\x1b[1;34m' + message.rstrip() + '\x1b[0m' + end)
 
 
 def print_bold(message, end='\n'):
-    sys.stdout.write('\x1b[1;37m' + message.strip() + '\x1b[0m' + end)
+    sys.stdout.write('\x1b[1;37m' + message.rstrip() + '\x1b[0m' + end)
 
 
 def print_additional_trigger(message, count):
-    sys.stdout.write('\x1b[1;31m"' + message.strip() + "\" : " + str(count) + ' (0 expected) \x1b[0m\n')
+    sys.stdout.write('\x1b[1;31m"' + message.rstrip() + "\" : " + str(count) + ' (0 expected) \x1b[0m\n')
 
 
 def print_trigger(message, expected, actual):
@@ -78,11 +78,18 @@ tests_passed = 0
 
 test_dir = Path('.')
 tests = [test_file for test_file in test_dir.iterdir() if test_file.is_file() and test_file.suffix == ".rtlola_test"]
+if len(sys.argv) == 2:
+    tests = [test_file for test_file in tests if sys.argv[1] in test_file.name]
+
+tests_passed = []
+tests_crashed = []
+tests_wrong_out = []
 return_code = 0
 for test_file in tests:
     total_number_of_tests += 1
     print("========================================================================")
-    print_bold(str(test_file))
+    test_name = test_file.name.split('.')[0]
+    print_bold("{}:".format(test_name))
     with test_file.open() as fd:
         test_json = json.load(fd)
         spec_file = build_path(repo_base_dir, test_json["spec_file"].split('/')[1:])
@@ -122,9 +129,9 @@ for test_file in tests:
                     print_additional_trigger(trigger, triggers_in_output[trigger])
                     something_wrong = True
             if something_wrong:
-                wrong_tests += 1
+                tests_wrong_out.append(test_name)
         else:
-            crashed_tests += 1
+            tests_crashed.append(test_name)
             print_fail("Returned with error code")
             something_wrong = True
 
@@ -132,21 +139,29 @@ for test_file in tests:
             if False:
                 print("STDOUT")
                 print(run_result.stdout)
-            print("STDERR")
-            print(run_result.stderr)
-            print_fail("FAIL: " + str(test_file) + "\n" + test_json["rationale"])
+                print("STDERR")
+                print(run_result.stderr)
+            print_fail("FAIL".format(test_name))
+            print_fail(test_json["rationale"])
             return_code = 1
         else:
-            tests_passed +=1
-            print_pass("PASS:" + str(test_file))
+            tests_passed.append(test_name)
+            print_pass("PASS")
 
         print("")
 print("========================================================================")
 print("Total tests: {}".format(total_number_of_tests))
-print_pass("Tests passed: {}".format(tests_passed))
-print_fail("Tests crashed: {}".format(crashed_tests))
-print_fail("Tests with wrong output: {}".format(wrong_tests))
-print("")
-print_bold("Passing rate: {:05.2f}%".format((100.0*tests_passed/total_number_of_tests)))
+print_pass("Tests passed: {}".format(len(tests_passed)))
+if len(tests_crashed) > 0:
+    print_fail("Tests crashed: {}".format(len(tests_crashed)))
+    for test in tests_crashed:
+        print_fail("\t{}".format(test))
+if len(tests_wrong_out) > 0:
+    print_fail("Tests with wrong output: {}".format(len(tests_wrong_out)))
+    for test in tests_wrong_out:
+        print_fail("\t{}".format(test))
+if total_number_of_tests > 0:
+    print("")
+    print_bold("Passing rate: {:.2f}%".format((100.0*len(tests_passed)/total_number_of_tests)))
 print("========================================================================")
 sys.exit(return_code)
