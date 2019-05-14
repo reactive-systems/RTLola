@@ -211,6 +211,17 @@ impl ValueTy {
         }
     }
 
+    /// Replaces parameters by the given list
+    pub(crate) fn replace_params_with_ty(&self, generics: &[ValueTy]) -> ValueTy {
+        match self {
+            &ValueTy::Param(id, _) => generics[id as usize].clone(),
+            ValueTy::Option(t) => ValueTy::Option(t.replace_params_with_ty(generics).into()),
+            ValueTy::Infer(_) | ValueTy::Constr(_) => self.clone(),
+            _ if self.is_primitive() => self.clone(),
+            _ => unreachable!("replace_param for {}", self),
+        }
+    }
+
     /// Replaces constraints by default values
     pub(crate) fn replace_constr(&self) -> ValueTy {
         match &self {

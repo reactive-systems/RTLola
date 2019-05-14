@@ -1,5 +1,6 @@
 //! This module contains the Lola standard library.
 
+use crate::analysis::naming::ScopedDecl;
 use crate::ast::{BinOp, FunctionName, UnOp};
 use crate::ty::{TypeConstraint, ValueTy};
 use lazy_static::lazy_static;
@@ -16,6 +17,15 @@ pub struct FuncDecl {
     pub generics: Vec<Generic>,
     pub parameters: Vec<ValueTy>,
     pub return_type: ValueTy,
+}
+
+impl FuncDecl {
+    /// Given the instantiation of the generic parameters, this function returns the instantiated types of the arguments and return type.
+    /// For example `sqrt<T>(_: T) -> T` is `sqrt<T>(_: Float32) -> Float32` when `T` is instantiated by `Float32`.
+    pub(crate) fn get_types_for_args_and_ret(&self, generics: &[ValueTy]) -> (Vec<ValueTy>, ValueTy) {
+        let args = self.parameters.iter().map(|ty| ty.replace_params_with_ty(generics)).collect();
+        (args, self.return_type.replace_params_with_ty(generics))
+    }
 }
 
 impl BinOp {
@@ -69,8 +79,6 @@ impl UnOp {
         }
     }
 }
-
-use crate::analysis::naming::ScopedDecl;
 
 lazy_static! {
     // fn sqrt<T: FloatingPoint>(T) -> T

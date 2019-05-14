@@ -429,7 +429,19 @@ impl<'a> Lowering<'a> {
 
         let expr = match &expr.kind {
             ExpressionKind::Lit(l) => ir::Expression::LoadConstant(self.lower_literal(l, expr.id)),
-            ExpressionKind::Ident(_) => ir::Expression::SyncStreamLookup(self.get_ref_for_ident(expr.id)),
+            ExpressionKind::Ident(ident) => {
+                let src_ty = match self.get_decl(expr.id) {
+                    Declaration::In(input) => self.lower_node_type(input.id),
+                    Declaration::Out(output) => self.lower_node_type(output.id),
+                    _ => unreachable!(),
+                };
+                let sync_expr = ir::Expression::SyncStreamLookup(self.get_ref_for_ident(expr.id));
+                if src_ty != result_type {
+                    ir::Expression::Convert { from: src_ty, to: result_type.clone(), expr: sync_expr.into() }
+                } else {
+                    sync_expr
+                }
+            }
             ExpressionKind::StreamAccess(expr, kind) => {
                 let target_id = match &expr.kind {
                     ExpressionKind::Ident(_) => expr.id,
@@ -498,25 +510,24 @@ impl<'a> Lowering<'a> {
             ExpressionKind::Function(name, _, args) => {
                 let args: Vec<&ast::Expression> = args.iter().map(Box::as_ref).collect();
 
-                let req_arg_types = self.tt.get_func_arg_types(expr.id);
-                let req_types = if let Declaration::Func(fd) = self.get_decl(expr.id) {
-                    fd.parameters
-                        .iter()
-                        .map(|param| {
-                            if let crate::ty::ValueTy::Param(i, _) = param {
-                                (&req_arg_types[*i as usize]).into()
-                            } else {
-                                param.into()
-                            }
-                        })
-                        .collect::<Vec<ir::Type>>()
+                let generics = self.tt.get_func_arg_types(expr.id);
+                let (arg_types, ret_type) = if let Declaration::Func(fd) = self.get_decl(expr.id) {
+                    fd.get_types_for_args_and_ret(generics)
                 } else {
-                    panic!("Function not declared as such.")
+                    unreachable!("Function not declared as such.")
                 };
+                let arg_types: Vec<ir::Type> = arg_types.into_iter().map(|ty| (&ty).into()).collect();
+                let ret_type: ir::Type = (&ret_type).into();
 
-                let args = self.handle_func_args(&req_types, &args[..]);
-                let fun_ty = ir::Type::Function(req_types, Box::new(result_type.clone()));
-                ir::Expression::Function(name.name.name.clone(), args, fun_ty)
+                let args = self.handle_func_args(&arg_types, &args[..]);
+                let fun_ty = ir::Type::Function(arg_types, Box::new(ret_type.clone()));
+
+                let func_expr = ir::Expression::Function(name.name.name.clone(), args, fun_ty);
+                if ret_type != result_type {
+                    ir::Expression::Convert { from: ret_type, to: result_type.clone(), expr: func_expr.into() }
+                } else {
+                    func_expr
+                }
             }
             ExpressionKind::Field(_, _) => unimplemented!(),
             ExpressionKind::Method(_, _, _, _) => unimplemented!(),
@@ -807,7 +818,7 @@ mod tests {
         let stream = &ir.outputs[0];
 
         let expr = &stream.expr;
-        assert_eq!("In(0).cast::<UInt8, UInt16>()", format!("{}", expr))
+        assert_eq!("In(0).cast::<UInt8,UInt16>()", format!("{}", expr))
     }
 
     #[test]
@@ -820,7 +831,7 @@ mod tests {
         assert_eq!(stream.ty, ty);
 
         let expr = &stream.expr;
-        assert_eq!("sqrt(In(0).cast::<Float32, Float64>(): Float64) -> Float64", format!("{}", expr))
+        assert_eq!("sqrt(In(0): Float32) -> Float32.cast::<Float32,Float64>()", format!("{}", expr))
     }
 
     #[test]
@@ -836,8 +847,7 @@ mod tests {
         assert_eq!("cast(In(0): Float64) -> Float32", format!("{}", expr))
     }
 
-    #[ignore]
-    /// Needs to be adapted to new lowering.
+    #[ignore] // Needs to be adapted to new lowering.
     #[test]
     fn lower_function_expression_regex() {
         //        let ir = spec_to_ir("import regex\ninput a: String output v: Bool := matches_regex(a, r\"a*b\")");
