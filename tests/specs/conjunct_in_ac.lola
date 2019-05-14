@@ -1,0 +1,13 @@
+input a: Int32
+input b: Int32
+input c: Int32
+output d @ (a || c) := b.hold().defaults(to:10)
+
+trigger d == 1 "1 used"
+trigger d == 2 "2 used"
+trigger d == 3 "3 used"
+trigger d == 4 "4 used"
+trigger d == 5 "5 used"
+trigger d == 6 "6 used"
+trigger d == 7 "7 used"
+trigger d ==10 "default used"

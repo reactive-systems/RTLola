@@ -1,0 +1,31 @@
+{
+  "spec_file": "../tests/specs/conjunct_in_ac.lola",
+  "input_file": "../traces/tests/three_int32_streams.csv",
+  "rationale": "Check that the hold access works",
+  "triggers": {
+    "1 used": {
+      "expected_count": 0
+    },
+    "2 used": {
+      "expected_count": 1
+    },
+    "3 used": {
+      "expected_count": 1
+    },
+    "4 used": {
+      "expected_count": 0
+    },
+    "5 used": {
+      "expected_count": 1
+    },
+    "6 used": {
+      "expected_count": 1
+    },
+    "7 used": {
+      "expected_count": 1
+    },
+    "default used": {
+      "expected_count": 0
+    }
+  }
+}
