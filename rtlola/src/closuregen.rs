@@ -145,7 +145,7 @@ impl<'s> Expr<'s> for Expression {
                 CompiledExpr::new(move |ctx| ctx.lookup_with_offset(target, offset))
             }
 
-            SampleAndHoldStreamLookup(str_ref) => CompiledExpr::new(move |ctx| ctx.lookup(str_ref)),
+            StreamAccess(str_ref, kind) => CompiledExpr::new(move |ctx| ctx.lookup(str_ref)), // TODO: @Marvin
 
             SyncStreamLookup(str_ref) => CompiledExpr::new(move |ctx| ctx.lookup(str_ref)),
 

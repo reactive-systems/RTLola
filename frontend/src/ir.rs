@@ -1,6 +1,7 @@
 pub(crate) mod lowering;
 mod print;
 
+pub use crate::ast::StreamAccessKind; // Re-export needed for IR
 use crate::ty::ValueTy;
 pub use crate::ty::{Activation, FloatTy, IntTy, UIntTy}; // Re-export needed for IR
 use std::time::Duration;
@@ -141,7 +142,7 @@ pub enum Expression {
     /// 1st argument -> default
     OffsetLookup { target: StreamReference, offset: Offset },
     /// Accessing another stream under sample and hold semantics
-    SampleAndHoldStreamLookup(StreamReference),
+    StreamAccess(StreamReference, StreamAccessKind),
     /// Accessing another stream synchronously
     SyncStreamLookup(StreamReference),
     /// A window expression over a duration

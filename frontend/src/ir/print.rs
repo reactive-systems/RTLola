@@ -30,7 +30,11 @@ impl Display for Expression {
             Expression::WindowLookup(wr) => write!(f, "{}", wr),
             Expression::Default { expr, default } => write!(f, "{}.default({})", expr, default),
             Expression::OffsetLookup { target, offset } => write!(f, "{}.offset({})", target, offset),
-            Expression::SampleAndHoldStreamLookup(sr) | Expression::SyncStreamLookup(sr) => write!(f, "{}", sr),
+            Expression::SyncStreamLookup(sr) => write!(f, "{}", sr),
+            Expression::StreamAccess(sr, access) => match access {
+                StreamAccessKind::Hold => write!(f, "{}.hold()", sr),
+                StreamAccessKind::Optional => write!(f, "{}.get()", sr),
+            },
         }
     }
 }

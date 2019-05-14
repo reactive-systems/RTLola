@@ -323,9 +323,9 @@ impl<'a> ExpressionEvaluator<'a> {
                 res.unwrap_or(Value::None)
             }
 
-            SampleAndHoldStreamLookup(str_ref) => {
+            StreamAccess(str_ref, kind) => {
                 let res = self.perform_lookup(*str_ref, 0);
-                res.unwrap_or(Value::None)
+                res.unwrap_or(Value::None) // TODO: @Marvin
             }
 
             WindowLookup(win_ref) => {

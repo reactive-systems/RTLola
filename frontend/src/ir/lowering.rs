@@ -431,23 +431,12 @@ impl<'a> Lowering<'a> {
             ExpressionKind::Lit(l) => ir::Expression::LoadConstant(self.lower_literal(l, expr.id)),
             ExpressionKind::Ident(_) => ir::Expression::SyncStreamLookup(self.get_ref_for_ident(expr.id)),
             ExpressionKind::StreamAccess(expr, kind) => {
-                let (target_id, offset) = match &expr.kind {
-                    ExpressionKind::Ident(_) => (expr.id, None),
-                    ExpressionKind::Offset(stream, offset) => (stream.id, Some(self.lower_offset(offset))),
+                let target_id = match &expr.kind {
+                    ExpressionKind::Ident(_) => expr.id,
                     _ => unreachable!("checked by AST verifier"),
                 };
                 let target = self.get_ref_for_ident(target_id);
-                use ast::StreamAccessKind::*;
-                match kind {
-                    Hold => {
-                        assert!(offset.is_none()); // TODO: Discuss
-                        ir::Expression::SampleAndHoldStreamLookup(target)
-                    }
-                    Optional => {
-                        let offset = offset.unwrap_or(ir::Offset::PastDiscreteOffset(0));
-                        ir::Expression::OffsetLookup { target, offset }
-                    }
-                }
+                ir::Expression::StreamAccess(target, *kind)
             }
             ExpressionKind::Default(e, dft) => ir::Expression::Default {
                 expr: Box::new(self.lower_expression(e).0),
