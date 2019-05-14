@@ -1,5 +1,5 @@
 use streamlab_frontend::ir::{
-    Activation, Constant, Expression, LolaIR, Offset, StreamReference, Trigger, Type, WindowReference,
+    Activation, Constant, Expression, LolaIR, Offset, StreamAccessKind, StreamReference, Trigger, Type, WindowReference,
 };
 
 use crate::basics::{EvalConfig, OutputHandler};
@@ -31,6 +31,7 @@ pub(crate) struct EvaluatorData<'c> {
     compiled_exprs: Vec<CompiledExpr<'c>>,
     global_store: GlobalStore,
     fresh_inputs: BitSet,
+    fresh_outputs: BitSet,
     ir: LolaIR,
     handler: Arc<OutputHandler>,
     config: EvalConfig,
@@ -47,6 +48,7 @@ pub(crate) struct Evaluator<'e, 'c> {
     compiled_exprs: &'e Vec<CompiledExpr<'c>>,
     global_store: &'e mut GlobalStore,
     fresh_inputs: &'e mut BitSet,
+    fresh_outputs: &'e mut BitSet,
     ir: &'e LolaIR,
     handler: &'e OutputHandler,
     config: &'e EvalConfig,
@@ -55,12 +57,14 @@ pub(crate) struct Evaluator<'e, 'c> {
 pub(crate) struct ExpressionEvaluator<'e> {
     global_store: &'e GlobalStore,
     fresh_inputs: &'e BitSet,
+    fresh_outputs: &'e BitSet,
 }
 
 pub(crate) struct EvaluationContext<'e> {
     ts: SystemTime,
     global_store: &'e GlobalStore,
     fresh_inputs: &'e BitSet,
+    fresh_outputs: &'e BitSet,
 }
 
 impl<'c> EvaluatorData<'c> {
@@ -81,6 +85,7 @@ impl<'c> EvaluatorData<'c> {
         let compiled_exprs = ir.outputs.iter().map(|o| o.expr.clone().compile()).collect();
         let global_store = GlobalStore::new(&ir, ts);
         let fresh_inputs = BitSet::with_capacity(ir.inputs.len());
+        let fresh_outputs = BitSet::with_capacity(ir.outputs.len());
         handler.debug(|| format!("Evaluation layers: {:?}", layers));
         EvaluatorData {
             layers,
@@ -89,6 +94,7 @@ impl<'c> EvaluatorData<'c> {
             compiled_exprs,
             global_store,
             fresh_inputs,
+            fresh_outputs,
             ir,
             handler,
             config,
@@ -104,6 +110,7 @@ impl<'c> EvaluatorData<'c> {
             compiled_exprs: &self.compiled_exprs,
             global_store: &mut self.global_store,
             fresh_inputs: &mut self.fresh_inputs,
+            fresh_outputs: &mut self.fresh_outputs,
             ir: &self.ir,
             handler: &self.handler,
             config: &self.config,
@@ -154,6 +161,7 @@ impl<'e, 'c> Evaluator<'e, 'c> {
     }
 
     pub(crate) fn eval_time_driven_outputs(&mut self, streams: &Vec<StreamReference>, ts: SystemTime) {
+        self.clear_freshness();
         self.prepare_evaluation(ts);
         for str_ref in streams {
             self.eval_output(*str_ref, ts);
@@ -189,6 +197,7 @@ impl<'e, 'c> Evaluator<'e, 'c> {
 
         // Register value in global store.
         self.global_store.get_out_instance_mut(inst.clone()).unwrap().push_value(res.clone()); // TODO: unsafe unwrap.
+        self.fresh_outputs.insert(ix);
 
         self.handler.output(|| format!("OutputStream[{}] := {:?}.", ix, res.clone()));
 
@@ -211,6 +220,7 @@ impl<'e, 'c> Evaluator<'e, 'c> {
 
     fn clear_freshness(&mut self) {
         self.fresh_inputs.clear();
+        self.fresh_outputs.clear();
     }
 
     fn is_trigger(&self, inst: OutInstance) -> Option<&Trigger> {
@@ -233,13 +243,25 @@ impl<'e, 'c> Evaluator<'e, 'c> {
 
     #[allow(non_snake_case)]
     fn as_ExpressionEvaluator<'n>(&'n self) -> (ExpressionEvaluator<'n>, &'e Vec<Expression>) {
-        (ExpressionEvaluator { global_store: &self.global_store, fresh_inputs: &self.fresh_inputs }, &self.exprs)
+        (
+            ExpressionEvaluator {
+                global_store: &self.global_store,
+                fresh_inputs: &self.fresh_inputs,
+                fresh_outputs: &self.fresh_outputs,
+            },
+            &self.exprs,
+        )
     }
 
     #[allow(non_snake_case)]
     fn as_EvaluationContext<'n>(&'n self, ts: SystemTime) -> (EvaluationContext<'n>, &'e Vec<CompiledExpr<'c>>) {
         (
-            EvaluationContext { ts, global_store: &self.global_store, fresh_inputs: &self.fresh_inputs },
+            EvaluationContext {
+                ts,
+                global_store: &self.global_store,
+                fresh_inputs: &self.fresh_inputs,
+                fresh_outputs: &self.fresh_outputs,
+            },
             &self.compiled_exprs,
         )
     }
@@ -343,8 +365,29 @@ impl<'a> ExpressionEvaluator<'a> {
             }
 
             StreamAccess(str_ref, kind) => {
-                let res = self.perform_lookup(*str_ref, 0);
-                res.unwrap_or(Value::None) // TODO: @Marvin
+                use StreamAccessKind::*;
+                match kind {
+                    Hold => self.perform_lookup(*str_ref, 0).unwrap_or(Value::None),
+                    Optional => {
+                        use StreamReference::*;
+                        match *str_ref {
+                            InRef(ix) => {
+                                if self.fresh_inputs.contains(ix) {
+                                    self.perform_lookup(*str_ref, 0).expect("value must be there")
+                                } else {
+                                    Value::None
+                                }
+                            }
+                            OutRef(ix) => {
+                                if self.fresh_outputs.contains(ix) {
+                                    self.perform_lookup(*str_ref, 0).expect("value must be there")
+                                } else {
+                                    Value::None
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
             WindowLookup(win_ref) => {
