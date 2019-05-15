@@ -201,7 +201,7 @@ impl WindowGeneric for WindowSigned {
     fn from_value(v: Value) -> Value {
         match v {
             Value::Signed(_) => v,
-            Value::Unsigned(u) => Value::Signed(u as i128),
+            Value::Unsigned(u) => Value::Signed(u as i64),
             _ => panic!("Type error."),
         }
     }

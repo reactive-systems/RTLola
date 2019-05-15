@@ -432,20 +432,20 @@ impl<'a> ExpressionEvaluator<'a> {
                 let v = self.eval_expr(expr, ts);
                 match (from, v) {
                     (UInt(_), Value::Unsigned(u)) => match to {
-                        UInt(_) => Value::Unsigned(u as u128),
-                        Int(_) => Value::Signed(u as i128),
+                        UInt(_) => Value::Unsigned(u),
+                        Int(_) => Value::Signed(u as i64),
                         Float(_) => Value::new_float(u as f64),
                         _ => unimplemented!(),
                     },
                     (Int(_), Value::Signed(i)) => match to {
-                        UInt(_) => Value::Unsigned(i as u128),
-                        Int(_) => Value::Signed(i as i128),
+                        UInt(_) => Value::Unsigned(i as u64),
+                        Int(_) => Value::Signed(i),
                         Float(_) => Value::new_float(i as f64),
                         _ => unimplemented!(),
                     },
                     (Float(_), Value::Float(f)) => match to {
-                        UInt(_) => Value::Unsigned(f.into_inner() as u128),
-                        Int(_) => Value::Signed(f.into_inner() as i128),
+                        UInt(_) => Value::Unsigned(f.into_inner() as u64),
+                        Int(_) => Value::Signed(f.into_inner() as i64),
                         Float(_) => Value::new_float(f.into_inner() as f64),
                         _ => unimplemented!(),
                     },

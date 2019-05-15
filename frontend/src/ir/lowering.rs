@@ -307,9 +307,9 @@ impl<'a> Lowering<'a> {
                     let offset = if let Some(offset) = offset.parse_literal::<i32>() {
                         // discrete offset
                         if offset <= 0 {
-                            ir::Offset::PastDiscreteOffset(offset.abs() as u128)
+                            ir::Offset::PastDiscreteOffset(offset.abs() as u32)
                         } else {
-                            ir::Offset::FutureDiscreteOffset(offset as u128)
+                            ir::Offset::FutureDiscreteOffset(offset as u32)
                         }
                     } else if let Some(_time_spec) = offset.parse_timespec() {
                         unimplemented!();
@@ -429,7 +429,7 @@ impl<'a> Lowering<'a> {
 
         let expr = match &expr.kind {
             ExpressionKind::Lit(l) => ir::Expression::LoadConstant(self.lower_literal(l, expr.id)),
-            ExpressionKind::Ident(ident) => {
+            ExpressionKind::Ident(_ident) => {
                 let src_ty = match self.get_decl(expr.id) {
                     Declaration::In(input) => self.lower_node_type(input.id),
                     Declaration::Out(output) => self.lower_node_type(output.id),
@@ -578,9 +578,9 @@ impl<'a> Lowering<'a> {
     }
 
     fn lower_offset(&self, offset: &ast::Expression) -> ir::Offset {
-        if let Some(val) = offset.parse_literal::<i128>() {
+        if let Some(val) = offset.parse_literal::<i32>() {
             assert!(val < 0); // Should be checked by type checker, though.
-            ir::Offset::PastDiscreteOffset(val.abs() as u128)
+            ir::Offset::PastDiscreteOffset(val.abs() as u32)
         } else {
             unimplemented!()
         }
@@ -598,11 +598,9 @@ impl<'a> Lowering<'a> {
                         ir::Constant::Float(lit.parse_numeric::<f64>().expect("Checked by TypeChecker."))
                     }
                     ir::Type::UInt(_) => {
-                        ir::Constant::UInt(lit.parse_numeric::<u128>().expect("Checked by TypeChecker."))
+                        ir::Constant::UInt(lit.parse_numeric::<u64>().expect("Checked by TypeChecker."))
                     }
-                    ir::Type::Int(_) => {
-                        ir::Constant::Int(lit.parse_numeric::<i128>().expect("Checked by TypeChecker."))
-                    }
+                    ir::Type::Int(_) => ir::Constant::Int(lit.parse_numeric::<i64>().expect("Checked by TypeChecker.")),
                     _ => panic!("Checked by TypeChecker."),
                 }
             }

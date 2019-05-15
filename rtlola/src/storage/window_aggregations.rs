@@ -63,8 +63,8 @@ impl<G: WindowGeneric> Default for AvgIV<G> {
 impl<G: WindowGeneric> Into<Value> for AvgIV<G> {
     fn into(self) -> Value {
         match self.sum {
-            Value::Unsigned(u) => Value::Unsigned(u / u128::from(self.num)),
-            Value::Signed(u) => Value::Signed(u / i128::from(self.num)),
+            Value::Unsigned(u) => Value::Unsigned(u / self.num),
+            Value::Signed(u) => Value::Signed(u / self.num as i64),
             Value::Float(u) => Value::Float(u / self.num as f64),
             _ => panic!("Type error."),
         }
@@ -174,7 +174,7 @@ impl WindowIV for CountIV {
 
 impl Into<Value> for CountIV {
     fn into(self) -> Value {
-        Value::Unsigned(u128::from(self.0))
+        Value::Unsigned(self.0)
     }
 }
 

@@ -9,10 +9,9 @@ use self::Value::*;
 pub(crate) enum Value {
     None,
     Bool(bool),
-    Unsigned(u128),
-    Signed(i128),
+    Unsigned(u64),
+    Signed(i64),
     Float(NotNan<f64>),
-    #[allow(dead_code)]
     Str(String),
 }
 
@@ -29,10 +28,10 @@ impl Value {
                 if source == "0.0" {
                     Some(Unsigned(0))
                 } else {
-                    source.parse::<u128>().map(Unsigned).ok()
+                    source.parse::<u64>().map(Unsigned).ok()
                 }
             }
-            Type::Int(_) => source.parse::<i128>().map(Signed).ok(),
+            Type::Int(_) => source.parse::<i64>().map(Signed).ok(),
             Type::Bool => source.parse::<bool>().map(Bool).ok(),
         }
     }

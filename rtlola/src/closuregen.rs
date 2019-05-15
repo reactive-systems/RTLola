@@ -228,14 +228,14 @@ impl<'s> Expr<'s> for Expression {
                     (UInt(_), UInt(_)) => CompiledExpr::new(move |ctx| {
                         let v = f_expr.execute(ctx);
                         match v {
-                            Value::Unsigned(u) => Value::Unsigned(u as u128),
+                            Value::Unsigned(u) => Value::Unsigned(u),
                             _ => panic!(),
                         }
                     }),
                     (UInt(_), Int(_)) => CompiledExpr::new(move |ctx| {
                         let v = f_expr.execute(ctx);
                         match v {
-                            Value::Unsigned(u) => Value::Signed(u as i128),
+                            Value::Unsigned(u) => Value::Signed(u as i64),
                             _ => panic!(),
                         }
                     }),
@@ -249,14 +249,14 @@ impl<'s> Expr<'s> for Expression {
                     (Int(_), UInt(_)) => CompiledExpr::new(move |ctx| {
                         let v = f_expr.execute(ctx);
                         match v {
-                            Value::Signed(i) => Value::Unsigned(i as u128),
+                            Value::Signed(i) => Value::Unsigned(i as u64),
                             _ => panic!(),
                         }
                     }),
                     (Int(_), Int(_)) => CompiledExpr::new(move |ctx| {
                         let v = f_expr.execute(ctx);
                         match v {
-                            Value::Signed(i) => Value::Signed(i as i128),
+                            Value::Signed(i) => Value::Signed(i),
                             _ => panic!(),
                         }
                     }),
@@ -270,14 +270,14 @@ impl<'s> Expr<'s> for Expression {
                     (Float(_), UInt(_)) => CompiledExpr::new(move |ctx| {
                         let v = f_expr.execute(ctx);
                         match v {
-                            Value::Float(f) => Value::Unsigned(f.into_inner() as u128),
+                            Value::Float(f) => Value::Unsigned(f.into_inner() as u64),
                             _ => panic!(),
                         }
                     }),
                     (Float(_), Int(_)) => CompiledExpr::new(move |ctx| {
                         let v = f_expr.execute(ctx);
                         match v {
-                            Value::Float(f) => Value::Signed(f.into_inner() as i128),
+                            Value::Float(f) => Value::Signed(f.into_inner() as i64),
                             _ => panic!(),
                         }
                     }),

@@ -165,8 +165,8 @@ pub enum Expression {
 pub enum Constant {
     Str(String),
     Bool(bool),
-    UInt(u128),
-    Int(i128),
+    UInt(u64),
+    Int(i64),
     Float(f64),
 }
 
@@ -181,9 +181,9 @@ pub struct Dependency {
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum Offset {
     /// A strictly positive discrete offset, e.g., `4`, or `42`
-    FutureDiscreteOffset(u128),
+    FutureDiscreteOffset(u32),
     /// A non-negative discrete offset, e.g., `0`, `-4`, or `-42`
-    PastDiscreteOffset(u128),
+    PastDiscreteOffset(u32),
     /// A positive real-time offset, e.g., `-3ms`, `-4min`, `-2.3h`
     FutureRealTimeOffset(Duration),
     /// A non-negative real-time offset, e.g., `0`, `4min`, `2.3h`
