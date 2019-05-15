@@ -14,7 +14,7 @@ use ordered_float::NotNan;
 
 use std::time::SystemTime;
 
-enum ActivationCondition {
+pub(crate) enum ActivationCondition {
     TimeDriven,
     True,
     Conjunction(BitSet),
@@ -55,7 +55,7 @@ pub(crate) struct Evaluator<'e, 'c> {
     config: &'e EvalConfig,
 }
 
-pub(crate) struct ExpressionEvaluator<'e> {
+struct ExpressionEvaluator<'e> {
     global_store: &'e GlobalStore,
     fresh_inputs: &'e BitSet,
     fresh_outputs: &'e BitSet,
@@ -63,9 +63,9 @@ pub(crate) struct ExpressionEvaluator<'e> {
 
 pub(crate) struct EvaluationContext<'e> {
     ts: SystemTime,
-    global_store: &'e GlobalStore,
-    fresh_inputs: &'e BitSet,
-    fresh_outputs: &'e BitSet,
+    pub(crate) global_store: &'e GlobalStore,
+    pub(crate) fresh_inputs: &'e BitSet,
+    pub(crate) fresh_outputs: &'e BitSet,
 }
 
 impl<'c> EvaluatorData<'c> {
@@ -535,7 +535,7 @@ impl ActivationCondition {
         General(ac.clone())
     }
 
-    fn eval(&self, inputs: &BitSet) -> bool {
+    pub(crate) fn eval(&self, inputs: &BitSet) -> bool {
         use ActivationCondition::*;
         match self {
             True => true,

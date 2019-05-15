@@ -4,7 +4,7 @@
 
 use crate::evaluator::EvaluationContext;
 use crate::storage::Value;
-use streamlab_frontend::ir::{Constant, Expression, Offset, Type};
+use streamlab_frontend::ir::{Constant, Expression, Offset, StreamAccessKind, StreamReference, Type};
 
 pub(crate) trait Expr<'s> {
     fn compile(self) -> CompiledExpr<'s>;
@@ -145,7 +145,31 @@ impl<'s> Expr<'s> for Expression {
                 CompiledExpr::new(move |ctx| ctx.lookup_with_offset(target, offset))
             }
 
-            StreamAccess(str_ref, kind) => CompiledExpr::new(move |ctx| ctx.lookup(str_ref)), // TODO: @Marvin
+            StreamAccess(str_ref, kind) => {
+                use StreamAccessKind::*;
+                match kind {
+                    Hold => CompiledExpr::new(move |ctx| ctx.lookup(str_ref)),
+                    Optional => {
+                        use StreamReference::*;
+                        match str_ref {
+                            InRef(ix) => CompiledExpr::new(move |ctx| {
+                                if ctx.fresh_inputs.contains(ix) {
+                                    ctx.lookup(str_ref)
+                                } else {
+                                    Value::None
+                                }
+                            }),
+                            OutRef(ix) => CompiledExpr::new(move |ctx| {
+                                if ctx.fresh_outputs.contains(ix) {
+                                    ctx.lookup(str_ref)
+                                } else {
+                                    Value::None
+                                }
+                            }),
+                        }
+                    }
+                }
+            }
 
             SyncStreamLookup(str_ref) => CompiledExpr::new(move |ctx| ctx.lookup(str_ref)),
 
