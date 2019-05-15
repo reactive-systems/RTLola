@@ -86,70 +86,71 @@ tests_passed = []
 tests_crashed = []
 tests_wrong_out = []
 return_code = 0
-for test_file in tests:
-    total_number_of_tests += 1
-    print("========================================================================")
-    test_name = test_file.name.split('.')[0]
-    print_bold("{}:".format(test_name))
-    with test_file.open() as fd:
-        test_json = json.load(fd)
-        spec_file = build_path(repo_base_dir, test_json["spec_file"].split('/')[1:])
-        input_file = build_path(repo_base_dir, test_json["input_file"].split('/')[1:])
-        run_result = subprocess.run([rtlola_executable_path_string, "monitor", "--offline", "--stdout", "--verbosity", "outputs", str(spec_file), "--csv-in", str(input_file), "--interpreted"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=str(repo_base_dir), universal_newlines=True)
-        something_wrong = False
-        if run_result.returncode == 0:
-            lines = iter(run_result.stdout.split("\n"))
-            triggers_in_output = dict()
+for (mode, config) in [('interpreted', ["--interpreted"]), ('closure', [])]:
+    for test_file in tests:
+        total_number_of_tests += 1
+        print("========================================================================")
+        test_name = "{} @ {}".format(mode, test_file.name.split('.')[0])
+        print_bold("{}:".format(test_name))
+        with test_file.open() as fd:
+            test_json = json.load(fd)
+            spec_file = build_path(repo_base_dir, test_json["spec_file"].split('/')[1:])
+            input_file = build_path(repo_base_dir, test_json["input_file"].split('/')[1:])
+            run_result = subprocess.run([streamlab_executable_path_string, "--offline", "--stdout", "--verbosity", "outputs", str(spec_file), "--csv-in", str(input_file)] + config, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=str(repo_base_dir), universal_newlines=True)
+            something_wrong = False
+            if run_result.returncode == 0:
+                lines = iter(run_result.stdout.split("\n"))
+                triggers_in_output = dict()
 
-            # count triggers
-            for line in lines:
-                if line == "":
-                    continue
-                if line.startswith("Trigger: "):
-                    trigger_warning = line[len("Trigger: "):]
-                    triggers_in_output.setdefault(trigger_warning, 0)
-                    triggers_in_output[trigger_warning] += 1
-                # else:
-                #     print("Unexpected line: {}".format(line))
+                # count triggers
+                for line in lines:
+                    if line == "":
+                        continue
+                    if line.startswith("Trigger: "):
+                        trigger_warning = line[len("Trigger: "):]
+                        triggers_in_output.setdefault(trigger_warning, 0)
+                        triggers_in_output[trigger_warning] += 1
+                    # else:
+                    #     print("Unexpected line: {}".format(line))
 
-            # print diff in triggers
-            # TODO allow for specifying a tolerance in the JSON
-            expected_triggers = list(test_json["triggers"].keys())
-            trigger_names = list(set(list(triggers_in_output.keys()) + expected_triggers))
-            trigger_names.sort()
-            for trigger in trigger_names:
-                if trigger in expected_triggers:
-                    actual = triggers_in_output[trigger] if trigger in triggers_in_output else 0
-                    expected = 0
+                # print diff in triggers
+                # TODO allow for specifying a tolerance in the JSON
+                expected_triggers = list(test_json["triggers"].keys())
+                trigger_names = list(set(list(triggers_in_output.keys()) + expected_triggers))
+                trigger_names.sort()
+                for trigger in trigger_names:
                     if trigger in expected_triggers:
-                        expected = test_json["triggers"][trigger]["expected_count"]
-                    if actual != expected:
-                        print_trigger(trigger, expected, actual)
+                        actual = triggers_in_output[trigger] if trigger in triggers_in_output else 0
+                        expected = 0
+                        if trigger in expected_triggers:
+                            expected = test_json["triggers"][trigger]["expected_count"]
+                        if actual != expected:
+                            print_trigger(trigger, expected, actual)
+                            something_wrong = True
+                    else:
+                        print_additional_trigger(trigger, triggers_in_output[trigger])
                         something_wrong = True
-                else:
-                    print_additional_trigger(trigger, triggers_in_output[trigger])
-                    something_wrong = True
+                if something_wrong:
+                    tests_wrong_out.append(test_name)
+            else:
+                tests_crashed.append(test_name)
+                print_fail("Returned with error code")
+                something_wrong = True
+
             if something_wrong:
-                tests_wrong_out.append(test_name)
-        else:
-            tests_crashed.append(test_name)
-            print_fail("Returned with error code")
-            something_wrong = True
+                if False:
+                    print("STDOUT")
+                    print(run_result.stdout)
+                    print("STDERR")
+                    print(run_result.stderr)
+                print_fail("FAIL".format(test_name))
+                print_fail(test_json["rationale"])
+                return_code = 1
+            else:
+                tests_passed.append(test_name)
+                print_pass("PASS")
 
-        if something_wrong:
-            if False:
-                print("STDOUT")
-                print(run_result.stdout)
-                print("STDERR")
-                print(run_result.stderr)
-            print_fail("FAIL".format(test_name))
-            print_fail(test_json["rationale"])
-            return_code = 1
-        else:
-            tests_passed.append(test_name)
-            print_pass("PASS")
-
-        print("")
+            print("")
 print("========================================================================")
 print("Total tests: {}".format(total_number_of_tests))
 print_pass("Tests passed: {}".format(len(tests_passed)))
