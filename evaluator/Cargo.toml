@@ -1,5 +1,5 @@
 [package]
-name = "rtlola"
+name = "streamlab-evaluator"
 version = "0.1.0"
 authors = [
     "Malte Schledjewski <schledjewski@react.uni-saarland.de>",
@@ -9,13 +9,9 @@ authors = [
 ]
 edition = "2018"
 
-[lib]
-name = "rtlola"
-path = "src/lib.rs"
-
 [[bin]]
-name = "stream_lab"
-path = "src/bin/bin.rs"
+name = "streamlab"
+path = "src/bin/streamlab.rs"
 
 [dependencies]
 streamlab-frontend = {path = "../frontend/"}

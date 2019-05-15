@@ -1,4 +1,4 @@
-//! This module contains the logic for the `lola-analyze` binary.
+//! This module contains the logic for the `streamlab-analyze` binary.
 
 use std::error::Error;
 use std::fs::File;
@@ -30,10 +30,10 @@ pub struct Config {
 
 impl Config {
     pub fn new(args: &[String]) -> Self {
-        let matches = App::new("lola-analyze")
+        let matches = App::new("streamlab-analyze")
             .version(env!("CARGO_PKG_VERSION"))
             .author(env!("CARGO_PKG_AUTHORS"))
-            .about("lola-analyze is a useful tool to analyze Lola specifications")
+            .about("streamlab-analyze is a tool to analyze Lola specifications")
             .arg(Arg::with_name("v").short("v").multiple(true).required(false).help("Sets the level of verbosity"))
             .arg(Arg::with_name("INPUT").help("Sets the input file to use").required(true).index(1))
             .subcommand(SubCommand::with_name("parse").about("Parses the input file and outputs parse tree"))

@@ -3,6 +3,6 @@
 members = [
   "common",
   "frontend",
-  "rtlola",
+  "evaluator",
 ]
 
