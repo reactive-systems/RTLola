@@ -4,6 +4,7 @@
 
 use crate::evaluator::EvaluationContext;
 use crate::storage::Value;
+use std::ops::{Add, Div, Mul, Neg, Not, Rem, Sub};
 use streamlab_frontend::ir::{Constant, Expression, Offset, StreamAccessKind, StreamReference, Type};
 
 pub(crate) trait Expr<'s> {
@@ -43,96 +44,66 @@ impl<'s> Expr<'s> for Expression {
 
             ArithLog(op, operands, _ty) => {
                 let f_operands: Vec<CompiledExpr> = operands.into_iter().map(|e| e.compile()).collect();
+
+                macro_rules! create_unop {
+                    ($fn:ident) => {
+                        CompiledExpr::new(move |ctx| {
+                            let lhs = f_operands[0].execute(ctx);
+                            lhs.$fn()
+                        })
+                    };
+                }
+                macro_rules! create_binop {
+                    ($fn:ident) => {
+                        CompiledExpr::new(move |ctx| {
+                            let lhs = f_operands[0].execute(ctx);
+                            let rhs = f_operands[1].execute(ctx);
+                            lhs.$fn(rhs)
+                        })
+                    };
+                }
+                macro_rules! create_cmp {
+                    ($fn:ident) => {
+                        CompiledExpr::new(move |ctx| {
+                            let lhs = f_operands[0].execute(ctx);
+                            let rhs = f_operands[1].execute(ctx);
+                            Value::Bool(lhs.$fn(&rhs))
+                        })
+                    };
+                }
+                macro_rules! create_lazyop {
+                    ($b:expr) => {
+                        CompiledExpr::new(move |ctx| {
+                            let lhs = f_operands[0].execute(ctx).get_bool();
+                            if lhs == $b {
+                                Value::Bool($b)
+                            } else {
+                                let res = f_operands[1].execute(ctx);
+                                assert!(res.is_bool());
+                                res
+                            }
+                        })
+                    };
+                }
+
                 use streamlab_frontend::ir::ArithLogOp::*;
                 match op {
-                    Not => CompiledExpr::new(move |ctx| {
-                        let b = f_operands[0].execute(ctx);
-                        !b
-                    }),
-                    Neg => CompiledExpr::new(move |ctx| {
-                        let v = f_operands[0].execute(ctx);
-                        -v
-                    }),
-                    Add => CompiledExpr::new(move |ctx| {
-                        let lhs = f_operands[0].execute(ctx);
-                        let rhs = f_operands[1].execute(ctx);
-                        lhs + rhs
-                    }),
-                    Sub => CompiledExpr::new(move |ctx| {
-                        let lhs = f_operands[0].execute(ctx);
-                        let rhs = f_operands[1].execute(ctx);
-                        lhs - rhs
-                    }),
-                    Mul => CompiledExpr::new(move |ctx| {
-                        let lhs = f_operands[0].execute(ctx);
-                        let rhs = f_operands[1].execute(ctx);
-                        lhs * rhs
-                    }),
-                    Div => CompiledExpr::new(move |ctx| {
-                        let lhs = f_operands[0].execute(ctx);
-                        let rhs = f_operands[1].execute(ctx);
-                        lhs / rhs
-                    }),
-                    Rem => CompiledExpr::new(move |ctx| {
-                        let lhs = f_operands[0].execute(ctx);
-                        let rhs = f_operands[1].execute(ctx);
-                        lhs % rhs
-                    }),
-                    Pow => CompiledExpr::new(move |ctx| {
-                        let base = f_operands[0].execute(ctx);
-                        let exp = f_operands[1].execute(ctx);
-                        base.pow(exp)
-                    }),
-                    And => CompiledExpr::new(move |ctx| {
-                        let lhs = f_operands[0].execute(ctx).get_bool();
-                        if !lhs {
-                            Value::Bool(false)
-                        } else {
-                            let res = f_operands[1].execute(ctx);
-                            assert!(res.is_bool());
-                            res
-                        }
-                    }),
-                    Or => CompiledExpr::new(move |ctx| {
-                        let lhs = f_operands[0].execute(ctx).get_bool();
-                        if lhs {
-                            Value::Bool(true)
-                        } else {
-                            let res = f_operands[1].execute(ctx);
-                            assert!(res.is_bool());
-                            res
-                        }
-                    }),
-                    Eq => CompiledExpr::new(move |ctx| {
-                        let lhs = f_operands[0].execute(ctx);
-                        let rhs = f_operands[1].execute(ctx);
-                        Value::Bool(lhs == rhs)
-                    }),
-                    Lt => CompiledExpr::new(move |ctx| {
-                        let lhs = f_operands[0].execute(ctx);
-                        let rhs = f_operands[1].execute(ctx);
-                        Value::Bool(lhs < rhs)
-                    }),
-                    Le => CompiledExpr::new(move |ctx| {
-                        let lhs = f_operands[0].execute(ctx);
-                        let rhs = f_operands[1].execute(ctx);
-                        Value::Bool(lhs <= rhs)
-                    }),
-                    Ne => CompiledExpr::new(move |ctx| {
-                        let lhs = f_operands[0].execute(ctx);
-                        let rhs = f_operands[1].execute(ctx);
-                        Value::Bool(lhs != rhs)
-                    }),
-                    Ge => CompiledExpr::new(move |ctx| {
-                        let lhs = f_operands[0].execute(ctx);
-                        let rhs = f_operands[1].execute(ctx);
-                        Value::Bool(lhs >= rhs)
-                    }),
-                    Gt => CompiledExpr::new(move |ctx| {
-                        let lhs = f_operands[0].execute(ctx);
-                        let rhs = f_operands[1].execute(ctx);
-                        Value::Bool(lhs > rhs)
-                    }),
+                    Not => create_unop!(not),
+                    Neg => create_unop!(neg),
+                    Add => create_binop!(add),
+                    Sub => create_binop!(sub),
+                    Mul => create_binop!(mul),
+                    Div => create_binop!(div),
+                    Rem => create_binop!(rem),
+                    Pow => create_binop!(pow),
+                    Eq => create_cmp!(eq),
+                    Lt => create_cmp!(lt),
+                    Le => create_cmp!(le),
+                    Ne => create_cmp!(ne),
+                    Ge => create_cmp!(ge),
+                    Gt => create_cmp!(gt),
+                    And => create_lazyop!(false),
+                    Or => create_lazyop!(true),
                 }
             }
 
@@ -203,35 +174,24 @@ impl<'s> Expr<'s> for Expression {
             Function(name, args, _ty) => {
                 //TODO(marvin): handle type
                 let f_arg = args[0].clone().compile();
+
+                macro_rules! create_floatfn {
+                    ($fn:ident) => {
+                        CompiledExpr::new(move |ctx| {
+                            let arg = f_arg.execute(ctx);
+                            match arg {
+                                Value::Float(f) => Value::new_float(f.$fn()),
+                                _ => panic!(),
+                            }
+                        })
+                    };
+                }
+
                 match name.as_ref() {
-                    "sqrt" => CompiledExpr::new(move |ctx| {
-                        let arg = f_arg.execute(ctx);
-                        match arg {
-                            Value::Float(f) => Value::new_float(f.sqrt()),
-                            _ => panic!(),
-                        }
-                    }),
-                    "sin" => CompiledExpr::new(move |ctx| {
-                        let arg = f_arg.execute(ctx);
-                        match arg {
-                            Value::Float(f) => Value::new_float(f.sin()),
-                            _ => panic!(),
-                        }
-                    }),
-                    "cos" => CompiledExpr::new(move |ctx| {
-                        let arg = f_arg.execute(ctx);
-                        match arg {
-                            Value::Float(f) => Value::new_float(f.cos()),
-                            _ => panic!(),
-                        }
-                    }),
-                    "arctan" => CompiledExpr::new(move |ctx| {
-                        let arg = f_arg.execute(ctx);
-                        match arg {
-                            Value::Float(f) => Value::new_float(f.atan()),
-                            _ => panic!(),
-                        }
-                    }),
+                    "sqrt" => create_floatfn!(sqrt),
+                    "sin" => create_floatfn!(sin),
+                    "cos" => create_floatfn!(cos),
+                    "arctan" => create_floatfn!(atan),
                     "abs" => CompiledExpr::new(move |ctx| {
                         let arg = f_arg.execute(ctx);
                         match arg {
@@ -246,72 +206,49 @@ impl<'s> Expr<'s> for Expression {
 
             //Expression::Convert { from, to, expr } => CompiledExpr::new(move |ctx| {}),
             Convert { from, to, expr } => {
-                use Type::*;
                 let f_expr = expr.compile();
+
+                macro_rules! create_convert {
+                    (Float, $to:ident, $ty:ty) => {
+                        CompiledExpr::new(move |ctx| {
+                            let v = f_expr.execute(ctx);
+                            match v {
+                                Value::Float(f) => Value::$to(f.into_inner() as $ty),
+                                _ => panic!(),
+                            }
+                        })
+                    };
+                    ($from:ident, Float, $ty:ty) => {
+                        CompiledExpr::new(move |ctx| {
+                            let v = f_expr.execute(ctx);
+                            match v {
+                                Value::$from(v) => Value::new_float(v as $ty),
+                                _ => panic!(),
+                            }
+                        })
+                    };
+                    ($from:ident, $to:ident, $ty:ty) => {
+                        CompiledExpr::new(move |ctx| {
+                            let v = f_expr.execute(ctx);
+                            match v {
+                                Value::$from(v) => Value::$to(v as $ty),
+                                _ => panic!(),
+                            }
+                        })
+                    };
+                }
+
+                use Type::*;
                 match (from, to) {
-                    (UInt(_), UInt(_)) => CompiledExpr::new(move |ctx| {
-                        let v = f_expr.execute(ctx);
-                        match v {
-                            Value::Unsigned(u) => Value::Unsigned(u),
-                            _ => panic!(),
-                        }
-                    }),
-                    (UInt(_), Int(_)) => CompiledExpr::new(move |ctx| {
-                        let v = f_expr.execute(ctx);
-                        match v {
-                            Value::Unsigned(u) => Value::Signed(u as i64),
-                            _ => panic!(),
-                        }
-                    }),
-                    (UInt(_), Float(_)) => CompiledExpr::new(move |ctx| {
-                        let v = f_expr.execute(ctx);
-                        match v {
-                            Value::Unsigned(u) => Value::new_float(u as f64),
-                            _ => panic!(),
-                        }
-                    }),
-                    (Int(_), UInt(_)) => CompiledExpr::new(move |ctx| {
-                        let v = f_expr.execute(ctx);
-                        match v {
-                            Value::Signed(i) => Value::Unsigned(i as u64),
-                            _ => panic!(),
-                        }
-                    }),
-                    (Int(_), Int(_)) => CompiledExpr::new(move |ctx| {
-                        let v = f_expr.execute(ctx);
-                        match v {
-                            Value::Signed(i) => Value::Signed(i),
-                            _ => panic!(),
-                        }
-                    }),
-                    (Int(_), Float(_)) => CompiledExpr::new(move |ctx| {
-                        let v = f_expr.execute(ctx);
-                        match v {
-                            Value::Signed(i) => Value::new_float(i as f64),
-                            _ => panic!(),
-                        }
-                    }),
-                    (Float(_), UInt(_)) => CompiledExpr::new(move |ctx| {
-                        let v = f_expr.execute(ctx);
-                        match v {
-                            Value::Float(f) => Value::Unsigned(f.into_inner() as u64),
-                            _ => panic!(),
-                        }
-                    }),
-                    (Float(_), Int(_)) => CompiledExpr::new(move |ctx| {
-                        let v = f_expr.execute(ctx);
-                        match v {
-                            Value::Float(f) => Value::Signed(f.into_inner() as i64),
-                            _ => panic!(),
-                        }
-                    }),
-                    (Float(_), Float(_)) => CompiledExpr::new(move |ctx| {
-                        let v = f_expr.execute(ctx);
-                        match v {
-                            Value::Float(f) => Value::new_float(f.into_inner() as f64),
-                            _ => panic!(),
-                        }
-                    }),
+                    (UInt(_), UInt(_)) => CompiledExpr::new(move |ctx| f_expr.execute(ctx)),
+                    (UInt(_), Int(_)) => create_convert!(Unsigned, Signed, i64),
+                    (UInt(_), Float(_)) => create_convert!(Unsigned, Float, f64),
+                    (Int(_), UInt(_)) => create_convert!(Signed, Unsigned, u64),
+                    (Int(_), Int(_)) => CompiledExpr::new(move |ctx| f_expr.execute(ctx)),
+                    (Int(_), Float(_)) => create_convert!(Signed, Float, f64),
+                    (Float(_), UInt(_)) => create_convert!(Float, Unsigned, u64),
+                    (Float(_), Int(_)) => create_convert!(Float, Signed, i64),
+                    (Float(_), Float(_)) => CompiledExpr::new(move |ctx| f_expr.execute(ctx)),
                     _ => unimplemented!(),
                 }
             }
