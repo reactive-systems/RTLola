@@ -69,4 +69,4 @@ integration_tests:
   stage: test
   image: rust:latest
   script:
-    - cd tests && python3 ./rtlola_test_runner.py
+    - cd tests && python3 ./streamlab-e2e-tests.py

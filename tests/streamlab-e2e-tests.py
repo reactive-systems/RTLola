@@ -55,15 +55,15 @@ def print_trigger_too_many(message, expected, actual):
 
 
 running_on_windows = platform.system() == "Windows"
-executable_name = "stream_lab.exe" if running_on_windows else "stream_lab"
+executable_name = "streamlab.exe" if running_on_windows else "streamlab"
 
 # TODO get build_version from command line an check against BUILD_VERSIONS
 # debug build is used during development so probably already build
 build_version = "debug"
 
 repo_base_dir = Path(".").resolve().parent
-rtlola_executable_path = repo_base_dir / "target" / build_version / executable_name
-rtlola_executable_path_string = str(rtlola_executable_path)
+streamlab_executable_path = repo_base_dir / "target" / build_version / executable_name
+streamlab_executable_path_string = str(streamlab_executable_path)
 
 if build_version == "debug":
     cargo_build = subprocess.run(["cargo", "build"], cwd=str(repo_base_dir))
@@ -78,7 +78,7 @@ wrong_tests = 0
 tests_passed = 0
 
 test_dir = Path('.')
-tests = [test_file for test_file in test_dir.iterdir() if test_file.is_file() and test_file.suffix == ".rtlola_test"]
+tests = [test_file for test_file in test_dir.iterdir() if test_file.is_file() and test_file.suffix == ".streamlab_test"]
 if len(sys.argv) == 2:
     tests = [test_file for test_file in tests if sys.argv[1] in test_file.name]
 
