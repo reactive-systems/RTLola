@@ -200,3 +200,15 @@ impl Ord for Value {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+
+    #[test]
+    fn size_of_value() {
+        let result = std::mem::size_of::<Value>();
+        assert!(result == 32, "Size of `Value` should be 32 bytes, was `{}`", result);
+    }
+}

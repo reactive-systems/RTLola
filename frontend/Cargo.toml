@@ -4,6 +4,7 @@ version = "0.1.0"
 authors = [
     "Malte Schledjewski <schledjewski@react.uni-saarland.de>",
     "Maximilian Schwenger <schwenger@react.uni-saarland.de>",
+    "Marvin Stenger <stenger@react.uni-saarland.de>",
     "Leander Tentrup <tentrup@react.uni-saarland.de>"
 ]
 edition = "2018"
