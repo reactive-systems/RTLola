@@ -445,7 +445,7 @@ impl StreamTy {
             StreamTy::RealTime(_) | StreamTy::Event(_) => Some(self.clone()),
             StreamTy::Infer(vars) => {
                 if vars.is_empty() {
-                    return Some(StreamTy::Event(Activation::Conjunction(Vec::new())));
+                    return Some(StreamTy::Event(Activation::True));
                 }
                 let mut seen_vars = HashSet::new();
                 let stream_types: Vec<StreamTy> =
@@ -501,6 +501,7 @@ impl StreamTy {
             _ => return,
         };
         match ac {
+            Activation::Conjunction(args) if args.is_empty() => *ac = Activation::True,
             Activation::Conjunction(args) | Activation::Disjunction(args) => {
                 args.sort();
                 args.dedup();
@@ -525,6 +526,7 @@ impl Activation<StreamVar> {
                 right.iter().all(|cond| left.contains(cond))
             }
             (Activation::Conjunction(left), _) => left.contains(other),
+            (_, Activation::True) => true,
             _ => {
                 // there are possible many more cases that we want to look at in order to make analysis more precise
                 false
@@ -535,6 +537,7 @@ impl Activation<StreamVar> {
     pub(crate) fn conjunction(&self, other: &Self) -> Self {
         use Activation::*;
         match (self, other) {
+            (True, _) => other.clone(),
             (Conjunction(c_l), Conjunction(c_r)) => {
                 let mut con = c_l.clone();
                 con.extend(c_r.iter().cloned());

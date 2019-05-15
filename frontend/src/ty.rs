@@ -85,6 +85,7 @@ pub enum Activation<Var> {
     Conjunction(Vec<Self>),
     Disjunction(Vec<Self>),
     Stream(Var),
+    True,
 }
 
 impl std::fmt::Display for Freq {
@@ -280,15 +281,10 @@ impl std::fmt::Display for Activation<StreamVar> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         use crate::ast::print::write_delim_list;
         match self {
-            Activation::Conjunction(con) => {
-                if con.is_empty() {
-                    write!(f, "true")
-                } else {
-                    write_delim_list(f, &con, "(", ")", " & ")
-                }
-            }
+            Activation::Conjunction(con) => write_delim_list(f, &con, "(", ")", " & "),
             Activation::Disjunction(dis) => write_delim_list(f, &dis, "(", ")", " | "),
             Activation::Stream(v) => write!(f, "{}", v),
+            Activation::True => write!(f, "true"),
         }
     }
 }

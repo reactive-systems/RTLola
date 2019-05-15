@@ -970,13 +970,13 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
         match self.stream_vars.get(&id) {
             Some(&var) => match self.stream_unifier.get_normalized_type(var) {
                 // make stream types default to event stream with empty conjunction, i.e., true
-                Some(StreamTy::Infer(_)) | None => Some(StreamTy::Event(Activation::Conjunction(Vec::new()))),
+                Some(StreamTy::Infer(_)) | None => Some(StreamTy::Event(Activation::True)),
                 Some(mut stream_ty) => {
                     stream_ty.simplify();
                     Some(stream_ty)
                 }
             },
-            None => Some(StreamTy::Event(Activation::Conjunction(Vec::new()))),
+            None => Some(StreamTy::Event(Activation::True)),
         }
     }
 
@@ -1015,7 +1015,7 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
             Activation::Stream(var) => {
                 *ac = match self.stream_unifier.get_normalized_type(*var) {
                     // make stream types default to event stream with empty conjunction, i.e., true
-                    Some(StreamTy::Infer(_)) | None => Activation::Conjunction(Vec::new()),
+                    Some(StreamTy::Infer(_)) | None => Activation::True,
                     Some(StreamTy::Event(Activation::Stream(v))) if *var == v => {
                         return;
                     }
@@ -1024,6 +1024,7 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
                 };
                 self.normalize_activation_condition(ac);
             }
+            Activation::True => {}
         }
     }
 
@@ -1049,6 +1050,7 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
                     .0;
                 Activation::Stream(crate::ir::StreamReference::InRef(idx))
             }
+            Activation::True => Activation::True,
         }
     }
 }

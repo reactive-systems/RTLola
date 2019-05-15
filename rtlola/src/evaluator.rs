@@ -520,6 +520,7 @@ impl ActivationCondition {
     fn eval_(ac: &Activation<StreamReference>, inputs: &BitSet) -> bool {
         use Activation::*;
         match ac {
+            True => true,
             Stream(var) => inputs.contains(var.in_ix()),
             Conjunction(vec) => vec.iter().all(|ac| Self::eval_(ac, inputs)),
             Disjunction(vec) => vec.iter().any(|ac| Self::eval_(ac, inputs)),
