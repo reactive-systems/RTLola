@@ -36,7 +36,7 @@ impl<'s> Expr<'s> for Expression {
                     Constant::UInt(u) => Value::Unsigned(u),
                     Constant::Int(i) => Value::Signed(i),
                     Constant::Float(f) => Value::Float(f.into()),
-                    Constant::Str(_) => unimplemented!(),
+                    Constant::Str(s) => Value::Str(s),
                 };
                 CompiledExpr::new(move |_| v.clone())
             }

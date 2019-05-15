@@ -276,7 +276,7 @@ impl<'a> ExpressionEvaluator<'a> {
                 Constant::UInt(u) => Value::Unsigned(*u),
                 Constant::Int(i) => Value::Signed(*i),
                 Constant::Float(f) => Value::Float((*f).into()),
-                Constant::Str(_) => unimplemented!(),
+                Constant::Str(s) => Value::Str(s.to_string()),
             },
 
             ArithLog(op, operands, _ty) => {

@@ -21,7 +21,7 @@ impl Value {
     pub(crate) fn try_from(source: &str, ty: &Type) -> Option<Value> {
         match ty {
             Type::Option(_) | Type::Function(_, _) => panic!("Cannot occur."),
-            Type::String => unimplemented!(),
+            Type::String => Some(Value::Str(source.to_string())),
             Type::Tuple(_) => unimplemented!(),
             Type::Float(_) => source.parse::<f64>().ok().map(|f| Float(NotNan::new(f).unwrap())),
             Type::UInt(_) => {
