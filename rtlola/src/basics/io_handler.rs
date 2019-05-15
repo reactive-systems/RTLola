@@ -4,7 +4,7 @@ use csv::{Reader as CSVReader, Result as ReaderResult, StringRecord};
 use std::fs::File;
 use std::io::{stderr, stdin, stdout, Write};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, SystemTime};
 
@@ -262,11 +262,17 @@ struct StatisticsData {
     start: SystemTime,
     num_events: AtomicU64,
     num_triggers: AtomicU64,
+    done: Mutex<bool>,
 }
 
 impl StatisticsData {
     fn new() -> Self {
-        Self { start: SystemTime::now(), num_events: AtomicU64::new(0), num_triggers: AtomicU64::new(0) }
+        Self {
+            start: SystemTime::now(),
+            num_events: AtomicU64::new(0),
+            num_triggers: AtomicU64::new(0),
+            done: Mutex::new(false),
+        }
     }
 }
 
@@ -277,19 +283,23 @@ struct Statistics {
 impl Statistics {
     fn new() -> Self {
         let data = Arc::new(StatisticsData::new());
+        // print intitial info
+        Self::print_progress_info(&data, ' ');
         let copy = data.clone();
         thread::spawn(move || {
             // this thread is responsible for displaying progress information
             let mut spinner = "⠁⠁⠉⠙⠚⠒⠂⠂⠒⠲⠴⠤⠄⠄⠤⠠⠠⠤⠦⠖⠒⠐⠐⠒⠓⠋⠉⠈⠈ "
                 .chars()
                 .cycle();
-            thread::sleep(Duration::from_millis(1)); // make sure that elapsed time is greater than 0
             loop {
-                Self::print_progress_info(&copy, spinner.next().unwrap());
-
                 thread::sleep(Duration::from_millis(100));
-
+                #[allow(clippy::mutex_atomic)]
+                let done = copy.done.lock().unwrap();
+                if *done {
+                    return;
+                }
                 Self::clear_progress_info();
+                Self::print_progress_info(&copy, spinner.next().unwrap());
             }
         });
 
@@ -304,9 +314,12 @@ impl Statistics {
         self.data.num_triggers.fetch_add(1, Ordering::Relaxed);
     }
 
+    #[allow(clippy::mutex_atomic)]
     pub(crate) fn terminate(&self) {
+        let mut done = self.data.done.lock().unwrap();
         Self::clear_progress_info();
         Self::print_progress_info(&self.data, ' ');
+        *done = true;
     }
 
     fn print_progress_info(data: &Arc<StatisticsData>, spin_char: char) {
@@ -314,16 +327,20 @@ impl Statistics {
 
         // write event statistics
         let now = SystemTime::now();
-        let num_events: u128 = data.num_events.load(Ordering::Relaxed).into();
         let elapsed_total = now.duration_since(data.start).unwrap().as_nanos();
-        let events_per_second = (num_events * Duration::from_secs(1).as_nanos()) / elapsed_total;
-        let nanos_per_event = elapsed_total / num_events;
-        writeln!(
-            out,
-            "{} {} events, {} events per second, {} nsec per event",
-            spin_char, num_events, events_per_second, nanos_per_event
-        )
-        .unwrap_or_else(|_| {});
+        let num_events: u128 = data.num_events.load(Ordering::Relaxed).into();
+        if num_events > 0 {
+            let events_per_second = (num_events * Duration::from_secs(1).as_nanos()) / elapsed_total;
+            let nanos_per_event = elapsed_total / num_events;
+            writeln!(
+                out,
+                "{} {} events, {} events per second, {} nsec per event",
+                spin_char, num_events, events_per_second, nanos_per_event
+            )
+            .unwrap_or_else(|_| {});
+        } else {
+            writeln!(out, "{} {} events", spin_char, num_events).unwrap_or_else(|_| {});
+        }
 
         // write trigger statistics
         let num_triggers = data.num_triggers.load(Ordering::Relaxed);
