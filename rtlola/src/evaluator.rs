@@ -15,8 +15,9 @@ use ordered_float::NotNan;
 use std::time::SystemTime;
 
 enum ActivationCondition {
-    //TODO(marvin): implement fast path for conjunctions
     TimeDriven,
+    True,
+    Conjunction(BitSet),
     General(Activation<StreamReference>),
 }
 
@@ -79,7 +80,13 @@ impl<'c> EvaluatorData<'c> {
         let activation_conditions = ir
             .outputs
             .iter()
-            .map(|o| if let Some(ac) = &o.ac { ac.clone().into() } else { ActivationCondition::TimeDriven })
+            .map(|o| {
+                if let Some(ac) = &o.ac {
+                    ActivationCondition::new(ac.clone(), ir.inputs.len())
+                } else {
+                    ActivationCondition::TimeDriven
+                }
+            })
             .collect();
         let exprs = ir.outputs.iter().map(|o| o.expr.clone()).collect();
         let compiled_exprs = if config.closure_based_evaluator {
@@ -503,16 +510,36 @@ impl<'e> EvaluationContext<'e> {
     }
 }
 
-impl From<Activation<StreamReference>> for ActivationCondition {
-    fn from(ac: Activation<StreamReference>) -> Self {
-        ActivationCondition::General(ac)
-    }
-}
-
 impl ActivationCondition {
+    fn new(ac: Activation<StreamReference>, n_inputs: usize) -> Self {
+        use ActivationCondition::*;
+        if let Activation::True = &ac {
+            // special case for constant output streams
+            return True;
+        }
+        if let Activation::Conjunction(vec) = &ac {
+            assert!(!vec.is_empty());
+            let ixs: Vec<usize> = vec
+                .iter()
+                .flat_map(|ac| if let Activation::Stream(var) = ac { Some(var.in_ix()) } else { None })
+                .collect();
+            if vec.len() == ixs.len() {
+                // fast path for conjunctive activation conditions
+                let mut bs = BitSet::with_capacity(n_inputs);
+                for ix in ixs {
+                    bs.insert(ix);
+                }
+                return Conjunction(bs);
+            }
+        }
+        General(ac)
+    }
+
     fn eval(&self, inputs: &BitSet) -> bool {
         use ActivationCondition::*;
         match self {
+            True => true,
+            Conjunction(bs) => bs.is_subset(inputs),
             General(ac) => Self::eval_(ac, inputs),
             TimeDriven => panic!(),
         }
@@ -520,10 +547,10 @@ impl ActivationCondition {
     fn eval_(ac: &Activation<StreamReference>, inputs: &BitSet) -> bool {
         use Activation::*;
         match ac {
-            True => true,
             Stream(var) => inputs.contains(var.in_ix()),
             Conjunction(vec) => vec.iter().all(|ac| Self::eval_(ac, inputs)),
             Disjunction(vec) => vec.iter().any(|ac| Self::eval_(ac, inputs)),
+            True => panic!(),
         }
     }
 }
