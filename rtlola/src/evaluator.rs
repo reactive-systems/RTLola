@@ -82,7 +82,11 @@ impl<'c> EvaluatorData<'c> {
             .map(|o| if let Some(ac) = &o.ac { ac.clone().into() } else { ActivationCondition::TimeDriven })
             .collect();
         let exprs = ir.outputs.iter().map(|o| o.expr.clone()).collect();
-        let compiled_exprs = ir.outputs.iter().map(|o| o.expr.clone().compile()).collect();
+        let compiled_exprs = if config.closure_based_evaluator {
+            ir.outputs.iter().map(|o| o.expr.clone().compile()).collect()
+        } else {
+            vec![]
+        };
         let global_store = GlobalStore::new(&ir, ts);
         let fresh_inputs = BitSet::with_capacity(ir.inputs.len());
         let fresh_outputs = BitSet::with_capacity(ir.outputs.len());
