@@ -82,7 +82,7 @@ impl<'c> EvaluatorData<'c> {
             .iter()
             .map(|o| {
                 if let Some(ac) = &o.ac {
-                    ActivationCondition::new(ac.clone(), ir.inputs.len())
+                    ActivationCondition::new(ac, ir.inputs.len())
                 } else {
                     ActivationCondition::TimeDriven
                 }
@@ -511,13 +511,13 @@ impl<'e> EvaluationContext<'e> {
 }
 
 impl ActivationCondition {
-    fn new(ac: Activation<StreamReference>, n_inputs: usize) -> Self {
+    fn new(ac: &Activation<StreamReference>, n_inputs: usize) -> Self {
         use ActivationCondition::*;
-        if let Activation::True = &ac {
+        if let Activation::True = ac {
             // special case for constant output streams
             return True;
         }
-        if let Activation::Conjunction(vec) = &ac {
+        if let Activation::Conjunction(vec) = ac {
             assert!(!vec.is_empty());
             let ixs: Vec<usize> = vec
                 .iter()
@@ -532,7 +532,7 @@ impl ActivationCondition {
                 return Conjunction(bs);
             }
         }
-        General(ac)
+        General(ac.clone())
     }
 
     fn eval(&self, inputs: &BitSet) -> bool {
