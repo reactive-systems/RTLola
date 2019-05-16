@@ -70,3 +70,14 @@ integration_tests:
   image: rust:latest
   script:
     - cd tests && python3 ./streamlab-e2e-tests.py
+
+# Use cargo to run the benchmarks
+cargo:bench:
+  stage: test
+  tags:
+    - benchmarking
+  image: rustlang/rust:nightly
+  script:
+    - rustc --version && cargo --version      # Print version info for debugging
+    - cargo bench # TODO: actually compare the results
+  allow_failure: true
