@@ -6,7 +6,7 @@ use std::error::Error;
 use std::ops::AddAssign;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use streamlab_frontend::ir::{FloatTy, LolaIR, Type, UIntTy};
+use streamlab_frontend::ir::{LolaIR, Type};
 
 pub(crate) type EventEvaluation = Vec<Value>;
 
@@ -69,29 +69,16 @@ impl EventDrivenManager {
         buffer
     }
 
-    fn get_time(&self) -> SystemTime {
-        let s = self.input_reader.str_for_time();
-        //TODO(marvin): fix this typing issue
-        let mut v = Value::try_from(s, &Type::Float(FloatTy::F64));
-        if v.is_none() {
-            v = Value::try_from(s, &Type::UInt(UIntTy::U64));
-        }
-        let v = v.unwrap_or_else(|| panic!("Failed to parse time string {}.", s));
-
-        //TODO(marvin): simplify time computation
-        match v {
-            Value::Unsigned(u) => UNIX_EPOCH + Duration::from_secs(u as u64),
-            Value::Float(f) => {
-                let f: f64 = (f).into();
-                let nanos_per_sec: u32 = 1_000_000_000;
-                let nanos = f * (f64::from(nanos_per_sec));
-                let nanos = nanos as u128;
-                let secs = (nanos / (u128::from(nanos_per_sec))) as u64;
-                let nanos = (nanos % (u128::from(nanos_per_sec))) as u32;
-                UNIX_EPOCH + Duration::new(secs, nanos)
-            }
-            _ => panic!("Invalid time stamp value type: {:?}", v),
-        }
+    fn get_time(&mut self) -> SystemTime {
+        let str_time = self.input_reader.str_for_time();
+        let float_secs: f64 = match str_time.parse() {
+            Ok(f) => f,
+            Err(e) => panic!("Failed to parse time string {}: {}", str_time, e),
+        };
+        const NANOS_PER_SEC: f64 = 1_000_000_000.0;
+        let float_nanos = float_secs * NANOS_PER_SEC;
+        let nanos = float_nanos as u64;
+        UNIX_EPOCH + Duration::from_nanos(nanos)
     }
 
     pub(crate) fn start_online(mut self, work_queue: Sender<WorkItem>) -> ! {
