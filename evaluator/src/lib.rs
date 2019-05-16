@@ -16,6 +16,7 @@ use std::time::Duration;
 use streamlab_frontend;
 use streamlab_frontend::ir::LolaIR;
 
+#[derive(Debug, Clone)]
 pub struct Config {
     cfg: EvalConfig,
     ir: LolaIR,

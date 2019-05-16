@@ -1,8 +1,8 @@
 use crate::basics::{EvalConfig, InputReader, OutputHandler};
 use crate::coordination::WorkItem;
 use crate::storage::Value;
-
 use crossbeam_channel::Sender;
+use std::error::Error;
 use std::ops::AddAssign;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -116,15 +116,12 @@ impl EventDrivenManager {
         }
     }
 
-    pub(crate) fn start_offline(mut self, work_queue: Sender<WorkItem>) -> ! {
+    pub(crate) fn start_offline(mut self, work_queue: Sender<WorkItem>) -> Result<(), Box<dyn Error>> {
         let mut start_time: Option<SystemTime> = None;
         loop {
             if !self.read_event() {
-                let _ = work_queue.send(WorkItem::End); // Whether it fails or not, we really don't care.
-                                                        // Sleep until you slowly fade into nothingness...
-                loop {
-                    std::thread::sleep(std::time::Duration::new(u64::max_value(), 0))
-                }
+                let _ = work_queue.send(WorkItem::End);
+                return Ok(());
             }
             let event = self.get_event();
             let time = self.get_time();

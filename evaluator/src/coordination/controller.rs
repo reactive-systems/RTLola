@@ -4,6 +4,7 @@ use super::WorkItem;
 use crate::basics::{EvalConfig, OutputHandler};
 use crate::evaluator::EvaluatorData;
 use crossbeam_channel::{bounded, unbounded};
+use std::error::Error;
 use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, SystemTime};
@@ -30,17 +31,17 @@ impl Controller {
         Self { ir, config, output_handler }
     }
 
-    pub(crate) fn start(&self) -> ! {
+    pub(crate) fn start(&self) -> Result<(), Box<dyn Error>> {
         if self.config.offline {
-            self.evaluate_offline();
+            self.evaluate_offline()
         } else {
-            self.evaluate_online();
+            self.evaluate_online()
         }
     }
 
     /// Starts the online evaluation process, i.e. periodically computes outputs for time-driven streams
     /// and fetches/expects events from specified input source.
-    fn evaluate_online(&self) -> ! {
+    fn evaluate_online(&self) -> Result<(), Box<dyn Error>> {
         let (work_tx, work_rx) = unbounded();
 
         let copy_output_handler = self.output_handler.clone();
@@ -83,7 +84,7 @@ impl Controller {
 
     /// Starts the offline evaluation process, i.e. periodically computes outputs for time-driven streams
     /// and fetches/expects events from specified input source.
-    fn evaluate_offline(&self) -> ! {
+    fn evaluate_offline(&self) -> Result<(), Box<dyn Error>> {
         // Use a bounded channel for offline mode, as we "control" time.
         let (work_tx, work_rx) = bounded(1024);
 
@@ -91,10 +92,13 @@ impl Controller {
 
         let ir_clone = self.ir.clone();
         let cfg_clone = self.config.clone();
-        let _event = thread::Builder::new().name("EventDrivenManager".into()).spawn(move || {
-            let event_manager = EventDrivenManager::setup(ir_clone, cfg_clone, output_copy_handler);
-            event_manager.start_offline(work_tx);
-        });
+        let edm_thread = thread::Builder::new()
+            .name("EventDrivenManager".into())
+            .spawn(move || {
+                let event_manager = EventDrivenManager::setup(ir_clone, cfg_clone, output_copy_handler);
+                event_manager.start_offline(work_tx).unwrap_or_else(|e| panic!("EventDrivenManager failed: {}", e));
+            })
+            .unwrap_or_else(|e| panic!("Failed to start EventDrivenManager thread: {}", e));
 
         let start_time = match work_rx.recv() {
             Err(e) => panic!("Both producers hung up! {}", e),
@@ -140,9 +144,12 @@ impl Controller {
                 WorkItem::End => {
                     self.output_handler.output(|| "Finished entire input. Terminating.");
                     self.output_handler.terminate();
-                    std::process::exit(0);
+                    break;
                 }
             }
         }
+
+        edm_thread.join().expect("Could not join on EventDrivenManger thread");
+        Ok(())
     }
 }
