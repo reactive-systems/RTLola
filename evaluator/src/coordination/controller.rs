@@ -3,7 +3,8 @@ use super::time_driven_manager::TimeDrivenManager;
 use super::WorkItem;
 use crate::basics::{EvalConfig, OutputHandler};
 use crate::evaluator::EvaluatorData;
-use std::sync::{mpsc, Arc};
+use crossbeam_channel::{bounded, unbounded};
+use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, SystemTime};
 use streamlab_frontend::ir::LolaIR;
@@ -40,7 +41,7 @@ impl Controller {
     /// Starts the online evaluation process, i.e. periodically computes outputs for time-driven streams
     /// and fetches/expects events from specified input source.
     fn evaluate_online(&self) -> ! {
-        let (work_tx, work_rx) = mpsc::channel();
+        let (work_tx, work_rx) = unbounded();
 
         let copy_output_handler = self.output_handler.clone();
 
@@ -84,7 +85,7 @@ impl Controller {
     /// and fetches/expects events from specified input source.
     fn evaluate_offline(&self) -> ! {
         // Use a bounded channel for offline mode, as we "control" time.
-        let (work_tx, work_rx) = mpsc::sync_channel(1024);
+        let (work_tx, work_rx) = bounded(1024);
 
         let output_copy_handler = self.output_handler.clone();
 

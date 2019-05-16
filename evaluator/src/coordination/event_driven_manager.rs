@@ -2,8 +2,8 @@ use crate::basics::{EvalConfig, InputReader, OutputHandler};
 use crate::coordination::WorkItem;
 use crate::storage::Value;
 
+use crossbeam_channel::Sender;
 use std::ops::AddAssign;
-use std::sync::mpsc::{Sender, SyncSender};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use streamlab_frontend::ir::{FloatTy, LolaIR, StreamReference, Type, UIntTy};
@@ -116,7 +116,7 @@ impl EventDrivenManager {
         }
     }
 
-    pub(crate) fn start_offline(mut self, work_queue: SyncSender<WorkItem>) -> ! {
+    pub(crate) fn start_offline(mut self, work_queue: Sender<WorkItem>) -> ! {
         let mut start_time: Option<SystemTime> = None;
         loop {
             if !self.read_event() {

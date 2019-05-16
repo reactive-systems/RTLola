@@ -1,7 +1,7 @@
 use super::WorkItem;
 use crate::basics::{EvalConfig, OutputHandler};
 
-use std::sync::mpsc::Sender;
+use crossbeam_channel::Sender;
 use std::sync::Arc;
 use std::thread::sleep;
 use std::time::{Duration, SystemTime};
