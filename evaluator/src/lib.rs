@@ -18,7 +18,6 @@ use streamlab_frontend::ir::LolaIR;
 
 pub struct Config {
     cfg: EvalConfig,
-    offline: bool,
     ir: LolaIR,
 }
 
@@ -140,17 +139,15 @@ impl Config {
         };
 
         let closure_based_evaluator = !parse_matches.is_present("INTERPRETED");
+        let offline = parse_matches.is_present("OFFLINE");
 
-        let cfg = EvalConfig::new(src, verbosity, out, closure_based_evaluator);
+        let cfg = EvalConfig::new(src, verbosity, out, closure_based_evaluator, offline);
 
-        Config { cfg, offline: parse_matches.is_present("OFFLINE"), ir }
+        Config { cfg, ir }
     }
 
     pub fn run(self) -> Result<(), Box<dyn std::error::Error>> {
-        if self.offline {
-            Controller::evaluate_offline(self.ir, self.cfg)
-        } else {
-            Controller::evaluate_online(self.ir, self.cfg);
-        }
+        let controller = Controller::new(self.ir, self.cfg);
+        controller.start()
     }
 }

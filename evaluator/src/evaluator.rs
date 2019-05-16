@@ -1,18 +1,17 @@
+use crate::basics::{EvalConfig, OutputHandler};
+use crate::closuregen::{CompiledExpr, Expr};
+use crate::coordination::{EventEvaluation, TimeEvaluation, WorkItem};
+use crate::storage::{GlobalStore, Value};
+use bit_set::BitSet;
+use ordered_float::NotNan;
+use std::sync::Arc;
+use std::time::SystemTime;
 use streamlab_frontend::ir::{
     Activation, Constant, Expression, LolaIR, Offset, StreamAccessKind, StreamReference, Trigger, Type, WindowReference,
 };
 
-use crate::basics::{EvalConfig, OutputHandler};
-use crate::closuregen::{CompiledExpr, Expr};
-use crate::storage::{GlobalStore, Value};
-use std::sync::Arc;
-
 pub(crate) type OutInstance = (usize, Vec<Value>);
 pub(crate) type Window = (usize, Vec<Value>);
-use bit_set::BitSet;
-use ordered_float::NotNan;
-
-use std::time::SystemTime;
 
 pub(crate) enum ActivationCondition {
     TimeDriven,
@@ -69,12 +68,7 @@ pub(crate) struct EvaluationContext<'e> {
 }
 
 impl<'c> EvaluatorData<'c> {
-    pub(crate) fn new(
-        ir: LolaIR,
-        ts: SystemTime,
-        config: EvalConfig,
-        handler: Arc<OutputHandler>,
-    ) -> EvaluatorData<'c> {
+    pub(crate) fn new(ir: LolaIR, ts: SystemTime, config: EvalConfig, handler: Arc<OutputHandler>) -> Self {
         // Layers of event based output streams
         let layers = ir.get_event_driven_layers();
         let activation_conditions = ir
@@ -130,6 +124,29 @@ impl<'c> EvaluatorData<'c> {
 }
 
 impl<'e, 'c> Evaluator<'e, 'c> {
+    pub(crate) fn eval_workitem(&mut self, wi: WorkItem) {
+        self.handler.debug(|| format!("Received {:?}.", wi));
+        match wi {
+            WorkItem::Event(e, ts) => self.evaluate_event_item(&e, ts),
+            WorkItem::Time(t, ts) => self.evaluate_timed_item(&t, ts),
+            WorkItem::Start(_) => panic!("Received spurious start command."),
+            WorkItem::End => {
+                self.handler.output(|| "Finished entire input. Terminating.");
+                std::process::exit(0);
+            }
+        }
+    }
+
+    pub(crate) fn evaluate_timed_item(&mut self, t: &TimeEvaluation, ts: SystemTime) {
+        self.handler.new_event();
+        self.eval_time_driven_outputs(t, ts);
+    }
+
+    pub(crate) fn evaluate_event_item(&mut self, e: &EventEvaluation, ts: SystemTime) {
+        self.handler.new_event();
+        self.eval_event(e, ts)
+    }
+
     pub(crate) fn eval_event(&mut self, event: &Vec<(StreamReference, Value)>, ts: SystemTime) {
         self.clear_freshness();
         self.accept_inputs(event, ts);

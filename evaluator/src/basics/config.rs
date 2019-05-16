@@ -6,6 +6,7 @@ pub struct EvalConfig {
     pub verbosity: Verbosity,
     pub output_channel: OutputChannel,
     pub closure_based_evaluator: bool,
+    pub offline: bool,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
@@ -32,8 +33,9 @@ impl EvalConfig {
         verbosity: Verbosity,
         output: OutputChannel,
         closure_based_evaluator: bool,
+        offline: bool,
     ) -> Self {
-        EvalConfig { source, verbosity, output_channel: output, closure_based_evaluator }
+        EvalConfig { source, verbosity, output_channel: output, closure_based_evaluator, offline }
     }
 
     pub fn debug() -> Self {
@@ -42,8 +44,8 @@ impl EvalConfig {
         cfg
     }
 
-    pub fn release(path: String, output: OutputChannel, closure_based_evaluator: bool) -> Self {
-        EvalConfig::new(InputSource::for_file(path), Verbosity::Triggers, output, closure_based_evaluator)
+    pub fn release(path: String, output: OutputChannel, closure_based_evaluator: bool, offline: bool) -> Self {
+        EvalConfig::new(InputSource::for_file(path), Verbosity::Triggers, output, closure_based_evaluator, offline)
     }
 }
 
@@ -54,6 +56,7 @@ impl Default for EvalConfig {
             verbosity: Verbosity::Triggers,
             output_channel: OutputChannel::StdOut,
             closure_based_evaluator: true,
+            offline: true,
         }
     }
 }
