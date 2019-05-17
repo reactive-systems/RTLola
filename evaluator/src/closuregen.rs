@@ -37,7 +37,7 @@ impl<'s> Expr<'s> for Expression {
                     Constant::UInt(u) => Value::Unsigned(u),
                     Constant::Int(i) => Value::Signed(i),
                     Constant::Float(f) => Value::Float(f.into()),
-                    Constant::Str(s) => Value::Str(s),
+                    Constant::Str(s) => Value::Str(s.into_boxed_str()),
                 };
                 CompiledExpr::new(move |_| v.clone())
             }
@@ -161,16 +161,11 @@ impl<'s> Expr<'s> for Expression {
                 })
             }
 
-            /*
             Tuple(entries) => {
                 let f_entries: Vec<CompiledExpr> = entries.into_iter().map(|e| e.compile()).collect();
-
-                CompiledExpr::new(move |ctx| {
-                    let entries: Vec<Value> = f_entries.iter().map(|f| f.execute(ctx)).collect();
-                    Value::Tuple(entries)
-                })
+                CompiledExpr::new(move |ctx| Value::Tuple(f_entries.iter().map(|f| f.execute(ctx)).collect()))
             }
-            */
+
             Function(name, args, _ty) => {
                 //TODO(marvin): handle type
                 let f_arg = args[0].clone().compile();
@@ -265,7 +260,6 @@ impl<'s> Expr<'s> for Expression {
                     }
                 })
             }
-            _ => unimplemented!("not implemented yet"),
         }
     }
 }

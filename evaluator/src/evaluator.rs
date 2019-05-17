@@ -304,7 +304,7 @@ impl<'a> ExpressionEvaluator<'a> {
                 Constant::UInt(u) => Value::Unsigned(*u),
                 Constant::Int(i) => Value::Signed(*i),
                 Constant::Float(f) => Value::Float((*f).into()),
-                Constant::Str(s) => Value::Str(s.to_string()),
+                Constant::Str(s) => Value::Str(s.clone().into_boxed_str()),
             },
 
             ArithLog(op, operands, _ty) => {
@@ -449,7 +449,7 @@ impl<'a> ExpressionEvaluator<'a> {
                 }
             }
 
-            Tuple(_entries) => unimplemented!("Who needs tuples, anyway?"),
+            Tuple(entries) => Value::Tuple(entries.iter().map(|e| self.eval_expr(e, ts)).collect()),
 
             Convert { from, to, expr } => {
                 use Type::*;
@@ -803,6 +803,22 @@ mod tests {
         let v1 = Value::Float(NotNan::new(3.5f64).unwrap());
         let v2 = Value::Float(NotNan::new(39.347568f64).unwrap());
         let expected = Value::Float(NotNan::new(3.5f64 + 39.347568f64).unwrap());
+        eval.accept_input(a, v1.clone(), SystemTime::now());
+        eval.accept_input(b, v2.clone(), SystemTime::now());
+        eval.eval_stream((0, Vec::new()), SystemTime::now());
+        assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), expected);
+    }
+
+    #[test]
+    fn test_bin_tuple() {
+        let (_, mut eval) = setup("input a: Int32\n input b: Bool\noutput c := (a, b)");
+        let mut eval = eval.as_Evaluator();
+        let out_ref = StreamReference::OutRef(0);
+        let a = StreamReference::InRef(0);
+        let b = StreamReference::InRef(1);
+        let v1 = Value::Signed(1);
+        let v2 = Value::Bool(true);
+        let expected = Value::Tuple(Box::new([v1.clone(), v2.clone()]));
         eval.accept_input(a, v1.clone(), SystemTime::now());
         eval.accept_input(b, v2.clone(), SystemTime::now());
         eval.eval_stream((0, Vec::new()), SystemTime::now());

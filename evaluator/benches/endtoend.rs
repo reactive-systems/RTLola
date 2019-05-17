@@ -15,6 +15,6 @@ fn endtoend_semi_complex_spec(b: &mut Bencher) {
         "--offline".to_string(),
     ]);
     b.iter(|| {
-        config.clone().run();
+        config.clone().run().unwrap_or_else(|e| panic!("E2E test failed: {}", e));
     });
 }

@@ -12,7 +12,8 @@ pub(crate) enum Value {
     Unsigned(u64),
     Signed(i64),
     Float(NotNan<f64>),
-    Str(String),
+    Tuple(Box<[Value]>),
+    Str(Box<str>),
 }
 
 impl Value {
@@ -20,7 +21,7 @@ impl Value {
     pub(crate) fn try_from(source: &str, ty: &Type) -> Option<Value> {
         match ty {
             Type::Option(_) | Type::Function(_, _) => panic!("Cannot occur."),
-            Type::String => Some(Value::Str(source.to_string())),
+            Type::String => Some(Value::Str(source.into())),
             Type::Tuple(_) => unimplemented!(),
             Type::Float(_) => source.parse::<f64>().ok().map(|f| Float(NotNan::new(f).unwrap())),
             Type::UInt(_) => {
@@ -178,6 +179,7 @@ impl PartialEq for Value {
             (Signed(i1), Signed(i2)) => i1.eq(i2),
             (Float(f1), Float(f2)) => f1.eq(f2),
             (Str(s1), Str(s2)) => s1.eq(s2),
+            (Tuple(args1), Tuple(args2)) => args1.iter().zip(args2.iter()).all(|(v1, v2)| v1.eq(v2)),
             (a, b) => panic!("Incompatible types: ({:?},{:?})", a, b),
         }
     }
@@ -209,6 +211,7 @@ mod tests {
     #[test]
     fn size_of_value() {
         let result = std::mem::size_of::<Value>();
-        assert!(result == 32, "Size of `Value` should be 32 bytes, was `{}`", result);
+        let expected = 24;
+        assert!(result == expected, "Size of `Value` should be {} bytes, was `{}`", expected, result);
     }
 }
