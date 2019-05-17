@@ -338,6 +338,18 @@ impl Expression {
     }
 }
 
+impl Expression {
+    /// Tries to resolve a tuple index access
+    pub(crate) fn get_expr_from_tuple<'a>(&'a self, idx: usize) -> Option<&'a Expression> {
+        use ExpressionKind::*;
+        match &self.kind {
+            Tuple(entries) => Some(entries[idx].as_ref()),
+            Ident(_) => None,
+            _ => unimplemented!(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

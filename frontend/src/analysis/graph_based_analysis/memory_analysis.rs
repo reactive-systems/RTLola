@@ -90,7 +90,23 @@ fn add_sliding_windows<'a>(
                 };
             }
         }
-        Field(_, _) | Method(_, _, _, _) => unimplemented!(),
+        Field(expr, ident) => {
+            let num: usize = ident.name.parse::<usize>().expect("checked in AST verifier");
+            if let Some(inner) = expr.get_expr_from_tuple(num) {
+                match add_sliding_windows(inner, type_table, declaration_table) {
+                    MemoryBound::Bounded(u) => required_memory += u,
+                    MemoryBound::Unbounded => return MemoryBound::Unbounded,
+                    MemoryBound::Unknown => unknown_size = true,
+                };
+            } else {
+                match add_sliding_windows(expr, type_table, declaration_table) {
+                    MemoryBound::Bounded(u) => required_memory += u,
+                    MemoryBound::Unbounded => return MemoryBound::Unbounded,
+                    MemoryBound::Unknown => unknown_size = true,
+                };
+            }
+        }
+        Method(_, _, _, _) => unimplemented!(),
         SlidingWindowAggregation { expr, duration, aggregation } => {
             if let Ident(_) = &expr.kind {
             } else {

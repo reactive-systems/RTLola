@@ -260,6 +260,17 @@ impl<'s> Expr<'s> for Expression {
                     }
                 })
             }
+
+            TupleAccess(expr, num) => {
+                let f_expr = expr.compile();
+                CompiledExpr::new(move |ctx| {
+                    if let Value::Tuple(args) = f_expr.execute(ctx) {
+                        args[num].clone()
+                    } else {
+                        unreachable!("verified by type checker");
+                    }
+                })
+            }
         }
     }
 }

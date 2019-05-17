@@ -529,7 +529,10 @@ impl<'a> Lowering<'a> {
                     func_expr
                 }
             }
-            ExpressionKind::Field(_, _) => unimplemented!(),
+            ExpressionKind::Field(expr, ident) => {
+                let num: usize = ident.name.parse::<usize>().expect("checked in AST verifier");
+                ir::Expression::TupleAccess(self.lower_expression(expr).0.into(), num)
+            }
             ExpressionKind::Method(_, _, _, _) => unimplemented!(),
         };
         (expr, result_type)

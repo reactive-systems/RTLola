@@ -35,6 +35,7 @@ impl Display for Expression {
                 StreamAccessKind::Hold => write!(f, "{}.hold()", sr),
                 StreamAccessKind::Optional => write!(f, "{}.get()", sr),
             },
+            Expression::TupleAccess(expr, num) => write!(f, "{}.{}", expr, num),
         }
     }
 }

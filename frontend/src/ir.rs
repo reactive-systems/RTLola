@@ -140,7 +140,10 @@ pub enum Expression {
     ArithLog(ArithLogOp, Vec<Expression>, Type),
     /// Accessing another stream with a potentially 0 offset
     /// 1st argument -> default
-    OffsetLookup { target: StreamReference, offset: Offset },
+    OffsetLookup {
+        target: StreamReference,
+        offset: Offset,
+    },
     /// Accessing another stream under sample and hold semantics
     StreamAccess(StreamReference, StreamAccessKind),
     /// Accessing another stream synchronously
@@ -148,16 +151,28 @@ pub enum Expression {
     /// A window expression over a duration
     WindowLookup(WindowReference),
     /// An if-then-else expression
-    Ite { condition: Box<Expression>, consequence: Box<Expression>, alternative: Box<Expression> },
+    Ite {
+        condition: Box<Expression>,
+        consequence: Box<Expression>,
+        alternative: Box<Expression>,
+    },
     /// A tuple expression
     Tuple(Vec<Expression>),
+    TupleAccess(Box<Expression>, usize),
     /// A function call with its monomorphic type
     /// Argumentes never need to be coerced, @see `Expression::Convert`.
     Function(String, Vec<Expression>, Type),
     /// Converting a value to a different type
-    Convert { from: Type, to: Type, expr: Box<Expression> },
+    Convert {
+        from: Type,
+        to: Type,
+        expr: Box<Expression>,
+    },
     /// Transforms an optional value into a "normal" one
-    Default { expr: Box<Expression>, default: Box<Expression> },
+    Default {
+        expr: Box<Expression>,
+        default: Box<Expression>,
+    },
 }
 
 /// Represents a constant value of a certain kind.

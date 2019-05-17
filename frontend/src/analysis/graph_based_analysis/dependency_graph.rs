@@ -352,7 +352,14 @@ impl<'a> DependencyAnalyser<'a> {
                     StreamDependency::Access(location, offset, expr.span),
                 );
             }
-            ExpressionKind::Field(_, _) => unimplemented!(),
+            ExpressionKind::Field(expr, ident) => {
+                let num: usize = ident.name.parse::<usize>().expect("checked in AST verifier");
+                if let Some(inner) = expr.get_expr_from_tuple(num) {
+                    self.add_edges_for_expression(current_node, inner, location, mapping);
+                } else {
+                    self.add_edges_for_expression(current_node, expr, location, mapping);
+                }
+            }
             ExpressionKind::Method(_, _, _, _) => unimplemented!(),
         }
     }

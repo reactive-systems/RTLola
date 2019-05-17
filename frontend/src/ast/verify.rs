@@ -30,6 +30,7 @@ impl<'a, 'b> Verifier<'a, 'b> {
         self.expression_walker(expr, &Self::check_missing_expression);
         self.expression_walker(expr, &Self::check_offsets_are_literals);
         self.expression_walker(expr, &Self::check_direct_access);
+        self.expression_walker(expr, &Self::check_field_access);
     }
 
     /// Iterates over the `Expression` AST and calls `check` on every node
@@ -139,6 +140,23 @@ impl<'a, 'b> Verifier<'a, 'b> {
                     handler.error_with_span(
                         "operation can be only applied to streams directly",
                         LabeledSpan::new(inner.span, "expected a stream variable", true),
+                    );
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn check_field_access(handler: &Handler, expr: &Expression) {
+        use ExpressionKind::*;
+        match &expr.kind {
+            Field(_expr, ident) => {
+                if let Ok(_) = ident.name.parse::<usize>() {
+                    // a valid vield access
+                } else {
+                    handler.error_with_span(
+                        "field access has to be an integer",
+                        LabeledSpan::new(ident.span, "expected an integer", true),
                     );
                 }
             }

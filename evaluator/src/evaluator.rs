@@ -485,6 +485,14 @@ impl<'a> ExpressionEvaluator<'a> {
                     v
                 }
             }
+
+            TupleAccess(expr, num) => {
+                if let Value::Tuple(entries) = self.eval_expr(expr, ts) {
+                    entries[*num].clone()
+                } else {
+                    unreachable!("verified by type checker")
+                }
+            }
         }
     }
 
@@ -811,9 +819,11 @@ mod tests {
 
     #[test]
     fn test_bin_tuple() {
-        let (_, mut eval) = setup("input a: Int32\n input b: Bool\noutput c := (a, b)");
+        let (_, mut eval) = setup("input a: Int32\n input b: Bool\noutput c := (a, b) output d := c.0 output e := c.1");
         let mut eval = eval.as_Evaluator();
         let out_ref = StreamReference::OutRef(0);
+        let out_ref0 = StreamReference::OutRef(1);
+        let out_ref1 = StreamReference::OutRef(2);
         let a = StreamReference::InRef(0);
         let b = StreamReference::InRef(1);
         let v1 = Value::Signed(1);
@@ -822,7 +832,11 @@ mod tests {
         eval.accept_input(a, v1.clone(), SystemTime::now());
         eval.accept_input(b, v2.clone(), SystemTime::now());
         eval.eval_stream((0, Vec::new()), SystemTime::now());
+        eval.eval_stream((1, Vec::new()), SystemTime::now());
+        eval.eval_stream((2, Vec::new()), SystemTime::now());
         assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), expected);
+        assert_eq!(eval.__peek_value(out_ref0, &Vec::new(), 0).unwrap(), v1);
+        assert_eq!(eval.__peek_value(out_ref1, &Vec::new(), 0).unwrap(), v2);
     }
 
     #[test]

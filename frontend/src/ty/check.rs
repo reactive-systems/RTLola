@@ -679,7 +679,7 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
                 debug!("{} {}", base, infered);
                 match infered {
                     ValueTy::Tuple(inner) => {
-                        let num: usize = ident.name.parse::<usize>().expect("verify that this is checked earlier");
+                        let num: usize = ident.name.parse::<usize>().expect("checked in AST verifier");
                         if num >= inner.len() {
                             self.handler.error_with_span(
                                 &format!("Try to access tuple at position {}", num),
