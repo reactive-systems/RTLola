@@ -139,21 +139,21 @@ impl<'e, 'c> Evaluator<'e, 'c> {
 
     pub(crate) fn evaluate_timed_item(&mut self, t: &TimeEvaluation, ts: SystemTime) {
         self.handler.new_event();
-        self.eval_time_driven_outputs(t, ts);
+        self.eval_time_driven_outputs(t.as_slice(), ts);
     }
 
     pub(crate) fn evaluate_event_item(&mut self, e: &EventEvaluation, ts: SystemTime) {
         self.handler.new_event();
-        self.eval_event(e, ts)
+        self.eval_event(e.as_slice(), ts)
     }
 
-    pub(crate) fn eval_event(&mut self, event: &Vec<Value>, ts: SystemTime) {
+    pub(crate) fn eval_event(&mut self, event: &[Value], ts: SystemTime) {
         self.clear_freshness();
         self.accept_inputs(event, ts);
         self.eval_all_event_driven_outputs(ts);
     }
 
-    fn accept_inputs(&mut self, event: &Vec<Value>, ts: SystemTime) {
+    fn accept_inputs(&mut self, event: &[Value], ts: SystemTime) {
         for (ix, v) in event.iter().enumerate() {
             match v {
                 Value::None => {}
@@ -179,7 +179,7 @@ impl<'e, 'c> Evaluator<'e, 'c> {
         }
     }
 
-    fn eval_event_driven_outputs(&mut self, streams: &Vec<StreamReference>, ts: SystemTime) {
+    fn eval_event_driven_outputs(&mut self, streams: &[StreamReference], ts: SystemTime) {
         for str_ref in streams {
             self.eval_event_driven_output(*str_ref, ts);
         }
@@ -191,7 +191,7 @@ impl<'e, 'c> Evaluator<'e, 'c> {
         }
     }
 
-    pub(crate) fn eval_time_driven_outputs(&mut self, streams: &Vec<StreamReference>, ts: SystemTime) {
+    pub(crate) fn eval_time_driven_outputs(&mut self, streams: &[StreamReference], ts: SystemTime) {
         self.clear_freshness();
         self.prepare_evaluation(ts);
         for str_ref in streams {
