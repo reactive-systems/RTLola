@@ -1,6 +1,5 @@
 use crate::basics::{EvalConfig, OutputHandler};
 use crate::closuregen::{CompiledExpr, Expr};
-use crate::coordination::{EventEvaluation, TimeEvaluation, WorkItem};
 use crate::storage::{GlobalStore, Value};
 use bit_set::BitSet;
 use ordered_float::NotNan;
@@ -124,29 +123,6 @@ impl<'c> EvaluatorData<'c> {
 }
 
 impl<'e, 'c> Evaluator<'e, 'c> {
-    pub(crate) fn eval_workitem(&mut self, wi: WorkItem) {
-        self.handler.debug(|| format!("Received {:?}.", wi));
-        match wi {
-            WorkItem::Event(e, ts) => self.evaluate_event_item(&e, ts),
-            WorkItem::Time(t, ts) => self.evaluate_timed_item(&t, ts),
-            WorkItem::Start(_) => panic!("Received spurious start command."),
-            WorkItem::End => {
-                self.handler.output(|| "Finished entire input. Terminating.");
-                std::process::exit(0);
-            }
-        }
-    }
-
-    pub(crate) fn evaluate_timed_item(&mut self, t: &TimeEvaluation, ts: SystemTime) {
-        self.handler.new_event();
-        self.eval_time_driven_outputs(t.as_slice(), ts);
-    }
-
-    pub(crate) fn evaluate_event_item(&mut self, e: &EventEvaluation, ts: SystemTime) {
-        self.handler.new_event();
-        self.eval_event(e.as_slice(), ts)
-    }
-
     pub(crate) fn eval_event(&mut self, event: &[Value], ts: SystemTime) {
         self.clear_freshness();
         self.accept_inputs(event, ts);
@@ -172,7 +148,7 @@ impl<'e, 'c> Evaluator<'e, 'c> {
         }
     }
 
-    pub fn eval_all_event_driven_outputs(&mut self, ts: SystemTime) {
+    fn eval_all_event_driven_outputs(&mut self, ts: SystemTime) {
         self.prepare_evaluation(ts);
         for layer in self.layers {
             self.eval_event_driven_outputs(layer, ts);

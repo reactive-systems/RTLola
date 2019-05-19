@@ -2,7 +2,8 @@ use super::event_driven_manager::EventDrivenManager;
 use super::time_driven_manager::TimeDrivenManager;
 use super::WorkItem;
 use crate::basics::{EvalConfig, OutputHandler};
-use crate::evaluator::EvaluatorData;
+use crate::coordination::{EventEvaluation, TimeEvaluation};
+use crate::evaluator::{Evaluator, EvaluatorData};
 use crossbeam_channel::{bounded, unbounded};
 use std::error::Error;
 use std::sync::Arc;
@@ -75,9 +76,19 @@ impl Controller {
         let mut evaluator = evaluatordata.as_Evaluator();
 
         loop {
-            match work_rx.recv() {
-                Ok(item) => evaluator.eval_workitem(item),
+            let item = match work_rx.recv() {
+                Ok(item) => item,
                 Err(e) => panic!("Both producers hung up! {}", e),
+            };
+            self.output_handler.debug(|| format!("Received {:?}.", item));
+            match item {
+                WorkItem::Event(e, ts) => self.evaluate_event_item(&mut evaluator, &e, ts),
+                WorkItem::Time(t, ts) => self.evaluate_timed_item(&mut evaluator, &t, ts),
+                WorkItem::Start(_) => panic!("Received spurious start command."),
+                WorkItem::End => {
+                    self.output_handler.output(|| "Finished entire input. Terminating.");
+                    std::process::exit(0);
+                }
             }
         }
     }
@@ -131,14 +142,14 @@ impl Controller {
                     if has_time_driven {
                         while ts >= next_deadline {
                             // Go back in time, evaluate,...
-                            evaluator.evaluate_timed_item(&due_streams, next_deadline);
+                            self.evaluate_timed_item(&mut evaluator, &due_streams, next_deadline);
                             let (wait_time, due) = time_manager.get_current_deadline(next_deadline);
                             assert!(wait_time > Duration::from_secs(0));
                             next_deadline += wait_time;
                             due_streams = due;
                         }
                     }
-                    evaluator.evaluate_event_item(&e, ts)
+                    self.evaluate_event_item(&mut evaluator, &e, ts)
                 }
                 WorkItem::Time(_, _) => panic!("Received time command in offline mode."),
                 WorkItem::Start(_) => panic!("Received spurious start command."),
@@ -152,5 +163,17 @@ impl Controller {
 
         edm_thread.join().expect("Could not join on EventDrivenManger thread");
         Ok(())
+    }
+
+    #[inline]
+    pub(crate) fn evaluate_timed_item(&self, evaluator: &mut Evaluator, t: &TimeEvaluation, ts: SystemTime) {
+        self.output_handler.new_event();
+        evaluator.eval_time_driven_outputs(t.as_slice(), ts);
+    }
+
+    #[inline]
+    pub(crate) fn evaluate_event_item(&self, evaluator: &mut Evaluator, e: &EventEvaluation, ts: SystemTime) {
+        self.output_handler.new_event();
+        evaluator.eval_event(e.as_slice(), ts)
     }
 }
