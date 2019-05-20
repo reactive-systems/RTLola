@@ -152,3 +152,20 @@ impl Config {
         controller.start()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn zero_wait_time_regression() {
+        let config = Config::new(&[
+            "streamlab".to_string(),
+            "../tests/specs/different_frequencies.lola".to_string(),
+            "--csv-in=../traces/tests/alternating_single_int32-every0.1s.csv".to_string(),
+            "--verbosity=silent".to_string(),
+            "--offline".to_string(),
+        ]);
+        config.run().unwrap_or_else(|e| panic!("E2E test failed: {}", e));
+    }
+}

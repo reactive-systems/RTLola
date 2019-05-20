@@ -133,6 +133,7 @@ impl Controller {
                             // Go back in time, evaluate,...
                             evaluator.evaluate_timed_item(&due_streams, next_deadline);
                             let (wait_time, due) = time_manager.get_current_deadline(next_deadline);
+                            assert!(wait_time > Duration::from_secs(0));
                             next_deadline += wait_time;
                             due_streams = due;
                         }
