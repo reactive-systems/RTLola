@@ -1,6 +1,6 @@
 use super::event_driven_manager::EventDrivenManager;
 use super::time_driven_manager::TimeDrivenManager;
-use super::WorkItem;
+use super::{WorkItem, CAP_WORK_QUEUE};
 use crate::basics::{EvalConfig, OutputHandler};
 use crate::coordination::{EventEvaluation, TimeEvaluation};
 use crate::evaluator::{Evaluator, EvaluatorData};
@@ -84,7 +84,6 @@ impl Controller {
             match item {
                 WorkItem::Event(e, ts) => self.evaluate_event_item(&mut evaluator, &e, ts),
                 WorkItem::Time(t, ts) => self.evaluate_timed_item(&mut evaluator, &t, ts),
-                WorkItem::Start(_) => panic!("Received spurious start command."),
                 WorkItem::End => {
                     self.output_handler.output(|| "Finished entire input. Terminating.");
                     std::process::exit(0);
@@ -97,7 +96,8 @@ impl Controller {
     /// and fetches/expects events from specified input source.
     fn evaluate_offline(&self) -> Result<(), Box<dyn Error>> {
         // Use a bounded channel for offline mode, as we "control" time.
-        let (work_tx, work_rx) = bounded(1024);
+        let (work_tx, work_rx) = bounded(CAP_WORK_QUEUE);
+        let (time_tx, time_rx) = bounded(1);
 
         let output_copy_handler = self.output_handler.clone();
 
@@ -107,16 +107,15 @@ impl Controller {
             .name("EventDrivenManager".into())
             .spawn(move || {
                 let event_manager = EventDrivenManager::setup(ir_clone, cfg_clone, output_copy_handler);
-                event_manager.start_offline(work_tx).unwrap_or_else(|e| panic!("EventDrivenManager failed: {}", e));
+                event_manager
+                    .start_offline(work_tx, time_tx)
+                    .unwrap_or_else(|e| panic!("EventDrivenManager failed: {}", e));
             })
             .unwrap_or_else(|e| panic!("Failed to start EventDrivenManager thread: {}", e));
 
-        let start_time = match work_rx.recv() {
-            Err(e) => panic!("Both producers hung up! {}", e),
-            Ok(item) => match item {
-                WorkItem::Start(ts) => ts,
-                _ => panic!("Did not receive a start event in offline mode!"),
-            },
+        let start_time = match time_rx.recv() {
+            Err(e) => panic!("Did not receive a start event in offline mode! {}", e),
+            Ok(ts) => ts,
         };
 
         let has_time_driven = !self.ir.time_driven.is_empty();
@@ -134,29 +133,30 @@ impl Controller {
 
         let mut evaluator = evaluatordata.as_Evaluator();
 
-        loop {
-            let item = work_rx.recv().unwrap_or_else(|e| panic!("Both producers hung up! {}", e));
-            self.output_handler.debug(|| format!("Received {:?}.", item));
-            match item {
-                WorkItem::Event(e, ts) => {
-                    if has_time_driven {
-                        while ts >= next_deadline {
-                            // Go back in time, evaluate,...
-                            self.evaluate_timed_item(&mut evaluator, &due_streams, next_deadline);
-                            let (wait_time, due) = time_manager.get_current_deadline(next_deadline);
-                            assert!(wait_time > Duration::from_secs(0));
-                            next_deadline += wait_time;
-                            due_streams = due;
+        'outer: loop {
+            let local_queue = work_rx.recv().unwrap_or_else(|e| panic!("EventDrivenManager hung up! {}", e));
+            for item in local_queue {
+                self.output_handler.debug(|| format!("Received {:?}.", item));
+                match item {
+                    WorkItem::Event(e, ts) => {
+                        if has_time_driven {
+                            while ts >= next_deadline {
+                                // Go back in time, evaluate,...
+                                self.evaluate_timed_item(&mut evaluator, &due_streams, next_deadline);
+                                let (wait_time, due) = time_manager.get_current_deadline(next_deadline);
+                                assert!(wait_time > Duration::from_secs(0));
+                                next_deadline += wait_time;
+                                due_streams = due;
+                            }
                         }
+                        self.evaluate_event_item(&mut evaluator, &e, ts)
                     }
-                    self.evaluate_event_item(&mut evaluator, &e, ts)
-                }
-                WorkItem::Time(_, _) => panic!("Received time command in offline mode."),
-                WorkItem::Start(_) => panic!("Received spurious start command."),
-                WorkItem::End => {
-                    self.output_handler.output(|| "Finished entire input. Terminating.");
-                    self.output_handler.terminate();
-                    break;
+                    WorkItem::Time(_, _) => panic!("Received time command in offline mode."),
+                    WorkItem::End => {
+                        self.output_handler.output(|| "Finished entire input. Terminating.");
+                        self.output_handler.terminate();
+                        break 'outer;
+                    }
                 }
             }
         }

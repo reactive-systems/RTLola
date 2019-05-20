@@ -9,10 +9,12 @@ pub(crate) use self::controller::Controller;
 pub(crate) use self::event_driven_manager::EventEvaluation;
 pub(crate) use self::time_driven_manager::TimeEvaluation;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) enum WorkItem {
     Event(EventEvaluation, SystemTime),
     Time(TimeEvaluation, SystemTime),
-    Start(SystemTime),
     End,
 }
+
+pub(crate) const CAP_WORK_QUEUE: usize = 8;
+pub(crate) const CAP_LOCAL_QUEUE: usize = 4096;

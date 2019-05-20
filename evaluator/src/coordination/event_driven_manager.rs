@@ -1,5 +1,5 @@
 use crate::basics::{EvalConfig, InputReader, OutputHandler};
-use crate::coordination::WorkItem;
+use crate::coordination::{WorkItem, CAP_LOCAL_QUEUE};
 use crate::storage::Value;
 use crossbeam_channel::Sender;
 use std::error::Error;
@@ -100,25 +100,34 @@ impl EventDrivenManager {
         }
     }
 
-    pub(crate) fn start_offline(mut self, work_queue: Sender<WorkItem>) -> Result<(), Box<dyn Error>> {
+    pub(crate) fn start_offline(
+        mut self,
+        work_queue: Sender<Vec<WorkItem>>,
+        time_slot: Sender<SystemTime>,
+    ) -> Result<(), Box<dyn Error>> {
         let mut start_time: Option<SystemTime> = None;
         loop {
-            if !self.has_event() {
-                let _ = work_queue.send(WorkItem::End);
-                return Ok(());
-            }
-            let event = self.read_event();
-            let time = self.get_time();
-            if start_time.is_none() {
-                start_time = Some(time);
-                let _ = work_queue.send(WorkItem::Start(time));
-            }
+            let mut local_queue = Vec::with_capacity(CAP_LOCAL_QUEUE);
+            for _i in 0..local_queue.capacity() {
+                if !self.has_event() {
+                    local_queue.push(WorkItem::End);
+                    let _ = work_queue.send(local_queue);
+                    return Ok(());
+                }
+                let event = self.read_event();
+                let time = self.get_time();
+                if start_time.is_none() {
+                    start_time = Some(time);
+                    let _ = time_slot.send(time);
+                }
 
-            match work_queue.send(WorkItem::Event(event, time)) {
-                Ok(_) => {}
-                Err(e) => self.out_handler.runtime_warning(|| format!("Error when sending work item. {}", e)),
+                local_queue.push(WorkItem::Event(event, time));
+                self.current_cycle += 1;
             }
-            self.current_cycle += 1;
+            match work_queue.send(local_queue) {
+                Ok(_) => {}
+                Err(e) => self.out_handler.runtime_warning(|| format!("Error when sending local queue. {}", e)),
+            }
         }
     }
 }
