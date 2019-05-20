@@ -3,9 +3,12 @@ from pathlib import Path
 import subprocess
 import platform
 import sys
+import argparse
+
 
 BUILD_VERSIONS = ["release", "debug"]
 EXIT_FAILURE = 1
+
 
 
 def build_path(base_dir, parts):
@@ -54,6 +57,9 @@ def print_trigger_too_many(message, expected, actual):
     sys.stdout.write('"' + message.strip() + '\"\x1b[1;31m' + " : {} ({} expected)".format(actual, expected) + '\x1b[0m\n')
 
 
+parser = argparse.ArgumentParser(description='Run end-to-end tests for StreamLab')
+
+
 running_on_windows = platform.system() == "Windows"
 executable_name = "streamlab.exe" if running_on_windows else "streamlab"
 
@@ -61,7 +67,13 @@ executable_name = "streamlab.exe" if running_on_windows else "streamlab"
 # debug build is used during development so probably already build
 build_version = "debug"
 
-repo_base_dir = Path(".").resolve().parent
+repo_base_dir = Path(".").resolve()
+if not Path(".gitlab-ci.yml").exists():
+    if (repo_base_dir.parent/".gitlab-ci.yml").exists():
+        repo_base_dir = repo_base_dir.parent
+    else:
+        print_fail("Run this script from the repo base or from te tests directory!")
+        sys.exit(EXIT_FAILURE)
 streamlab_executable_path = repo_base_dir / "target" / build_version / executable_name
 streamlab_executable_path_string = str(streamlab_executable_path)
 
@@ -77,7 +89,7 @@ crashed_tests = 0
 wrong_tests = 0
 tests_passed = 0
 
-test_dir = Path('.')
+test_dir = repo_base_dir/"tests"
 tests = [test_file for test_file in test_dir.iterdir() if test_file.is_file() and test_file.suffix == ".streamlab_test"]
 if len(sys.argv) == 2:
     tests = [test_file for test_file in tests if sys.argv[1] in test_file.name]
@@ -96,46 +108,53 @@ for (mode, config) in [('interpreted', ["--interpreted"]), ('closure', [])]:
             test_json = json.load(fd)
             spec_file = build_path(repo_base_dir, test_json["spec_file"].split('/')[1:])
             input_file = build_path(repo_base_dir, test_json["input_file"].split('/')[1:])
-            run_result = subprocess.run([streamlab_executable_path_string, "--offline", "--stdout", "--verbosity", "outputs", str(spec_file), "--csv-in", str(input_file)] + config, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=str(repo_base_dir), universal_newlines=True)
             something_wrong = False
-            if run_result.returncode == 0:
-                lines = iter(run_result.stdout.split("\n"))
-                triggers_in_output = dict()
-
-                # count triggers
-                for line in lines:
-                    if line == "":
-                        continue
-                    if line.startswith("Trigger: "):
-                        trigger_warning = line[len("Trigger: "):]
-                        triggers_in_output.setdefault(trigger_warning, 0)
-                        triggers_in_output[trigger_warning] += 1
-                    # else:
-                    #     print("Unexpected line: {}".format(line))
-
-                # print diff in triggers
-                # TODO allow for specifying a tolerance in the JSON
-                expected_triggers = list(test_json["triggers"].keys())
-                trigger_names = list(set(list(triggers_in_output.keys()) + expected_triggers))
-                trigger_names.sort()
-                for trigger in trigger_names:
-                    if trigger in expected_triggers:
-                        actual = triggers_in_output[trigger] if trigger in triggers_in_output else 0
-                        expected = 0
-                        if trigger in expected_triggers:
-                            expected = test_json["triggers"][trigger]["expected_count"]
-                        if actual != expected:
-                            print_trigger(trigger, expected, actual)
-                            something_wrong = True
-                    else:
-                        print_additional_trigger(trigger, triggers_in_output[trigger])
-                        something_wrong = True
-                if something_wrong:
-                    tests_wrong_out.append(test_name)
-            else:
+            run_result = None
+            try:
+                run_result = subprocess.run([streamlab_executable_path_string, "--offline", "--stdout", "--verbosity", "outputs", str(spec_file), "--csv-in", str(input_file)] + config, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=str(repo_base_dir), universal_newlines=True, timeout=10)
+            except subprocess.TimeoutExpired:
                 tests_crashed.append(test_name)
-                print_fail("Returned with error code")
+                print_fail("Test timed out")
                 something_wrong = True
+            if run_result is not None:
+                if run_result.returncode == 0:
+                    lines = iter(run_result.stdout.split("\n"))
+                    triggers_in_output = dict()
+
+                    # count triggers
+                    for line in lines:
+                        if line == "":
+                            continue
+                        if line.startswith("Trigger: "):
+                            trigger_warning = line[len("Trigger: "):]
+                            triggers_in_output.setdefault(trigger_warning, 0)
+                            triggers_in_output[trigger_warning] += 1
+                        # else:
+                        #     print("Unexpected line: {}".format(line))
+
+                    # print diff in triggers
+                    # TODO allow for specifying a tolerance in the JSON
+                    expected_triggers = list(test_json["triggers"].keys())
+                    trigger_names = list(set(list(triggers_in_output.keys()) + expected_triggers))
+                    trigger_names.sort()
+                    for trigger in trigger_names:
+                        if trigger in expected_triggers:
+                            actual = triggers_in_output[trigger] if trigger in triggers_in_output else 0
+                            expected = 0
+                            if trigger in expected_triggers:
+                                expected = test_json["triggers"][trigger]["expected_count"]
+                            if actual != expected:
+                                print_trigger(trigger, expected, actual)
+                                something_wrong = True
+                        else:
+                            print_additional_trigger(trigger, triggers_in_output[trigger])
+                            something_wrong = True
+                    if something_wrong:
+                        tests_wrong_out.append(test_name)
+                else:
+                    tests_crashed.append(test_name)
+                    print_fail("Returned with error code")
+                    something_wrong = True
 
             if something_wrong:
                 if False:
