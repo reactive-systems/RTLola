@@ -165,7 +165,7 @@ impl<'a> Lowering<'a> {
             ac,
         };
         self.ir.outputs.push(output);
-        let trig = ir::Trigger { message: trigger.message.clone(), reference };
+        let trig = ir::Trigger { message: trigger.message.clone(), reference, trigger_idx: self.ir.triggers.len() };
         match self.check_time_driven(trigger.id, reference) {
             None => self.ir.event_driven.push(EventDrivenStream { reference }),
             Some(tds) => self.ir.time_driven.push(tds),

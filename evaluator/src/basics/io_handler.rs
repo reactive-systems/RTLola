@@ -178,16 +178,16 @@ pub(crate) struct OutputHandler {
     pub(crate) verbosity: Verbosity,
     channel: OutputChannel,
     file: Option<File>,
-    statistics: Option<Statistics>,
+    pub(crate) statistics: Option<Statistics>,
 }
 
 impl OutputHandler {
-    pub(crate) fn new(config: &EvalConfig) -> OutputHandler {
+    pub(crate) fn new(config: &EvalConfig, num_trigger: usize) -> OutputHandler {
         OutputHandler {
             verbosity: config.verbosity,
             channel: config.output_channel.clone(),
             file: None,
-            statistics: if config.verbosity == Verbosity::Progress { Some(Statistics::new()) } else { None },
+            statistics: if config.verbosity == Verbosity::Progress { Some(Statistics::new(num_trigger)) } else { None },
         }
     }
 
@@ -199,13 +199,13 @@ impl OutputHandler {
     }
 
     #[allow(dead_code)]
-    pub(crate) fn trigger<F, T: Into<String>>(&self, msg: F)
+    pub(crate) fn trigger<F, T: Into<String>>(&self, msg: F, trigger_idx: usize)
     where
         F: FnOnce() -> T,
     {
         self.emit(Verbosity::Triggers, msg);
         if let Some(statistics) = &self.statistics {
-            statistics.trigger();
+            statistics.trigger(trigger_idx);
         }
     }
 
@@ -261,28 +261,28 @@ impl OutputHandler {
 struct StatisticsData {
     start: SystemTime,
     num_events: AtomicU64,
-    num_triggers: AtomicU64,
+    num_triggers: Vec<AtomicU64>,
     done: Mutex<bool>,
 }
 
 impl StatisticsData {
-    fn new() -> Self {
+    fn new(num_trigger: usize) -> Self {
         Self {
             start: SystemTime::now(),
             num_events: AtomicU64::new(0),
-            num_triggers: AtomicU64::new(0),
+            num_triggers: (0..num_trigger).map(|_| AtomicU64::new(0)).collect(),
             done: Mutex::new(false),
         }
     }
 }
 
-struct Statistics {
+pub(crate) struct Statistics {
     data: Arc<StatisticsData>,
 }
 
 impl Statistics {
-    fn new() -> Self {
-        let data = Arc::new(StatisticsData::new());
+    fn new(num_trigger: usize) -> Self {
+        let data = Arc::new(StatisticsData::new(num_trigger));
         // print intitial info
         Self::print_progress_info(&data, ' ');
         let copy = data.clone();
@@ -310,8 +310,8 @@ impl Statistics {
         self.data.num_events.fetch_add(1, Ordering::Relaxed);
     }
 
-    fn trigger(&self) {
-        self.data.num_triggers.fetch_add(1, Ordering::Relaxed);
+    fn trigger(&self, trigger_idx: usize) {
+        self.data.num_triggers[trigger_idx].fetch_add(1, Ordering::Relaxed);
     }
 
     #[allow(clippy::mutex_atomic)]
@@ -343,7 +343,8 @@ impl Statistics {
         }
 
         // write trigger statistics
-        let num_triggers = data.num_triggers.load(Ordering::Relaxed);
+        let num_triggers =
+            data.num_triggers.iter().fold(0, |val, num_trigger| val + num_trigger.load(Ordering::Relaxed));
         writeln!(out, "  {} triggers", num_triggers).unwrap_or_else(|_| {});
     }
 
@@ -354,5 +355,10 @@ impl Statistics {
         terminal.clear(ClearType::CurrentLine).unwrap_or_else(|_| {});
         cursor().move_up(1);
         terminal.clear(ClearType::CurrentLine).unwrap_or_else(|_| {});
+    }
+
+    #[cfg(test)]
+    pub(crate) fn get_num_trigger(&self, trigger_idx: usize) -> u64 {
+        self.data.num_triggers[trigger_idx].fetch_add(1, Ordering::Relaxed)
     }
 }

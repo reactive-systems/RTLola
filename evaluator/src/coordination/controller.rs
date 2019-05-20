@@ -16,7 +16,7 @@ pub struct Controller {
     config: EvalConfig,
 
     /// Handles all kind of output behavior according to config.
-    output_handler: Arc<OutputHandler>,
+    pub(crate) output_handler: Arc<OutputHandler>,
 }
 
 impl streamlab_frontend::LolaBackend for Controller {
@@ -27,7 +27,7 @@ impl streamlab_frontend::LolaBackend for Controller {
 
 impl Controller {
     pub(crate) fn new(ir: LolaIR, config: EvalConfig) -> Self {
-        let output_handler = Arc::new(OutputHandler::new(&config));
+        let output_handler = Arc::new(OutputHandler::new(&config, ir.triggers.len()));
         Self { ir, config, output_handler }
     }
 

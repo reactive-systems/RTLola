@@ -147,15 +147,18 @@ impl Config {
         Config { cfg, ir }
     }
 
-    pub fn run(self) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn run(self) -> Result<Controller, Box<dyn std::error::Error>> {
         let controller = Controller::new(self.ir, self.cfg);
-        controller.start()
+        controller.start()?;
+        Ok(controller)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Write;
+    use tempfile::NamedTempFile;
 
     #[test]
     fn zero_wait_time_regression() {
@@ -167,5 +170,42 @@ mod tests {
             "--offline".to_string(),
         ]);
         config.run().unwrap_or_else(|e| panic!("E2E test failed: {}", e));
+    }
+
+    #[test]
+    fn add_two_i32_streams() {
+        let spec = r#"
+            input a: Int32
+            input b: Int32
+
+            output c := a + b
+
+            trigger c > 2 "c is too large"
+        "#;
+        let ir = streamlab_frontend::parse(spec);
+        let mut file = NamedTempFile::new().expect("failed to create temporary file");
+        write!(
+            file,
+            "a,b,time
+#,#,1547627523.000536
+3,#,1547627523.100536
+#,3,1547627523.200536
+1,1,1547627523.300536
+#,3,1547627523.400536
+3,#,1547627523.500536
+2,2,1547627523.600536"
+        )
+        .expect("writing tempfile failed");
+
+        let cfg = EvalConfig::new(
+            InputSource::for_file(file.path().to_str().unwrap().to_string()),
+            Verbosity::Progress,
+            OutputChannel::StdErr,
+            true, // closure
+            true, // offline
+        );
+        let config = Config { cfg, ir };
+        let ctrl = config.run().unwrap_or_else(|e| panic!("E2E test failed: {}", e));
+        assert_eq!(ctrl.output_handler.statistics.as_ref().unwrap().get_num_trigger(0), 1);
     }
 }

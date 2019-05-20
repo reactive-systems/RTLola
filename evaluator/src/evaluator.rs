@@ -233,8 +233,10 @@ impl<'e, 'c> Evaluator<'e, 'c> {
         if let Value::Bool(true) = res {
             //TODO(marvin): cache trigger info in vector
             if let Some(trig) = self.is_trigger(inst.clone()) {
-                self.handler
-                    .trigger(|| format!("Trigger: {}", trig.message.as_ref().unwrap_or(&String::from("Warning!"))))
+                self.handler.trigger(
+                    || format!("Trigger: {}", trig.message.as_ref().unwrap_or(&String::from("Warning!"))),
+                    trig.trigger_idx,
+                )
             }
         }
 
@@ -596,7 +598,7 @@ mod tests {
         let ir = streamlab_frontend::parse(spec);
         let mut config = EvalConfig::default();
         config.verbosity = crate::basics::Verbosity::WarningsOnly;
-        let handler = Arc::new(OutputHandler::new(&config));
+        let handler = Arc::new(OutputHandler::new(&config, ir.triggers.len()));
         let eval = EvaluatorData::new(ir.clone(), ts, config, handler);
         (ir, eval)
     }

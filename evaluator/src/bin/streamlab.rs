@@ -5,5 +5,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     let args: Vec<String> = env::args().collect();
 
     let config = streamlab_evaluator::Config::new(&args);
-    config.run()
+    config.run()?;
+    Ok(())
 }

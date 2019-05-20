@@ -124,6 +124,7 @@ pub struct EventDrivenStream {
 pub struct Trigger {
     pub message: Option<String>,
     pub reference: StreamReference,
+    pub trigger_idx: usize,
 }
 
 /// The expressions of the IR.
