@@ -18,16 +18,16 @@ pub enum OutputChannel {
 #[derive(Debug, Clone)]
 pub enum InputSource {
     StdIn,
-    File { path: String, reading_delay: Option<Duration> },
+    File { path: String, reading_delay: Option<Duration>, time_col: Option<usize> },
 }
 
 impl InputSource {
-    pub fn for_file(path: String) -> InputSource {
-        InputSource::File { path, reading_delay: None }
+    pub fn for_file(path: String, time_col: Option<usize>) -> InputSource {
+        InputSource::File { path, reading_delay: None, time_col }
     }
 
-    pub fn with_delay(path: String, delay: Duration) -> InputSource {
-        InputSource::File { path, reading_delay: Some(delay) }
+    pub fn with_delay(path: String, delay: Duration, time_col: Option<usize>) -> InputSource {
+        InputSource::File { path, reading_delay: Some(delay), time_col }
     }
 
     pub fn stdin() -> InputSource {
@@ -46,7 +46,7 @@ pub(crate) struct ColumnMapping {
 }
 
 impl ColumnMapping {
-    fn from_header(names: &[&str], header: &StringRecord) -> ColumnMapping {
+    fn from_header(names: &[&str], header: &StringRecord, time_col: Option<usize>) -> ColumnMapping {
         let str2col: Vec<usize> = names
             .iter()
             .map(|name| {
@@ -62,7 +62,7 @@ impl ColumnMapping {
             col2str[*header_ix] = Some(str_ix);
         }
 
-        let time_ix = header.iter().position(|name| name == "time" || name == "ts" || name == "timestamp");
+        let time_ix = time_col.or(header.iter().position(|name| name == "time" || name == "ts" || name == "timestamp"));
         ColumnMapping { str2col, col2str, time_ix }
     }
 
@@ -119,15 +119,15 @@ pub(crate) struct InputReader {
 impl InputReader {
     pub(crate) fn from(src: InputSource, names: &[&str]) -> ReaderResult<InputReader> {
         let mut delay = None;
-        let mut wrapper = match src {
-            InputSource::StdIn => ReaderWrapper::Std(CSVReader::from_reader(stdin())),
-            InputSource::File { path, reading_delay } => {
+        let (mut wrapper, time_col) = match src {
+            InputSource::StdIn => (ReaderWrapper::Std(CSVReader::from_reader(stdin())), None),
+            InputSource::File { path, reading_delay, time_col } => {
                 delay = reading_delay;
-                ReaderWrapper::File(CSVReader::from_path(path)?)
+                (ReaderWrapper::File(CSVReader::from_path(path)?), time_col)
             }
         };
 
-        let mapping = ColumnMapping::from_header(names, wrapper.get_header()?);
+        let mapping = ColumnMapping::from_header(names, wrapper.get_header()?, time_col);
 
         Ok(InputReader { reader: wrapper, mapping, record: StringRecord::new(), reading_delay: delay })
     }

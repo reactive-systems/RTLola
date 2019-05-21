@@ -45,7 +45,13 @@ impl EvalConfig {
     }
 
     pub fn release(path: String, output: OutputChannel, closure_based_evaluator: bool, offline: bool) -> Self {
-        EvalConfig::new(InputSource::for_file(path), Verbosity::Triggers, output, closure_based_evaluator, offline)
+        EvalConfig::new(
+            InputSource::for_file(path, None),
+            Verbosity::Triggers,
+            output,
+            closure_based_evaluator,
+            offline,
+        )
     }
 }
 

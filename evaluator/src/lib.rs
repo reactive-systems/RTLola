@@ -47,6 +47,9 @@ impl Config {
                 .conflicts_with("STDIN")
         )
         .arg(
+            Arg::with_name("CSV_TIME_COLUMN").long("csv-time-column").help("The column in the CSV that contains time info").requires("CSV_INPUT_FILE").takes_value(true)
+        )
+        .arg(
             Arg::with_name("STDOUT")
                 .help("Output to stdout")
                 .long("stdout")
@@ -83,13 +86,13 @@ impl Config {
                 .long("offline")
                 .help("Use the timestamps from the input.\nThe column name must be one of [time,timestamp,ts].\nThe column must produce a monotonically increasing sequence of values.")
         )
-        .arg(
-            Arg::with_name("INTERPRETED").long("interpreted").help("Interpret expressions instead of compilation")
-        )
         .group(
             ArgGroup::with_name("MODE")
                 .required(true)
                 .args(&["ONLINE", "OFFLINE"])
+        )
+        .arg(
+            Arg::with_name("INTERPRETED").long("interpreted").help("Interpret expressions instead of compilation")
         )
         .get_matches_from(args);
 
@@ -115,8 +118,12 @@ impl Config {
         };
         let delay = Duration::new(0, 1_000_000 * delay);
 
+        let csv_time_column = parse_matches
+            .value_of("CSV_TIME_COLUMN")
+            .map(|col| col.parse::<usize>().expect("time column needs to be a unsigned integer"));
+
         let src = if let Some(file) = parse_matches.value_of("CSV_INPUT_FILE") {
-            InputSource::with_delay(String::from(file), delay)
+            InputSource::with_delay(String::from(file), delay, csv_time_column)
         } else {
             InputSource::stdin()
         };
@@ -243,7 +250,7 @@ mod tests {
         .expect("writing tempfile failed");
 
         let cfg = EvalConfig::new(
-            InputSource::for_file(file.path().to_str().unwrap().to_string()),
+            InputSource::for_file(file.path().to_str().unwrap().to_string(), None),
             Verbosity::Progress,
             OutputChannel::StdErr,
             true, // closure
@@ -258,7 +265,7 @@ mod tests {
     fn regex_simple() {
         let spec = r#"
             import regex
-            
+
             input a: String
 
             output x := matches(a, regex: "sub")
@@ -279,7 +286,7 @@ subsub,25.0"
         .expect("writing tempfile failed");
 
         let cfg = EvalConfig::new(
-            InputSource::for_file(file.path().to_str().unwrap().to_string()),
+            InputSource::for_file(file.path().to_str().unwrap().to_string(), None),
             Verbosity::Progress,
             OutputChannel::StdErr,
             true, // closure
