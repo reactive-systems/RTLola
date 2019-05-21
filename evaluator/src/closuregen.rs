@@ -4,6 +4,7 @@
 
 use crate::evaluator::EvaluationContext;
 use crate::storage::Value;
+use regex::Regex;
 use std::ops::{Add, Div, Mul, Neg, Not, Rem, Sub};
 use streamlab_frontend::ir::{Constant, Expression, Offset, StreamAccessKind, StreamReference, Type};
 
@@ -195,6 +196,21 @@ impl<'s> Expr<'s> for Expression {
                             _ => panic!(),
                         }
                     }),
+                    "matches" => {
+                        let re_str = match &args[1] {
+                            Expression::LoadConstant(Constant::Str(s)) => s,
+                            _ => unreachable!("regex should be a string literal"),
+                        };
+                        let re = Regex::new(&re_str).expect("Given regular expression was invalid");
+                        CompiledExpr::new(move |ctx| {
+                            let val = f_arg.execute(ctx);
+                            if let Value::Str(s) = &val {
+                                Value::Bool(re.is_match(s))
+                            } else {
+                                unreachable!("expected `String`, found {:?}", val);
+                            }
+                        })
+                    }
                     _ => panic!("Unknown function."),
                 }
             }

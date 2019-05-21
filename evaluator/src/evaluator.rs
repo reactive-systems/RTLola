@@ -3,6 +3,7 @@ use crate::closuregen::{CompiledExpr, Expr};
 use crate::storage::{GlobalStore, Value};
 use bit_set::BitSet;
 use ordered_float::NotNan;
+use regex::Regex;
 use std::sync::Arc;
 use std::time::SystemTime;
 use streamlab_frontend::ir::{
@@ -415,6 +416,19 @@ impl<'a> ExpressionEvaluator<'a> {
                         };
                         Value::Signed(res)
                     }
+                    Value::Str(s) => match name.as_ref() {
+                        "matches" => {
+                            let re_str = match &args[1] {
+                                Expression::LoadConstant(Constant::Str(s)) => s,
+                                _ => unreachable!("regex should be a string literal"),
+                            };
+                            // compiling regex every time it is used is a performance problem
+                            // TODO: move it out of the eval loop
+                            let re = Regex::new(&re_str).expect("Given regular expression was invalid");
+                            Value::Bool(re.is_match(&s))
+                        }
+                        _ => unreachable!("unknown `String` function {}", name),
+                    },
                     _ => panic!("Unknown function: {}", name),
                 }
             }

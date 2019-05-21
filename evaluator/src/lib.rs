@@ -253,4 +253,41 @@ mod tests {
         let ctrl = config.run().unwrap_or_else(|e| panic!("E2E test failed: {}", e));
         assert_eq!(ctrl.output_handler.statistics.as_ref().unwrap().get_num_trigger(0), 1);
     }
+
+    #[test]
+    fn regex_simple() {
+        let spec = r#"
+            import regex
+            
+            input a: String
+
+            output x := matches(a, regex: "sub")
+            output y := matches(a, regex: "^sub")
+
+            trigger x "sub"
+            trigger y "^sub"
+        "#;
+        let ir = streamlab_frontend::parse(spec);
+        let mut file = NamedTempFile::new().expect("failed to create temporary file");
+        write!(
+            file,
+            "a,time
+xub,24.8
+sajhasdsub,24.9
+subsub,25.0"
+        )
+        .expect("writing tempfile failed");
+
+        let cfg = EvalConfig::new(
+            InputSource::for_file(file.path().to_str().unwrap().to_string()),
+            Verbosity::Progress,
+            OutputChannel::StdErr,
+            true, // closure
+            true, // offline
+        );
+        let config = Config { cfg, ir };
+        let ctrl = config.run().unwrap_or_else(|e| panic!("E2E test failed: {}", e));
+        assert_eq!(ctrl.output_handler.statistics.as_ref().unwrap().get_num_trigger(0), 2);
+        assert_eq!(ctrl.output_handler.statistics.as_ref().unwrap().get_num_trigger(1), 1);
+    }
 }
