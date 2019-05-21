@@ -607,6 +607,7 @@ mod tests {
         output o_1: UInt8 := 3
         output o_2: Int8 := -5
         output o_3: Float32 := -123.456
+        output o_4: String := "foobar"
         "#,
         );
         let mut eval = eval.as_Evaluator();
@@ -614,6 +615,7 @@ mod tests {
         peek_assert_eq!(eval, 1, Unsigned(3));
         peek_assert_eq!(eval, 2, Signed(-5));
         peek_assert_eq!(eval, 3, Value::new_float(-123.456));
+        peek_assert_eq!(eval, 4, Str("foobar".into()));
     }
 
     #[test]
