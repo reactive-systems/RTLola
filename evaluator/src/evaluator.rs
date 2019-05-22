@@ -30,6 +30,7 @@ pub(crate) struct EvaluatorData<'c> {
     global_store: GlobalStore,
     fresh_inputs: BitSet,
     fresh_outputs: BitSet,
+    triggers: Vec<Option<Trigger>>,
     ir: LolaIR,
     handler: Arc<OutputHandler>,
     config: EvalConfig,
@@ -47,6 +48,7 @@ pub(crate) struct Evaluator<'e, 'c> {
     global_store: &'e mut GlobalStore,
     fresh_inputs: &'e mut BitSet,
     fresh_outputs: &'e mut BitSet,
+    triggers: &'e Vec<Option<Trigger>>,
     ir: &'e LolaIR,
     handler: &'e OutputHandler,
     config: &'e EvalConfig,
@@ -69,6 +71,7 @@ impl<'c> EvaluatorData<'c> {
     pub(crate) fn new(ir: LolaIR, ts: SystemTime, config: EvalConfig, handler: Arc<OutputHandler>) -> Self {
         // Layers of event based output streams
         let layers = ir.get_event_driven_layers();
+        handler.debug(|| format!("Evaluation layers: {:?}", layers));
         let activation_conditions = ir
             .outputs
             .iter()
@@ -89,7 +92,10 @@ impl<'c> EvaluatorData<'c> {
         let global_store = GlobalStore::new(&ir, ts);
         let fresh_inputs = BitSet::with_capacity(ir.inputs.len());
         let fresh_outputs = BitSet::with_capacity(ir.outputs.len());
-        handler.debug(|| format!("Evaluation layers: {:?}", layers));
+        let mut triggers = vec![None; ir.outputs.len()];
+        for t in &ir.triggers {
+            triggers[t.reference.out_ix()] = Some(t.clone());
+        }
         EvaluatorData {
             layers,
             activation_conditions,
@@ -98,6 +104,7 @@ impl<'c> EvaluatorData<'c> {
             global_store,
             fresh_inputs,
             fresh_outputs,
+            triggers,
             ir,
             handler,
             config,
@@ -114,6 +121,7 @@ impl<'c> EvaluatorData<'c> {
             global_store: &mut self.global_store,
             fresh_inputs: &mut self.fresh_inputs,
             fresh_outputs: &mut self.fresh_outputs,
+            triggers: &self.triggers,
             ir: &self.ir,
             handler: &self.handler,
             config: &self.config,
@@ -227,7 +235,7 @@ impl<'e, 'c> Evaluator<'e, 'c> {
     }
 
     fn is_trigger(&self, ix: OutputReference) -> Option<&Trigger> {
-        self.ir.triggers.iter().find(|t| t.reference.out_ix() == ix)
+        self.triggers[ix].as_ref()
     }
 
     #[cfg(test)]
