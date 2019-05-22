@@ -1,6 +1,9 @@
 input a: Int32
 
-output b @ 10Hz := a.aggregate(over: 0.1s, using: count)
+output s @ 10Hz := a.aggregate(over: 0.1s, using: sum)
+output c @ 10Hz := a.aggregate(over: 0.1s, using: count)
+output av @ 10Hz := a.aggregate(over: 0.1s, using: avg).defaults(to: 10)
+output i @ 10Hz := a.aggregate(over: 0.1s, using: integral).defaults(to: 10)
 
-trigger b == 1 "count is 1"
-trigger b == 2 "count is 2"
+trigger c == 1 "count is 1"
+trigger c == 2 "count is 2"
