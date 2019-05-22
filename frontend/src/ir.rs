@@ -294,10 +294,13 @@ pub struct WindowReference {
 }
 
 /// Allows for referencing a stream within the specification.
+pub type InputReference = usize;
+pub type OutputReference = usize;
+
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum StreamReference {
-    InRef(usize),
-    OutRef(usize),
+    InRef(InputReference),
+    OutRef(OutputReference),
 }
 
 impl StreamReference {
@@ -384,12 +387,12 @@ impl Stream for InputStream {
 }
 
 impl LolaIR {
-    pub fn input_refs(&self) -> Vec<StreamReference> {
-        self.inputs.iter().map(|s| (s as &Stream).as_stream_ref()).collect()
+    pub fn input_refs(&self) -> Vec<InputReference> {
+        self.inputs.iter().map(|s| (s as &Stream).as_stream_ref().in_ix()).collect()
     }
 
-    pub fn output_refs(&self) -> Vec<StreamReference> {
-        self.outputs.iter().map(|s| (s as &Stream).as_stream_ref()).collect()
+    pub fn output_refs(&self) -> Vec<OutputReference> {
+        self.outputs.iter().map(|s| (s as &Stream).as_stream_ref().out_ix()).collect()
     }
 
     pub(crate) fn get_in_mut(&mut self, reference: StreamReference) -> &mut InputStream {
@@ -421,7 +424,11 @@ impl LolaIR {
     }
 
     pub fn all_streams(&self) -> Vec<StreamReference> {
-        self.input_refs().iter().chain(self.output_refs().iter()).cloned().collect()
+        self.input_refs()
+            .iter()
+            .map(|ix| StreamReference::InRef(*ix))
+            .chain(self.output_refs().iter().map(|ix| StreamReference::OutRef(*ix)))
+            .collect()
     }
 
     pub fn get_triggers(&self) -> Vec<&OutputStream> {
