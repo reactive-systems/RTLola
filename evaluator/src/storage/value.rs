@@ -5,7 +5,7 @@ use streamlab_frontend::ir::Type;
 
 use self::Value::*;
 
-#[derive(Debug, Eq, Hash, Clone)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub(crate) enum Value {
     None,
     Bool(bool),
@@ -167,20 +167,6 @@ impl ops::Neg for Value {
             Signed(v) => Signed(-v), // TODO Check
             Float(v) => Float(-v),
             a => panic!("Incompatible type: {:?}", a),
-        }
-    }
-}
-
-impl PartialEq for Value {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Bool(b1), Bool(b2)) => b1.eq(b2),
-            (Unsigned(u1), Unsigned(u2)) => u1.eq(u2),
-            (Signed(i1), Signed(i2)) => i1.eq(i2),
-            (Float(f1), Float(f2)) => f1.eq(f2),
-            (Str(s1), Str(s2)) => s1.eq(s2),
-            (Tuple(args1), Tuple(args2)) => args1.iter().zip(args2.iter()).all(|(v1, v2)| v1.eq(v2)),
-            (a, b) => panic!("Incompatible types: ({:?},{:?})", a, b),
         }
     }
 }
