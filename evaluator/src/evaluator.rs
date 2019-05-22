@@ -11,9 +11,6 @@ use streamlab_frontend::ir::{
     StreamReference, Trigger, Type, WindowReference,
 };
 
-pub(crate) type OutInstance = (usize, Vec<Value>);
-pub(crate) type Window = (usize, Vec<Value>);
-
 pub(crate) enum ActivationCondition {
     TimeDriven,
     True,
@@ -141,12 +138,12 @@ impl<'e, 'c> Evaluator<'e, 'c> {
     }
 
     fn accept_input(&mut self, input: InputReference, v: Value, ts: SystemTime) {
-        self.global_store.get_in_instance_mut(StreamReference::InRef(input)).push_value(v.clone());
+        self.global_store.get_in_instance_mut(input).push_value(v.clone());
         self.fresh_inputs.insert(input);
         self.handler.debug(|| format!("InputStream[{}] := {:?}.", input, v.clone()));
         let extended = &self.ir.inputs[input];
         for win in &extended.dependent_windows {
-            self.global_store.get_window_mut((win.ix, Vec::new())).accept_value(v.clone(), ts)
+            self.global_store.get_window_mut(win.ix).accept_value(v.clone(), ts)
         }
     }
 
@@ -157,23 +154,23 @@ impl<'e, 'c> Evaluator<'e, 'c> {
         }
     }
 
-    fn eval_event_driven_outputs(&mut self, streams: &[OutputReference], ts: SystemTime) {
-        for str_ref in streams {
-            self.eval_event_driven_output(*str_ref, ts);
+    fn eval_event_driven_outputs(&mut self, outputs: &[OutputReference], ts: SystemTime) {
+        for output in outputs {
+            self.eval_event_driven_output(*output, ts);
         }
     }
 
-    fn eval_event_driven_output(&mut self, stream: OutputReference, ts: SystemTime) {
-        if self.activation_conditions[stream].eval(self.fresh_inputs) {
-            self.eval_output(stream, ts);
+    fn eval_event_driven_output(&mut self, output: OutputReference, ts: SystemTime) {
+        if self.activation_conditions[output].eval(self.fresh_inputs) {
+            self.eval_stream(output, ts);
         }
     }
 
-    pub(crate) fn eval_time_driven_outputs(&mut self, streams: &[OutputReference], ts: SystemTime) {
+    pub(crate) fn eval_time_driven_outputs(&mut self, outputs: &[OutputReference], ts: SystemTime) {
         self.clear_freshness();
         self.prepare_evaluation(ts);
-        for str_ref in streams {
-            self.eval_output(*str_ref, ts);
+        for output in outputs {
+            self.eval_stream(*output, ts);
         }
     }
 
@@ -182,17 +179,12 @@ impl<'e, 'c> Evaluator<'e, 'c> {
         let windows = &self.ir.sliding_windows;
         for win in windows {
             let ix = win.reference.ix;
-            self.global_store.get_window_mut((ix, Vec::new())).update(ts);
+            self.global_store.get_window_mut(ix).update(ts);
         }
     }
 
-    fn eval_output(&mut self, stream: OutputReference, ts: SystemTime) {
-        let inst = (stream, Vec::new());
-        self.eval_stream(inst, ts);
-    }
-
-    fn eval_stream(&mut self, inst: OutInstance, ts: SystemTime) {
-        let (ix, _) = inst;
+    fn eval_stream(&mut self, output: OutputReference, ts: SystemTime) {
+        let ix = output;
         self.handler
             .debug(|| format!("Evaluating stream {}: {}.", ix, self.ir.get_out(StreamReference::OutRef(ix)).name));
 
@@ -205,7 +197,7 @@ impl<'e, 'c> Evaluator<'e, 'c> {
         };
 
         // Register value in global store.
-        self.global_store.get_out_instance_mut(inst.clone()).unwrap().push_value(res.clone()); // TODO: unsafe unwrap.
+        self.global_store.get_out_instance_mut(output).unwrap().push_value(res.clone()); // TODO: unsafe unwrap.
         self.fresh_outputs.insert(ix);
 
         self.handler.output(|| format!("OutputStream[{}] := {:?}.", ix, res.clone()));
@@ -213,7 +205,7 @@ impl<'e, 'c> Evaluator<'e, 'c> {
         // Check if we have to emit a warning.
         if let Value::Bool(true) = res {
             //TODO(marvin): cache trigger info in vector
-            if let Some(trig) = self.is_trigger(inst.clone()) {
+            if let Some(trig) = self.is_trigger(output) {
                 self.handler.trigger(
                     || format!("Trigger: {}", trig.message.as_ref().unwrap_or(&String::from("Warning!"))),
                     trig.trigger_idx,
@@ -224,7 +216,7 @@ impl<'e, 'c> Evaluator<'e, 'c> {
         // Check linked streams and inform them.
         let extended = &self.ir.outputs[ix];
         for win in &extended.dependent_windows {
-            self.global_store.get_window_mut((win.ix, Vec::new())).accept_value(res.clone(), ts)
+            self.global_store.get_window_mut(win.ix).accept_value(res.clone(), ts)
         }
         // TODO: Dependent streams?
     }
@@ -234,19 +226,20 @@ impl<'e, 'c> Evaluator<'e, 'c> {
         self.fresh_outputs.clear();
     }
 
-    fn is_trigger(&self, inst: OutInstance) -> Option<&Trigger> {
-        self.ir.triggers.iter().find(|t| t.reference.out_ix() == inst.0)
+    fn is_trigger(&self, ix: OutputReference) -> Option<&Trigger> {
+        self.ir.triggers.iter().find(|t| t.reference.out_ix() == ix)
     }
 
     #[cfg(test)]
     fn __peek_value(&self, sr: StreamReference, args: &[Value], offset: i16) -> Option<Value> {
         match sr {
-            StreamReference::InRef(_) => {
+            StreamReference::InRef(ix) => {
                 assert!(args.is_empty());
-                self.global_store.get_in_instance(sr).get_value(offset)
+                self.global_store.get_in_instance(ix).get_value(offset)
             }
             StreamReference::OutRef(ix) => {
-                let inst = (ix, Vec::from(args));
+                //let inst = (ix, Vec::from(args));
+                let inst = ix;
                 self.global_store.get_out_instance(inst).and_then(|st| st.get_value(offset))
             }
         }
@@ -487,17 +480,14 @@ impl<'a> ExpressionEvaluator<'a> {
 
     fn lookup_with_offset(&self, stream_ref: StreamReference, offset: i16) -> Value {
         let inst = match stream_ref {
-            StreamReference::InRef(_) => self.global_store.get_in_instance(stream_ref),
-            StreamReference::OutRef(ix) => {
-                self.global_store.get_out_instance((ix, Vec::new())).expect("no out instance")
-            }
+            StreamReference::InRef(ix) => self.global_store.get_in_instance(ix),
+            StreamReference::OutRef(ix) => self.global_store.get_out_instance(ix).expect("no out instance"),
         };
         inst.get_value(offset).unwrap_or(Value::None)
     }
 
     fn lookup_window(&self, window_ref: WindowReference, ts: SystemTime) -> Value {
-        let window: Window = (window_ref.ix, Vec::new());
-        self.global_store.get_window(window).get_value(ts)
+        self.global_store.get_window(window_ref.ix).get_value(ts)
     }
 }
 
@@ -508,17 +498,14 @@ impl<'e> EvaluationContext<'e> {
 
     pub(crate) fn lookup_with_offset(&self, stream_ref: StreamReference, offset: i16) -> Value {
         let inst = match stream_ref {
-            StreamReference::InRef(_) => self.global_store.get_in_instance(stream_ref),
-            StreamReference::OutRef(ix) => {
-                self.global_store.get_out_instance((ix, Vec::new())).expect("no out instance")
-            }
+            StreamReference::InRef(ix) => self.global_store.get_in_instance(ix),
+            StreamReference::OutRef(ix) => self.global_store.get_out_instance(ix).expect("no out instance"),
         };
         inst.get_value(offset).unwrap_or(Value::None)
     }
 
     pub(crate) fn lookup_window(&self, window_ref: WindowReference) -> Value {
-        let window: Window = (window_ref.ix, Vec::new());
-        self.global_store.get_window(window).get_value(self.ts)
+        self.global_store.get_window(window_ref.ix).get_value(self.ts)
     }
 }
 
@@ -588,10 +575,22 @@ mod tests {
         (ir, eval)
     }
 
+    macro_rules! eval_stream {
+        ($eval:expr, $ix:expr) => {
+            $eval.eval_stream($ix, SystemTime::now());
+        };
+    }
+
+    macro_rules! accept_input {
+        ($eval:expr, $str_ref:expr, $v:expr) => {
+            $eval.accept_input($str_ref.in_ix(), $v.clone(), SystemTime::now());
+        };
+    }
+
     macro_rules! peek_assert_eq {
-        ($eval:expr,$str_ref:expr,$value:expr) => {
-            $eval.eval_stream(($str_ref, Vec::new()), SystemTime::now());
-            assert_eq!($eval.__peek_value(StreamReference::OutRef($str_ref), &Vec::new(), 0).unwrap(), $value);
+        ($eval:expr,$ix:expr,$value:expr) => {
+            eval_stream!($eval, $ix);
+            assert_eq!($eval.__peek_value(StreamReference::OutRef($ix), &Vec::new(), 0).unwrap(), $value);
         };
     }
 
@@ -698,7 +697,7 @@ mod tests {
         let mut eval = eval.as_Evaluator();
         let sr = StreamReference::InRef(0);
         let v = Value::Unsigned(3);
-        eval.accept_input(sr, v.clone(), SystemTime::now());
+        accept_input!(eval, sr, v.clone());
         assert_eq!(eval.__peek_value(sr, &Vec::new(), 0).unwrap(), v)
     }
 
@@ -709,8 +708,8 @@ mod tests {
         let out_ref = StreamReference::OutRef(0);
         let in_ref = StreamReference::InRef(0);
         let v = Value::Unsigned(9);
-        eval.accept_input(in_ref, v.clone(), SystemTime::now());
-        eval.eval_stream((0, Vec::new()), SystemTime::now());
+        accept_input!(eval, in_ref, v.clone());
+        eval_stream!(eval, 0);
         assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), v)
     }
 
@@ -722,9 +721,9 @@ mod tests {
         let out_ref = StreamReference::OutRef(1);
         let in_ref = StreamReference::InRef(0);
         let v1 = Value::Unsigned(1);
-        eval.accept_input(in_ref, v1, SystemTime::now());
-        eval.eval_stream((0, Vec::new()), SystemTime::now());
-        eval.eval_stream((1, Vec::new()), SystemTime::now());
+        accept_input!(eval, in_ref, v1);
+        eval_stream!(eval, 0);
+        eval_stream!(eval, 1);
         assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), Value::Unsigned(3));
     }
 
@@ -738,13 +737,13 @@ mod tests {
         let in_ref = StreamReference::InRef(0);
         let v1 = Value::Unsigned(1);
         let v2 = Value::Unsigned(2);
-        eval.accept_input(in_ref, v1.clone(), SystemTime::now());
-        eval.eval_stream((0, Vec::new()), SystemTime::now());
-        eval.eval_stream((1, Vec::new()), SystemTime::now());
-        eval.accept_input(in_ref, v2, SystemTime::now());
-        eval.eval_stream((0, Vec::new()), SystemTime::now());
-        eval.eval_stream((1, Vec::new()), SystemTime::now());
-        eval.eval_stream((2, Vec::new()), SystemTime::now());
+        accept_input!(eval, in_ref, v1.clone());
+        eval_stream!(eval, 0);
+        eval_stream!(eval, 1);
+        accept_input!(eval, in_ref, v2);
+        eval_stream!(eval, 0);
+        eval_stream!(eval, 1);
+        eval_stream!(eval, 2);
         assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), v1);
     }
 
@@ -755,8 +754,8 @@ mod tests {
         let out_ref = StreamReference::OutRef(0);
         let in_ref = StreamReference::InRef(0);
         let v1 = Value::Unsigned(1);
-        eval.accept_input(in_ref, v1.clone(), SystemTime::now());
-        eval.eval_stream((0, Vec::new()), SystemTime::now());
+        accept_input!(eval, in_ref, v1.clone());
+        eval_stream!(eval, 0);
         assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), v1);
     }
 
@@ -769,8 +768,8 @@ mod tests {
         let in_ref = StreamReference::InRef(0);
         let expected = Value::Unsigned(7 + 100000);
         let v1 = Value::Unsigned(7);
-        eval.accept_input(in_ref, v1, SystemTime::now());
-        eval.eval_stream((0, Vec::new()), SystemTime::now());
+        accept_input!(eval, in_ref, v1);
+        eval_stream!(eval, 0);
         assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), expected);
     }
 
@@ -784,9 +783,9 @@ mod tests {
         let v1 = Value::Unsigned(1);
         let v2 = Value::Unsigned(2);
         let expected = Value::Unsigned(1 + 2);
-        eval.accept_input(a, v1.clone(), SystemTime::now());
-        eval.accept_input(b, v2.clone(), SystemTime::now());
-        eval.eval_stream((0, Vec::new()), SystemTime::now());
+        accept_input!(eval, a, v1.clone());
+        accept_input!(eval, b, v2.clone());
+        eval_stream!(eval, 0);
         assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), expected);
     }
 
@@ -800,9 +799,9 @@ mod tests {
         let v1 = Value::Float(NotNan::new(3.5f64).unwrap());
         let v2 = Value::Float(NotNan::new(39.347568f64).unwrap());
         let expected = Value::Float(NotNan::new(3.5f64 + 39.347568f64).unwrap());
-        eval.accept_input(a, v1.clone(), SystemTime::now());
-        eval.accept_input(b, v2.clone(), SystemTime::now());
-        eval.eval_stream((0, Vec::new()), SystemTime::now());
+        accept_input!(eval, a, v1.clone());
+        accept_input!(eval, b, v2.clone());
+        eval_stream!(eval, 0);
         assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), expected);
     }
 
@@ -818,11 +817,11 @@ mod tests {
         let v1 = Value::Signed(1);
         let v2 = Value::Bool(true);
         let expected = Value::Tuple(Box::new([v1.clone(), v2.clone()]));
-        eval.accept_input(a, v1.clone(), SystemTime::now());
-        eval.accept_input(b, v2.clone(), SystemTime::now());
-        eval.eval_stream((0, Vec::new()), SystemTime::now());
-        eval.eval_stream((1, Vec::new()), SystemTime::now());
-        eval.eval_stream((2, Vec::new()), SystemTime::now());
+        accept_input!(eval, a, v1.clone());
+        accept_input!(eval, b, v2.clone());
+        eval_stream!(eval, 0);
+        eval_stream!(eval, 1);
+        eval_stream!(eval, 2);
         assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), expected);
         assert_eq!(eval.__peek_value(out_ref0, &Vec::new(), 0).unwrap(), v1);
         assert_eq!(eval.__peek_value(out_ref1, &Vec::new(), 0).unwrap(), v2);
@@ -838,11 +837,11 @@ mod tests {
         let v1 = Value::Unsigned(1);
         let v2 = Value::Unsigned(2);
         let v3 = Value::Unsigned(3);
-        eval.accept_input(in_ref, v1, SystemTime::now());
-        eval.accept_input(in_ref, v2.clone(), SystemTime::now());
-        eval.accept_input(in_ref, v3, SystemTime::now());
-        eval.eval_stream((0, Vec::new()), SystemTime::now());
-        eval.eval_stream((1, Vec::new()), SystemTime::now());
+        accept_input!(eval, in_ref, v1);
+        accept_input!(eval, in_ref, v2.clone());
+        accept_input!(eval, in_ref, v3);
+        eval_stream!(eval, 0);
+        eval_stream!(eval, 1);
         assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), v2)
     }
 
@@ -855,21 +854,21 @@ mod tests {
         let trig_ref = StreamReference::OutRef(2);
         let in_ref = StreamReference::InRef(0);
         let v1 = Value::Unsigned(8);
-        eval.eval_stream((0, Vec::new()), SystemTime::now());
-        eval.eval_stream((1, Vec::new()), SystemTime::now());
-        eval.eval_stream((2, Vec::new()), SystemTime::now());
+        eval_stream!(eval, 0);
+        eval_stream!(eval, 1);
+        eval_stream!(eval, 2);
         assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), Value::Unsigned(3));
         assert_eq!(eval.__peek_value(trig_ref, &Vec::new(), 0).unwrap(), Value::Bool(false));
-        eval.accept_input(in_ref, v1.clone(), SystemTime::now());
-        eval.eval_stream((0, Vec::new()), SystemTime::now());
-        eval.eval_stream((1, Vec::new()), SystemTime::now());
-        eval.eval_stream((2, Vec::new()), SystemTime::now());
+        accept_input!(eval, in_ref, v1.clone());
+        eval_stream!(eval, 0);
+        eval_stream!(eval, 1);
+        eval_stream!(eval, 2);
         assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), Value::Unsigned(3));
         assert_eq!(eval.__peek_value(trig_ref, &Vec::new(), 0).unwrap(), Value::Bool(false));
-        eval.accept_input(in_ref, Value::Unsigned(17), SystemTime::now());
-        eval.eval_stream((0, Vec::new()), SystemTime::now());
-        eval.eval_stream((1, Vec::new()), SystemTime::now());
-        eval.eval_stream((2, Vec::new()), SystemTime::now());
+        accept_input!(eval, in_ref, Value::Unsigned(17));
+        eval_stream!(eval, 0);
+        eval_stream!(eval, 1);
+        eval_stream!(eval, 2);
         assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), v1);
         assert_eq!(eval.__peek_value(trig_ref, &Vec::new(), 0).unwrap(), Value::Bool(true));
     }
@@ -887,12 +886,12 @@ mod tests {
         let in_ref = StreamReference::InRef(0);
         let n = 25;
         for v in 1..=n {
-            eval.accept_input(in_ref, Value::Signed(v), time);
+            accept_input!(eval, in_ref, Value::Signed(v));
             time += Duration::from_secs(1);
         }
         time += Duration::from_secs(1);
         // 71 secs have passed. All values should be within the window.
-        eval.eval_stream((0, Vec::new()), time);
+        eval_stream!(eval, 0);
         let expected = Value::Signed((n * n + n) / 2);
         assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), expected);
     }
@@ -910,12 +909,12 @@ mod tests {
         let in_ref = StreamReference::InRef(0);
         let n = 25;
         for v in 1..=n {
-            eval.accept_input(in_ref, Value::Unsigned(v), time);
+            accept_input!(eval, in_ref, Value::Unsigned(v));
             time += Duration::from_secs(1);
         }
         time += Duration::from_secs(1);
         // 71 secs have passed. All values should be within the window.
-        eval.eval_stream((0, Vec::new()), time);
+        eval_stream!(eval, 0);
         let expected = Value::Unsigned(n);
         assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), expected);
     }
@@ -936,22 +935,22 @@ mod tests {
             Value::Float(NotNan::new(f).unwrap())
         }
 
-        eval.accept_input(in_ref, mv(1f64), time);
+        eval.accept_input(in_ref.in_ix(), mv(1f64), time);
         time += Duration::from_secs(2);
-        eval.accept_input(in_ref, mv(5f64), time);
+        eval.accept_input(in_ref.in_ix(), mv(5f64), time);
         // Value so far: (1+5) / 2 * 2 = 6
         time += Duration::from_secs(5);
-        eval.accept_input(in_ref, mv(25f64), time);
+        eval.accept_input(in_ref.in_ix(), mv(25f64), time);
         // Value so far: 6 + (5+25) / 2 * 5 = 6 + 75 = 81
         time += Duration::from_secs(1);
-        eval.accept_input(in_ref, mv(0f64), time);
+        eval.accept_input(in_ref.in_ix(), mv(0f64), time);
         // Value so far: 81 + (25+0) / 2 * 1 = 81 + 12.5 = 93.5
         time += Duration::from_secs(10);
-        eval.accept_input(in_ref, mv(-40f64), time);
+        eval.accept_input(in_ref.in_ix(), mv(-40f64), time);
         // Value so far: 93.5 + (0+(-40)) / 2 * 10 = 93.5 - 200 = -106.5
         // Time passed: 2 + 5 + 1 + 10 = 18.
 
-        eval.eval_stream((0, Vec::new()), time);
+        eval_stream!(eval, 0);
 
         let expected = Value::Float(NotNan::new(-106.5).unwrap());
         assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), expected);
@@ -965,7 +964,7 @@ mod tests {
         let out_ref = StreamReference::OutRef(0);
         let _a = StreamReference::InRef(0);
         let expected = Value::Unsigned(0);
-        eval.eval_stream((0, Vec::new()), SystemTime::now());
+        eval_stream!(eval, 0);
         assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), expected);
     }
 }
