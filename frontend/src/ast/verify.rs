@@ -149,18 +149,13 @@ impl<'a, 'b> Verifier<'a, 'b> {
 
     fn check_field_access(handler: &Handler, expr: &Expression) {
         use ExpressionKind::*;
-        match &expr.kind {
-            Field(_expr, ident) => {
-                if let Ok(_) = ident.name.parse::<usize>() {
-                    // a valid vield access
-                } else {
-                    handler.error_with_span(
-                        "field access has to be an integer",
-                        LabeledSpan::new(ident.span, "expected an integer", true),
-                    );
-                }
+        if let Field(_, ident) = &expr.kind {
+            if ident.name.parse::<usize>().is_err() {
+                handler.error_with_span(
+                    "field access has to be an integer",
+                    LabeledSpan::new(ident.span, "expected an integer", true),
+                );
             }
-            _ => {}
         }
     }
 }

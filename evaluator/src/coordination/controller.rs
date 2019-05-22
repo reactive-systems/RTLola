@@ -51,10 +51,8 @@ impl Controller {
         if has_time_driven {
             let work_tx_clone = work_tx.clone();
             let ir_clone = self.ir.clone();
-            let cfg_clone = self.config.clone();
             let _ = thread::Builder::new().name("TimeDrivenManager".into()).spawn(move || {
-                let time_manager =
-                    TimeDrivenManager::setup(ir_clone, cfg_clone, SystemTime::now(), copy_output_handler);
+                let time_manager = TimeDrivenManager::setup(ir_clone, SystemTime::now(), copy_output_handler);
                 time_manager.start_online(work_tx_clone);
             });
         };
@@ -120,9 +118,8 @@ impl Controller {
 
         let has_time_driven = !self.ir.time_driven.is_empty();
         let ir_clone = self.ir.clone();
-        let cfg_clone = self.config.clone();
         let output_copy_handler = self.output_handler.clone();
-        let time_manager = TimeDrivenManager::setup(ir_clone, cfg_clone, start_time, output_copy_handler);
+        let time_manager = TimeDrivenManager::setup(ir_clone, start_time, output_copy_handler);
         let (wait_time, mut due_streams) =
             if has_time_driven { time_manager.get_current_deadline(start_time) } else { (Duration::default(), vec![]) };
         let mut next_deadline = start_time + wait_time;

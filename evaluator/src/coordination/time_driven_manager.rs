@@ -1,5 +1,5 @@
 use super::WorkItem;
-use crate::basics::{EvalConfig, OutputHandler};
+use crate::basics::OutputHandler;
 
 use crossbeam_channel::Sender;
 use std::sync::Arc;
@@ -50,12 +50,7 @@ pub(crate) struct TimeDrivenManager {
 
 impl TimeDrivenManager {
     /// Creates a new TimeDrivenManager managing time-driven output streams.
-    pub(crate) fn setup(
-        ir: LolaIR,
-        _config: EvalConfig,
-        start_time: SystemTime,
-        handler: Arc<OutputHandler>,
-    ) -> TimeDrivenManager {
+    pub(crate) fn setup(ir: LolaIR, start_time: SystemTime, handler: Arc<OutputHandler>) -> TimeDrivenManager {
         if ir.time_driven.is_empty() {
             // return dummy
             return TimeDrivenManager {

@@ -340,7 +340,7 @@ impl Expression {
 
 impl Expression {
     /// Tries to resolve a tuple index access
-    pub(crate) fn get_expr_from_tuple<'a>(&'a self, idx: usize) -> Option<&'a Expression> {
+    pub(crate) fn get_expr_from_tuple(&self, idx: usize) -> Option<&Expression> {
         use ExpressionKind::*;
         match &self.kind {
             Tuple(entries) => Some(entries[idx].as_ref()),

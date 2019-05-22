@@ -11,7 +11,7 @@ use super::{Activation, Freq, StreamTy, TypeConstraint, ValueTy};
 use crate::analysis::naming::{Declaration, DeclarationTable};
 use crate::ast::{
     BinOp, Constant, Expression, ExpressionKind, Input, Literal, LolaSpec, Output, StreamAccessKind,
-    TimeSpec, Trigger, Type, TypeKind, WindowOperation,
+    Trigger, Type, TypeKind, WindowOperation,
 };
 use crate::parse::{NodeId, Span};
 use crate::reporting::{Handler, LabeledSpan};
@@ -239,8 +239,7 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
         let mut frequency = None;
         let mut activation = None;
         if let Some(expr) = &output.extend.expr {
-            if let Some(time_spec) = expr.parse_timespec() {
-                let _time_spec: TimeSpec = time_spec;
+            if let Some(_) = expr.parse_timespec() {
                 frequency = Some(Freq::new(
                     Frequency::from_str(expr.to_uom_string().expect("offsets have been checked before").as_str())
                         .expect("valid frequency has been checked before"),
@@ -407,10 +406,10 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
             Bool(_) => ValueTy::Bool,
             Numeric(val, unit) => {
                 assert!(unit.is_none());
-                if val.contains(".") {
+                if val.contains('.') {
                     // Floating Point
                     ValueTy::Constr(TypeConstraint::FloatingPoint)
-                } else if val.starts_with("-") {
+                } else if val.starts_with('-') {
                     ValueTy::Constr(TypeConstraint::SignedInteger)
                 } else {
                     ValueTy::Constr(TypeConstraint::Integer)
@@ -494,7 +493,7 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
             }
             Offset(inner, offset) => self.infer_offset_expr(var, stream_var, expr.span, inner, offset)?,
             SlidingWindowAggregation { expr: inner, duration, aggregation } => {
-                self.infer_sliding_window_expression(var, stream_var, expr.span, inner, duration, aggregation)?;
+                self.infer_sliding_window_expression(var, stream_var, expr.span, inner, duration, *aggregation)?;
             }
             Ite(cond, left, right) => {
                 // value type constraints
@@ -782,7 +781,7 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
         span: Span,
         expr: &'a Expression,
         _duration: &'a Expression,
-        window_op: &'a WindowOperation,
+        window_op: WindowOperation,
     ) -> Result<(), ()> {
         // the stream variable has to be real-time
         match self.stream_unifier.get_normalized_type(stream_var) {

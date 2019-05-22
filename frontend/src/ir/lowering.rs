@@ -429,7 +429,7 @@ impl<'a> Lowering<'a> {
 
         let expr = match &expr.kind {
             ExpressionKind::Lit(l) => ir::Expression::LoadConstant(self.lower_literal(l, expr.id)),
-            ExpressionKind::Ident(_ident) => {
+            ExpressionKind::Ident(_) => {
                 let src_ty = match self.get_decl(expr.id) {
                     Declaration::In(input) => self.lower_node_type(input.id),
                     Declaration::Out(output) => self.lower_node_type(output.id),
