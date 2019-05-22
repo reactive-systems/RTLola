@@ -1,0 +1,10 @@
+{
+  "spec_file": ["tests", "specs","add_two_streams_explicit_ac.lola"],
+  "input_file": ["traces","tests","two_int32_streams.csv"],
+  "rationale": "Add two Int32 streams that have no holes. The explicit activation condition should fire exactly three times.",
+  "triggers": {
+    "c is too large": {
+      "expected_count" : 3
+    }
+  }
+}

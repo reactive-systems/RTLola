@@ -1,0 +1,6 @@
+input a: Int32
+input b: Int32
+
+output c @ a := a + b.hold().defaults(to: 0)
+
+trigger c > 2 "c is too large"
