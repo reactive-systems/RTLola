@@ -447,14 +447,18 @@ impl LolaIR {
         &self.sliding_windows[window.ix]
     }
 
-    pub fn get_event_driven_layers(&self) -> Vec<Vec<StreamReference>> {
+    pub fn get_event_driven_layers(&self) -> Vec<Vec<OutputReference>> {
         if self.event_driven.is_empty() {
             return vec![];
         }
 
         // Zip eval layer with stream reference.
-        let streams_with_layers: Vec<(usize, StreamReference)> =
-            self.event_driven.iter().map(|s| s.reference).map(|r| (self.get_out(r).eval_layer() as usize, r)).collect();
+        let streams_with_layers: Vec<(usize, OutputReference)> = self
+            .event_driven
+            .iter()
+            .map(|s| s.reference)
+            .map(|r| (self.get_out(r).eval_layer() as usize, r.out_ix()))
+            .collect();
 
         // Streams are annotated with an evaluation layer. The layer is not minimal, so there might be
         // layers without entries and more layers than streams.
@@ -472,7 +476,7 @@ impl LolaIR {
         // b) For each potential layer
         for i in 0..=max_layer {
             // c) Find streams that would be in it.
-            let in_layer_i: Vec<StreamReference> =
+            let in_layer_i: Vec<OutputReference> =
                 streams_with_layers.iter().filter_map(|(l, r)| if *l == i { Some(*r) } else { None }).collect();
             if in_layer_i.is_empty() {
                 // d) If there is none, skip this layer

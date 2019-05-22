@@ -5,12 +5,12 @@ use crossbeam_channel::Sender;
 use std::sync::Arc;
 use std::thread::sleep;
 use std::time::{Duration, SystemTime};
-use streamlab_frontend::ir::{LolaIR, StreamReference};
+use streamlab_frontend::ir::{LolaIR, OutputReference};
 
 use common::duration::*;
 use common::schedule::{Deadline, Schedule};
 
-pub(crate) type TimeEvaluation = Vec<StreamReference>;
+pub(crate) type TimeEvaluation = Vec<OutputReference>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct TDMState {
@@ -74,7 +74,7 @@ impl TimeDrivenManager {
         }
     }
 
-    pub(crate) fn get_current_deadline(&self, ts: SystemTime) -> (Duration, Vec<StreamReference>) {
+    pub(crate) fn get_current_deadline(&self, ts: SystemTime) -> (Duration, Vec<OutputReference>) {
         let earliest_deadline_state = self.earliest_deadline_state(ts);
         let current_deadline = &self.deadlines[earliest_deadline_state.deadline];
         let time_of_deadline = earliest_deadline_state.time + current_deadline.pause;

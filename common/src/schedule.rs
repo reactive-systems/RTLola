@@ -1,12 +1,12 @@
 use crate::duration::*;
 use crate::math;
 use std::time::Duration;
-use streamlab_frontend::ir::{LolaIR, StreamReference};
+use streamlab_frontend::ir::{LolaIR, OutputReference};
 
 #[derive(Debug, Clone)]
 pub struct Deadline {
     pub pause: Duration,
-    pub due: Vec<StreamReference>,
+    pub due: Vec<OutputReference>,
 }
 
 pub struct Schedule {
@@ -51,7 +51,7 @@ impl Schedule {
     /// Hyper period: 2 seconds, gcd: 100ms, streams: (c @ .5Hz), (b @ 1Hz), (a @ 2Hz)
     /// Input:  `[[a] [b]   []  [c]]`
     /// Output: `[[a] [a,b] [a] [a,b,c]`
-    fn apply_periodicity(steps: &[Vec<StreamReference>]) -> Vec<Vec<StreamReference>> {
+    fn apply_periodicity(steps: &[Vec<OutputReference>]) -> Vec<Vec<OutputReference>> {
         // Whenever there are streams in a cell at index `i`,
         // add them to every cell with index k*i within bounds, where k > 1.
         // k = 0 would always schedule them initially, so this must be skipped.
@@ -74,17 +74,17 @@ impl Schedule {
     /// Hyper period: 2 seconds, gcd: 100ms, streams: (c @ .5Hz), (b @ 1Hz), (a @ 2Hz)
     /// Result: `[[a] [b] [] [c]]`
     /// Meaning: `a` starts being scheduled after one gcd, `b` after two gcds, `c` after 4 gcds.
-    fn build_extend_steps(ir: &LolaIR, gcd: Duration, hyper_period: Duration) -> Vec<Vec<StreamReference>> {
+    fn build_extend_steps(ir: &LolaIR, gcd: Duration, hyper_period: Duration) -> Vec<Vec<OutputReference>> {
         let num_steps = divide_durations(hyper_period, gcd, false);
         let mut extend_steps = vec![Vec::new(); num_steps];
         for s in ir.time_driven.iter() {
             let ix = divide_durations(s.extend_rate, gcd, false) - 1;
-            extend_steps[ix].push(s.reference);
+            extend_steps[ix].push(s.reference.out_ix());
         }
         extend_steps
     }
 
-    fn condense_deadlines(gcd: Duration, extend_steps: Vec<Vec<StreamReference>>) -> Vec<Deadline> {
+    fn condense_deadlines(gcd: Duration, extend_steps: Vec<Vec<OutputReference>>) -> Vec<Deadline> {
         let init: (u32, Vec<Deadline>) = (0, Vec::new());
         let (remaining, mut deadlines) = extend_steps.iter().fold(init, |(empty_counter, mut deadlines), step| {
             if step.is_empty() {

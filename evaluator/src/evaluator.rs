@@ -7,7 +7,8 @@ use regex::Regex;
 use std::sync::Arc;
 use std::time::SystemTime;
 use streamlab_frontend::ir::{
-    Activation, Constant, Expression, LolaIR, Offset, StreamAccessKind, StreamReference, Trigger, Type, WindowReference,
+    Activation, Constant, Expression, InputReference, LolaIR, Offset, OutputReference, StreamAccessKind,
+    StreamReference, Trigger, Type, WindowReference,
 };
 
 pub(crate) type OutInstance = (usize, Vec<Value>);
@@ -22,7 +23,7 @@ pub(crate) enum ActivationCondition {
 
 pub(crate) struct EvaluatorData<'c> {
     // Evaluation order of output streams
-    layers: Vec<Vec<StreamReference>>,
+    layers: Vec<Vec<OutputReference>>,
     // Indexed by stream reference.
     activation_conditions: Vec<ActivationCondition>,
     // Indexed by stream reference.
@@ -39,7 +40,7 @@ pub(crate) struct EvaluatorData<'c> {
 
 pub(crate) struct Evaluator<'e, 'c> {
     // Evaluation order of output streams
-    layers: &'e Vec<Vec<StreamReference>>,
+    layers: &'e Vec<Vec<OutputReference>>,
     // Indexed by stream reference.
     activation_conditions: &'e Vec<ActivationCondition>,
     // Indexed by stream reference.
@@ -134,16 +135,16 @@ impl<'e, 'c> Evaluator<'e, 'c> {
         for (ix, v) in event.iter().enumerate() {
             match v {
                 Value::None => {}
-                v => self.accept_input(StreamReference::InRef(ix), v.clone(), ts),
+                v => self.accept_input(ix, v.clone(), ts),
             }
         }
     }
 
-    fn accept_input(&mut self, input: StreamReference, v: Value, ts: SystemTime) {
-        self.global_store.get_in_instance_mut(input).push_value(v.clone());
-        self.fresh_inputs.insert(input.in_ix());
-        self.handler.debug(|| format!("InputStream[{}] := {:?}.", input.in_ix(), v.clone()));
-        let extended = self.ir.get_in(input);
+    fn accept_input(&mut self, input: InputReference, v: Value, ts: SystemTime) {
+        self.global_store.get_in_instance_mut(StreamReference::InRef(input)).push_value(v.clone());
+        self.fresh_inputs.insert(input);
+        self.handler.debug(|| format!("InputStream[{}] := {:?}.", input, v.clone()));
+        let extended = &self.ir.inputs[input];
         for win in &extended.dependent_windows {
             self.global_store.get_window_mut((win.ix, Vec::new())).accept_value(v.clone(), ts)
         }
@@ -156,19 +157,19 @@ impl<'e, 'c> Evaluator<'e, 'c> {
         }
     }
 
-    fn eval_event_driven_outputs(&mut self, streams: &[StreamReference], ts: SystemTime) {
+    fn eval_event_driven_outputs(&mut self, streams: &[OutputReference], ts: SystemTime) {
         for str_ref in streams {
             self.eval_event_driven_output(*str_ref, ts);
         }
     }
 
-    fn eval_event_driven_output(&mut self, stream: StreamReference, ts: SystemTime) {
-        if self.activation_conditions[stream.out_ix()].eval(self.fresh_inputs) {
+    fn eval_event_driven_output(&mut self, stream: OutputReference, ts: SystemTime) {
+        if self.activation_conditions[stream].eval(self.fresh_inputs) {
             self.eval_output(stream, ts);
         }
     }
 
-    pub(crate) fn eval_time_driven_outputs(&mut self, streams: &[StreamReference], ts: SystemTime) {
+    pub(crate) fn eval_time_driven_outputs(&mut self, streams: &[OutputReference], ts: SystemTime) {
         self.clear_freshness();
         self.prepare_evaluation(ts);
         for str_ref in streams {
@@ -185,8 +186,8 @@ impl<'e, 'c> Evaluator<'e, 'c> {
         }
     }
 
-    fn eval_output(&mut self, stream: StreamReference, ts: SystemTime) {
-        let inst = (stream.out_ix(), Vec::new());
+    fn eval_output(&mut self, stream: OutputReference, ts: SystemTime) {
+        let inst = (stream, Vec::new());
         self.eval_stream(inst, ts);
     }
 
@@ -221,7 +222,7 @@ impl<'e, 'c> Evaluator<'e, 'c> {
         }
 
         // Check linked streams and inform them.
-        let extended = self.ir.get_out(StreamReference::OutRef(ix));
+        let extended = &self.ir.outputs[ix];
         for win in &extended.dependent_windows {
             self.global_store.get_window_mut((win.ix, Vec::new())).accept_value(res.clone(), ts)
         }
