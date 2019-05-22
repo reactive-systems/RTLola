@@ -1,0 +1,16 @@
+{
+  "spec_file": ["tests", "specs","sliding_window.lola"],
+  "input_file": ["traces","tests","single_int32-every0.1s.csv"],
+  "rationale": "Have one sliding window count the number of events in its own duration.\nWe should see the default and the right counts.",
+  "triggers": {
+    "count is 1": {
+      "expected_count" : 4
+    },
+    "count is 2": {
+      "expected_count" : 1
+    },
+    "default used" : {
+      "expected_count" : 1
+    }
+  }
+}
