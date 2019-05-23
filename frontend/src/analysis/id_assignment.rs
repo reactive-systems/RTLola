@@ -173,7 +173,7 @@ where
             }
         }
         ExpressionKind::Tuple(exprs) => exprs.iter_mut().for_each(|e| assign_ids_expr(e, next_id)),
-        ExpressionKind::Function(name, types, args) => {
+        ExpressionKind::Function(_, types, args) => {
             types.iter_mut().for_each(|ty| assign_ids_type(ty, next_id));
             args.iter_mut().for_each(|e| assign_ids_expr(e, next_id));
         }

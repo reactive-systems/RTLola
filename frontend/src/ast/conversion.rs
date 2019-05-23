@@ -1,6 +1,6 @@
 use super::{Expression, ExpressionKind, LitKind, NodeId, TimeSpec};
 use crate::ast::Literal;
-use num::{BigInt, BigRational, FromPrimitive, One, Signed, ToPrimitive};
+use num::{BigRational, FromPrimitive, One, Signed, ToPrimitive};
 use std::str::FromStr;
 use std::time::Duration;
 

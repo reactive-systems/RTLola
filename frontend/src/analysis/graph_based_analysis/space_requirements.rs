@@ -13,7 +13,6 @@ use petgraph::Direction;
 use std::cmp::max;
 use std::collections::HashMap;
 use std::collections::HashSet;
-use std::time::Duration;
 use uom::si::bigrational::Time as SITime;
 use uom::si::frequency::hertz;
 use uom::si::time::{nanosecond, second};

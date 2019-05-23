@@ -1,4 +1,4 @@
-use super::{Activation, Freq, StreamTy, TypeConstraint, ValueTy};
+use super::{Activation, StreamTy, TypeConstraint, ValueTy};
 use ena::unify::{
     EqUnifyValue, InPlace, InPlaceUnificationTable, Snapshot, UnificationStore, UnificationTable, UnifyKey, UnifyValue,
 };
@@ -431,7 +431,7 @@ impl Activation {
     pub(crate) fn implies_valid<U: Unifier<Var = StreamVar, Ty = StreamTy>>(
         &self,
         other: &Activation,
-        unifier: &mut U,
+        _unifier: &mut U,
     ) -> bool {
         if self == other {
             return true;

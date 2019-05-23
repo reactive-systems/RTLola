@@ -233,6 +233,7 @@ impl<'a> Lowering<'a> {
 
     /// Returns the flattened result of calling `map` on each node recursively in `pre_order` or post_order.
     /// Applies filter to each node before mapping. Children of filtered nodes will not be taken into account.
+    #[allow(dead_code)]
     fn collect_expression<T, M, F>(expr: &'a ast::Expression, map: &M, filter: &F, pre_order: bool) -> Vec<T>
     where
         M: Fn(&'a ast::Expression) -> Vec<T>,

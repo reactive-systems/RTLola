@@ -70,7 +70,7 @@ impl UnOp {
     }
 }
 
-use crate::analysis::naming::{Declaration, ScopedDecl};
+use crate::analysis::naming::ScopedDecl;
 
 lazy_static! {
     // fn sqrt<T: FloatingPoint>(T) -> T

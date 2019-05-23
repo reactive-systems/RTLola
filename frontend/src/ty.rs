@@ -6,8 +6,8 @@ pub(crate) mod check;
 pub(crate) mod unifier;
 
 use lazy_static::lazy_static;
-use num::{BigInt, BigRational, Integer, Zero};
-use unifier::{StreamVar, ValueUnifier, ValueVar};
+use num::{BigRational, Integer, Zero};
+use unifier::{StreamVar, ValueVar};
 use uom::si::bigrational::Frequency;
 use uom::si::frequency::hertz;
 

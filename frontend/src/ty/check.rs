@@ -232,7 +232,7 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
         let mut activation = None;
         if let Some(expr) = &output.extend.expr {
             if let Some(time_spec) = expr.parse_timespec() {
-                let time_spec: TimeSpec = time_spec;
+                let _time_spec: TimeSpec = time_spec;
                 frequency = Some(Freq::new(
                     Frequency::from_str(expr.to_uom_string().expect("offsets have been checked before").as_str())
                         .expect("valid frequency has been checked before"),
@@ -773,7 +773,7 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
         stream_var: StreamVar,
         span: Span,
         expr: &'a Expression,
-        duration: &'a Expression,
+        _duration: &'a Expression,
         window_op: &'a WindowOperation,
     ) -> Result<(), ()> {
         // the stream variable has to be real-time

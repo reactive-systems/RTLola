@@ -5,12 +5,12 @@ use crate::analysis::naming::Declaration;
 use crate::analysis::DeclarationTable;
 use crate::analysis::TypeTable;
 use crate::ast;
-use crate::ast::{ExpressionKind, LolaSpec, StreamAccessKind, WindowOperation};
+use crate::ast::{ExpressionKind, LolaSpec, WindowOperation};
 use crate::ty::StreamTy;
 use num::{BigRational, ToPrimitive};
 use std::cmp::min;
 use std::str::FromStr as _;
-use uom::si::bigrational::{Frequency, Time};
+use uom::si::bigrational::Time;
 use uom::si::frequency::hertz;
 use uom::si::time::second;
 

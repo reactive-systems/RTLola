@@ -447,6 +447,7 @@ impl<'a> Declaration<'a> {
     }
 
     /// is a stream, i.e., can be used with offsets
+    #[allow(dead_code)]
     fn is_lookup_target(&self) -> bool {
         match self {
             Declaration::In(_) | Declaration::Out(_) => true,

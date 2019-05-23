@@ -4,7 +4,6 @@ use std::error::Error;
 use std::fs::File;
 use std::io::prelude::*;
 use std::path::PathBuf;
-use std::process;
 
 use clap::{App, Arg, SubCommand};
 use pest::Parser;

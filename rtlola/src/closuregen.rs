@@ -41,7 +41,7 @@ impl<'s> Expr<'s> for Expression {
                 CompiledExpr::new(move |_| v.clone())
             }
 
-            ArithLog(op, operands, ty) => {
+            ArithLog(op, operands, _ty) => {
                 let f_operands: Vec<CompiledExpr> = operands.into_iter().map(|e| e.compile()).collect();
                 use streamlab_frontend::ir::ArithLogOp::*;
                 match op {
@@ -176,7 +176,7 @@ impl<'s> Expr<'s> for Expression {
                 })
             }
             */
-            Function(name, args, ty) => {
+            Function(name, args, _ty) => {
                 //TODO(marvin): handle type
                 let f_arg = args[0].clone().compile();
                 match name.as_ref() {
