@@ -5,8 +5,8 @@ pub struct EvalConfig {
     pub source: InputSource,
     pub verbosity: Verbosity,
     pub output_channel: OutputChannel,
-    pub closure_based_evaluator: bool,
-    pub offline: bool,
+    pub evaluator: EvaluatorChoice,
+    pub mode: ExecutionMode,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
@@ -27,15 +27,27 @@ pub enum Verbosity {
     Debug,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ExecutionMode {
+    Offline,
+    Online,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum EvaluatorChoice {
+    ClosureBased,
+    Interpreted,
+}
+
 impl EvalConfig {
     pub fn new(
         source: InputSource,
         verbosity: Verbosity,
         output: OutputChannel,
-        closure_based_evaluator: bool,
-        offline: bool,
+        evaluator: EvaluatorChoice,
+        mode: ExecutionMode,
     ) -> Self {
-        EvalConfig { source, verbosity, output_channel: output, closure_based_evaluator, offline }
+        EvalConfig { source, verbosity, output_channel: output, evaluator, mode }
     }
 
     pub fn debug() -> Self {
@@ -44,14 +56,8 @@ impl EvalConfig {
         cfg
     }
 
-    pub fn release(path: String, output: OutputChannel, closure_based_evaluator: bool, offline: bool) -> Self {
-        EvalConfig::new(
-            InputSource::file(path, None, None),
-            Verbosity::Triggers,
-            output,
-            closure_based_evaluator,
-            offline,
-        )
+    pub fn release(path: String, output: OutputChannel, evaluator: EvaluatorChoice, mode: ExecutionMode) -> Self {
+        EvalConfig::new(InputSource::file(path, None, None), Verbosity::Triggers, output, evaluator, mode)
     }
 }
 
@@ -61,8 +67,8 @@ impl Default for EvalConfig {
             source: InputSource::StdIn,
             verbosity: Verbosity::Triggers,
             output_channel: OutputChannel::StdOut,
-            closure_based_evaluator: true,
-            offline: true,
+            evaluator: EvaluatorChoice::ClosureBased,
+            mode: ExecutionMode::Offline,
         }
     }
 }

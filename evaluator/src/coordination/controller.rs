@@ -1,7 +1,7 @@
 use super::event_driven_manager::EventDrivenManager;
 use super::time_driven_manager::TimeDrivenManager;
 use super::{WorkItem, CAP_WORK_QUEUE};
-use crate::basics::{EvalConfig, OutputHandler};
+use crate::basics::{EvalConfig, ExecutionMode::*, OutputHandler};
 use crate::coordination::{EventEvaluation, TimeEvaluation};
 use crate::evaluator::{Evaluator, EvaluatorData};
 use crossbeam_channel::{bounded, unbounded};
@@ -33,10 +33,9 @@ impl Controller {
     }
 
     pub(crate) fn start(&self) -> Result<(), Box<dyn Error>> {
-        if self.config.offline {
-            self.evaluate_offline()
-        } else {
-            self.evaluate_online()
+        match self.config.mode {
+            Offline => self.evaluate_offline(),
+            Online => self.evaluate_online(),
         }
     }
 

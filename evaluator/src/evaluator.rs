@@ -1,4 +1,4 @@
-use crate::basics::{EvalConfig, OutputHandler};
+use crate::basics::{EvalConfig, EvaluatorChoice::*, OutputHandler};
 use crate::closuregen::{CompiledExpr, Expr};
 use crate::storage::{GlobalStore, Value};
 use bit_set::BitSet;
@@ -84,7 +84,7 @@ impl<'c> EvaluatorData<'c> {
             })
             .collect();
         let exprs = ir.outputs.iter().map(|o| o.expr.clone()).collect();
-        let compiled_exprs = if config.closure_based_evaluator {
+        let compiled_exprs = if config.evaluator == ClosureBased {
             ir.outputs.iter().map(|o| o.expr.clone().compile()).collect()
         } else {
             vec![]
@@ -196,12 +196,15 @@ impl<'e, 'c> Evaluator<'e, 'c> {
         self.handler
             .debug(|| format!("Evaluating stream {}: {}.", ix, self.ir.get_out(StreamReference::OutRef(ix)).name));
 
-        let res = if self.config.closure_based_evaluator {
-            let (ctx, compiled_exprs) = self.as_EvaluationContext(ts);
-            compiled_exprs[ix].execute(&ctx)
-        } else {
-            let (expr_eval, exprs) = self.as_ExpressionEvaluator();
-            expr_eval.eval_expr(&exprs[ix], ts)
+        let res = match self.config.evaluator {
+            ClosureBased => {
+                let (ctx, compiled_exprs) = self.as_EvaluationContext(ts);
+                compiled_exprs[ix].execute(&ctx)
+            }
+            Interpreted => {
+                let (expr_eval, exprs) = self.as_ExpressionEvaluator();
+                expr_eval.eval_expr(&exprs[ix], ts)
+            }
         };
 
         // Register value in global store.

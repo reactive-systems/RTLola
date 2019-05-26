@@ -33,8 +33,8 @@ fn zero_wait_time_regression() {
         InputSource::file(file.path().to_str().unwrap().to_string(), None, None),
         Verbosity::Progress,
         OutputChannel::StdErr,
-        true, // closure
-        true, // offline
+        EvaluatorChoice::ClosureBased,
+        ExecutionMode::Offline,
     );
     let config = Config { cfg, ir };
     config.run().unwrap_or_else(|e| panic!("E2E test failed: {}", e));
@@ -68,8 +68,8 @@ fn test_parse_event() {
         InputSource::file(file.path().to_str().unwrap().to_string(), None, None),
         Verbosity::Progress,
         OutputChannel::StdErr,
-        true, // closure
-        true, // offline
+        EvaluatorChoice::ClosureBased,
+        ExecutionMode::Offline,
     );
     let config = Config { cfg, ir };
     let ctrl = config.run().unwrap_or_else(|e| panic!("E2E test failed: {}", e));
@@ -114,8 +114,8 @@ fn add_two_i32_streams() {
         InputSource::file(file.path().to_str().unwrap().to_string(), None, None),
         Verbosity::Progress,
         OutputChannel::StdErr,
-        true, // closure
-        true, // offline
+        EvaluatorChoice::ClosureBased,
+        ExecutionMode::Offline,
     );
     let config = Config { cfg, ir };
     let ctrl = config.run().unwrap_or_else(|e| panic!("E2E test failed: {}", e));
@@ -150,8 +150,8 @@ subsub,25.0"
         InputSource::file(file.path().to_str().unwrap().to_string(), None, None),
         Verbosity::Progress,
         OutputChannel::StdErr,
-        true, // closure
-        true, // offline
+        EvaluatorChoice::ClosureBased,
+        ExecutionMode::Offline,
     );
     let config = Config { cfg, ir };
     let ctrl = config.run().unwrap_or_else(|e| panic!("E2E test failed: {}", e));

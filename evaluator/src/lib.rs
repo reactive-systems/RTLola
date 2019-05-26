@@ -10,7 +10,7 @@ mod storage;
 mod tests;
 
 use crate::coordination::Controller;
-use basics::{EvalConfig, InputSource, OutputChannel, Verbosity};
+use basics::{EvalConfig, EvaluatorChoice, ExecutionMode, InputSource, OutputChannel, Verbosity};
 use clap::{value_t, App, Arg, ArgGroup};
 use std::fs::File;
 use std::io::Read;
@@ -150,10 +150,17 @@ impl Config {
             _ => unreachable!(),
         };
 
-        let closure_based_evaluator = !parse_matches.is_present("INTERPRETED");
-        let offline = parse_matches.is_present("OFFLINE");
+        let mut evaluator = EvaluatorChoice::ClosureBased;
+        if parse_matches.is_present("INTERPRETED") {
+            evaluator = EvaluatorChoice::Interpreted;
+        }
 
-        let cfg = EvalConfig::new(src, verbosity, out, closure_based_evaluator, offline);
+        let mut mode = ExecutionMode::Offline;
+        if parse_matches.is_present("ONLINE") {
+            mode = ExecutionMode::Online;
+        }
+
+        let cfg = EvalConfig::new(src, verbosity, out, evaluator, mode);
 
         Config { cfg, ir }
     }
