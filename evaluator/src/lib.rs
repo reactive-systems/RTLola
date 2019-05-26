@@ -107,25 +107,27 @@ impl Config {
 
         let ir = streamlab_frontend::parse(contents.as_str());
 
-        let delay = if parse_matches.is_present("DELAY") {
-            value_t!(parse_matches, "DELAY", u32).unwrap_or_else(|_| {
-                eprintln!(
-                    "DELAY value `{}` is not a number.\nUsing no delay.",
-                    parse_matches.value_of("DELAY").expect("We set a default value.")
-                );
-                0
-            })
-        } else {
-            0
+        let mut delay: Option<Duration> = None;
+        if parse_matches.is_present("DELAY") {
+            delay = match value_t!(parse_matches, "DELAY", humantime::Duration) {
+                Ok(d) => Some(d.into()),
+                Err(e) => {
+                    eprintln!(
+                        "Could not parse DELAY value `{}`: {}.\nUsing no delay.",
+                        parse_matches.value_of("DELAY").expect("We set a default value."),
+                        e
+                    );
+                    None
+                }
+            }
         };
-        let delay = Duration::new(0, 1_000_000 * delay);
 
         let csv_time_column = parse_matches
             .value_of("CSV_TIME_COLUMN")
             .map(|col| col.parse::<usize>().expect("time column needs to be a unsigned integer"));
 
         let src = if let Some(file) = parse_matches.value_of("CSV_INPUT_FILE") {
-            InputSource::with_delay(String::from(file), delay, csv_time_column)
+            InputSource::with_delay(String::from(file), delay.unwrap_or(Duration::from_secs(0)), csv_time_column)
         } else {
             InputSource::stdin()
         };
