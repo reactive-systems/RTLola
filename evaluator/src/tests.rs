@@ -30,7 +30,7 @@ fn zero_wait_time_regression() {
     write!(file, "{}", ALTERNATING_SINGLE_INT32).expect("writing tempfile failed");
 
     let cfg = EvalConfig::new(
-        InputSource::for_file(file.path().to_str().unwrap().to_string(), None),
+        InputSource::file(file.path().to_str().unwrap().to_string(), None, None),
         Verbosity::Progress,
         OutputChannel::StdErr,
         true, // closure
@@ -65,7 +65,7 @@ fn test_parse_event() {
     .expect("writing tempfile failed");
 
     let cfg = EvalConfig::new(
-        InputSource::for_file(file.path().to_str().unwrap().to_string(), None),
+        InputSource::file(file.path().to_str().unwrap().to_string(), None, None),
         Verbosity::Progress,
         OutputChannel::StdErr,
         true, // closure
@@ -111,7 +111,7 @@ fn add_two_i32_streams() {
     .expect("writing tempfile failed");
 
     let cfg = EvalConfig::new(
-        InputSource::for_file(file.path().to_str().unwrap().to_string(), None),
+        InputSource::file(file.path().to_str().unwrap().to_string(), None, None),
         Verbosity::Progress,
         OutputChannel::StdErr,
         true, // closure
@@ -147,7 +147,7 @@ subsub,25.0"
     .expect("writing tempfile failed");
 
     let cfg = EvalConfig::new(
-        InputSource::for_file(file.path().to_str().unwrap().to_string(), None),
+        InputSource::file(file.path().to_str().unwrap().to_string(), None, None),
         Verbosity::Progress,
         OutputChannel::StdErr,
         true, // closure

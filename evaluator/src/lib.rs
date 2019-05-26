@@ -127,7 +127,7 @@ impl Config {
             .map(|col| col.parse::<usize>().expect("time column needs to be a unsigned integer"));
 
         let src = if let Some(file) = parse_matches.value_of("CSV_INPUT_FILE") {
-            InputSource::with_delay(String::from(file), delay.unwrap_or(Duration::from_secs(0)), csv_time_column)
+            InputSource::file(String::from(file), delay, csv_time_column)
         } else {
             InputSource::stdin()
         };

@@ -20,16 +20,12 @@ pub enum OutputChannel {
 #[derive(Debug, Clone)]
 pub enum InputSource {
     StdIn,
-    File { path: String, reading_delay: Option<Duration>, time_col: Option<usize> },
+    File { path: String, delay: Option<Duration>, time_col: Option<usize> },
 }
 
 impl InputSource {
-    pub fn for_file(path: String, time_col: Option<usize>) -> InputSource {
-        InputSource::File { path, reading_delay: None, time_col }
-    }
-
-    pub fn with_delay(path: String, delay: Duration, time_col: Option<usize>) -> InputSource {
-        InputSource::File { path, reading_delay: Some(delay), time_col }
+    pub fn file(path: String, delay: Option<Duration>, time_col: Option<usize>) -> InputSource {
+        InputSource::File { path, delay, time_col }
     }
 
     pub fn stdin() -> InputSource {
@@ -124,8 +120,8 @@ impl InputReader {
         let mut delay = None;
         let (mut wrapper, time_col) = match src {
             InputSource::StdIn => (ReaderWrapper::Std(CSVReader::from_reader(stdin())), None),
-            InputSource::File { path, reading_delay, time_col } => {
-                delay = reading_delay;
+            InputSource::File { path, delay:d, time_col } => {
+                delay = d;
                 (ReaderWrapper::File(CSVReader::from_path(path)?), time_col)
             }
         };
