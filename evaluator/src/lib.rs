@@ -64,11 +64,11 @@ impl Config {
         )
         .arg(
             Arg::with_name("DELAY")
+                .help("Delay [ms] between reading in two lines from the input. Only used for file input.")
                 .short("d")
                 .long("delay")
-                .help("Delay [ms] between reading in two lines from the input. Only used for file input.")
                 .requires("CSV_INPUT_FILE")
-                .conflicts_with("OFFLINE")
+                .conflicts_with("ONLINE")
                 .takes_value(true)
         ).
         arg(
