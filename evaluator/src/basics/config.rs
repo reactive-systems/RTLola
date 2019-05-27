@@ -7,6 +7,7 @@ pub struct EvalConfig {
     pub output_channel: OutputChannel,
     pub evaluator: EvaluatorChoice,
     pub mode: ExecutionMode,
+    pub time_presentation: TimeRepresentation,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
@@ -39,6 +40,20 @@ pub enum EvaluatorChoice {
     Interpreted,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum TimeRepresentation {
+    Hide,
+    Relative(TimeFormat),
+    Absolute(TimeFormat),
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum TimeFormat {
+    UIntNanos,
+    FloatSecs,
+    HumanTime,
+}
+
 impl EvalConfig {
     pub fn new(
         source: InputSource,
@@ -46,8 +61,9 @@ impl EvalConfig {
         output: OutputChannel,
         evaluator: EvaluatorChoice,
         mode: ExecutionMode,
+        time_presentation: TimeRepresentation,
     ) -> Self {
-        EvalConfig { source, verbosity, output_channel: output, evaluator, mode }
+        EvalConfig { source, verbosity, output_channel: output, evaluator, mode, time_presentation }
     }
 
     pub fn debug() -> Self {
@@ -56,8 +72,21 @@ impl EvalConfig {
         cfg
     }
 
-    pub fn release(path: String, output: OutputChannel, evaluator: EvaluatorChoice, mode: ExecutionMode) -> Self {
-        EvalConfig::new(InputSource::file(path, None, None), Verbosity::Triggers, output, evaluator, mode)
+    pub fn release(
+        path: String,
+        output: OutputChannel,
+        evaluator: EvaluatorChoice,
+        mode: ExecutionMode,
+        time_presentation: TimeRepresentation,
+    ) -> Self {
+        EvalConfig::new(
+            InputSource::file(path, None, None),
+            Verbosity::Triggers,
+            output,
+            evaluator,
+            mode,
+            time_presentation,
+        )
     }
 }
 
@@ -69,6 +98,7 @@ impl Default for EvalConfig {
             output_channel: OutputChannel::StdOut,
             evaluator: EvaluatorChoice::ClosureBased,
             mode: ExecutionMode::Offline,
+            time_presentation: TimeRepresentation::Hide,
         }
     }
 }

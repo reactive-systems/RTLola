@@ -35,6 +35,7 @@ fn zero_wait_time_regression() {
         OutputChannel::StdErr,
         EvaluatorChoice::ClosureBased,
         ExecutionMode::Offline,
+        TimeRepresentation::Hide,
     );
     let config = Config { cfg, ir };
     config.run().unwrap_or_else(|e| panic!("E2E test failed: {}", e));
@@ -70,6 +71,7 @@ fn test_parse_event() {
         OutputChannel::StdErr,
         EvaluatorChoice::ClosureBased,
         ExecutionMode::Offline,
+        TimeRepresentation::Hide,
     );
     let config = Config { cfg, ir };
     let ctrl = config.run().unwrap_or_else(|e| panic!("E2E test failed: {}", e));
@@ -116,6 +118,7 @@ fn add_two_i32_streams() {
         OutputChannel::StdErr,
         EvaluatorChoice::ClosureBased,
         ExecutionMode::Offline,
+        TimeRepresentation::Hide,
     );
     let config = Config { cfg, ir };
     let ctrl = config.run().unwrap_or_else(|e| panic!("E2E test failed: {}", e));
@@ -152,6 +155,7 @@ subsub,25.0"
         OutputChannel::StdErr,
         EvaluatorChoice::ClosureBased,
         ExecutionMode::Offline,
+        TimeRepresentation::Hide,
     );
     let config = Config { cfg, ir };
     let ctrl = config.run().unwrap_or_else(|e| panic!("E2E test failed: {}", e));

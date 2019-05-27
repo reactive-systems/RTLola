@@ -1,6 +1,6 @@
 #![allow(clippy::mutex_atomic)]
 
-use super::{EvalConfig, Verbosity};
+use super::{EvalConfig, TimeFormat, TimeRepresentation, Verbosity};
 use crate::storage::Value;
 use crossterm::{cursor, terminal, ClearType};
 use csv::{Reader as CSVReader, Result as ReaderResult, StringRecord};
@@ -264,6 +264,8 @@ pub(crate) struct OutputHandler {
     channel: OutputChannel,
     file: Option<File>,
     pub(crate) statistics: Option<Statistics>,
+    pub(crate) start_time: Mutex<SystemTime>,
+    time_representation: TimeRepresentation,
 }
 
 impl OutputHandler {
@@ -273,6 +275,8 @@ impl OutputHandler {
             channel: config.output_channel.clone(),
             file: None,
             statistics: if config.verbosity == Verbosity::Progress { Some(Statistics::new(num_trigger)) } else { None },
+            start_time: Mutex::new(SystemTime::now()),
+            time_representation: config.time_presentation,
         }
     }
 
@@ -283,11 +287,42 @@ impl OutputHandler {
         self.emit(Verbosity::WarningsOnly, msg);
     }
 
+    fn time_info(&self, ts: SystemTime) -> Option<String> {
+        use TimeFormat::*;
+        use TimeRepresentation::*;
+        match self.time_representation {
+            Hide => None,
+            Relative(format) => {
+                let d = ts.duration_since(*self.start_time.lock().unwrap()).expect("Computation of duration failed!");
+                match format {
+                    UIntNanos => Some(format!("{}", d.as_nanos())),
+                    FloatSecs => Some(format!("{}.{:09}", d.as_secs(), d.subsec_nanos())),
+                    HumanTime => Some(format!("{}", humantime::format_duration(d))),
+                }
+            }
+            Absolute(format) => {
+                let d = ts.duration_since(SystemTime::UNIX_EPOCH).expect("Computation of duration failed!");
+                match format {
+                    UIntNanos => Some(format!("{}", d.as_nanos())),
+                    FloatSecs => Some(format!("{}.{:09}", d.as_secs(), d.subsec_nanos())),
+                    HumanTime => Some(format!("{}", humantime::format_rfc3339(ts))),
+                }
+            }
+        }
+    }
+
     #[allow(dead_code)]
-    pub(crate) fn trigger<F, T: Into<String>>(&self, msg: F, trigger_idx: usize)
+    pub(crate) fn trigger<F, T: Into<String>>(&self, msg: F, trigger_idx: usize, ts: SystemTime)
     where
         F: FnOnce() -> T,
     {
+        let msg = || {
+            if let Some(ti) = self.time_info(ts) {
+                format!("{}: {}", ti, msg().into())
+            } else {
+                format!("{}", msg().into())
+            }
+        };
         self.emit(Verbosity::Triggers, msg);
         if let Some(statistics) = &self.statistics {
             statistics.trigger(trigger_idx);

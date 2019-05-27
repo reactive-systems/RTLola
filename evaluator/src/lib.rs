@@ -10,7 +10,7 @@ mod storage;
 mod tests;
 
 use crate::coordination::Controller;
-use basics::{EvalConfig, EvaluatorChoice, ExecutionMode, InputSource, OutputChannel, Verbosity};
+use basics::{EvalConfig, EvaluatorChoice, ExecutionMode, InputSource, OutputChannel, TimeRepresentation, Verbosity};
 use clap::{value_t, App, Arg, ArgGroup};
 use std::fs::File;
 use std::io::Read;
@@ -160,7 +160,7 @@ impl Config {
             mode = ExecutionMode::Online;
         }
 
-        let cfg = EvalConfig::new(src, verbosity, out, evaluator, mode);
+        let cfg = EvalConfig::new(src, verbosity, out, evaluator, mode, TimeRepresentation::Hide);
 
         Config { cfg, ir }
     }

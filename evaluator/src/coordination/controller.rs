@@ -115,6 +115,10 @@ impl Controller {
             Ok(ts) => ts,
         };
 
+        let mut start_time_ref = self.output_handler.start_time.lock().unwrap();
+        *start_time_ref = start_time;
+        drop(start_time_ref);
+
         let has_time_driven = !self.ir.time_driven.is_empty();
         let ir_clone = self.ir.clone();
         let output_copy_handler = self.output_handler.clone();

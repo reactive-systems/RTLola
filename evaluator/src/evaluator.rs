@@ -220,6 +220,7 @@ impl<'e, 'c> Evaluator<'e, 'c> {
                 self.handler.trigger(
                     || format!("Trigger: {}", trig.message.as_ref().unwrap_or(&String::from("Warning!"))),
                     trig.trigger_idx,
+                    ts,
                 )
             }
         }
