@@ -113,6 +113,7 @@ impl ReaderWrapper {
 enum TimeHandling {
     RealTime,
     FromFile,
+    Delayed { delay: Duration, time: Option<SystemTime> },
 }
 
 // TODO(marvin): this can be a trait
@@ -122,15 +123,14 @@ pub(crate) struct EventSource {
     mapping: ColumnMapping,
     in_types: Vec<Type>,
     timer: TimeHandling,
-    reading_delay: Option<Duration>,
 }
 
 impl EventSource {
     pub(crate) fn from(src: &InputSource, ir: &LolaIR) -> ReaderResult<EventSource> {
         use InputSource::*;
-        let (mut wrapper, delay, time_col) = match src {
-            StdIn => (ReaderWrapper::Std(CSVReader::from_reader(stdin())), None, None),
-            File { path, delay, time_col } => (ReaderWrapper::File(CSVReader::from_path(path)?), *delay, *time_col),
+        let (mut wrapper, time_col) = match src {
+            StdIn => (ReaderWrapper::Std(CSVReader::from_reader(stdin())), None),
+            File { path, delay: _, time_col } => (ReaderWrapper::File(CSVReader::from_path(path)?), *time_col),
         };
 
         let stream_names: Vec<&str> = ir.inputs.iter().map(|i| i.name.as_str()).collect();
@@ -140,17 +140,16 @@ impl EventSource {
         use TimeHandling::*;
         let timer = match src {
             StdIn => RealTime,
-            File { path: _, delay: _, time_col: _ } => FromFile,
+            File { path: _, delay, time_col: _ } => match delay {
+                Some(d) => Delayed { delay: *d, time: None },
+                None => FromFile,
+            },
         };
 
-        Ok(EventSource { reader: wrapper, record: StringRecord::new(), mapping, in_types, timer, reading_delay: delay })
+        Ok(EventSource { reader: wrapper, record: StringRecord::new(), mapping, in_types, timer })
     }
 
     pub(crate) fn read_blocking(&mut self) -> ReaderResult<bool> {
-        if let Some(delay) = self.reading_delay {
-            thread::sleep(delay);
-        }
-
         if cfg!(debug_assertion) {
             // Reset record.
             self.record.clear();
@@ -189,6 +188,20 @@ impl EventSource {
         match self.timer {
             RealTime => SystemTime::now(),
             FromFile => self.read_time(),
+            Delayed { delay, ref mut time } => match time {
+                Some(ref mut t) => {
+                    *t += delay;
+                    *t
+                }
+                None => {
+                    let now = match self.mapping.time_ix {
+                        Some(_) => self.read_time(),
+                        None => SystemTime::UNIX_EPOCH,
+                    };
+                    self.timer = Delayed { delay, time: Some(now) };
+                    now
+                }
+            },
         }
     }
 
