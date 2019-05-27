@@ -13,10 +13,8 @@ use crate::coordination::Controller;
 use basics::{
     EvalConfig, EvaluatorChoice, ExecutionMode, InputSource, OutputChannel, TimeFormat, TimeRepresentation, Verbosity,
 };
-use clap::{value_t, App, Arg, ArgGroup};
-use std::fs::File;
-use std::io::Read;
-use std::time::Duration;
+use clap::{App, Arg, ArgGroup};
+use std::fs;
 use streamlab_frontend;
 use streamlab_frontend::ir::LolaIR;
 
@@ -48,10 +46,16 @@ impl Config {
                 .help("Read CSV input from a file")
                 .long("csv-in")
                 .takes_value(true)
+                .number_of_values(1)
                 .conflicts_with("STDIN")
         )
         .arg(
-            Arg::with_name("CSV_TIME_COLUMN").long("csv-time-column").help("The column in the CSV that contains time info").requires("CSV_INPUT_FILE").takes_value(true)
+            Arg::with_name("CSV_TIME_COLUMN")
+                .help("The column in the CSV that contains time info")
+                .long("csv-time-column")
+                .requires("CSV_INPUT_FILE")
+                .takes_value(true)
+                .number_of_values(1)
         )
         .arg(
             Arg::with_name("STDOUT")
@@ -72,6 +76,7 @@ impl Config {
                 .requires("CSV_INPUT_FILE")
                 .conflicts_with("ONLINE")
                 .takes_value(true)
+                .number_of_values(1)
         )
         .arg(
             Arg::with_name("VERBOSITY")
@@ -120,24 +125,18 @@ impl Config {
         // Now we have a reference to clone's matches
         let filename = parse_matches.value_of("SPEC").map(|s| s.to_string()).unwrap();
 
-        let mut file = File::open(&filename).unwrap_or_else(|e| panic!("Could not open file {}: {}", filename, e));
-        let mut contents = String::new();
-        file.read_to_string(&mut contents).unwrap_or_else(|e| panic!("Could not read file {}: {}", filename, e));
+        let contents =
+            fs::read_to_string(&filename).unwrap_or_else(|e| panic!("Could not read file {}: {}", filename, e));
 
         let ir = streamlab_frontend::parse(contents.as_str());
 
-        let mut delay: Option<Duration> = None;
-        if parse_matches.is_present("DELAY") {
-            delay = match value_t!(parse_matches, "DELAY", humantime::Duration) {
-                Ok(d) => Some(d.into()),
-                Err(e) => {
-                    eprintln!(
-                        "Could not parse DELAY value `{}`: {}.\nUsing no delay.",
-                        parse_matches.value_of("DELAY").expect("We set a default value."),
-                        e
-                    );
-                    None
-                }
+        let delay = match parse_matches.value_of("DELAY") {
+            None => None,
+            Some(delay_str) => {
+                let d = delay_str
+                    .parse::<humantime::Duration>()
+                    .unwrap_or_else(|e| panic!("Could not parse DELAY value `{}`: {}.", delay_str, e));
+                Some(d.into())
             }
         };
 
@@ -159,24 +158,27 @@ impl Config {
             OutputChannel::StdErr
         };
 
+        use Verbosity::*;
         let verbosity = match parse_matches.value_of("VERBOSITY").unwrap() {
-            "debug" => Verbosity::Debug,
-            "outputs" => Verbosity::Outputs,
-            "triggers" => Verbosity::Triggers,
-            "warnings" => Verbosity::WarningsOnly,
-            "progress" => Verbosity::Progress,
-            "silent" | "quiet" => Verbosity::Silent,
+            "debug" => Debug,
+            "outputs" => Outputs,
+            "triggers" => Triggers,
+            "warnings" => WarningsOnly,
+            "progress" => Progress,
+            "silent" | "quiet" => Silent,
             _ => unreachable!(),
         };
 
-        let mut evaluator = EvaluatorChoice::ClosureBased;
+        use EvaluatorChoice::*;
+        let mut evaluator = ClosureBased;
         if parse_matches.is_present("INTERPRETED") {
-            evaluator = EvaluatorChoice::Interpreted;
+            evaluator = Interpreted;
         }
 
-        let mut mode = ExecutionMode::Offline;
+        use ExecutionMode::*;
+        let mut mode = Offline;
         if parse_matches.is_present("ONLINE") {
-            mode = ExecutionMode::Online;
+            mode = Online;
         }
 
         use TimeFormat::*;
