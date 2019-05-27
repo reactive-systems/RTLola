@@ -1,6 +1,7 @@
 #![allow(clippy::mutex_atomic)]
 
 use super::{EvalConfig, Verbosity};
+use crate::storage::Value;
 use crossterm::{cursor, terminal, ClearType};
 use csv::{Reader as CSVReader, Result as ReaderResult, StringRecord};
 use std::fs::File;
@@ -8,7 +9,8 @@ use std::io::{stderr, stdin, stdout, Write};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::{Duration, SystemTime};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use streamlab_frontend::ir::{LolaIR, Type};
 
 #[derive(Debug, Clone)]
 pub enum OutputChannel {
@@ -108,27 +110,40 @@ impl ReaderWrapper {
     }
 }
 
-pub(crate) struct InputReader {
+enum TimeHandling {
+    RealTime,
+    FromFile,
+}
+
+// TODO(marvin): this can be a trait
+pub(crate) struct EventSource {
     reader: ReaderWrapper,
-    pub(crate) mapping: ColumnMapping,
-    pub(crate) record: StringRecord,
+    record: StringRecord,
+    mapping: ColumnMapping,
+    in_types: Vec<Type>,
+    timer: TimeHandling,
     reading_delay: Option<Duration>,
 }
 
-impl InputReader {
-    pub(crate) fn from(src: InputSource, names: &[&str]) -> ReaderResult<InputReader> {
-        let mut delay = None;
-        let (mut wrapper, time_col) = match src {
-            InputSource::StdIn => (ReaderWrapper::Std(CSVReader::from_reader(stdin())), None),
-            InputSource::File { path, delay:d, time_col } => {
-                delay = d;
-                (ReaderWrapper::File(CSVReader::from_path(path)?), time_col)
-            }
+impl EventSource {
+    pub(crate) fn from(src: &InputSource, ir: &LolaIR) -> ReaderResult<EventSource> {
+        use InputSource::*;
+        let (mut wrapper, delay, time_col) = match src {
+            StdIn => (ReaderWrapper::Std(CSVReader::from_reader(stdin())), None, None),
+            File { path, delay, time_col } => (ReaderWrapper::File(CSVReader::from_path(path)?), *delay, *time_col),
         };
 
-        let mapping = ColumnMapping::from_header(names, wrapper.get_header()?, time_col);
+        let stream_names: Vec<&str> = ir.inputs.iter().map(|i| i.name.as_str()).collect();
+        let mapping = ColumnMapping::from_header(stream_names.as_slice(), wrapper.get_header()?, time_col);
+        let in_types: Vec<Type> = ir.inputs.iter().map(|i| i.ty.clone()).collect();
 
-        Ok(InputReader { reader: wrapper, mapping, record: StringRecord::new(), reading_delay: delay })
+        use TimeHandling::*;
+        let timer = match src {
+            StdIn => RealTime,
+            File { path: _, delay: _, time_col: _ } => FromFile,
+        };
+
+        Ok(EventSource { reader: wrapper, record: StringRecord::new(), mapping, in_types, timer, reading_delay: delay })
     }
 
     pub(crate) fn read_blocking(&mut self) -> ReaderResult<bool> {
@@ -157,6 +172,50 @@ impl InputReader {
         }
 
         Ok(true)
+    }
+
+    pub(crate) fn has_event(&mut self) -> bool {
+        self.read_blocking().unwrap_or_else(|e| panic!("Error reading data. {}", e))
+    }
+
+    pub(crate) fn get_event(&mut self) -> (Vec<Value>, SystemTime) {
+        let event = self.read_event();
+        let time = self.get_time();
+        (event, time)
+    }
+
+    fn get_time(&mut self) -> SystemTime {
+        use TimeHandling::*;
+        match self.timer {
+            RealTime => SystemTime::now(),
+            FromFile => self.read_time(),
+        }
+    }
+
+    fn read_event(&self) -> Vec<Value> {
+        let mut buffer = vec![Value::None; self.in_types.len()];
+        for (col_ix, s) in self.record.iter().enumerate() {
+            if let Some(str_ix) = self.mapping.col2str[col_ix] {
+                if s != "#" {
+                    let t = &self.in_types[str_ix];
+                    buffer[str_ix] = Value::try_from(s, t)
+                        .unwrap_or_else(|| panic!("Failed to parse {} as value of type {:?}.", s, t))
+                }
+            }
+        }
+        buffer
+    }
+
+    fn read_time(&self) -> SystemTime {
+        let str_time = self.str_for_time();
+        let float_secs: f64 = match str_time.parse() {
+            Ok(f) => f,
+            Err(e) => panic!("Failed to parse time string {}: {}", str_time, e),
+        };
+        const NANOS_PER_SEC: f64 = 1_000_000_000.0;
+        let float_nanos = float_secs * NANOS_PER_SEC;
+        let nanos = float_nanos as u64;
+        UNIX_EPOCH + Duration::from_nanos(nanos)
     }
 
     pub(crate) fn str_for_time(&self) -> &str {

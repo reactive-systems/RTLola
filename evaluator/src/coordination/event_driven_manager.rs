@@ -1,12 +1,12 @@
-use crate::basics::{EvalConfig, InputReader, OutputHandler};
+use crate::basics::{EvalConfig, EventSource, OutputHandler};
 use crate::coordination::{WorkItem, CAP_LOCAL_QUEUE};
 use crate::storage::Value;
 use crossbeam_channel::Sender;
 use std::error::Error;
 use std::ops::AddAssign;
 use std::sync::Arc;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use streamlab_frontend::ir::{LolaIR, Type};
+use std::time::SystemTime;
+use streamlab_frontend::ir::LolaIR;
 
 pub(crate) type EventEvaluation = Vec<Value>;
 
@@ -32,66 +32,30 @@ impl AddAssign<u128> for EventDrivenCycleCount {
 pub struct EventDrivenManager {
     current_cycle: EventDrivenCycleCount,
     out_handler: Arc<OutputHandler>,
-    input_reader: InputReader,
-    in_types: Vec<Type>,
+    event_source: EventSource,
 }
 
 impl EventDrivenManager {
     /// Creates a new EventDrivenManager managing event-driven output streams.
     pub(crate) fn setup(ir: LolaIR, config: EvalConfig, out_handler: Arc<OutputHandler>) -> EventDrivenManager {
-        let stream_names: Vec<&str> = ir.inputs.iter().map(|i| i.name.as_str()).collect();
-        let input_reader = InputReader::from(config.source, stream_names.as_slice());
-        let input_reader = match input_reader {
+        let event_source = match EventSource::from(&config.source, &ir) {
             Ok(r) => r,
             Err(e) => panic!("Cannot create input reader: {}", e),
         };
 
-        let in_types: Vec<Type> = ir.inputs.iter().map(|i| i.ty.clone()).collect();
-
-        EDM { current_cycle: 0.into(), out_handler, input_reader, in_types }
-    }
-
-    fn has_event(&mut self) -> bool {
-        self.input_reader.read_blocking().unwrap_or_else(|e| panic!("Error reading data. {}", e))
-    }
-
-    fn read_event(&self) -> Vec<Value> {
-        let mut buffer = vec![Value::None; self.in_types.len()];
-        for (col_ix, s) in self.input_reader.record.iter().enumerate() {
-            if let Some(str_ix) = self.input_reader.mapping.col2str[col_ix] {
-                if s != "#" {
-                    let t = &self.in_types[str_ix];
-                    buffer[str_ix] = Value::try_from(s, t)
-                        .unwrap_or_else(|| panic!("Failed to parse {} as value of type {:?}.", s, t))
-                }
-            }
-        }
-        buffer
-    }
-
-    fn get_time(&mut self) -> SystemTime {
-        let str_time = self.input_reader.str_for_time();
-        let float_secs: f64 = match str_time.parse() {
-            Ok(f) => f,
-            Err(e) => panic!("Failed to parse time string {}: {}", str_time, e),
-        };
-        const NANOS_PER_SEC: f64 = 1_000_000_000.0;
-        let float_nanos = float_secs * NANOS_PER_SEC;
-        let nanos = float_nanos as u64;
-        UNIX_EPOCH + Duration::from_nanos(nanos)
+        EDM { current_cycle: 0.into(), out_handler, event_source }
     }
 
     pub(crate) fn start_online(mut self, work_queue: Sender<WorkItem>) -> ! {
         loop {
-            if !self.has_event() {
+            if !self.event_source.has_event() {
                 let _ = work_queue.send(WorkItem::End); // Whether it fails or not, we really don't care.
                                                         // Sleep until you slowly fade into nothingness...
                 loop {
                     std::thread::sleep(std::time::Duration::new(u64::max_value(), 0))
                 }
             }
-            let event = self.read_event();
-            let time = SystemTime::now();
+            let (event, time) = self.event_source.get_event();
             match work_queue.send(WorkItem::Event(event, time)) {
                 Ok(_) => {}
                 Err(e) => self.out_handler.runtime_warning(|| format!("Error when sending work item. {}", e)),
@@ -109,13 +73,12 @@ impl EventDrivenManager {
         loop {
             let mut local_queue = Vec::with_capacity(CAP_LOCAL_QUEUE);
             for _i in 0..local_queue.capacity() {
-                if !self.has_event() {
+                if !self.event_source.has_event() {
                     local_queue.push(WorkItem::End);
                     let _ = work_queue.send(local_queue);
                     return Ok(());
                 }
-                let event = self.read_event();
-                let time = self.get_time();
+                let (event, time) = self.event_source.get_event();
                 if start_time.is_none() {
                     start_time = Some(time);
                     let _ = time_slot.send(time);
