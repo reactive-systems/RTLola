@@ -4,7 +4,12 @@
   "rationale": "Add two Int32 streams that have holes. The explicit activation condition should fire exactly three times.",
   "triggers": {
     "c is too large": {
-      "expected_count": 3
+      "expected_count": 3,
+      "time_info": [
+        "1547627523.100536000",
+        "1547627523.500536000",
+        "1547627523.600536000"
+      ]
     }
   }
 }

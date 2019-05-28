@@ -4,16 +4,31 @@
   "rationale": "Short offset of 6 into a stream with holes.\nWe should see the default value default value 6 times.",
   "triggers": {
     "b is 7": {
-      "expected_count": 1
+      "expected_count": 1,
+      "time_info": [
+        "25.800000000"
+      ]
     },
     "b is 6": {
-      "expected_count": 1
+      "expected_count": 1,
+      "time_info": [
+        "26.000000000"
+      ]
     },
     "b is 5": {
-      "expected_count": 0
+      "expected_count": 0,
+      "time_info": []
     },
     "default used": {
-      "expected_count": 6
+      "expected_count": 6,
+      "time_info": [
+        "24.700000000",
+        "24.800000000",
+        "25.000000000",
+        "25.200000000",
+        "25.400000000",
+        "25.600000000"
+      ]
     }
   }
 }

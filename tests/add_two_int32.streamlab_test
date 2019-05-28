@@ -4,7 +4,10 @@
   "rationale": "Add two Int32 streams that have holes. The trigger should only fire once.",
   "triggers": {
     "c is too large": {
-      "expected_count": 1
+      "expected_count": 1,
+      "time_info": [
+        "1547627523.600536000"
+      ]
     }
   }
 }

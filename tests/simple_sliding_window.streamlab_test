@@ -4,10 +4,19 @@
   "rationale": "Have one sliding window count the number of events in its own duration.\nWe should see the default and the right counts.",
   "triggers": {
     "count is 1": {
-      "expected_count": 4
+      "expected_count": 4,
+      "time_info": [
+        "0.200000000",
+        "0.300000000",
+        "0.500000000",
+        "0.600000000"
+      ]
     },
     "count is 2": {
-      "expected_count": 1
+      "expected_count": 1,
+      "time_info": [
+        "0.400000000"
+      ]
     }
   }
 }
