@@ -4,6 +4,7 @@ import subprocess
 import platform
 import sys
 import argparse
+import re
 
 
 BUILD_VERSIONS = ["release", "debug"]
@@ -125,12 +126,14 @@ for (mode, config) in [('interpreted', ["--interpreted"]), ('closure', [])]:
                     for line in lines:
                         if line == "":
                             continue
-                        if line.startswith("Trigger: "):
-                            trigger_warning = line[len("Trigger: "):]
-                            triggers_in_output.setdefault(trigger_warning, 0)
-                            triggers_in_output[trigger_warning] += 1
-                        # else:
-                        #     print("Unexpected line: {}".format(line))
+                        m = re.match(r'((?P<timeinfo>.*): )?Trigger: (?P<trig_msg>.*)', line)
+                        if m:
+                            timeinfo = m.group('timeinfo')
+                            trig_msg = m.group('trig_msg')
+                            triggers_in_output.setdefault(trig_msg, [])
+                            triggers_in_output[trig_msg].append(timeinfo)
+                            continue
+                        #print("Unexpected line: {}".format(line))
 
                     # print diff in triggers
                     # TODO allow for specifying a tolerance in the JSON
@@ -139,7 +142,7 @@ for (mode, config) in [('interpreted', ["--interpreted"]), ('closure', [])]:
                     trigger_names.sort()
                     for trigger in trigger_names:
                         if trigger in expected_triggers:
-                            actual = triggers_in_output[trigger] if trigger in triggers_in_output else 0
+                            actual = len(triggers_in_output[trigger]) if trigger in triggers_in_output else 0
                             expected = 0
                             if trigger in expected_triggers:
                                 expected = test_json["triggers"][trigger]["expected_count"]
