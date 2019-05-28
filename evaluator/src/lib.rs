@@ -10,7 +10,9 @@ mod storage;
 mod tests;
 
 use crate::coordination::Controller;
-use basics::{EvalConfig, EvaluatorChoice, ExecutionMode, InputSource, OutputChannel, TimeRepresentation, Verbosity};
+use basics::{
+    EvalConfig, EvaluatorChoice, ExecutionMode, InputSource, OutputChannel, TimeFormat, TimeRepresentation, Verbosity,
+};
 use clap::{value_t, App, Arg, ArgGroup};
 use std::fs::File;
 use std::io::Read;
@@ -70,13 +72,30 @@ impl Config {
                 .requires("CSV_INPUT_FILE")
                 .conflicts_with("ONLINE")
                 .takes_value(true)
-        ).
-        arg(
+        )
+        .arg(
             Arg::with_name("VERBOSITY")
                 .short("l")
                 .long("verbosity")
                 .possible_values(&["debug", "outputs", "triggers", "warnings", "progress", "silent", "quiet"])
                 .default_value("triggers")
+        )
+        .arg(
+            Arg::with_name("TIMEREPRESENTATION")
+                .help("Sets the trigger time info representation")
+                .long("time-info-rep")
+                .possible_values(&[
+                    "hide",
+                    "relative",
+                    "relative_nanos", "relative_uint_nanos",
+                    "relative_secs", "relative_float_secs",
+                    "relative_human", "relative_human_time",
+                    "absolute",
+                    "absolute_nanos", "absolute_uint_nanos",
+                    "absolute_secs", "absolute_float_secs",
+                    "absolute_human", "absolute_human_time",
+                ])
+                .default_value("hide")
         )
         .arg(
             Arg::with_name("ONLINE")
@@ -160,7 +179,20 @@ impl Config {
             mode = ExecutionMode::Online;
         }
 
-        let cfg = EvalConfig::new(src, verbosity, out, evaluator, mode, TimeRepresentation::Hide);
+        use TimeFormat::*;
+        use TimeRepresentation::*;
+        let time_representation = match parse_matches.value_of("TIMEREPRESENTATION").unwrap() {
+            "hide" => Hide,
+            "relative_nanos" | "relative_uint_nanos" => Relative(UIntNanos),
+            "relative" | "relative_secs" | "relative_float_secs" => Relative(FloatSecs),
+            "relative_human" | "relative_human_time" => Relative(HumanTime),
+            "absolute_nanos" | "absolute_uint_nanos" => Absolute(UIntNanos),
+            "absolute" | "absolute_secs" | "absolute_float_secs" => Absolute(FloatSecs),
+            "absolute_human" | "absolute_human_time" => Absolute(HumanTime),
+            _ => unreachable!(),
+        };
+
+        let cfg = EvalConfig::new(src, verbosity, out, evaluator, mode, time_representation);
 
         Config { cfg, ir }
     }
