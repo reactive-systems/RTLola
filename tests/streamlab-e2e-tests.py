@@ -99,7 +99,8 @@ tests_passed = []
 tests_crashed = []
 tests_wrong_out = []
 return_code = 0
-for (mode, config) in [('interpreted', ["--interpreted"]), ('closure', [])]:
+for (mode, config) in [('interpreted', ["--interpreted"]), ('closure', []), ('time-info', ["--time-info-rep", "absolute"])]:
+    check_time_info = "--time-info-rep" in config
     for test_file in tests:
         total_number_of_tests += 1
         print("========================================================================")
@@ -142,12 +143,20 @@ for (mode, config) in [('interpreted', ["--interpreted"]), ('closure', [])]:
                     trigger_names.sort()
                     for trigger in trigger_names:
                         if trigger in expected_triggers:
-                            actual = len(triggers_in_output[trigger]) if trigger in triggers_in_output else 0
-                            expected = 0
+                            actual_time_info = triggers_in_output[trigger] if trigger in triggers_in_output else []
+                            actual_count = len(actual_time_info)
+                            expected_count = 0
+                            expected_time_info = []
                             if trigger in expected_triggers:
-                                expected = test_json["triggers"][trigger]["expected_count"]
-                            if actual != expected:
-                                print_trigger(trigger, expected, actual)
+                                expected_count = test_json["triggers"][trigger]["expected_count"]
+                                expected_time_info = test_json["triggers"][trigger]["time_info"]
+                                assert expected_count == len(expected_time_info)
+                            if actual_count != expected_count:
+                                print_trigger(trigger, expected_count, actual_count)
+                                something_wrong = True
+                            if check_time_info and actual_time_info != expected_time_info:
+                                print_fail("time info for trigger \"{}\" incorrect".format(trigger))
+                                #TODO give better info where the error is located
                                 something_wrong = True
                         else:
                             print_additional_trigger(trigger, triggers_in_output[trigger])
@@ -165,7 +174,7 @@ for (mode, config) in [('interpreted', ["--interpreted"]), ('closure', [])]:
                     print(run_result.stdout)
                     print("STDERR")
                     print(run_result.stderr)
-                print_fail("FAIL".format(test_name))
+                print_fail("FAIL")
                 print_fail(test_json["rationale"])
                 return_code = 1
             else:
