@@ -220,15 +220,33 @@ impl EventSource {
     }
 
     fn read_time(&self) -> SystemTime {
-        let str_time = self.str_for_time();
-        let float_secs: f64 = match str_time.parse() {
-            Ok(f) => f,
-            Err(e) => panic!("Failed to parse time string {}: {}", str_time, e),
+        let time_str = self.str_for_time();
+        let mut time_str_split = time_str.split('.');
+        let secs_str: &str = match time_str_split.next() {
+            Some(s) => s,
+            None => panic!("Failed to parse time string {}.", time_str),
         };
-        const NANOS_PER_SEC: f64 = 1_000_000_000.0;
-        let float_nanos = float_secs * NANOS_PER_SEC;
-        let nanos = float_nanos as u64;
-        UNIX_EPOCH + Duration::from_nanos(nanos)
+        let secs = match secs_str.parse::<u64>() {
+            Ok(u) => u,
+            Err(e) => panic!("Failed to parse time string {}: {}", time_str, e),
+        };
+        let d: Duration = if let Some(nanos_str) = time_str_split.next() {
+            let mut chars = nanos_str.chars();
+            let mut nanos: u32 = 0;
+            for _ in 1..=9 {
+                nanos *= 10;
+                if let Some(c) = chars.next() {
+                    if let Some(d) = c.to_digit(10) {
+                        nanos += d;
+                    }
+                }
+            }
+            assert!(time_str_split.next().is_none());
+            Duration::new(secs, nanos)
+        } else {
+            Duration::from_nanos(secs)
+        };
+        UNIX_EPOCH + d
     }
 
     pub(crate) fn str_for_time(&self) -> &str {
