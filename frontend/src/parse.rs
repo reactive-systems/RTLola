@@ -174,7 +174,7 @@ fn parse_output(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> Output {
     // Parse the `@ [Expr]` part of output declaration
     let extend = if let Rule::ActivationCondition = pair.as_rule() {
         let span: Span = pair.as_span().into();
-        let expr = build_expression_ast(spec, pair.into_inner(), span);
+        let expr = build_expression_ast(spec, pair.into_inner());
         pair = pairs.next().expect("mismatch between grammar and AST");
         ActivationCondition { expr: Some(expr), id: NodeId::DUMMY, span }
     } else {
@@ -188,8 +188,7 @@ fn parse_output(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> Output {
     };
 
     // Parse expression
-    let expr_span = pair.as_span();
-    let expression = build_expression_ast(spec, pair.into_inner(), expr_span.into());
+    let expression = build_expression_ast(spec, pair.into_inner());
     Output { id: NodeId::DUMMY, name, ty, extend, params, template_spec: tspec, expression, span }
 }
 
@@ -234,8 +233,7 @@ fn parse_template_spec(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> TemplateSpe
         let exp = pair.unwrap();
         let span_ter = exp.as_span().into();
         let expr = exp.into_inner().next().expect("mismatch between grammar and AST");
-        let expr_span = expr.as_span().into();
-        let expr = build_expression_ast(spec, expr.into_inner(), expr_span);
+        let expr = build_expression_ast(spec, expr.into_inner());
         ter_spec = Some(TerminateSpec { target: expr, id: NodeId::DUMMY, span: span_ter });
     }
     TemplateSpec { inv: inv_spec, ext: ext_spec, ter: ter_spec, id: NodeId::DUMMY, span }
@@ -247,10 +245,7 @@ fn parse_ext_spec(spec: &mut LolaSpec, ext_pair: Pair<'_, Rule>) -> ExtendSpec {
 
     let first_child = children.next().expect("mismatch between grammar and ast");
     let target = match first_child.as_rule() {
-        Rule::Expr => {
-            let span = first_child.as_span().into();
-            build_expression_ast(spec, first_child.into_inner(), span)
-        }
+        Rule::Expr => build_expression_ast(spec, first_child.into_inner()),
         _ => unreachable!(),
     };
     ExtendSpec { target, id: NodeId::DUMMY, span: span_ext }
@@ -260,8 +255,7 @@ fn parse_inv_spec(spec: &mut LolaSpec, inv_pair: Pair<'_, Rule>) -> InvokeSpec {
     let span_inv = inv_pair.as_span().into();
     let mut inv_children = inv_pair.into_inner();
     let expr_pair = inv_children.next().expect("mismatch between grammar and AST");
-    let expr_span = expr_pair.as_span().into();
-    let inv_target = build_expression_ast(spec, expr_pair.into_inner(), expr_span);
+    let inv_target = build_expression_ast(spec, expr_pair.into_inner());
     // Compute invocation condition:
     let mut is_if = false;
     let mut cond_expr = None;
@@ -272,8 +266,7 @@ fn parse_inv_spec(spec: &mut LolaSpec, inv_pair: Pair<'_, Rule>) -> InvokeSpec {
             _ => unreachable!(),
         };
         let condition = inv_cond_pair.into_inner().next().expect("mismatch between grammar and AST");
-        let cond_expr_span = condition.as_span().into();
-        cond_expr = Some(build_expression_ast(spec, condition.into_inner(), cond_expr_span))
+        cond_expr = Some(build_expression_ast(spec, condition.into_inner()))
     }
     InvokeSpec { condition: cond_expr, is_if, target: inv_target, id: NodeId::DUMMY, span: span_inv }
 }
@@ -300,8 +293,7 @@ fn parse_trigger(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> Trigger {
         name = Some(parse_ident(&pair));
         pair = pairs.next().expect("mismatch between grammar and AST");
     }
-    let expr_span = pair.as_span();
-    let expression = build_expression_ast(spec, pair.into_inner(), expr_span.into());
+    let expression = build_expression_ast(spec, pair.into_inner());
 
     if let Some(pair) = pairs.next() {
         assert_eq!(pair.as_rule(), Rule::String);
@@ -397,13 +389,7 @@ fn parse_literal(pair: Pair<'_, Rule>) -> Literal {
 
 #[allow(clippy::vec_box)]
 fn parse_vec_of_expressions(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>) -> Vec<Box<Expression>> {
-    pairs
-        .map(|expr| {
-            let span = expr.as_span().into();
-            build_expression_ast(spec, expr.into_inner(), span)
-        })
-        .map(Box::new)
-        .collect()
+    pairs.map(|expr| build_expression_ast(spec, expr.into_inner())).map(Box::new).collect()
 }
 
 fn parse_vec_of_types(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>) -> Vec<Type> {
@@ -437,8 +423,7 @@ fn build_function_expression(spec: &mut LolaSpec, pair: Pair<'_, Rule>, span: Sp
         } else {
             arg_names.push(None);
         }
-        let span = pair.as_span();
-        args.push(build_expression_ast(spec, pair.into_inner(), span.into()).into());
+        args.push(build_expression_ast(spec, pair.into_inner()).into());
     }
     let name = FunctionName { name: fun_name, arg_names };
     Expression::new(ExpressionKind::Function(name, type_params, args), span)
@@ -447,12 +432,13 @@ fn build_function_expression(spec: &mut LolaSpec, pair: Pair<'_, Rule>, span: Sp
 /**
  * Builds the Expr AST.
  */
-fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>, span: Span) -> Expression {
+fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>) -> Expression {
     PREC_CLIMBER.climb(
         pairs,
         |pair: Pair<'_, Rule>| build_term_ast(spec, pair),
         |lhs: Expression, op: Pair<'_, Rule>, rhs: Expression| {
             // Reduce function combining `Expression`s to `Expression`s with the correct precs
+            let span = Span { start: lhs.span.start, end: rhs.span.end };
             let op = match op.as_rule() {
                 Rule::Add => BinOp::Add,
                 Rule::Subtract => BinOp::Sub,
@@ -470,9 +456,11 @@ fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>, span: Span)
                 Rule::NotEqual => BinOp::Ne,
                 // bubble up the unary operator on the lhs (if it exists) to fix precedence
                 Rule::Dot => {
-                    let (inner, unop) = match lhs.kind {
-                        ExpressionKind::Unary(unop, inner) => (inner, Some(unop)),
-                        _ => (Box::new(lhs), None),
+                    let (unop, binop_span, inner) = match lhs.kind {
+                        ExpressionKind::Unary(unop, inner) => {
+                            (Some(unop), Span { start: inner.span.start, end: rhs.span.end }, inner)
+                        }
+                        _ => (None, span, Box::new(lhs)),
                     };
                     match rhs.kind {
                         // access to a tuple
@@ -486,11 +474,11 @@ fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>, span: Span)
                                     panic!("expected unsigned integer, found {}", l);
                                 }
                             };
-                            let new_inner = Expression::new(ExpressionKind::Field(inner, ident), span); //TODO this span seems to be the span off the whole expression
+                            let binop_expr = Expression::new(ExpressionKind::Field(inner, ident), binop_span);
                             match unop {
-                                None => return new_inner,
+                                None => return binop_expr,
                                 Some(unop) => {
-                                    return Expression::new(ExpressionKind::Unary(unop, Box::new(new_inner)), span)
+                                    return Expression::new(ExpressionKind::Unary(unop, Box::new(binop_expr)), span)
                                 }
                             }
                         }
@@ -539,11 +527,11 @@ fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>, span: Span)
                                 }
                                 _ => ExpressionKind::Method(inner, name, types, args),
                             };
-                            let new_inner = Expression::new(kind, rhs.span);
+                            let binop_expr = Expression::new(kind, binop_span);
                             match unop {
-                                None => return new_inner,
+                                None => return binop_expr,
                                 Some(unop) => {
-                                    return Expression::new(ExpressionKind::Unary(unop, Box::new(new_inner)), span)
+                                    return Expression::new(ExpressionKind::Unary(unop, Box::new(binop_expr)), span)
                                 }
                             }
                         }
@@ -557,7 +545,8 @@ fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>, span: Span)
                     };
                     match lhs.kind {
                         ExpressionKind::Unary(unop, inner) => {
-                            let new_inner = Expression::new(ExpressionKind::Offset(inner, offset), span);
+                            let inner_span = Span { start: inner.span.start, end: rhs.span.end };
+                            let new_inner = Expression::new(ExpressionKind::Offset(inner, offset), inner_span);
                             return Expression::new(ExpressionKind::Unary(unop, Box::new(new_inner)), span);
                         }
                         _ => return Expression::new(ExpressionKind::Offset(lhs.into(), offset), span),
@@ -599,11 +588,10 @@ fn build_term_ast(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> Expression {
                 None
             };
 
-            let inner_span = inner_expression.as_span().into();
             Expression::new(
                 ExpressionKind::ParenthesizedExpression(
                     opening_parenthesis,
-                    Box::new(build_expression_ast(spec, inner_expression.into_inner(), inner_span)),
+                    Box::new(build_expression_ast(spec, inner_expression.into_inner())),
                     closing_parenthesis,
                 ),
                 span.into(),
@@ -636,10 +624,7 @@ fn build_term_ast(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> Expression {
             assert!(elements.len() != 1, "Tuples may not have exactly one element.");
             Expression::new(ExpressionKind::Tuple(elements), span.into())
         }
-        Rule::Expr => {
-            let span = pair.as_span();
-            build_expression_ast(spec, pair.into_inner(), span.into())
-        }
+        Rule::Expr => build_expression_ast(spec, pair.into_inner()),
         Rule::FunctionExpr => build_function_expression(spec, pair, span.into()),
         Rule::IntegerLiteral => {
             let span = span.into();
@@ -988,8 +973,7 @@ mod tests {
     fn parse_expression() {
         let expr = LolaParser::parse(Rule::Expr, "in + 1\n").unwrap_or_else(|e| panic!("{}", e)).next().unwrap();
         let mut spec = LolaSpec::new();
-        let span = expr.as_span();
-        let ast = build_expression_ast(&mut spec, expr.into_inner(), span.into());
+        let ast = build_expression_ast(&mut spec, expr.into_inner());
         assert_eq!(format!("{}", ast), "in + 1")
     }
 
@@ -997,8 +981,7 @@ mod tests {
     fn parse_expression_precedence() {
         let expr = LolaParser::parse(Rule::Expr, "(a ∨ b ∧ c)").unwrap_or_else(|e| panic!("{}", e)).next().unwrap();
         let mut spec = LolaSpec::new();
-        let span = expr.as_span();
-        let ast = build_expression_ast(&mut spec, expr.into_inner(), span.into());
+        let ast = build_expression_ast(&mut spec, expr.into_inner());
         assert_eq!(format!("{}", ast), "(a ∨ b ∧ c)")
     }
 
@@ -1006,8 +989,7 @@ mod tests {
     fn parse_missing_closing_parenthesis() {
         let expr = LolaParser::parse(Rule::Expr, "(a ∨ b ∧ c").unwrap_or_else(|e| panic!("{}", e)).next().unwrap();
         let mut spec = LolaSpec::new();
-        let span = expr.as_span();
-        let ast = build_expression_ast(&mut spec, expr.into_inner(), span.into());
+        let ast = build_expression_ast(&mut spec, expr.into_inner());
         assert_eq!(format!("{}", ast), "(a ∨ b ∧ c")
     }
 
