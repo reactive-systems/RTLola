@@ -56,3 +56,9 @@ JSON format (needs extension for specifying the timestamps)
 - add time based checks for triggers ( time since start / absolute time)
 - add tolerance for time based trigger checking
 - adjust `simple_sliding_window.streamlab_test` for the other aggregations
+- tuple, and data types, string, regexp
+- forward sliding windows / delay operator
+- min/max
+- let
+
+agg(over:9s) agg(over: =9s)

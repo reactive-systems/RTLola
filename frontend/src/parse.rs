@@ -28,7 +28,6 @@ lazy_static! {
             Operator::new(Add, Left) | Operator::new(Subtract, Left),
             Operator::new(Multiply, Left) | Operator::new(Divide, Left) | Operator::new(Mod, Left),
             Operator::new(Power, Right),
-            Operator::new(Default, Left),
             Operator::new(Dot, Left),
             Operator::new(OpeningBracket, Left),
         ])
@@ -469,7 +468,12 @@ fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>, span: Span)
                 Rule::MoreThanOrEqual => BinOp::Ge,
                 Rule::Equal => BinOp::Eq,
                 Rule::NotEqual => BinOp::Ne,
+                // bubble up the unary operator on the lhs (if it exists) to fix precedence
                 Rule::Dot => {
+                    let (inner, unop) = match lhs.kind {
+                        ExpressionKind::Unary(unop, inner) => (inner, Some(unop)),
+                        _ => (Box::new(lhs), None),
+                    };
                     match rhs.kind {
                         // access to a tuple
                         ExpressionKind::Lit(l) => {
@@ -482,26 +486,32 @@ fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>, span: Span)
                                     panic!("expected unsigned integer, found {}", l);
                                 }
                             };
-                            return Expression::new(ExpressionKind::Field(Box::new(lhs), ident), span);
+                            let new_inner = Expression::new(ExpressionKind::Field(inner, ident), span); //TODO this span seems to be the span off the whole expression
+                            match unop {
+                                None => return new_inner,
+                                Some(unop) => {
+                                    return Expression::new(ExpressionKind::Unary(unop, Box::new(new_inner)), span)
+                                }
+                            }
                         }
                         ExpressionKind::Function(name, types, args) => {
                             // match for builtin function names and transform them into appropriate AST nodes
                             let kind = match name.as_string().as_str() {
                                 "defaults(to:)" => {
                                     assert_eq!(args.len(), 1);
-                                    ExpressionKind::Default(lhs.into(), args[0].clone())
+                                    ExpressionKind::Default(inner, args[0].clone())
                                 }
                                 "offset(by:)" => {
                                     assert_eq!(args.len(), 1);
-                                    ExpressionKind::Offset(lhs.into(), args[0].clone())
+                                    ExpressionKind::Offset(inner, args[0].clone())
                                 }
                                 "hold()" => {
                                     assert_eq!(args.len(), 0);
-                                    ExpressionKind::StreamAccess(lhs.into(), StreamAccessKind::Hold)
+                                    ExpressionKind::StreamAccess(inner, StreamAccessKind::Hold)
                                 }
                                 "get()" => {
                                     assert_eq!(args.len(), 0);
-                                    ExpressionKind::StreamAccess(lhs.into(), StreamAccessKind::Optional)
+                                    ExpressionKind::StreamAccess(inner, StreamAccessKind::Optional)
                                 }
                                 "aggregate(over:using:)" => {
                                     assert_eq!(args.len(), 2);
@@ -517,20 +527,31 @@ fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>, span: Span)
                                         _ => panic!("unknown aggregation function {}", args[1]),
                                     };
                                     ExpressionKind::SlidingWindowAggregation {
-                                        expr: lhs.into(),
+                                        expr: inner,
                                         duration: args[0].clone(),
                                         aggregation: window_op,
                                     }
                                 }
-                                _ => ExpressionKind::Method(Box::new(lhs), name, types, args),
+                                _ => ExpressionKind::Method(inner, name, types, args),
                             };
-                            return Expression::new(kind, rhs.span);
+                            let new_inner = Expression::new(kind, rhs.span);
+                            match unop {
+                                None => return new_inner,
+                                Some(unop) => {
+                                    return Expression::new(ExpressionKind::Unary(unop, Box::new(new_inner)), span)
+                                }
+                            }
                         }
                         _ => panic!("expected method call or tuple access, found {}", rhs),
                     }
                 }
-                Rule::Default => return Expression::new(ExpressionKind::Default(Box::new(lhs), Box::new(rhs)), span),
-                Rule::OpeningBracket => return Expression::new(ExpressionKind::Offset(lhs.into(), rhs.into()), span),
+                Rule::OpeningBracket => match lhs.kind {
+                    ExpressionKind::Unary(unop, inner) => {
+                        let new_inner = Expression::new(ExpressionKind::Offset(inner, rhs.into()), span);
+                        return Expression::new(ExpressionKind::Unary(unop, Box::new(new_inner)), span);
+                    }
+                    _ => return Expression::new(ExpressionKind::Offset(lhs.into(), rhs.into()), span),
+                },
                 _ => unreachable!(),
             };
             Expression::new(ExpressionKind::Binary(op, Box::new(lhs), Box::new(rhs)), span)

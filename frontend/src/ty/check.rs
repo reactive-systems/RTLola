@@ -1606,7 +1606,7 @@ mod tests {
     #[test]
     fn infinite_recursion_regression() {
         // this should fail in type checking as the value type of `c` cannot be determined.
-        let spec = "output c := c[0]?0";
+        let spec = "output c := c[0].defaults(to:0)";
         assert_eq!(1, num_type_errors(spec));
     }
 
