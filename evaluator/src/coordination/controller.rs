@@ -1,6 +1,7 @@
 use super::event_driven_manager::EventDrivenManager;
 use super::time_driven_manager::TimeDrivenManager;
 use super::{WorkItem, CAP_WORK_QUEUE};
+use crate::basics::Time;
 use crate::basics::{EvalConfig, ExecutionMode::*, OutputHandler};
 use crate::coordination::{EventEvaluation, TimeEvaluation};
 use crate::evaluator::{Evaluator, EvaluatorData};
@@ -8,7 +9,7 @@ use crossbeam_channel::{bounded, unbounded};
 use std::error::Error;
 use std::sync::Arc;
 use std::thread;
-use std::time::{Duration, SystemTime};
+use std::time::{Duration, Instant};
 use streamlab_frontend::ir::LolaIR;
 
 pub struct Controller {
@@ -43,6 +44,7 @@ impl Controller {
     /// and fetches/expects events from specified input source.
     fn evaluate_online(&self) -> Result<(), Box<dyn Error>> {
         let (work_tx, work_rx) = unbounded();
+        let now = Instant::now();
 
         let copy_output_handler = self.output_handler.clone();
 
@@ -51,8 +53,8 @@ impl Controller {
             let work_tx_clone = work_tx.clone();
             let ir_clone = self.ir.clone();
             let _ = thread::Builder::new().name("TimeDrivenManager".into()).spawn(move || {
-                let time_manager = TimeDrivenManager::setup(ir_clone, SystemTime::now(), copy_output_handler);
-                time_manager.start_online(work_tx_clone);
+                let time_manager = TimeDrivenManager::setup(ir_clone, copy_output_handler);
+                time_manager.start_online(now, work_tx_clone);
             });
         };
 
@@ -62,13 +64,12 @@ impl Controller {
         let cfg_clone = self.config.clone();
         // TODO: Wait until all events have been read.
         let _event = thread::Builder::new().name("EventDrivenManager".into()).spawn(move || {
-            let event_manager = EventDrivenManager::setup(ir_clone, cfg_clone, copy_output_handler);
+            let event_manager = EventDrivenManager::setup(ir_clone, cfg_clone, copy_output_handler, now);
             event_manager.start_online(work_tx);
         });
 
         let copy_output_handler = self.output_handler.clone();
-        let mut evaluatordata =
-            EvaluatorData::new(self.ir.clone(), SystemTime::now(), self.config.clone(), copy_output_handler);
+        let mut evaluatordata = EvaluatorData::new(self.ir.clone(), self.config.clone(), copy_output_handler);
 
         let mut evaluator = evaluatordata.as_Evaluator();
 
@@ -103,7 +104,7 @@ impl Controller {
         let edm_thread = thread::Builder::new()
             .name("EventDrivenManager".into())
             .spawn(move || {
-                let event_manager = EventDrivenManager::setup(ir_clone, cfg_clone, output_copy_handler);
+                let event_manager = EventDrivenManager::setup(ir_clone, cfg_clone, output_copy_handler, Instant::now());
                 event_manager
                     .start_offline(work_tx, time_tx)
                     .unwrap_or_else(|e| panic!("EventDrivenManager failed: {}", e));
@@ -122,14 +123,16 @@ impl Controller {
         let has_time_driven = !self.ir.time_driven.is_empty();
         let ir_clone = self.ir.clone();
         let output_copy_handler = self.output_handler.clone();
-        let time_manager = TimeDrivenManager::setup(ir_clone, start_time, output_copy_handler);
-        let (wait_time, mut due_streams) =
-            if has_time_driven { time_manager.get_current_deadline(start_time) } else { (Duration::default(), vec![]) };
-        let mut next_deadline = start_time + wait_time;
+        let time_manager = TimeDrivenManager::setup(ir_clone, output_copy_handler);
+        let (wait_time, mut due_streams) = if has_time_driven {
+            time_manager.get_current_deadline(Time::default())
+        } else {
+            (Duration::default(), vec![])
+        };
+        let mut next_deadline = wait_time;
 
         let output_copy_handler = self.output_handler.clone();
-        let mut evaluatordata =
-            EvaluatorData::new(self.ir.clone(), start_time, self.config.clone(), output_copy_handler);
+        let mut evaluatordata = EvaluatorData::new(self.ir.clone(), self.config.clone(), output_copy_handler);
 
         let mut evaluator = evaluatordata.as_Evaluator();
 
@@ -166,13 +169,13 @@ impl Controller {
     }
 
     #[inline]
-    pub(crate) fn evaluate_timed_item(&self, evaluator: &mut Evaluator, t: &TimeEvaluation, ts: SystemTime) {
+    pub(crate) fn evaluate_timed_item(&self, evaluator: &mut Evaluator, t: &TimeEvaluation, ts: Time) {
         self.output_handler.new_event();
         evaluator.eval_time_driven_outputs(t.as_slice(), ts);
     }
 
     #[inline]
-    pub(crate) fn evaluate_event_item(&self, evaluator: &mut Evaluator, e: &EventEvaluation, ts: SystemTime) {
+    pub(crate) fn evaluate_event_item(&self, evaluator: &mut Evaluator, e: &EventEvaluation, ts: Time) {
         self.output_handler.new_event();
         evaluator.eval_event(e.as_slice(), ts)
     }

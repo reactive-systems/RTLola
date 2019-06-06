@@ -1,11 +1,12 @@
 use super::window_aggregations::*;
 use super::Value;
+use crate::basics::Time;
 use ordered_float::NotNan;
 use std::cmp::Ordering;
 use std::collections::VecDeque;
 use std::fmt::Debug;
 use std::ops::Add;
-use std::time::{Duration, SystemTime};
+use std::time::Duration;
 use streamlab_frontend::ir::{Type, WindowOperation as WinOp};
 
 const SIZE: usize = 64;
@@ -22,7 +23,7 @@ pub(crate) enum SlidingWindow {
 }
 
 impl SlidingWindow {
-    pub(crate) fn new(dur: Duration, op: WinOp, ts: SystemTime, ty: &Type) -> SlidingWindow {
+    pub(crate) fn new(dur: Duration, op: WinOp, ts: Time, ty: &Type) -> SlidingWindow {
         match (op, ty) {
             (WinOp::Sum, Type::UInt(_)) => SlidingWindow::SumUnsigned(WindowInstance::new(dur, ts)),
             (WinOp::Sum, Type::Int(_)) => SlidingWindow::SumSigned(WindowInstance::new(dur, ts)),
@@ -37,7 +38,7 @@ impl SlidingWindow {
         }
     }
 
-    pub(crate) fn update(&mut self, ts: SystemTime) {
+    pub(crate) fn update(&mut self, ts: Time) {
         match self {
             SlidingWindow::SumUnsigned(wi) => wi.update_buckets(ts),
             SlidingWindow::SumSigned(wi) => wi.update_buckets(ts),
@@ -51,7 +52,7 @@ impl SlidingWindow {
     }
 
     /// You should always call `SlidingWindow::update` before calling `SlidingWindow::get_value()`!
-    pub(crate) fn get_value(&self, ts: SystemTime) -> Value {
+    pub(crate) fn get_value(&self, ts: Time) -> Value {
         match self {
             SlidingWindow::SumUnsigned(wi) => wi.get_value(ts),
             SlidingWindow::SumSigned(wi) => wi.get_value(ts),
@@ -64,7 +65,7 @@ impl SlidingWindow {
         }
     }
 
-    pub(crate) fn accept_value(&mut self, v: Value, ts: SystemTime) {
+    pub(crate) fn accept_value(&mut self, v: Value, ts: Time) {
         match self {
             SlidingWindow::SumUnsigned(wi) => wi.accept_value(v, ts),
             SlidingWindow::SumSigned(wi) => wi.accept_value(v, ts),
@@ -80,15 +81,15 @@ impl SlidingWindow {
 
 // TODO: Consider using None rather than Default.
 pub(crate) trait WindowIV:
-    Clone + Add<Output = Self> + From<(Value, SystemTime)> + Sized + Debug + Into<Value>
+    Clone + Add<Output = Self> + From<(Value, Time)> + Sized + Debug + Into<Value>
 {
-    fn default(ts: SystemTime) -> Self;
+    fn default(ts: Time) -> Self;
 }
 
 pub(crate) struct WindowInstance<IV: WindowIV> {
     buckets: VecDeque<IV>,
     time_per_bucket: Duration,
-    start_time: SystemTime,
+    start_time: Time,
     last_bucket_ix: BIx,
 }
 
@@ -128,7 +129,7 @@ impl BIx {
 }
 
 impl<IV: WindowIV> WindowInstance<IV> {
-    fn new(dur: Duration, ts: SystemTime) -> WindowInstance<IV> {
+    fn new(dur: Duration, ts: Time) -> WindowInstance<IV> {
         let time_per_bucket = dur / (SIZE as u32);
         let buckets = VecDeque::from(vec![IV::default(ts); SIZE]);
         // last bucket_ix is 1, so we consider all buckets, i.e. from 1 to end and from start to 0,
@@ -138,18 +139,18 @@ impl<IV: WindowIV> WindowInstance<IV> {
     }
 
     /// You should always call `WindowInstance::update_buckets` before calling `WindowInstance::get_value()`!
-    fn get_value(&self, ts: SystemTime) -> Value {
+    fn get_value(&self, ts: Time) -> Value {
         // Reversal is essential for non-commutative operations.
         self.buckets.iter().rev().fold(IV::default(ts), |acc, e| acc + e.clone()).into()
     }
 
-    fn accept_value(&mut self, v: Value, ts: SystemTime) {
+    fn accept_value(&mut self, v: Value, ts: Time) {
         self.update_buckets(ts);
         let b = self.buckets.get_mut(0).expect("Bug!");
         *b = b.clone() + (v, ts).into(); // TODO: Require add_assign rather than add.
     }
 
-    fn update_buckets(&mut self, ts: SystemTime) {
+    fn update_buckets(&mut self, ts: Time) {
         let curr = self.get_current_bucket(ts);
         let last = self.last_bucket_ix;
 
@@ -161,19 +162,17 @@ impl<IV: WindowIV> WindowInstance<IV> {
         }
     }
 
-    fn invalidate_n(&mut self, n: usize, ts: SystemTime) {
+    fn invalidate_n(&mut self, n: usize, ts: Time) {
         for _ in 0..n {
             self.buckets.pop_back();
             self.buckets.push_front(IV::default(ts));
         }
     }
 
-    fn get_current_bucket(&self, ts: SystemTime) -> BIx {
-        //        let overall_ix = ts.duration_since(self.start_time).div_duration(self.time_per_bucket);
-        let overall_ix = Self::quickfix_duration_div(
-            ts.duration_since(self.start_time).expect("Time does not behave monotonically!"),
-            self.time_per_bucket,
-        );
+    fn get_current_bucket(&self, ts: Time) -> BIx {
+        // let overall_ix = ts.duration_since(self.start_time).div_duration(self.time_per_bucket);
+        assert!(ts >= self.start_time, "Time does not behave monotonically!");
+        let overall_ix = Self::quickfix_duration_div(ts - self.start_time, self.time_per_bucket);
         let overall_ix = overall_ix.floor() as usize;
         let period = overall_ix / self.buckets.len();
         let ix = overall_ix % self.buckets.len();

@@ -1,11 +1,10 @@
-use crate::basics::{EvalConfig, EvaluatorChoice::*, OutputHandler};
+use crate::basics::{EvalConfig, EvaluatorChoice::*, OutputHandler, Time};
 use crate::closuregen::{CompiledExpr, Expr};
 use crate::storage::{GlobalStore, Value};
 use bit_set::BitSet;
 use ordered_float::NotNan;
 use regex::Regex;
 use std::sync::Arc;
-use std::time::SystemTime;
 use streamlab_frontend::ir::{
     Activation, Constant, Expression, InputReference, LolaIR, Offset, OutputReference, StreamAccessKind,
     StreamReference, Trigger, Type, WindowReference,
@@ -61,14 +60,14 @@ struct ExpressionEvaluator<'e> {
 }
 
 pub(crate) struct EvaluationContext<'e> {
-    ts: SystemTime,
+    ts: Time,
     pub(crate) global_store: &'e GlobalStore,
     pub(crate) fresh_inputs: &'e BitSet,
     pub(crate) fresh_outputs: &'e BitSet,
 }
 
 impl<'c> EvaluatorData<'c> {
-    pub(crate) fn new(ir: LolaIR, ts: SystemTime, config: EvalConfig, handler: Arc<OutputHandler>) -> Self {
+    pub(crate) fn new(ir: LolaIR, config: EvalConfig, handler: Arc<OutputHandler>) -> Self {
         // Layers of event based output streams
         let layers = ir.get_event_driven_layers();
         handler.debug(|| format!("Evaluation layers: {:?}", layers));
@@ -89,7 +88,7 @@ impl<'c> EvaluatorData<'c> {
         } else {
             vec![]
         };
-        let global_store = GlobalStore::new(&ir, ts);
+        let global_store = GlobalStore::new(&ir, Time::default());
         let fresh_inputs = BitSet::with_capacity(ir.inputs.len());
         let fresh_outputs = BitSet::with_capacity(ir.outputs.len());
         let mut triggers = vec![None; ir.outputs.len()];
@@ -130,13 +129,13 @@ impl<'c> EvaluatorData<'c> {
 }
 
 impl<'e, 'c> Evaluator<'e, 'c> {
-    pub(crate) fn eval_event(&mut self, event: &[Value], ts: SystemTime) {
+    pub(crate) fn eval_event(&mut self, event: &[Value], ts: Time) {
         self.clear_freshness();
         self.accept_inputs(event, ts);
         self.eval_all_event_driven_outputs(ts);
     }
 
-    fn accept_inputs(&mut self, event: &[Value], ts: SystemTime) {
+    fn accept_inputs(&mut self, event: &[Value], ts: Time) {
         for (ix, v) in event.iter().enumerate() {
             match v {
                 Value::None => {}
@@ -145,7 +144,7 @@ impl<'e, 'c> Evaluator<'e, 'c> {
         }
     }
 
-    fn accept_input(&mut self, input: InputReference, v: Value, ts: SystemTime) {
+    fn accept_input(&mut self, input: InputReference, v: Value, ts: Time) {
         self.global_store.get_in_instance_mut(input).push_value(v.clone());
         self.fresh_inputs.insert(input);
         self.handler.debug(|| format!("InputStream[{}] := {:?}.", input, v.clone()));
@@ -155,26 +154,26 @@ impl<'e, 'c> Evaluator<'e, 'c> {
         }
     }
 
-    fn eval_all_event_driven_outputs(&mut self, ts: SystemTime) {
+    fn eval_all_event_driven_outputs(&mut self, ts: Time) {
         self.prepare_evaluation(ts);
         for layer in self.layers {
             self.eval_event_driven_outputs(layer, ts);
         }
     }
 
-    fn eval_event_driven_outputs(&mut self, outputs: &[OutputReference], ts: SystemTime) {
+    fn eval_event_driven_outputs(&mut self, outputs: &[OutputReference], ts: Time) {
         for output in outputs {
             self.eval_event_driven_output(*output, ts);
         }
     }
 
-    fn eval_event_driven_output(&mut self, output: OutputReference, ts: SystemTime) {
+    fn eval_event_driven_output(&mut self, output: OutputReference, ts: Time) {
         if self.activation_conditions[output].eval(self.fresh_inputs) {
             self.eval_stream(output, ts);
         }
     }
 
-    pub(crate) fn eval_time_driven_outputs(&mut self, outputs: &[OutputReference], ts: SystemTime) {
+    pub(crate) fn eval_time_driven_outputs(&mut self, outputs: &[OutputReference], ts: Time) {
         self.clear_freshness();
         self.prepare_evaluation(ts);
         for output in outputs {
@@ -182,7 +181,7 @@ impl<'e, 'c> Evaluator<'e, 'c> {
         }
     }
 
-    fn prepare_evaluation(&mut self, ts: SystemTime) {
+    fn prepare_evaluation(&mut self, ts: Time) {
         // We need to copy the references first because updating needs exclusive access to `self`.
         let windows = &self.ir.sliding_windows;
         for win in windows {
@@ -191,7 +190,7 @@ impl<'e, 'c> Evaluator<'e, 'c> {
         }
     }
 
-    fn eval_stream(&mut self, output: OutputReference, ts: SystemTime) {
+    fn eval_stream(&mut self, output: OutputReference, ts: Time) {
         let ix = output;
         self.handler
             .debug(|| format!("Evaluating stream {}: {}.", ix, self.ir.get_out(StreamReference::OutRef(ix)).name));
@@ -270,7 +269,7 @@ impl<'e, 'c> Evaluator<'e, 'c> {
     }
 
     #[allow(non_snake_case)]
-    fn as_EvaluationContext<'n>(&'n self, ts: SystemTime) -> (EvaluationContext<'n>, &'e Vec<CompiledExpr<'c>>) {
+    fn as_EvaluationContext<'n>(&'n self, ts: Time) -> (EvaluationContext<'n>, &'e Vec<CompiledExpr<'c>>) {
         (
             EvaluationContext {
                 ts,
@@ -284,7 +283,7 @@ impl<'e, 'c> Evaluator<'e, 'c> {
 }
 
 impl<'a> ExpressionEvaluator<'a> {
-    fn eval_expr(&self, expr: &Expression, ts: SystemTime) -> Value {
+    fn eval_expr(&self, expr: &Expression, ts: Time) -> Value {
         use streamlab_frontend::ir::Expression::*;
         match expr {
             LoadConstant(c) => match c {
@@ -498,7 +497,7 @@ impl<'a> ExpressionEvaluator<'a> {
         inst.get_value(offset).unwrap_or(Value::None)
     }
 
-    fn lookup_window(&self, window_ref: WindowReference, ts: SystemTime) -> Value {
+    fn lookup_window(&self, window_ref: WindowReference, ts: Time) -> Value {
         self.global_store.get_window(window_ref.ix).get_value(ts)
     }
 }
@@ -571,31 +570,32 @@ mod tests {
 
     use super::*;
     use crate::storage::Value::*;
-    use std::time::{Duration, SystemTime};
+    use std::time::Duration;
     use streamlab_frontend::ir::LolaIR;
 
     fn setup(spec: &str) -> (LolaIR, EvaluatorData) {
-        setup_time(spec, SystemTime::now())
-    }
-
-    fn setup_time(spec: &str, ts: SystemTime) -> (LolaIR, EvaluatorData) {
         let ir = streamlab_frontend::parse(spec);
         let mut config = EvalConfig::default();
         config.verbosity = crate::basics::Verbosity::WarningsOnly;
         let handler = Arc::new(OutputHandler::new(&config, ir.triggers.len()));
-        let eval = EvaluatorData::new(ir.clone(), ts, config, handler);
+        let eval = EvaluatorData::new(ir.clone(), config, handler);
         (ir, eval)
+    }
+
+    fn setup_time(spec: &str) -> (LolaIR, EvaluatorData, Time) {
+        let (ir, eval) = setup(spec);
+        (ir, eval, Time::default())
     }
 
     macro_rules! eval_stream {
         ($eval:expr, $ix:expr) => {
-            $eval.eval_stream($ix, SystemTime::now());
+            $eval.eval_stream($ix, Time::default());
         };
     }
 
     macro_rules! accept_input {
         ($eval:expr, $str_ref:expr, $v:expr) => {
-            $eval.accept_input($str_ref.in_ix(), $v.clone(), SystemTime::now());
+            $eval.accept_input($str_ref.in_ix(), $v.clone(), Time::default());
         };
     }
 
@@ -887,10 +887,8 @@ mod tests {
 
     #[test]
     fn test_sum_window() {
-        let mut time = SystemTime::now();
-        let (_, mut eval) = setup_time(
+        let (_, mut eval, mut time) = setup_time(
             "input a: Int16\noutput b: Int16 @0.25Hz := a.aggregate(over: 40s, using: sum).defaults(to: -3)",
-            time,
         );
         let mut eval = eval.as_Evaluator();
         time += Duration::from_secs(45);
@@ -910,11 +908,8 @@ mod tests {
 
     #[test]
     fn test_count_window() {
-        let mut time = SystemTime::now();
-        let (_, mut eval) = setup_time(
-            "input a: UInt16\noutput b: UInt16 @0.25Hz := a.aggregate(over: 40s, using: #).defaults(to: 3)",
-            time,
-        );
+        let (_, mut eval, mut time) =
+            setup_time("input a: UInt16\noutput b: UInt16 @0.25Hz := a.aggregate(over: 40s, using: #).defaults(to: 3)");
         let mut eval = eval.as_Evaluator();
         time += Duration::from_secs(45);
         let out_ref = StreamReference::OutRef(0);
@@ -933,10 +928,8 @@ mod tests {
 
     #[test]
     fn test_integral_window() {
-        let mut time = SystemTime::now();
-        let (_, mut eval) = setup_time(
+        let (_, mut eval, mut time) = setup_time(
             "input a: Float64\noutput b: Float64 @0.25Hz := a.aggregate(over: 40s, using: integral).defaults(to: -3.0)",
-            time,
         );
         let mut eval = eval.as_Evaluator();
         time += Duration::from_secs(45);
@@ -970,8 +963,7 @@ mod tests {
 
     #[test]
     fn test_window_type_count() {
-        let (_, mut eval) =
-            setup_time("input a: Int32\noutput b @ 10Hz := a.aggregate(over: 0.1s, using: count)", SystemTime::now());
+        let (_, mut eval) = setup("input a: Int32\noutput b @ 10Hz := a.aggregate(over: 0.1s, using: count)");
         let mut eval = eval.as_Evaluator();
         let out_ref = StreamReference::OutRef(0);
         let _a = StreamReference::InRef(0);

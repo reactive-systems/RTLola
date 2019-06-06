@@ -1,10 +1,10 @@
 use super::WorkItem;
-use crate::basics::OutputHandler;
+use crate::basics::{OutputHandler, Time};
 
 use crossbeam_channel::Sender;
 use std::sync::Arc;
 use std::thread::sleep;
-use std::time::{Duration, SystemTime};
+use std::time::{Duration, Instant};
 use streamlab_frontend::ir::{LolaIR, OutputReference};
 
 use common::duration::*;
@@ -16,7 +16,8 @@ pub(crate) type TimeEvaluation = Vec<OutputReference>;
 struct TDMState {
     cycle: TimeDrivenCycleCount,
     deadline: usize,
-    time: SystemTime, // Debug/statistics information.
+    time: Time,
+    // Debug/statistics information.
 }
 
 #[allow(dead_code)]
@@ -44,20 +45,20 @@ pub(crate) struct TimeDrivenManager {
     last_state: Option<TDMState>,
     deadlines: Vec<Deadline>,
     hyper_period: Duration,
-    start_time: SystemTime,
+    start_time: Time,
     handler: Arc<OutputHandler>,
 }
 
 impl TimeDrivenManager {
     /// Creates a new TimeDrivenManager managing time-driven output streams.
-    pub(crate) fn setup(ir: LolaIR, start_time: SystemTime, handler: Arc<OutputHandler>) -> TimeDrivenManager {
+    pub(crate) fn setup(ir: LolaIR, handler: Arc<OutputHandler>) -> TimeDrivenManager {
         if ir.time_driven.is_empty() {
             // return dummy
             return TimeDrivenManager {
                 last_state: None,
                 deadlines: vec![],
                 hyper_period: Duration::default(),
-                start_time,
+                start_time: Time::default(),
                 handler,
             };
         }
@@ -69,28 +70,28 @@ impl TimeDrivenManager {
             last_state: None,
             deadlines: schedule.deadlines,
             hyper_period: schedule.hyper_period,
-            start_time,
+            start_time: Time::default(),
             handler,
         }
     }
 
-    pub(crate) fn get_current_deadline(&self, ts: SystemTime) -> (Duration, Vec<OutputReference>) {
-        let earliest_deadline_state = self.earliest_deadline_state(ts);
+    pub(crate) fn get_current_deadline(&self, time: Time) -> (Duration, Vec<OutputReference>) {
+        let earliest_deadline_state = self.earliest_deadline_state(time);
         let current_deadline = &self.deadlines[earliest_deadline_state.deadline];
         let time_of_deadline = earliest_deadline_state.time + current_deadline.pause;
-        let pause = time_of_deadline.duration_since(ts).expect("Time did not behave monotonically!");
+        assert!(time_of_deadline >= time, "Time does not behave monotonically!");
+        let pause = time_of_deadline - time;
         (pause, current_deadline.due.clone())
     }
 
     /// Compute the state for the deadline earliest deadline that is not missed yet.
     /// Example: If this function is called immediately after setup, it returns
     /// a state containing the start time and deadline 0.
-    fn earliest_deadline_state(&self, time: SystemTime) -> TDMState {
+    fn earliest_deadline_state(&self, time: Time) -> TDMState {
         let start_time = self.start_time;
-        assert!(start_time <= time);
         let hyper_nanos = dur_as_nanos(self.hyper_period);
-        let time_since_start =
-            dur_as_nanos(time.duration_since(start_time).expect("Time did not behave monotonically!"));
+        assert!(time >= start_time, "Time does not behave monotonically!");
+        let time_since_start = (time - start_time).as_nanos();
 
         let hyper = time_since_start / hyper_nanos;
         let time_within_hyper = time_since_start % hyper_nanos;
@@ -110,13 +111,18 @@ impl TimeDrivenManager {
         unreachable!()
     }
 
-    pub fn start_online(self, work_chan: Sender<WorkItem>) -> ! {
+    pub fn start_online(self, start_time: Instant, work_chan: Sender<WorkItem>) -> ! {
         assert!(!self.deadlines.is_empty());
         loop {
-            let (wait_time, due_streams) = self.get_current_deadline(SystemTime::now());
+            let now = Instant::now();
+            assert!(now >= start_time, "Time does not behave monotonically!");
+            let (wait_time, due_streams) = self.get_current_deadline(now - start_time);
             sleep(wait_time);
             // TODO: Check if overslept.
-            let item = WorkItem::Time(due_streams, SystemTime::now());
+            let now = Instant::now();
+            assert!(now >= start_time, "Time does not behave monotonically!");
+            let time = now - start_time;
+            let item = WorkItem::Time(due_streams, time);
             if work_chan.send(item).is_err() {
                 self.handler.runtime_warning(|| "TDM: Sending failed; evaluation cycle lost.");
             }

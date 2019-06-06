@@ -5,7 +5,7 @@ use crossbeam_channel::Sender;
 use std::error::Error;
 use std::ops::AddAssign;
 use std::sync::Arc;
-use std::time::SystemTime;
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use streamlab_frontend::ir::LolaIR;
 
 pub(crate) type EventEvaluation = Vec<Value>;
@@ -37,8 +37,13 @@ pub struct EventDrivenManager {
 
 impl EventDrivenManager {
     /// Creates a new EventDrivenManager managing event-driven output streams.
-    pub(crate) fn setup(ir: LolaIR, config: EvalConfig, out_handler: Arc<OutputHandler>) -> EventDrivenManager {
-        let event_source = match EventSource::from(&config.source, &ir) {
+    pub(crate) fn setup(
+        ir: LolaIR,
+        config: EvalConfig,
+        out_handler: Arc<OutputHandler>,
+        start_time: Instant,
+    ) -> EventDrivenManager {
+        let event_source = match EventSource::from(&config.source, &ir, start_time) {
             Ok(r) => r,
             Err(e) => panic!("Cannot create input reader: {}", e),
         };
@@ -80,6 +85,7 @@ impl EventDrivenManager {
                 }
                 let (event, time) = self.event_source.get_event();
                 if start_time.is_none() {
+                    let time = self.event_source.read_time().unwrap_or(UNIX_EPOCH);
                     start_time = Some(time);
                     let _ = time_slot.send(time);
                 }

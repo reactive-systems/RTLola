@@ -2,7 +2,7 @@ mod controller;
 mod event_driven_manager;
 mod time_driven_manager;
 
-use std::time::SystemTime;
+use crate::basics::Time;
 
 // Re-exports
 pub(crate) use self::controller::Controller;
@@ -11,8 +11,8 @@ pub(crate) use self::time_driven_manager::TimeEvaluation;
 
 #[derive(Debug, Clone)]
 pub(crate) enum WorkItem {
-    Event(EventEvaluation, SystemTime),
-    Time(TimeEvaluation, SystemTime),
+    Event(EventEvaluation, Time),
+    Time(TimeEvaluation, Time),
     End,
 }
 

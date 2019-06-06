@@ -9,8 +9,10 @@ use std::io::{stderr, stdin, stdout, Write};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use streamlab_frontend::ir::{LolaIR, Type};
+
+pub type Time = Duration;
 
 #[derive(Debug, Clone)]
 pub enum OutputChannel {
@@ -111,9 +113,9 @@ impl ReaderWrapper {
 }
 
 enum TimeHandling {
-    RealTime,
-    FromFile,
-    Delayed { delay: Duration, time: Option<SystemTime> },
+    RealTime { start: Instant },
+    FromFile { start: Option<SystemTime> },
+    Delayed { delay: Duration, time: Time },
 }
 
 // TODO(marvin): this can be a trait
@@ -126,7 +128,7 @@ pub(crate) struct EventSource {
 }
 
 impl EventSource {
-    pub(crate) fn from(src: &InputSource, ir: &LolaIR) -> ReaderResult<EventSource> {
+    pub(crate) fn from(src: &InputSource, ir: &LolaIR, start_time: Instant) -> ReaderResult<EventSource> {
         use InputSource::*;
         let (mut wrapper, time_col) = match src {
             StdIn => (ReaderWrapper::Std(CSVReader::from_reader(stdin())), None),
@@ -139,10 +141,10 @@ impl EventSource {
 
         use TimeHandling::*;
         let timer = match src {
-            StdIn => RealTime,
+            StdIn => RealTime { start: start_time },
             File { path: _, delay, time_col: _ } => match delay {
-                Some(d) => Delayed { delay: *d, time: None },
-                None => FromFile,
+                Some(d) => Delayed { delay: *d, time: Duration::default() },
+                None => FromFile { start: None },
             },
         };
 
@@ -177,31 +179,30 @@ impl EventSource {
         self.read_blocking().unwrap_or_else(|e| panic!("Error reading data. {}", e))
     }
 
-    pub(crate) fn get_event(&mut self) -> (Vec<Value>, SystemTime) {
+    pub(crate) fn get_event(&mut self) -> (Vec<Value>, Time) {
         let event = self.read_event();
         let time = self.get_time();
         (event, time)
     }
 
-    fn get_time(&mut self) -> SystemTime {
+    fn get_time(&mut self) -> Time {
         use TimeHandling::*;
         match self.timer {
-            RealTime => SystemTime::now(),
-            FromFile => self.read_time(),
-            Delayed { delay, ref mut time } => match time {
-                Some(ref mut t) => {
-                    *t += delay;
-                    *t
+            RealTime { start } => Instant::now() - start,
+            FromFile { start } => {
+                let now = self.read_time().unwrap();
+                match start {
+                    None => {
+                        self.timer = FromFile { start: Some(now) };
+                        Time::default()
+                    }
+                    Some(start) => now.duration_since(start).expect("Time did not behave monotonically!"),
                 }
-                None => {
-                    let now = match self.mapping.time_ix {
-                        Some(_) => self.read_time(),
-                        None => SystemTime::UNIX_EPOCH,
-                    };
-                    self.timer = Delayed { delay, time: Some(now) };
-                    now
-                }
-            },
+            }
+            Delayed { delay, ref mut time } => {
+                *time += delay;
+                *time
+            }
         }
     }
 
@@ -219,8 +220,12 @@ impl EventSource {
         buffer
     }
 
-    fn read_time(&self) -> SystemTime {
+    pub fn read_time(&self) -> Option<SystemTime> {
         let time_str = self.str_for_time();
+        if time_str.is_none() {
+            return None;
+        }
+        let time_str = time_str.unwrap();
         let mut time_str_split = time_str.split('.');
         let secs_str: &str = match time_str_split.next() {
             Some(s) => s,
@@ -246,12 +251,11 @@ impl EventSource {
         } else {
             Duration::from_nanos(secs)
         };
-        UNIX_EPOCH + d
+        Some(UNIX_EPOCH + d)
     }
 
-    pub(crate) fn str_for_time(&self) -> &str {
-        assert!(self.time_index().is_some());
-        &self.record[self.time_index().unwrap()]
+    pub(crate) fn str_for_time(&self) -> Option<&str> {
+        self.time_index().map(|ix| &self.record[ix])
     }
 
     fn time_index(&self) -> Option<usize> {
@@ -287,13 +291,13 @@ impl OutputHandler {
         self.emit(Verbosity::WarningsOnly, msg);
     }
 
-    fn time_info(&self, ts: SystemTime) -> Option<String> {
+    fn time_info(&self, time: Time) -> Option<String> {
         use TimeFormat::*;
         use TimeRepresentation::*;
         match self.time_representation {
             Hide => None,
             Relative(format) => {
-                let d = ts.duration_since(*self.start_time.lock().unwrap()).expect("Computation of duration failed!");
+                let d = time;
                 match format {
                     UIntNanos => Some(format!("{}", d.as_nanos())),
                     FloatSecs => Some(format!("{}.{:09}", d.as_secs(), d.subsec_nanos())),
@@ -301,23 +305,32 @@ impl OutputHandler {
                 }
             }
             Absolute(format) => {
-                let d = ts.duration_since(SystemTime::UNIX_EPOCH).expect("Computation of duration failed!");
+                let mut d = time;
+                d += self
+                    .start_time
+                    .lock()
+                    .unwrap()
+                    .duration_since(UNIX_EPOCH)
+                    .expect("Computation of duration failed!");
                 match format {
                     UIntNanos => Some(format!("{}", d.as_nanos())),
                     FloatSecs => Some(format!("{}.{:09}", d.as_secs(), d.subsec_nanos())),
-                    HumanTime => Some(format!("{}", humantime::format_rfc3339(ts))),
+                    HumanTime => {
+                        let ts = UNIX_EPOCH + d;
+                        Some(format!("{}", humantime::format_rfc3339(ts)))
+                    }
                 }
             }
         }
     }
 
     #[allow(dead_code)]
-    pub(crate) fn trigger<F, T: Into<String>>(&self, msg: F, trigger_idx: usize, ts: SystemTime)
+    pub(crate) fn trigger<F, T: Into<String>>(&self, msg: F, trigger_idx: usize, time: Time)
     where
         F: FnOnce() -> T,
     {
         let msg = || {
-            if let Some(ti) = self.time_info(ts) {
+            if let Some(ti) = self.time_info(time) {
                 format!("{}: {}", ti, msg().into())
             } else {
                 format!("{}", msg().into())

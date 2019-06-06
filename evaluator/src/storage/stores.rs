@@ -1,8 +1,8 @@
 use super::Value;
 
+use crate::basics::Time;
 use crate::storage::SlidingWindow;
 use std::collections::VecDeque;
-use std::time::SystemTime;
 use streamlab_frontend::ir::{InputReference, LolaIR, MemorizationBound, OutputReference, OutputStream, Type};
 
 pub(crate) struct GlobalStore {
@@ -24,7 +24,7 @@ pub(crate) type OutInstance = OutputReference;
 pub(crate) type Window = usize;
 
 impl GlobalStore {
-    pub(crate) fn new(ir: &LolaIR, ts: SystemTime) -> GlobalStore {
+    pub(crate) fn new(ir: &LolaIR, ts: Time) -> GlobalStore {
         let mut index_map: Vec<Option<usize>> = vec![None; ir.outputs.len()];
 
         let nps: Vec<&OutputStream> = index_map

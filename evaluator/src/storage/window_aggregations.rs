@@ -1,10 +1,10 @@
+use crate::basics::Time;
 use crate::storage::{
     window::{WindowGeneric, WindowIV},
     Value,
 };
 use std::marker::PhantomData;
 use std::ops::Add;
-use std::time::SystemTime;
 
 #[derive(Clone, Debug)]
 pub(crate) struct SumIV<G: WindowGeneric> {
@@ -13,7 +13,7 @@ pub(crate) struct SumIV<G: WindowGeneric> {
 }
 
 impl<G: WindowGeneric> WindowIV for SumIV<G> {
-    fn default(time: SystemTime) -> SumIV<G> {
+    fn default(time: Time) -> SumIV<G> {
         let v = (G::from_value(Value::Unsigned(0)), time);
         Self::from(v)
     }
@@ -28,12 +28,12 @@ impl<G: WindowGeneric> Into<Value> for SumIV<G> {
 impl<G: WindowGeneric> Add for SumIV<G> {
     type Output = SumIV<G>;
     fn add(self, other: SumIV<G>) -> SumIV<G> {
-        (self.v + other.v, SystemTime::now()).into() // Timestamp will be discarded, anyway.
+        (self.v + other.v, Time::default()).into() // Timestamp will be discarded, anyway.
     }
 }
 
-impl<G: WindowGeneric> From<(Value, SystemTime)> for SumIV<G> {
-    fn from(v: (Value, SystemTime)) -> SumIV<G> {
+impl<G: WindowGeneric> From<(Value, Time)> for SumIV<G> {
+    fn from(v: (Value, Time)) -> SumIV<G> {
         SumIV { v: G::from_value(v.0), _marker: PhantomData }
     }
 }
@@ -47,7 +47,7 @@ pub(crate) struct AvgIV<G: WindowGeneric> {
 }
 
 impl<G: WindowGeneric> WindowIV for AvgIV<G> {
-    fn default(time: SystemTime) -> AvgIV<G> {
+    fn default(time: Time) -> AvgIV<G> {
         let v = (G::from_value(Value::Unsigned(0)), time);
         Self::from(v)
     }
@@ -55,7 +55,7 @@ impl<G: WindowGeneric> WindowIV for AvgIV<G> {
 
 impl<G: WindowGeneric> Default for AvgIV<G> {
     fn default() -> AvgIV<G> {
-        let with_mock_ts = (G::from_value(Value::Unsigned(0)), SystemTime::now());
+        let with_mock_ts = (G::from_value(Value::Unsigned(0)), Time::default());
         Self::from(with_mock_ts)
     }
 }
@@ -80,8 +80,8 @@ impl<G: WindowGeneric> Add for AvgIV<G> {
     }
 }
 
-impl<G: WindowGeneric> From<(Value, SystemTime)> for AvgIV<G> {
-    fn from(v: (Value, SystemTime)) -> AvgIV<G> {
+impl<G: WindowGeneric> From<(Value, Time)> for AvgIV<G> {
+    fn from(v: (Value, Time)) -> AvgIV<G> {
         AvgIV { sum: G::from_value(v.0), num: 1u64, _marker: PhantomData }
     }
 }
@@ -90,14 +90,14 @@ impl<G: WindowGeneric> From<(Value, SystemTime)> for AvgIV<G> {
 pub(crate) struct IntegralIV {
     volume: f64,
     end_value: Value,
-    end_time: SystemTime,
+    end_time: Time,
     start_value: Value,
-    start_time: SystemTime,
+    start_time: Time,
     valid: bool,
 }
 
 impl WindowIV for IntegralIV {
-    fn default(time: SystemTime) -> IntegralIV {
+    fn default(time: Time) -> IntegralIV {
         IntegralIV {
             volume: 0f64,
             end_value: Value::new_float(0f64),
@@ -129,7 +129,8 @@ impl Add for IntegralIV {
 
         let ts2 = other.start_time;
         let ts1 = self.end_time;
-        let time_diff = ts2.duration_since(ts1).expect("Time does not behave monotonically!");
+        assert!(ts2 >= ts1, "Time does not behave monotonically!");
+        let time_diff = ts2 - ts1;
         let time_diff_secs = (time_diff.as_secs() as f64) + (f64::from(time_diff.subsec_nanos())) / (100_000_000f64);
         let time_diff = Value::new_float(time_diff_secs);
         let value_sum = other.start_value.clone() + self.end_value.clone();
@@ -150,8 +151,8 @@ impl Add for IntegralIV {
     }
 }
 
-impl From<(Value, SystemTime)> for IntegralIV {
-    fn from(v: (Value, SystemTime)) -> IntegralIV {
+impl From<(Value, Time)> for IntegralIV {
+    fn from(v: (Value, Time)) -> IntegralIV {
         IntegralIV {
             volume: 0f64,
             end_value: v.0.clone(),
@@ -167,7 +168,7 @@ impl From<(Value, SystemTime)> for IntegralIV {
 pub(crate) struct CountIV(u64);
 
 impl WindowIV for CountIV {
-    fn default(_time: SystemTime) -> CountIV {
+    fn default(_time: Time) -> CountIV {
         CountIV(0)
     }
 }
@@ -185,8 +186,8 @@ impl Add for CountIV {
     }
 }
 
-impl From<(Value, SystemTime)> for CountIV {
-    fn from(_v: (Value, SystemTime)) -> CountIV {
+impl From<(Value, Time)> for CountIV {
+    fn from(_v: (Value, Time)) -> CountIV {
         CountIV(1)
     }
 }
