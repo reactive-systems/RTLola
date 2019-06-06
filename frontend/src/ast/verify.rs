@@ -26,49 +26,10 @@ impl<'a, 'b> Verifier<'a, 'b> {
     }
 
     fn check_expression(&self, expr: &Expression) {
-        self.expression_walker(expr, &Self::check_missing_paranthesis);
-        self.expression_walker(expr, &Self::check_missing_expression);
-        self.expression_walker(expr, &Self::check_direct_access);
-        self.expression_walker(expr, &Self::check_field_access);
-    }
-
-    /// Iterates over the `Expression` AST and calls `check` on every node
-    fn expression_walker<F>(&self, expr: &Expression, check: &F)
-    where
-        F: Fn(&Handler, &Expression) -> (),
-    {
-        check(self.handler, expr);
-
-        // Recursion
-        use ExpressionKind::*;
-        match &expr.kind {
-            Lit(_) | Ident(_) | MissingExpression => {}
-            Unary(_, inner)
-            | Field(inner, _)
-            | StreamAccess(inner, _)
-            | Offset(inner, _)
-            | ParenthesizedExpression(_, inner, _) => {
-                self.expression_walker(&inner, check);
-            }
-            Binary(_, left, right)
-            | Default(left, right)
-            | SlidingWindowAggregation { expr: left, duration: right, .. } => {
-                self.expression_walker(&left, check);
-                self.expression_walker(&right, check);
-            }
-            Ite(cond, normal, alternative) => {
-                self.expression_walker(&cond, check);
-                self.expression_walker(&normal, check);
-                self.expression_walker(&alternative, check);
-            }
-            Tuple(entries) | Function(_, _, entries) => {
-                entries.iter().for_each(|entry| self.expression_walker(entry, check));
-            }
-            Method(base, _, _, arguments) => {
-                self.expression_walker(&base, check);
-                arguments.iter().for_each(|entry| self.expression_walker(entry, check));
-            }
-        }
+        expr.iter().for_each(|inner| Self::check_missing_paranthesis(self.handler, inner));
+        expr.iter().for_each(|inner| Self::check_missing_expression(self.handler, inner));
+        expr.iter().for_each(|inner| Self::check_direct_access(self.handler, inner));
+        expr.iter().for_each(|inner| Self::check_field_access(self.handler, inner));
     }
 
     fn check_missing_paranthesis(handler: &Handler, expr: &Expression) {

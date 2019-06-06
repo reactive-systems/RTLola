@@ -377,18 +377,6 @@ impl Offset {
     }
 }
 
-impl Expression {
-    /// Tries to resolve a tuple index access
-    pub(crate) fn get_expr_from_tuple(&self, idx: usize) -> Option<&Expression> {
-        use ExpressionKind::*;
-        match &self.kind {
-            Tuple(entries) => Some(entries[idx].as_ref()),
-            Ident(_) => None,
-            _ => unimplemented!(),
-        }
-    }
-}
-
 impl FromStr for TimeUnit {
     type Err = String;
     fn from_str(unit: &str) -> Result<Self, Self::Err> {
@@ -403,6 +391,46 @@ impl FromStr for TimeUnit {
             "w" => Ok(TimeUnit::Week),
             "a" => Ok(TimeUnit::Year),
             _ => Err(format!("unknown time unit `{}`", unit)),
+        }
+    }
+}
+
+impl Expression {
+    /// Tries to resolve a tuple index access
+    pub(crate) fn get_expr_from_tuple(&self, idx: usize) -> Option<&Expression> {
+        use ExpressionKind::*;
+        match &self.kind {
+            Tuple(entries) => Some(entries[idx].as_ref()),
+            Ident(_) => None,
+            _ => unimplemented!(),
+        }
+    }
+
+    /// A recursive iterator over an `Expression` tree
+    /// Inspired by https://amos.me/blog/2019/recursive-iterators-rust/
+    pub(crate) fn iter<'a>(&'a self) -> Box<dyn Iterator<Item = &Expression> + 'a> {
+        use ExpressionKind::*;
+        match &self.kind {
+            Lit(_) | Ident(_) | MissingExpression => Box::new(std::iter::once(self)),
+            Unary(_, inner)
+            | Field(inner, _)
+            | StreamAccess(inner, _)
+            | Offset(inner, _)
+            | ParenthesizedExpression(_, inner, _) => Box::new(std::iter::once(self).chain(inner.iter())),
+            Binary(_, left, right)
+            | Default(left, right)
+            | SlidingWindowAggregation { expr: left, duration: right, .. } => {
+                Box::new(std::iter::once(self).chain(left.iter()).chain(right.iter()))
+            }
+            Ite(cond, normal, alternative) => {
+                Box::new(std::iter::once(self).chain(cond.iter()).chain(normal.iter()).chain(alternative.iter()))
+            }
+            Tuple(entries) | Function(_, _, entries) => {
+                Box::new(std::iter::once(self).chain(entries.iter().map(|entry| entry.iter()).flatten()))
+            }
+            Method(base, _, _, arguments) => Box::new(
+                std::iter::once(self).chain(base.iter()).chain(arguments.iter().map(|entry| entry.iter()).flatten()),
+            ),
         }
     }
 }
