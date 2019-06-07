@@ -125,3 +125,34 @@ subsub,25.0"#;
     assert_eq!(ctrl.output_handler.statistics.as_ref().unwrap().get_num_trigger(0), 2);
     assert_eq!(ctrl.output_handler.statistics.as_ref().unwrap().get_num_trigger(1), 1);
 }
+
+#[test]
+fn timed_counter() {
+    let spec = r#"
+output b @10Hz := b[-1].defaults(to: 0) + 1
+trigger b > 3
+    "#;
+
+    let data = r#"a,time
+1,0.0
+2,0.01
+1,0.11
+2,0.21
+1,0.31
+2,0.41
+1,0.51
+2,0.61
+1,0.71
+"#;
+
+    let ctrl = run(spec, data).unwrap_or_else(|e| panic!("E2E test failed: {}", e));
+    // the test case is 710ms, the counter starts with 1 at 0.0 and increases every 100ms, thus, there should be 5 trigger
+    //
+    // The execution should look as follows:
+    //
+    // time  | 0.0 | 0.01 | 0.1 | 0.11 | 0.2 | 0.21 | 0.3 | 0.31 | 0.4 | 0.41 | 0.5 | 0.51 | 0.6 | 0.61 | 0.7 | 0.71
+    // in a  |   1 |    2 |   - |    1 |   - |    2 |   - |    1 |   - |    2 |   - |    1 |   - |    2 |   - |    1
+    // out b |   1 |    - |   2 |    - |   3 |    - |   4 |    - |   5 |    - |   6 |    - |   7 |    - |   8 |    -
+    // trig  |   0 |    - |   0 |    - |   0 |    - |   1 |    - |   1 |    - |   1 |    - |   1 |    - |   1 |    -
+    assert_eq!(ctrl.output_handler.statistics.as_ref().unwrap().get_num_trigger(0), 5);
+}
