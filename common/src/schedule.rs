@@ -85,22 +85,20 @@ impl Schedule {
     }
 
     fn condense_deadlines(gcd: Duration, extend_steps: Vec<Vec<OutputReference>>) -> Vec<Deadline> {
-        let init: (u32, Vec<Deadline>) = (0, Vec::new());
-        let (remaining, mut deadlines) = extend_steps.iter().fold(init, |(empty_counter, mut deadlines), step| {
+        let mut empty_counter = 0;
+        let mut deadlines: Vec<Deadline> = vec![];
+        for step in extend_steps.iter() {
             if step.is_empty() {
-                (empty_counter + 1, deadlines)
-            } else {
-                let pause = (empty_counter + 1) * gcd;
-                let deadline = Deadline { pause, due: step.clone() };
-                deadlines.push(deadline);
-                (0, deadlines)
+                empty_counter += 1;
+                continue;
             }
-        });
-        if remaining != 0 {
-            // There is some gcd periods left at the end of the hyper period.
-            // We cannot add them to the first because this would off-set the very first iteration.
-            deadlines.push(Deadline { pause: remaining * gcd, due: Vec::new() });
+            let pause = (empty_counter + 1) * gcd;
+            empty_counter = 0;
+            let deadline = Deadline { pause, due: step.clone() };
+            deadlines.push(deadline);
         }
+        // There cannot be some gcd periods left at the end of the hyper period.
+        assert!(empty_counter == 0);
         deadlines
     }
 }
