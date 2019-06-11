@@ -45,12 +45,12 @@ impl Schedule {
         dur_from_nanos(lcm)
     }
 
-    /// Takes a vec of gdc-sized intervals. In each interval, there is the streams that need
+    /// Takes a vec of gcd-sized intervals. In each interval, there are streams that need
     /// to be scheduled periodically at this point in time.
     /// Example:
-    /// Hyper period: 2 seconds, gcd: 100ms, streams: (c @ .5Hz), (b @ 1Hz), (a @ 2Hz)
+    /// Hyper period: 2 seconds, gcd: 500ms, streams: (c @ .5Hz), (b @ 1Hz), (a @ 2Hz)
     /// Input:  `[[a] [b]   []  [c]]`
-    /// Output: `[[a] [a,b] [a] [a,b,c]`
+    /// Output: `[[a] [a,b] [a] [a,b,c]]`
     fn apply_periodicity(steps: &[Vec<OutputReference>]) -> Vec<Vec<OutputReference>> {
         // Whenever there are streams in a cell at index `i`,
         // add them to every cell with index k*i within bounds, where k > 1.
@@ -71,7 +71,7 @@ impl Schedule {
 
     /// Build extend steps for each gcd-sized time interval up to the hyper period.
     /// Example:
-    /// Hyper period: 2 seconds, gcd: 100ms, streams: (c @ .5Hz), (b @ 1Hz), (a @ 2Hz)
+    /// Hyper period: 2 seconds, gcd: 500ms, streams: (c @ .5Hz), (b @ 1Hz), (a @ 2Hz)
     /// Result: `[[a] [b] [] [c]]`
     /// Meaning: `a` starts being scheduled after one gcd, `b` after two gcds, `c` after 4 gcds.
     fn build_extend_steps(ir: &LolaIR, gcd: Duration, hyper_period: Duration) -> Vec<Vec<OutputReference>> {
