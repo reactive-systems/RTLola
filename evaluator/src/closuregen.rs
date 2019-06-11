@@ -120,20 +120,20 @@ impl<'s> Expr<'s> for Expression {
             StreamAccess(str_ref, kind) => {
                 use StreamAccessKind::*;
                 match kind {
-                    Hold => CompiledExpr::new(move |ctx| ctx.lookup(str_ref)),
+                    Hold => CompiledExpr::new(move |ctx| ctx.lookup_latest(str_ref)),
                     Optional => {
                         use StreamReference::*;
                         match str_ref {
                             InRef(ix) => CompiledExpr::new(move |ctx| {
                                 if ctx.fresh_inputs.contains(ix) {
-                                    ctx.lookup(str_ref)
+                                    ctx.lookup_latest(str_ref)
                                 } else {
                                     Value::None
                                 }
                             }),
                             OutRef(ix) => CompiledExpr::new(move |ctx| {
                                 if ctx.fresh_outputs.contains(ix) {
-                                    ctx.lookup(str_ref)
+                                    ctx.lookup_latest(str_ref)
                                 } else {
                                     Value::None
                                 }
@@ -143,7 +143,7 @@ impl<'s> Expr<'s> for Expression {
                 }
             }
 
-            SyncStreamLookup(str_ref) => CompiledExpr::new(move |ctx| ctx.lookup(str_ref)),
+            SyncStreamLookup(str_ref) => CompiledExpr::new(move |ctx| ctx.lookup_latest(str_ref)),
 
             WindowLookup(win_ref) => CompiledExpr::new(move |ctx| ctx.lookup_window(win_ref)),
 

@@ -27,6 +27,7 @@ pub(crate) struct EvaluatorData<'c> {
     // Indexed by stream reference.
     compiled_exprs: Vec<CompiledExpr<'c>>,
     global_store: GlobalStore,
+    time_last_event: Option<Time>,
     fresh_inputs: BitSet,
     fresh_outputs: BitSet,
     triggers: Vec<Option<Trigger>>,
@@ -45,6 +46,7 @@ pub(crate) struct Evaluator<'e, 'c> {
     // Indexed by stream reference.
     compiled_exprs: &'e Vec<CompiledExpr<'c>>,
     global_store: &'e mut GlobalStore,
+    time_last_event: &'e mut Option<Time>,
     fresh_inputs: &'e mut BitSet,
     fresh_outputs: &'e mut BitSet,
     triggers: &'e Vec<Option<Trigger>>,
@@ -101,6 +103,7 @@ impl<'c> EvaluatorData<'c> {
             exprs,
             compiled_exprs,
             global_store,
+            time_last_event: None,
             fresh_inputs,
             fresh_outputs,
             triggers,
@@ -118,6 +121,7 @@ impl<'c> EvaluatorData<'c> {
             exprs: &self.exprs,
             compiled_exprs: &self.compiled_exprs,
             global_store: &mut self.global_store,
+            time_last_event: &mut self.time_last_event,
             fresh_inputs: &mut self.fresh_inputs,
             fresh_outputs: &mut self.fresh_outputs,
             triggers: &self.triggers,
@@ -130,6 +134,11 @@ impl<'c> EvaluatorData<'c> {
 
 impl<'e, 'c> Evaluator<'e, 'c> {
     pub(crate) fn eval_event(&mut self, event: &[Value], ts: Time) {
+        assert!(
+            self.time_last_event.is_none() || self.time_last_event.unwrap() < ts,
+            "time does not behave striclty monotonic"
+        );
+        *self.time_last_event = Some(ts);
         self.clear_freshness();
         self.accept_inputs(event, ts);
         self.eval_all_event_driven_outputs(ts);
@@ -174,7 +183,14 @@ impl<'e, 'c> Evaluator<'e, 'c> {
     }
 
     pub(crate) fn eval_time_driven_outputs(&mut self, outputs: &[OutputReference], ts: Time) {
-        self.clear_freshness();
+        assert!(
+            self.time_last_event.is_none() || self.time_last_event.unwrap() <= ts,
+            "time does not behave monotonic"
+        );
+        if self.time_last_event.is_some() && ts > self.time_last_event.unwrap() {
+            self.clear_freshness();
+        }
+        *self.time_last_event = Some(ts);
         self.prepare_evaluation(ts);
         for output in outputs {
             self.eval_stream(*output, ts);
@@ -363,7 +379,7 @@ impl<'a> ExpressionEvaluator<'a> {
                 }
             }
 
-            SyncStreamLookup(str_ref) => self.lookup(*str_ref),
+            SyncStreamLookup(str_ref) => self.lookup_latest(*str_ref),
 
             OffsetLookup { target: str_ref, offset } => match offset {
                 Offset::FutureDiscreteOffset(_) | Offset::FutureRealTimeOffset(_) => unimplemented!(),
@@ -374,20 +390,20 @@ impl<'a> ExpressionEvaluator<'a> {
             StreamAccess(str_ref, kind) => {
                 use StreamAccessKind::*;
                 match kind {
-                    Hold => self.lookup(*str_ref),
+                    Hold => self.lookup_latest(*str_ref),
                     Optional => {
                         use StreamReference::*;
                         match *str_ref {
                             InRef(ix) => {
                                 if self.fresh_inputs.contains(ix) {
-                                    self.lookup(*str_ref)
+                                    self.lookup_latest(*str_ref)
                                 } else {
                                     Value::None
                                 }
                             }
                             OutRef(ix) => {
                                 if self.fresh_outputs.contains(ix) {
-                                    self.lookup(*str_ref)
+                                    self.lookup_latest(*str_ref)
                                 } else {
                                     Value::None
                                 }
@@ -485,16 +501,26 @@ impl<'a> ExpressionEvaluator<'a> {
         }
     }
 
-    fn lookup(&self, target: StreamReference) -> Value {
-        self.lookup_with_offset(target, 0)
-    }
-
-    fn lookup_with_offset(&self, stream_ref: StreamReference, offset: i16) -> Value {
+    fn lookup_latest(&self, stream_ref: StreamReference) -> Value {
         let inst = match stream_ref {
             StreamReference::InRef(ix) => self.global_store.get_in_instance(ix),
             StreamReference::OutRef(ix) => self.global_store.get_out_instance(ix).expect("no out instance"),
         };
-        inst.get_value(offset).unwrap_or(Value::None)
+        inst.get_value(0).unwrap_or(Value::None)
+    }
+
+    fn lookup_with_offset(&self, stream_ref: StreamReference, offset: i16) -> Value {
+        let (inst, fresh) = match stream_ref {
+            StreamReference::InRef(ix) => (self.global_store.get_in_instance(ix), self.fresh_inputs.contains(ix)),
+            StreamReference::OutRef(ix) => {
+                (self.global_store.get_out_instance(ix).expect("no out instance"), self.fresh_outputs.contains(ix))
+            }
+        };
+        if fresh {
+            inst.get_value(offset).unwrap_or(Value::None)
+        } else {
+            inst.get_value(offset + 1).unwrap_or(Value::None)
+        }
     }
 
     fn lookup_window(&self, window_ref: WindowReference, ts: Time) -> Value {
@@ -503,16 +529,26 @@ impl<'a> ExpressionEvaluator<'a> {
 }
 
 impl<'e> EvaluationContext<'e> {
-    pub(crate) fn lookup(&self, target: StreamReference) -> Value {
-        self.lookup_with_offset(target, 0)
-    }
-
-    pub(crate) fn lookup_with_offset(&self, stream_ref: StreamReference, offset: i16) -> Value {
+    pub(crate) fn lookup_latest(&self, stream_ref: StreamReference) -> Value {
         let inst = match stream_ref {
             StreamReference::InRef(ix) => self.global_store.get_in_instance(ix),
             StreamReference::OutRef(ix) => self.global_store.get_out_instance(ix).expect("no out instance"),
         };
-        inst.get_value(offset).unwrap_or(Value::None)
+        inst.get_value(0).unwrap_or(Value::None)
+    }
+
+    pub(crate) fn lookup_with_offset(&self, stream_ref: StreamReference, offset: i16) -> Value {
+        let (inst, fresh) = match stream_ref {
+            StreamReference::InRef(ix) => (self.global_store.get_in_instance(ix), self.fresh_inputs.contains(ix)),
+            StreamReference::OutRef(ix) => {
+                (self.global_store.get_out_instance(ix).expect("no out instance"), self.fresh_outputs.contains(ix))
+            }
+        };
+        if fresh {
+            inst.get_value(offset).unwrap_or(Value::None)
+        } else {
+            inst.get_value(offset + 1).unwrap_or(Value::None)
+        }
     }
 
     pub(crate) fn lookup_window(&self, window_ref: WindowReference) -> Value {
