@@ -75,6 +75,11 @@ impl TimeDrivenManager {
         }
     }
 
+    pub(crate) fn get_last_due(&self) -> &Vec<OutputReference> {
+        assert!(!self.deadlines.is_empty());
+        &self.deadlines.last().unwrap().due
+    }
+
     pub(crate) fn get_current_deadline(&self, time: Time) -> (Duration, Vec<OutputReference>) {
         let earliest_deadline_state = self.earliest_deadline_state(time);
         let current_deadline = &self.deadlines[earliest_deadline_state.deadline];
@@ -113,6 +118,11 @@ impl TimeDrivenManager {
 
     pub fn start_online(self, start_time: Instant, work_chan: Sender<WorkItem>) -> ! {
         assert!(!self.deadlines.is_empty());
+        // timed streams at time 0
+        let item = WorkItem::Time(self.get_last_due().clone(), Time::default());
+        if work_chan.send(item).is_err() {
+            self.handler.runtime_warning(|| "TDM: Sending failed; evaluation cycle lost.");
+        }
         loop {
             let now = Instant::now();
             assert!(now >= start_time, "Time does not behave monotonically!");
