@@ -489,7 +489,8 @@ fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>, handler: &H
                         }
                         ExpressionKind::Function(name, types, args) => {
                             // match for builtin function names and transform them into appropriate AST nodes
-                            let kind = match name.as_string().as_str() {
+                            let signature = name.as_string();
+                            let kind = match signature.as_str() {
                                 "defaults(to:)" => {
                                     assert_eq!(args.len(), 1);
                                     ExpressionKind::Default(inner, args[0].clone())
@@ -517,7 +518,7 @@ fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>, handler: &H
                                     assert_eq!(args.len(), 0);
                                     ExpressionKind::StreamAccess(inner, StreamAccessKind::Optional)
                                 }
-                                "aggregate(over:using:)" => {
+                                "aggregate(over:using:)" | "aggregate(over_exactly:using:)" => {
                                     assert_eq!(args.len(), 2);
                                     let window_op = match &args[1].kind {
                                         ExpressionKind::Ident(i) => match i.name.as_str() {
@@ -553,6 +554,7 @@ fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>, handler: &H
                                     ExpressionKind::SlidingWindowAggregation {
                                         expr: inner,
                                         duration: args[0].clone(),
+                                        wait: signature.contains("over_exactly"),
                                         aggregation: window_op,
                                     }
                                 }

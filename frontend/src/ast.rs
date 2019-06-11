@@ -256,7 +256,12 @@ pub enum ExpressionKind {
     /// An offset expression, e.g., `a.offset(by: -1)`
     Offset(Box<Expression>, Offset),
     /// A sliding window with duration `duration` and aggregation function `aggregation`
-    SlidingWindowAggregation { expr: Box<Expression>, duration: Box<Expression>, aggregation: WindowOperation },
+    SlidingWindowAggregation {
+        expr: Box<Expression>,
+        duration: Box<Expression>,
+        wait: bool,
+        aggregation: WindowOperation,
+    },
     /// A binary operation (For example: `a + b`, `a * b`)
     Binary(BinOp, Box<Expression>, Box<Expression>),
     /// A unary operation (For example: `!x`, `*x`)

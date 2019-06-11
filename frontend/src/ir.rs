@@ -270,6 +270,7 @@ pub enum ArithLogOp {
 pub struct SlidingWindow {
     pub target: StreamReference,
     pub duration: Duration,
+    pub wait: bool,
     pub op: WindowOperation,
     pub reference: WindowReference,
     pub ty: Type,

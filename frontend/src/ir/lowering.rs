@@ -383,14 +383,14 @@ impl<'a> Lowering<'a> {
 
     /// Creates a SlidingWindow, adds it to the IR, and returns a reference to it.
     fn lower_window(&mut self, win_expr: &ast::Expression) -> WindowReference {
-        if let ExpressionKind::SlidingWindowAggregation { expr, duration, aggregation } = &win_expr.kind {
+        if let ExpressionKind::SlidingWindowAggregation { expr, duration, wait, aggregation } = &win_expr.kind {
             if let ExpressionKind::Ident(_) = &expr.kind {
                 let target = self.get_ref_for_ident(expr.id);
                 let duration = self.lower_duration(duration.as_ref());
                 let op = self.lower_window_op(*aggregation);
                 let reference = WindowReference { ix: self.ir.sliding_windows.len() };
                 let ty = self.lower_node_type(win_expr.id);
-                let window = ir::SlidingWindow { target, duration, op, reference, ty };
+                let window = ir::SlidingWindow { target, duration, wait: *wait, op, reference, ty };
                 self.ir.sliding_windows.push(window);
                 reference
             } else {

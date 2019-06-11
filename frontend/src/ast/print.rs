@@ -218,9 +218,10 @@ impl Display for Expression {
             },
             ExpressionKind::Default(expr, val) => write!(f, "{}.defaults(to: {})", expr, val),
             ExpressionKind::Offset(expr, val) => write!(f, "{}.offset(by: {})", expr, val),
-            ExpressionKind::SlidingWindowAggregation { expr, duration, aggregation } => {
-                write!(f, "{}.aggregate(over: {}, using: {})", expr, duration, aggregation)
-            }
+            ExpressionKind::SlidingWindowAggregation { expr, duration, wait, aggregation } => match wait {
+                true => write!(f, "{}.aggregate(over_exactly: {}, using: {})", expr, duration, aggregation),
+                false => write!(f, "{}.aggregate(over: {}, using: {})", expr, duration, aggregation),
+            },
             ExpressionKind::Binary(op, lhs, rhs) => write!(f, "{} {} {}", lhs, op, rhs),
             ExpressionKind::Unary(operator, operand) => write!(f, "{}{}", operator, operand),
             ExpressionKind::Ite(cond, cons, alt) => write!(f, "if {} then {} else {}", cond, cons, alt),

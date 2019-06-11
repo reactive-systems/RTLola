@@ -29,23 +29,23 @@ pub(crate) enum SlidingWindow {
 }
 
 impl SlidingWindow {
-    pub(crate) fn new(dur: Duration, op: WinOp, ts: Time, ty: &Type) -> SlidingWindow {
+    pub(crate) fn new(dur: Duration, wait: bool, op: WinOp, ts: Time, ty: &Type) -> SlidingWindow {
         match (op, ty) {
-            (WinOp::Count, _) => SlidingWindow::Count(WindowInstance::new(dur, ts)),
-            (WinOp::Min, Type::UInt(_)) => SlidingWindow::MinUnsigned(WindowInstance::new(dur, ts)),
-            (WinOp::Min, Type::Int(_)) => SlidingWindow::MinSigned(WindowInstance::new(dur, ts)),
-            (WinOp::Min, Type::Float(_)) => SlidingWindow::MinFloat(WindowInstance::new(dur, ts)),
-            (WinOp::Max, Type::UInt(_)) => SlidingWindow::MaxUnsigned(WindowInstance::new(dur, ts)),
-            (WinOp::Max, Type::Int(_)) => SlidingWindow::MaxSigned(WindowInstance::new(dur, ts)),
-            (WinOp::Max, Type::Float(_)) => SlidingWindow::MaxFloat(WindowInstance::new(dur, ts)),
-            (WinOp::Sum, Type::UInt(_)) => SlidingWindow::SumUnsigned(WindowInstance::new(dur, ts)),
-            (WinOp::Sum, Type::Int(_)) => SlidingWindow::SumSigned(WindowInstance::new(dur, ts)),
-            (WinOp::Sum, Type::Float(_)) => SlidingWindow::SumFloat(WindowInstance::new(dur, ts)),
-            (WinOp::Average, Type::UInt(_)) => SlidingWindow::AvgUnsigned(WindowInstance::new(dur, ts)),
-            (WinOp::Average, Type::Int(_)) => SlidingWindow::AvgSigned(WindowInstance::new(dur, ts)),
-            (WinOp::Average, Type::Float(_)) => SlidingWindow::AvgFloat(WindowInstance::new(dur, ts)),
-            (WinOp::Integral, _) => SlidingWindow::Integral(WindowInstance::new(dur, ts)),
-            (_, Type::Option(t)) => SlidingWindow::new(dur, op, ts, t),
+            (WinOp::Count, _) => SlidingWindow::Count(WindowInstance::new(dur, wait, ts)),
+            (WinOp::Min, Type::UInt(_)) => SlidingWindow::MinUnsigned(WindowInstance::new(dur, wait, ts)),
+            (WinOp::Min, Type::Int(_)) => SlidingWindow::MinSigned(WindowInstance::new(dur, wait, ts)),
+            (WinOp::Min, Type::Float(_)) => SlidingWindow::MinFloat(WindowInstance::new(dur, wait, ts)),
+            (WinOp::Max, Type::UInt(_)) => SlidingWindow::MaxUnsigned(WindowInstance::new(dur, wait, ts)),
+            (WinOp::Max, Type::Int(_)) => SlidingWindow::MaxSigned(WindowInstance::new(dur, wait, ts)),
+            (WinOp::Max, Type::Float(_)) => SlidingWindow::MaxFloat(WindowInstance::new(dur, wait, ts)),
+            (WinOp::Sum, Type::UInt(_)) => SlidingWindow::SumUnsigned(WindowInstance::new(dur, wait, ts)),
+            (WinOp::Sum, Type::Int(_)) => SlidingWindow::SumSigned(WindowInstance::new(dur, wait, ts)),
+            (WinOp::Sum, Type::Float(_)) => SlidingWindow::SumFloat(WindowInstance::new(dur, wait, ts)),
+            (WinOp::Average, Type::UInt(_)) => SlidingWindow::AvgUnsigned(WindowInstance::new(dur, wait, ts)),
+            (WinOp::Average, Type::Int(_)) => SlidingWindow::AvgSigned(WindowInstance::new(dur, wait, ts)),
+            (WinOp::Average, Type::Float(_)) => SlidingWindow::AvgFloat(WindowInstance::new(dur, wait, ts)),
+            (WinOp::Integral, _) => SlidingWindow::Integral(WindowInstance::new(dur, wait, ts)),
+            (_, Type::Option(t)) => SlidingWindow::new(dur, wait, op, ts, t),
             _ => unimplemented!(),
         }
     }
@@ -121,6 +121,8 @@ pub(crate) struct WindowInstance<IV: WindowIV> {
     time_per_bucket: Duration,
     start_time: Time,
     last_bucket_ix: BIx,
+    wait: bool,
+    wait_duration: Duration,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -159,18 +161,28 @@ impl BIx {
 }
 
 impl<IV: WindowIV> WindowInstance<IV> {
-    fn new(dur: Duration, ts: Time) -> WindowInstance<IV> {
+    fn new(dur: Duration, wait: bool, ts: Time) -> WindowInstance<IV> {
         let time_per_bucket = dur / (SIZE as u32);
         let buckets = VecDeque::from(vec![IV::default(ts); SIZE]);
         // last bucket_ix is 1, so we consider all buckets, i.e. from 1 to end and from start to 0,
         // as in use. Whenever we progress by n buckets, we invalidate the pseudo-used ones.
         // This is safe since the value within is the neutral element of the operation.
-        WindowInstance { buckets, time_per_bucket, start_time: ts, last_bucket_ix: BIx::new(0, 0) }
+        WindowInstance {
+            buckets,
+            time_per_bucket,
+            start_time: ts,
+            last_bucket_ix: BIx::new(0, 0),
+            wait,
+            wait_duration: dur,
+        }
     }
 
     /// You should always call `WindowInstance::update_buckets` before calling `WindowInstance::get_value()`!
     fn get_value(&self, ts: Time) -> Value {
         // Reversal is essential for non-commutative operations.
+        if self.wait && ts < self.wait_duration {
+            return Value::None;
+        }
         self.buckets.iter().rev().fold(IV::default(ts), |acc, e| acc + e.clone()).into()
     }
 

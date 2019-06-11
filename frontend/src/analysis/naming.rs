@@ -318,7 +318,7 @@ impl<'a, 'b> NamingAnalysis<'a, 'b> {
             Offset(expr, _) => {
                 self.check_expression(expr);
             }
-            SlidingWindowAggregation { expr, duration, aggregation: _aggregation } => {
+            SlidingWindowAggregation { expr, duration, .. } => {
                 self.check_expression(expr);
                 self.check_expression(duration);
             }

@@ -152,7 +152,7 @@ where
         ExpressionKind::Offset(expr, _) => {
             assign_ids_expr(expr, next_id);
         }
-        ExpressionKind::SlidingWindowAggregation { expr, duration, aggregation: _aggregation } => {
+        ExpressionKind::SlidingWindowAggregation { expr, duration, .. } => {
             assign_ids_expr(expr, next_id);
             assign_ids_expr(duration, next_id);
         }

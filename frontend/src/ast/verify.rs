@@ -114,7 +114,7 @@ impl<'a, 'b> Verifier<'a, 'b> {
 
     fn check_sliding_window_duration(handler: &Handler, expr: &Expression) {
         use ExpressionKind::*;
-        if let SlidingWindowAggregation { expr: _, duration, aggregation: _ } = &expr.kind {
+        if let SlidingWindowAggregation { duration, .. } = &expr.kind {
             match duration.parse_duration() {
                 Err(_) => {
                     handler.error_with_span(

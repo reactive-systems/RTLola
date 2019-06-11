@@ -1052,7 +1052,7 @@ mod tests {
     #[test]
     fn test_integral_window() {
         let (_, mut eval, mut time) = setup_time(
-            "input a: Float64\noutput b: Float64 @0.25Hz := a.aggregate(over: 40s, using: integral).defaults(to: -3.0)",
+            "input a: Float64\noutput b: Float64 @0.25Hz := a.aggregate(over_exactly: 40s, using: integral).defaults(to: -3.0)",
         );
         let mut eval = eval.as_Evaluator();
         time += Duration::from_secs(45);

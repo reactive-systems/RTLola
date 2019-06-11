@@ -335,7 +335,7 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
             Offset(expr, _) => {
                 self.infer_stream_ty_from_expression(&expr, inner);
             }
-            SlidingWindowAggregation { expr: _, duration: _, aggregation: _ } => {}
+            SlidingWindowAggregation { .. } => {}
             Ite(cond, left, right) => {
                 self.infer_stream_ty_from_expression(&cond, inner);
                 self.infer_stream_ty_from_expression(&left, inner);
@@ -500,7 +500,7 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
                 }
             }
             Offset(inner, offset) => self.check_offset_expr(stream_ty, expr.span, inner, offset)?,
-            SlidingWindowAggregation { expr: inner, duration, aggregation } => {
+            SlidingWindowAggregation { expr: inner, duration, aggregation, .. } => {
                 self.check_sliding_window_expression(stream_ty, expr.span, inner, duration, *aggregation)?;
             }
             Ite(cond, left, right) => {
@@ -922,8 +922,8 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
                 }
             }
             Offset(inner, offset) => self.infer_offset_expr(var, expr.span, inner, offset)?,
-            SlidingWindowAggregation { expr: inner, duration, aggregation } => {
-                self.infer_sliding_window_expression(var, expr.span, inner, duration, *aggregation)?;
+            SlidingWindowAggregation { expr: inner, duration, wait, aggregation } => {
+                self.infer_sliding_window_expression(var, expr.span, inner, duration, *wait, *aggregation)?;
             }
             Ite(cond, left, right) => {
                 // value type constraints
@@ -1144,6 +1144,7 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
         span: Span,
         expr: &'a Expression,
         duration: &'a Expression,
+        wait: bool,
         window_op: WindowOperation,
     ) -> Result<(), ()> {
         // check duration
@@ -1158,17 +1159,31 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
             Count => {
                 // The value type of the inner stream is not restricted
                 self.infer_expression(expr, None)?;
-                // resulting type is a integer value
-                self.unifier
-                    .unify_var_ty(var, ValueTy::Constr(TypeConstraint::UnsignedInteger))
-                    .map_err(|err| self.handle_error(err, span))
+                // resulting type is an unsigned integer value, optional if wait
+                let inner_ty = ValueTy::Constr(TypeConstraint::UnsignedInteger);
+                match wait {
+                    false => self.unifier.unify_var_ty(var, inner_ty).map_err(|err| self.handle_error(err, span)),
+                    true => self
+                        .unifier
+                        .unify_var_ty(var, ValueTy::Option(inner_ty.into()))
+                        .map_err(|err| self.handle_error(err, span)),
+                }
             }
             Sum | Product => {
                 // The value type of the inner stream has to be numeric
                 self.infer_expression(expr, Some(ValueTy::Constr(TypeConstraint::Numeric)))?;
-                // resulting type depends on the inner type
+                // resulting type depends on the inner type, optional if wait
                 let inner_var = self.value_vars[&expr.id];
-                self.unifier.unify_var_ty(var, ValueTy::Infer(inner_var)).map_err(|err| self.handle_error(err, span))
+                match wait {
+                    false => self
+                        .unifier
+                        .unify_var_ty(var, ValueTy::Infer(inner_var))
+                        .map_err(|err| self.handle_error(err, span)),
+                    true => self
+                        .unifier
+                        .unify_var_ty(var, ValueTy::Option(ValueTy::Infer(inner_var).into()))
+                        .map_err(|err| self.handle_error(err, span)),
+                }
             }
             Min | Max | Average => {
                 // The value type of the inner stream has to be numeric
@@ -1182,10 +1197,15 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
             Integral => {
                 // The value type of the inner stream has to be numeric
                 self.infer_expression(expr, Some(ValueTy::Constr(TypeConstraint::Numeric)))?;
-                // resulting type is optional float
-                self.unifier
-                    .unify_var_ty(var, ValueTy::Option(ValueTy::Constr(TypeConstraint::FloatingPoint).into()))
-                    .map_err(|err| self.handle_error(err, span))
+                // resulting type is floating point, optional if wait
+                let inner_ty = ValueTy::Constr(TypeConstraint::FloatingPoint);
+                match wait {
+                    false => self.unifier.unify_var_ty(var, inner_ty).map_err(|err| self.handle_error(err, span)),
+                    true => self
+                        .unifier
+                        .unify_var_ty(var, ValueTy::Option(inner_ty.into()))
+                        .map_err(|err| self.handle_error(err, span)),
+                }
             }
         }
     }
@@ -1983,25 +2003,30 @@ mod tests {
     #[test]
     #[ignore] // ignore until implemented
     fn test_aggregation_implicit_cast() {
-        let spec = "input in: UInt8\n output out: Int16 @5Hz := in.aggregate(over: 3s, using: Σ)";
-        assert_eq!(0, num_type_errors(spec));
-        let spec = "input in: Int8\n output out: Float32 @5Hz := in.aggregate(over: 3s, using: avg).defaults(to: 5.0)";
+        let spec =
+            "input in: UInt8\n output out: Int16 @5Hz := in.aggregate(over_exactly: 3s, using: Σ).defaults(to: 5)";
         assert_eq!(0, num_type_errors(spec));
         let spec =
-            "input in: Int8\n output out: Float32 @5Hz := in.aggregate(over: 3s, using: integral).defaults(to: 5.0)";
+            "input in: Int8\n output out: Float32 @5Hz := in.aggregate(over_exactly: 3s, using: avg).defaults(to: 5.0)";
+        assert_eq!(0, num_type_errors(spec));
+        let spec =
+            "input in: Int8\n output out: Float32 @5Hz := in.aggregate(over_exactly: 3s, using: integral).defaults(to: 5.0)";
         assert_eq!(0, num_type_errors(spec));
     }
 
     #[test]
     fn test_aggregation_integer_integral() {
         let spec =
-            "input in: UInt8\n output out: UInt8 @5Hz := in.aggregate(over: 3s, using: integral).defaults(to: 5)";
+            "input in: UInt8\n output out: UInt8 @5Hz := in.aggregate(over_exactly: 3s, using: integral).defaults(to: 5)";
         assert_eq!(1, num_type_errors(spec));
-        let spec = "input in: Int8\n output out: Int8 @5Hz := in.aggregate(over: 3s, using: integral).defaults(to: 5)";
+        let spec =
+            "input in: Int8\n output out: Int8 @5Hz := in.aggregate(over_exactly: 3s, using: integral).defaults(to: 5)";
         assert_eq!(1, num_type_errors(spec));
-        let spec = "input in: UInt8\n output out @5Hz := in.aggregate(over: 3s, using: integral).defaults(to: 5.0)";
+        let spec =
+            "input in: UInt8\n output out @5Hz := in.aggregate(over_exactly: 3s, using: integral).defaults(to: 5.0)";
         assert_eq!(0, num_type_errors(spec));
-        let spec = "input in: Int8\n output out @5Hz := in.aggregate(over: 3s, using: integral).defaults(to: 5.0)";
+        let spec =
+            "input in: Int8\n output out @5Hz := in.aggregate(over_exactly: 3s, using: integral).defaults(to: 5.0)";
         assert_eq!(0, num_type_errors(spec));
     }
 
@@ -2031,7 +2056,7 @@ mod tests {
 
     #[test]
     fn test_involved() {
-        let spec = "input velo: Float32\n output avg: Float64 @5Hz := velo.aggregate(over: 1h, using: avg).defaults(to: 10000.0)";
+        let spec = "input velo: Float32\n output avg: Float64 @5Hz := velo.aggregate(over_exactly: 1h, using: avg).defaults(to: 10000.0)";
         assert_eq!(0, num_type_errors(spec));
     }
 

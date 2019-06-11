@@ -43,7 +43,8 @@ impl GlobalStore {
         let index_map = index_map.into_iter().flatten().collect();
         let np_outputs = nps.iter().map(|o| InstanceStore::new(&o.ty, o.memory_bound)).collect();
         let inputs = ir.inputs.iter().map(|i| InstanceStore::new(&i.ty, i.memory_bound)).collect();
-        let np_windows = ir.sliding_windows.iter().map(|w| SlidingWindow::new(w.duration, w.op, ts, &w.ty)).collect();
+        let np_windows =
+            ir.sliding_windows.iter().map(|w| SlidingWindow::new(w.duration, w.wait, w.op, ts, &w.ty)).collect();
 
         GlobalStore { inputs, index_map, np_outputs, np_windows }
     }
