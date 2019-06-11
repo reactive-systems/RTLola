@@ -281,6 +281,35 @@ impl Display for FunctionName {
     }
 }
 
+impl Display for Offset {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        match self {
+            Offset::Discrete(val) => write!(f, "{}", val),
+            Offset::RealTime(val, unit) => write!(f, "{}{}", val, unit),
+        }
+    }
+}
+
+impl Display for TimeUnit {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                TimeUnit::Nanosecond => "ns",
+                TimeUnit::Microsecond => "μs",
+                TimeUnit::Millisecond => "ms",
+                TimeUnit::Second => "s",
+                TimeUnit::Minute => "min",
+                TimeUnit::Hour => "h",
+                TimeUnit::Day => "d",
+                TimeUnit::Week => "w",
+                TimeUnit::Year => "a",
+            }
+        )
+    }
+}
+
 impl Display for WindowOperation {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         write!(

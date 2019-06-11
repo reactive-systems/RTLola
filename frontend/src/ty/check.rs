@@ -10,8 +10,8 @@ use super::unifier::{InferError, StreamVar, StreamVarOrTy, UnifiableTy, Unifier,
 use super::{Activation, Freq, StreamTy, TypeConstraint, ValueTy};
 use crate::analysis::naming::{Declaration, DeclarationTable};
 use crate::ast::{
-    BinOp, Constant, Expression, ExpressionKind, Input, Literal, LolaSpec, Output, StreamAccessKind,
-    Trigger, Type, TypeKind, WindowOperation,
+    BinOp, Constant, Expression, ExpressionKind, Input, Literal, LolaSpec, Offset, Output,
+    StreamAccessKind, Trigger, Type, TypeKind, WindowOperation,
 };
 use crate::parse::{NodeId, Span};
 use crate::reporting::{Handler, LabeledSpan};
@@ -22,7 +22,7 @@ use num::traits::ops::inv::Inv;
 use num::Signed;
 use std::collections::HashMap;
 use std::str::FromStr as _;
-use uom::si::bigrational::{Frequency, Time};
+use uom::si::bigrational::Frequency;
 use uom::si::frequency::hertz;
 use uom::si::time::second;
 
@@ -734,63 +734,51 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
         stream_var: StreamVar,
         span: Span,
         expr: &'a Expression,
-        offset: &'a Expression,
+        offset: &'a Offset,
     ) -> Result<(), ()> {
         // check if offset is discrete or time-based
-        if let Some(offset) = offset.parse_literal::<i32>() {
-            // discrete offset
-            let negative_offset = offset.is_negative();
+        match offset {
+            Offset::Discrete(offset) => {
+                let negative_offset = offset.is_negative();
 
-            // result type is an optional value if offset is negative
-            let target_var = self.unifier.new_var();
-            if negative_offset {
-                self.unifier
-                    .unify_var_ty(var, ValueTy::Option(ValueTy::Infer(target_var).into()))
-                    .map_err(|err| self.handle_error(err, span))?;
-            } else {
-                self.unifier.unify_var_var(var, target_var).map_err(|err| self.handle_error(err, span))?;
+                // result type is an optional value if offset is negative
+                let target_var = self.unifier.new_var();
+                if negative_offset {
+                    self.unifier
+                        .unify_var_ty(var, ValueTy::Option(ValueTy::Infer(target_var).into()))
+                        .map_err(|err| self.handle_error(err, span))?;
+                } else {
+                    self.unifier.unify_var_var(var, target_var).map_err(|err| self.handle_error(err, span))?;
+                }
+
+                // As the recursion checks that the stream types match, any integer offset will match as well.
+                self.infer_expression(expr, Some(ValueTy::Infer(target_var)), Some(StreamVarOrTy::Var(stream_var)))
             }
+            Offset::RealTime(time, _) => {
+                // target value type
+                let target_value_var = self.unifier.new_var();
+                if time.is_negative() {
+                    self.unifier
+                        .unify_var_ty(var, ValueTy::Option(ValueTy::Infer(target_value_var).into()))
+                        .map_err(|err| self.handle_error(err, span))?;
+                } else {
+                    self.unifier.unify_var_var(var, target_value_var).map_err(|err| self.handle_error(err, span))?;
+                }
+                // get frequency
+                let time = offset.to_uom_time().expect("guaranteed to be real-time");
+                let freq = Frequency::new::<hertz>(time.get::<second>().abs().inv());
 
-            // As the recursion checks that the stream types match, any integer offset will match as well.
-            self.infer_expression(expr, Some(ValueTy::Infer(target_var)), Some(StreamVarOrTy::Var(stream_var)))
-        } else if let Some(time_spec) = offset.parse_timespec() {
-            // time-based offset
+                // target stream type
+                let target_stream_ty = StreamTy::new_periodic(Freq::new(freq));
 
-            // target value type
-            let target_value_var = self.unifier.new_var();
-            if time_spec.exact_period.is_negative() {
-                self.unifier
-                    .unify_var_ty(var, ValueTy::Option(ValueTy::Infer(target_value_var).into()))
-                    .map_err(|err| self.handle_error(err, span))?;
-            } else {
-                self.unifier.unify_var_var(var, target_value_var).map_err(|err| self.handle_error(err, span))?;
+                // recursion
+                // stream types have to match
+                self.infer_expression(
+                    expr,
+                    Some(ValueTy::Infer(target_value_var)),
+                    Some(StreamVarOrTy::Ty(target_stream_ty)),
+                )
             }
-
-            // get frequency
-            let freq = if let Ok(time) =
-                Time::from_str(offset.to_uom_string().expect("offsets have been checked before").as_str())
-            {
-                Frequency::new::<hertz>(time.get::<second>().inv())
-            } else if let Ok(freq) =
-                Frequency::from_str(offset.to_uom_string().expect("offsets have been checked before").as_str())
-            {
-                freq
-            } else {
-                unreachable!("{} is neither time nor frequency", offset);
-            };
-
-            // target stream type
-            let target_stream_ty = StreamTy::new_periodic(Freq::new(freq));
-
-            // recursion
-            // stream types have to match
-            self.infer_expression(
-                expr,
-                Some(ValueTy::Infer(target_value_var)),
-                Some(StreamVarOrTy::Ty(target_stream_ty)),
-            )
-        } else {
-            unreachable!("offsets are either discrete or time-based");
         }
     }
 
@@ -1573,6 +1561,12 @@ mod tests {
     #[test]
     fn test_rt_offset() {
         let spec = "output a: Int8 @1Hz := 1\noutput b: Int8 @1Hz := a[-1s].defaults(to: 0)";
+        assert_eq!(0, num_type_errors(spec));
+    }
+
+    #[test]
+    fn test_rt_offset_regression() {
+        let spec = "output a @10Hz := a.offset(by: -100ms).defaults(to: 0) + 1";
         assert_eq!(0, num_type_errors(spec));
     }
 

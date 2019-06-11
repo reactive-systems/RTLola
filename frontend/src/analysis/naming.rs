@@ -315,9 +315,8 @@ impl<'a, 'b> NamingAnalysis<'a, 'b> {
                 self.check_ident(expression, ident);
             }
             StreamAccess(expr, _) => self.check_expression(expr),
-            Offset(expr, offset) => {
+            Offset(expr, _) => {
                 self.check_expression(expr);
-                self.check_expression(offset);
             }
             SlidingWindowAggregation { expr, duration, aggregation: _aggregation } => {
                 self.check_expression(expr);

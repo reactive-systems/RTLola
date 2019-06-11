@@ -9,6 +9,7 @@ use crate::ir::{EventDrivenStream, LolaIR, MemorizationBound, StreamReference, T
 use crate::parse::NodeId;
 use crate::ty::StreamTy;
 use std::collections::HashMap;
+use std::convert::TryInto;
 use std::time::Duration;
 
 use crate::analysis::graph_based_analysis::evaluation_order::{EvalOrder, EvaluationOrderResult};
@@ -266,7 +267,7 @@ impl<'a> Lowering<'a> {
                 ExpressionKind::Default(e, dft) => {
                     pre.chain(recursion(e)).chain(recursion(dft)).chain(post()).collect()
                 }
-                ExpressionKind::Offset(e, off) => pre.chain(recursion(e)).chain(recursion(off)).chain(post()).collect(),
+                ExpressionKind::Offset(e, _) => pre.chain(recursion(e)).chain(post()).collect(),
                 ExpressionKind::SlidingWindowAggregation { expr, duration, .. } => {
                     pre.chain(recursion(expr)).chain(recursion(duration)).chain(post()).collect()
                 }
@@ -304,17 +305,21 @@ impl<'a> Lowering<'a> {
             Offset(inner, offset) => match &inner.kind {
                 Ident(_ident) => {
                     let sr = self.get_ref_for_ident(inner.id);
-                    let offset = if let Some(offset) = offset.parse_literal::<i32>() {
-                        // discrete offset
-                        if offset <= 0 {
-                            ir::Offset::PastDiscreteOffset(offset.abs() as u32)
-                        } else {
-                            ir::Offset::FutureDiscreteOffset(offset as u32)
+                    let offset = match offset {
+                        &ast::Offset::Discrete(val) => {
+                            if val <= 0 {
+                                ir::Offset::PastDiscreteOffset(
+                                    val.abs().try_into().expect("conversion from i16.abs() => u32 cannot fail"),
+                                )
+                            } else {
+                                ir::Offset::FutureDiscreteOffset(
+                                    val.try_into().expect("conversion from positive i16 => u32 cannot fail"),
+                                )
+                            }
                         }
-                    } else if let Some(_time_spec) = offset.parse_timespec() {
-                        unimplemented!();
-                    } else {
-                        unreachable!("Verified in type checker");
+                        ast::Offset::RealTime(_val, _unit) => {
+                            unimplemented!();
+                        }
                     };
                     deps.push(ir::Dependency { stream: sr, offsets: vec![offset] })
                 }
@@ -604,12 +609,15 @@ impl<'a> Lowering<'a> {
             .collect()
     }
 
-    fn lower_offset(&self, offset: &ast::Expression) -> ir::Offset {
-        if let Some(val) = offset.parse_literal::<i32>() {
-            assert!(val < 0); // Should be checked by type checker, though.
-            ir::Offset::PastDiscreteOffset(val.abs() as u32)
-        } else {
-            unimplemented!()
+    fn lower_offset(&self, offset: &ast::Offset) -> ir::Offset {
+        match offset {
+            &ast::Offset::Discrete(val) => {
+                assert!(val < 0); // Should be checked by type checker, though.
+                ir::Offset::PastDiscreteOffset(
+                    val.abs().try_into().expect("conversion from i16.abs() => u32 cannot fail"),
+                )
+            }
+            ast::Offset::RealTime(_, _) => unimplemented!(),
         }
     }
 

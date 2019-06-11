@@ -22,7 +22,7 @@ petgraph = "0.4.13"
 ena = "0.11" # union-find implementation
 num = "0.2"     # infinite precision rationals
 color-backtrace = "0.1"
-uom = { version = "0.22.2", default-features = false, features = [ "autoconvert", "bigrational", "si", "std", "use_serde"]}
+uom = { version = "0.23", default-features = false, features = [ "autoconvert", "bigrational", "f64", "si", "std", "use_serde"]}
 
 
 [features]

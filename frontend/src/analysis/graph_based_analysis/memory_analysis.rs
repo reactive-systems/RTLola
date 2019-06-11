@@ -44,7 +44,7 @@ fn add_sliding_windows<'a>(
     use ExpressionKind::*;
     match &expr.kind {
         Lit(_) | Ident(_) => {}
-        Binary(_, left, right) | Default(left, right) | Offset(left, right) => {
+        Binary(_, left, right) | Default(left, right) => {
             match add_sliding_windows(left, type_table, declaration_table) {
                 MemoryBound::Bounded(u) => required_memory += u,
                 MemoryBound::Unbounded => return MemoryBound::Unbounded,
@@ -57,7 +57,7 @@ fn add_sliding_windows<'a>(
             };
         }
         MissingExpression => return MemoryBound::Unknown,
-        Unary(_, inner) | ParenthesizedExpression(_, inner, _) | StreamAccess(inner, _) => {
+        Unary(_, inner) | ParenthesizedExpression(_, inner, _) | StreamAccess(inner, _) | Offset(inner, _) => {
             match add_sliding_windows(inner, type_table, declaration_table) {
                 MemoryBound::Bounded(u) => required_memory += u,
                 MemoryBound::Unbounded => return MemoryBound::Unbounded,

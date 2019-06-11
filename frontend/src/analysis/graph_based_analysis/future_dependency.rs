@@ -34,8 +34,8 @@ pub(crate) fn future_dependent_stream(dependency_graph: &DependencyGraph) -> Fut
                 Access(_, offset, _) => match offset {
                     Offset::Discrete(offset) => *offset > 0,
                     Offset::Time(duration) => match duration {
-                        TimeOffset::Future(_, _) => true,
-                        TimeOffset::UpToNow(_, _) => false,
+                        TimeOffset::Future(_) => true,
+                        TimeOffset::UpToNow(_) => false,
                     },
                     Offset::SlidingWindow => false,
                 },

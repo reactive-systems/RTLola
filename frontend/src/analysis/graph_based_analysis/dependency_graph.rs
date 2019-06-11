@@ -1,13 +1,13 @@
 use super::{DependencyGraph, EIx, Location, NIx, Offset, StreamDependency, StreamNode, TimeOffset};
 use crate::analysis::lola_version::LolaVersionTable;
 use crate::analysis::naming::{Declaration, DeclarationTable};
-use crate::ast::{Expression, ExpressionKind, LanguageSpec, LolaSpec, Output, TemplateSpec};
+use crate::ast;
+use crate::ast::{ExpressionKind, LanguageSpec, LolaSpec, Output, TemplateSpec};
 use crate::parse::{NodeId, Span};
 use crate::reporting::{DiagnosticBuilder, Handler, LabeledSpan, Level};
-use num::Signed;
+use num::traits::sign::Signed;
 use petgraph::algo::tarjan_scc;
-use petgraph::graph::edge_index;
-use petgraph::graph::NodeIndex;
+use petgraph::graph::{edge_index, NodeIndex};
 use petgraph::visit::EdgeRef;
 use std::collections::HashMap;
 
@@ -242,18 +242,17 @@ impl<'a> DependencyAnalyser<'a> {
     }
 
     // Tranforms an offset expression into `Offset` representation
-    fn translate_offset(&self, offset: &Expression) -> Offset {
-        // TODO replace the evaluate_discrete/float
-        if let Some(offset) = offset.parse_literal::<i32>() {
-            Offset::Discrete(offset)
-        } else if let Some(time_spec) = offset.parse_timespec() {
-            if time_spec.signum <= 0 {
-                Offset::Time(TimeOffset::UpToNow(time_spec.period, time_spec.exact_period.abs()))
-            } else {
-                Offset::Time(TimeOffset::Future(time_spec.period, time_spec.exact_period.abs()))
+    fn translate_offset(&self, offset: &ast::Offset) -> Offset {
+        match offset {
+            &ast::Offset::Discrete(val) => Offset::Discrete(val.into()),
+            ast::Offset::RealTime(val, _) => {
+                let time = offset.to_uom_time().expect("guaranteed to be real-time");
+                if val.is_negative() {
+                    Offset::Time(TimeOffset::UpToNow(time.abs()))
+                } else {
+                    Offset::Time(TimeOffset::Future(time))
+                }
             }
-        } else {
-            panic!("Offsets have to be either integer or durations");
         }
     }
 

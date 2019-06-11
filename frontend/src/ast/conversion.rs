@@ -1,10 +1,26 @@
-use super::{Expression, ExpressionKind, LitKind, NodeId, TimeSpec};
+use super::{Expression, ExpressionKind, LitKind, NodeId, Offset, TimeSpec, TimeUnit};
 use crate::ast::Literal;
-use num::{BigRational, FromPrimitive, One, Signed, ToPrimitive};
+use num::{BigInt, BigRational, FromPrimitive, One, Signed, ToPrimitive};
 use std::str::FromStr;
 use std::time::Duration;
 
 impl Expression {
+    pub(crate) fn parse_offset(&self) -> Result<Offset, String> {
+        if let Some(val) = self.parse_literal::<i16>() {
+            Ok(Offset::Discrete(val))
+        } else {
+            // has to be a real-time expression
+            let (val, unit) = match &self.kind {
+                ExpressionKind::Lit(l) => match &l.kind {
+                    LitKind::Numeric(val, Some(unit)) => (val, unit),
+                    _ => return Err(format!("expected numeric value with unit, found `{}`", l)),
+                },
+                _ => return Err(format!("expected numeric value with unit, found `{}`", self)),
+            };
+            Ok(Offset::RealTime(parse_rational(val), TimeUnit::from_str(unit)?))
+        }
+    }
+
     pub(crate) fn parse_timespec(&self) -> Option<TimeSpec> {
         let (val, unit) = match &self.kind {
             ExpressionKind::Lit(l) => match &l.kind {
@@ -338,6 +354,29 @@ impl Expression {
     }
 }
 
+impl Offset {
+    pub(crate) fn to_uom_time(&self) -> Option<uom::si::bigrational::Time> {
+        match self {
+            Offset::Discrete(_) => None,
+            Offset::RealTime(val, unit) => {
+                let coefficient = match unit {
+                    TimeUnit::Nanosecond => BigRational::new(BigInt::from(1), BigInt::from(10_u64.pow(9))),
+                    TimeUnit::Microsecond => BigRational::new(BigInt::from(1), BigInt::from(10_u64.pow(6))),
+                    TimeUnit::Millisecond => BigRational::new(BigInt::from(1), BigInt::from(10_u64.pow(3))),
+                    TimeUnit::Second => BigRational::from_u64(1_u64).unwrap(),
+                    TimeUnit::Minute => BigRational::from_u64(60).unwrap(),
+                    TimeUnit::Hour => BigRational::from_u64(60 * 60).unwrap(),
+                    TimeUnit::Day => BigRational::from_u64(60 * 60 * 24).unwrap(),
+                    TimeUnit::Week => BigRational::from_u64(60 * 60 * 24 * 7).unwrap(),
+                    TimeUnit::Year => BigRational::from_u64(60 * 60 * 24 * 365).unwrap(),
+                };
+                let time = val * coefficient;
+                Some(uom::si::bigrational::Time::new::<uom::si::time::second>(time))
+            }
+        }
+    }
+}
+
 impl Expression {
     /// Tries to resolve a tuple index access
     pub(crate) fn get_expr_from_tuple(&self, idx: usize) -> Option<&Expression> {
@@ -346,6 +385,24 @@ impl Expression {
             Tuple(entries) => Some(entries[idx].as_ref()),
             Ident(_) => None,
             _ => unimplemented!(),
+        }
+    }
+}
+
+impl FromStr for TimeUnit {
+    type Err = String;
+    fn from_str(unit: &str) -> Result<Self, Self::Err> {
+        match unit {
+            "ns" => Ok(TimeUnit::Nanosecond),
+            "μs" | "us" => Ok(TimeUnit::Microsecond),
+            "ms" => Ok(TimeUnit::Millisecond),
+            "s" => Ok(TimeUnit::Second),
+            "min" => Ok(TimeUnit::Minute),
+            "h" => Ok(TimeUnit::Hour),
+            "d" => Ok(TimeUnit::Day),
+            "w" => Ok(TimeUnit::Week),
+            "a" => Ok(TimeUnit::Year),
+            _ => Err(format!("unknown time unit `{}`", unit)),
         }
     }
 }

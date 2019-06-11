@@ -258,7 +258,7 @@ pub enum ExpressionKind {
     /// A default expression, e.g., `a.defaults(to: 0) `
     Default(Box<Expression>, Box<Expression>),
     /// An offset expression, e.g., `a.offset(by: -1)`
-    Offset(Box<Expression>, Box<Expression>),
+    Offset(Box<Expression>, Offset),
     /// A sliding window with duration `duration` and aggregation function `aggregation`
     SlidingWindowAggregation { expr: Box<Expression>, duration: Box<Expression>, aggregation: WindowOperation },
     /// A binary operation (For example: `a + b`, `a * b`)
@@ -297,6 +297,27 @@ pub enum StreamAccessKind {
     Hold,
     /// Optional access, returns value if it exists
     Optional,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Offset {
+    Discrete(i16),
+    RealTime(BigRational, TimeUnit),
+}
+
+/// Supported time unit for real time expressions
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum TimeUnit {
+    Nanosecond,
+    Microsecond,
+    Millisecond,
+    Second,
+    Minute,
+    Hour,
+    Day,
+    Week,
+    /// Note: A year is always, *always*, 365 days long.
+    Year,
 }
 
 #[derive(Debug, Clone)]

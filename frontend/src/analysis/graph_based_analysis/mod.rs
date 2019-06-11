@@ -13,7 +13,7 @@ use crate::reporting::Handler;
 use crate::ty::check::TypeTable;
 use petgraph::Directed;
 use petgraph::Graph;
-use std::time::Duration;
+use uom::si::bigrational::Time;
 
 pub(crate) use self::evaluation_order::EvaluationOrderResult;
 pub(crate) use self::future_dependency::FutureDependentStreams;
@@ -21,7 +21,6 @@ pub(crate) use self::input_dependencies::RequiredInputs;
 pub(crate) use self::space_requirements::SpaceRequirements;
 use self::space_requirements::TrackingRequirements;
 use crate::ty::{FloatTy, IntTy, UIntTy, ValueTy};
-use num::BigRational;
 
 #[derive(Debug, Copy, Clone)]
 pub(crate) enum MemoryBound {
@@ -109,8 +108,8 @@ pub(crate) enum ComputeStep {
 
 #[derive(Debug, Clone)]
 pub(crate) enum TimeOffset {
-    UpToNow(Duration, BigRational),
-    Future(Duration, BigRational),
+    UpToNow(Time),
+    Future(Time),
 }
 
 #[derive(Debug, Clone)]

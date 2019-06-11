@@ -28,7 +28,6 @@ impl<'a, 'b> Verifier<'a, 'b> {
     fn check_expression(&self, expr: &Expression) {
         self.expression_walker(expr, &Self::check_missing_paranthesis);
         self.expression_walker(expr, &Self::check_missing_expression);
-        self.expression_walker(expr, &Self::check_offsets_are_literals);
         self.expression_walker(expr, &Self::check_direct_access);
         self.expression_walker(expr, &Self::check_field_access);
     }
@@ -47,12 +46,12 @@ impl<'a, 'b> Verifier<'a, 'b> {
             Unary(_, inner)
             | Field(inner, _)
             | StreamAccess(inner, _)
+            | Offset(inner, _)
             | ParenthesizedExpression(_, inner, _) => {
                 self.expression_walker(&inner, check);
             }
             Binary(_, left, right)
             | Default(left, right)
-            | Offset(left, right)
             | SlidingWindowAggregation { expr: left, duration: right, .. } => {
                 self.expression_walker(&left, check);
                 self.expression_walker(&right, check);
@@ -97,35 +96,6 @@ impl<'a, 'b> Verifier<'a, 'b> {
                 "missing expression",
                 LabeledSpan::new(expr.span, "we expected an expression here.", true),
             );
-        }
-    }
-
-    fn check_offsets_are_literals(handler: &Handler, expr: &Expression) {
-        use ExpressionKind::*;
-        match &expr.kind {
-            Offset(_, offset) => {
-                if let ExpressionKind::Lit(l) = &offset.kind {
-                    if let LitKind::Numeric(_, _) = l.kind {
-                        return;
-                    }
-                }
-                handler.error_with_span(
-                    "offsets have to be numeric constants, like `42` or `10sec`",
-                    LabeledSpan::new(expr.span, "expected a numeric value", true),
-                );
-            }
-            SlidingWindowAggregation { duration, .. } => {
-                if let ExpressionKind::Lit(l) = &duration.kind {
-                    if let LitKind::Numeric(_, Some(_)) = l.kind {
-                        return;
-                    }
-                }
-                handler.error_with_span(
-                    "only durations are allowed in sliding windows",
-                    LabeledSpan::new(expr.span, "expected a duration", true),
-                );
-            }
-            _ => {}
         }
     }
 
@@ -201,14 +171,6 @@ mod tests {
     #[test]
     fn do_not_warn_about_existing_expression() {
         assert_eq!(0, number_of_errors("output test: Int8 := (3+3)"))
-    }
-
-    #[test]
-    fn test_offsets_are_literals() {
-        assert_eq!(0, number_of_errors("output a := x.offest(by: 1)"));
-        assert_eq!(1, number_of_errors("output a := x.offset(by: y)"));
-        assert_eq!(0, number_of_errors("output a := x.aggregate(over: 1h, using: avg)"));
-        assert_eq!(1, number_of_errors("output a := x.aggregate(over: y, using: avg)"));
     }
 
     #[test]

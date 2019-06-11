@@ -13,9 +13,8 @@ use petgraph::Direction;
 use std::cmp::max;
 use std::collections::HashMap;
 use std::collections::HashSet;
-use uom::si::bigrational::Time as SITime;
 use uom::si::frequency::hertz;
-use uom::si::time::{nanosecond, second};
+use uom::si::time::second;
 
 pub(crate) type SpaceRequirements = HashMap<NodeId, StorageRequirement>;
 
@@ -101,14 +100,12 @@ pub(crate) fn determine_tracking_size(
                     !future_dependent_stream.contains(&src_id),
                     "time based access of future dependent streams is not implemented"
                 ); // TODO time based access of future dependent streams is not implemented
-                if let TimeOffset::UpToNow(_, exact_offset_duration) = offset {
+                if let TimeOffset::UpToNow(uom_time) = offset {
                     let src_timing = &type_table.get_stream_type(src_id);
                     if this_is_time_based {
                         let out_timing = &type_table.get_stream_type(id);
                         if let StreamTy::RealTime(freq) = out_timing {
-                            let result: BigRational = SITime::new::<nanosecond>(exact_offset_duration.clone())
-                                .get::<second>()
-                                / &freq.freq.get::<hertz>();
+                            let result: BigRational = uom_time.get::<second>() / &freq.freq.get::<hertz>();
                             let needed_space: u16 = if result.is_integer() {
                                 result.trunc().to_integer().to_u16().expect("buffer size does not fit in u16")
                             } else {
@@ -125,9 +122,7 @@ pub(crate) fn determine_tracking_size(
                                 tracking_requirements.push((src_id, TrackingRequirement::Unbounded));
                             }
                             StreamTy::RealTime(freq) => {
-                                let result: BigRational = SITime::new::<nanosecond>(exact_offset_duration.clone())
-                                    .get::<second>()
-                                    / &freq.freq.get::<hertz>();
+                                let result: BigRational = uom_time.get::<second>() / &freq.freq.get::<hertz>();
                                 let needed_space: u16 = if result.is_integer() {
                                     result.trunc().to_integer().to_u16().expect("buffer size does not fit in u16")
                                 } else {

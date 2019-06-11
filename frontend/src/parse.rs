@@ -503,7 +503,12 @@ fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>, span: Span)
                                 }
                                 "offset(by:)" => {
                                     assert_eq!(args.len(), 1);
-                                    ExpressionKind::Offset(inner, args[0].clone())
+                                    let offset_expr = &args[0];
+                                    let offset = match offset_expr.parse_offset() {
+                                        Ok(offset) => offset,
+                                        Err(reason) => panic!("{}", reason),
+                                    };
+                                    ExpressionKind::Offset(inner, offset)
                                 }
                                 "hold()" => {
                                     assert_eq!(args.len(), 0);
@@ -545,13 +550,19 @@ fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>, span: Span)
                         _ => panic!("expected method call or tuple access, found {}", rhs),
                     }
                 }
-                Rule::OpeningBracket => match lhs.kind {
-                    ExpressionKind::Unary(unop, inner) => {
-                        let new_inner = Expression::new(ExpressionKind::Offset(inner, rhs.into()), span);
-                        return Expression::new(ExpressionKind::Unary(unop, Box::new(new_inner)), span);
+                Rule::OpeningBracket => {
+                    let offset = match rhs.parse_offset() {
+                        Ok(offset) => offset,
+                        Err(reason) => panic!("{}", reason),
+                    };
+                    match lhs.kind {
+                        ExpressionKind::Unary(unop, inner) => {
+                            let new_inner = Expression::new(ExpressionKind::Offset(inner, offset), span);
+                            return Expression::new(ExpressionKind::Unary(unop, Box::new(new_inner)), span);
+                        }
+                        _ => return Expression::new(ExpressionKind::Offset(lhs.into(), offset), span),
                     }
-                    _ => return Expression::new(ExpressionKind::Offset(lhs.into(), rhs.into()), span),
-                },
+                }
                 _ => unreachable!(),
             };
             Expression::new(ExpressionKind::Binary(op, Box::new(lhs), Box::new(rhs)), span)
