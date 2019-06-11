@@ -127,6 +127,28 @@ subsub,25.0"#;
 }
 
 #[test]
+fn event_based_counter() {
+    let spec = r#"
+input time : Float32
+output b @ time := b[-1].defaults(to: 0) + 1
+trigger b > 3
+    "#;
+
+    let data = r#"time
+0.0
+1.0
+2.0
+3.0
+4.0
+5.0
+6.0"#;
+
+    let ctrl = run(spec, data).unwrap_or_else(|e| panic!("E2E test failed: {}", e));
+    // the test case is 6secs, the counter starts with 1 at 0.0 and increases every second, thus, there should be 4 trigger (4 times counter > 3)
+    assert_eq!(ctrl.output_handler.statistics.as_ref().unwrap().get_num_trigger(0), 4);
+}
+
+#[test]
 fn timed_counter() {
     let spec = r#"
 output b @10Hz := b[-1].defaults(to: 0) + 1
