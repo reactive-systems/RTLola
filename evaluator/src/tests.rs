@@ -127,6 +127,81 @@ subsub,25.0"#;
 }
 
 #[test]
+fn event_based_parallel_past_lookup() {
+    let spec = r#"
+input time : Float32
+output a @ time := b[-1].defaults(to: false)
+output b @ time := a[-1].defaults(to: true)
+trigger a "a"
+trigger b "b"
+trigger a∧b "a∧b"
+trigger a∨b "a∨b"
+    "#;
+
+    let data = r#"time
+0.0
+1.0
+2.0
+3.0
+4.0
+5.0
+6.0"#;
+
+    let ctrl = run(spec, data).unwrap_or_else(|e| panic!("E2E test failed: {}", e));
+    // The test case is 6secs, there should be 3 triggers.
+    // The execution should look as follows:
+    //
+    // time     | 0 | 1 | 2 | 3 | 4 | 5 | 6 |
+    // a        | 0 | 1 | 0 | 1 | 0 | 1 | 0 |
+    // b        | 1 | 0 | 1 | 0 | 1 | 0 | 1 |
+    // trig a   | 0 | 1 | 0 | 1 | 0 | 1 | 0 |
+    // trig b   | 1 | 0 | 1 | 0 | 1 | 0 | 1 |
+    // trig a∧b | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+    // trig a∨b | 1 | 1 | 1 | 1 | 1 | 1 | 1 |
+    assert_eq!(ctrl.output_handler.statistics.as_ref().unwrap().get_num_trigger(0), 3);
+    assert_eq!(ctrl.output_handler.statistics.as_ref().unwrap().get_num_trigger(1), 4);
+    assert_eq!(ctrl.output_handler.statistics.as_ref().unwrap().get_num_trigger(2), 0);
+    assert_eq!(ctrl.output_handler.statistics.as_ref().unwrap().get_num_trigger(3), 7);
+}
+
+#[test]
+fn timed_parallel_past_lookup() {
+    let spec = r#"
+output a @ 1Hz := b[-1].defaults(to: false)
+output b @ 1Hz := a[-1].defaults(to: true)
+trigger a "a"
+trigger b "b"
+trigger a∧b "a∧b"
+trigger a∨b "a∨b"
+    "#;
+
+    let data = r#"time
+0.0
+1.0
+2.0
+3.0
+4.0
+5.0
+6.0"#;
+
+    let ctrl = run(spec, data).unwrap_or_else(|e| panic!("E2E test failed: {}", e));
+    // The test case is 6secs, there should be 3 triggers.
+    // The execution should look as follows:
+    //
+    // time     | 0 | 1 | 2 | 3 | 4 | 5 | 6 |
+    // a        | 0 | 1 | 0 | 1 | 0 | 1 | 0 |
+    // b        | 1 | 0 | 1 | 0 | 1 | 0 | 1 |
+    // trig a   | 0 | 1 | 0 | 1 | 0 | 1 | 0 |
+    // trig b   | 1 | 0 | 1 | 0 | 1 | 0 | 1 |
+    // trig a∧b | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+    // trig a∨b | 1 | 1 | 1 | 1 | 1 | 1 | 1 |
+    assert_eq!(ctrl.output_handler.statistics.as_ref().unwrap().get_num_trigger(0), 3);
+    assert_eq!(ctrl.output_handler.statistics.as_ref().unwrap().get_num_trigger(1), 4);
+    assert_eq!(ctrl.output_handler.statistics.as_ref().unwrap().get_num_trigger(2), 0);
+    assert_eq!(ctrl.output_handler.statistics.as_ref().unwrap().get_num_trigger(3), 7);
+}
+
+#[test]
 fn event_based_counter() {
     let spec = r#"
 input time : Float32
