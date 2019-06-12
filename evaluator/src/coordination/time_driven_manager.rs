@@ -80,6 +80,10 @@ impl TimeDrivenManager {
         &self.deadlines.last().unwrap().due
     }
 
+    pub(crate) fn get_deadline_cycle(&self) -> impl Iterator<Item = &Deadline> {
+        return self.deadlines.iter().cycle();
+    }
+
     pub(crate) fn get_current_deadline(&self, time: Time) -> (Duration, Vec<OutputReference>) {
         let earliest_deadline_state = self.earliest_deadline_state(time);
         let current_deadline = &self.deadlines[earliest_deadline_state.deadline];

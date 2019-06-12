@@ -4,6 +4,7 @@ use super::{WorkItem, CAP_WORK_QUEUE};
 use crate::basics::{EvalConfig, ExecutionMode::*, OutputHandler, Time};
 use crate::coordination::{EventEvaluation, TimeEvaluation};
 use crate::evaluator::{Evaluator, EvaluatorData};
+use common::schedule::Deadline;
 use crossbeam_channel::{bounded, unbounded};
 use std::error::Error;
 use std::sync::Arc;
@@ -123,13 +124,15 @@ impl Controller {
         let ir_clone = self.ir.clone();
         let output_copy_handler = self.output_handler.clone();
         let time_manager = TimeDrivenManager::setup(ir_clone, output_copy_handler);
+        let hlp = vec![];
         let mut due_streams = if has_time_driven {
             // timed streams at time 0
-            time_manager.get_last_due().clone()
+            time_manager.get_last_due()
         } else {
-            vec![]
+            &hlp
         };
         let mut next_deadline = Duration::default();
+        let mut deadline_cycle = time_manager.get_deadline_cycle();
 
         let output_copy_handler = self.output_handler.clone();
         let mut evaluatordata = EvaluatorData::new(self.ir.clone(), self.config.clone(), output_copy_handler);
@@ -144,14 +147,22 @@ impl Controller {
                     WorkItem::Event(e, ts) => {
                         while has_time_driven && ts > next_deadline {
                             // Go back in time, evaluate,...
-                            due_streams =
-                                self.schedule_timed(&mut evaluator, &time_manager, &due_streams, &mut next_deadline);
+                            due_streams = self.schedule_timed(
+                                &mut evaluator,
+                                &mut deadline_cycle,
+                                due_streams,
+                                &mut next_deadline,
+                            );
                         }
                         self.output_handler.debug(|| format!("Schedule Event {:?}.", (&e, ts)));
                         self.evaluate_event_item(&mut evaluator, &e, ts);
                         if has_time_driven && ts == next_deadline {
-                            due_streams =
-                                self.schedule_timed(&mut evaluator, &time_manager, &due_streams, &mut next_deadline);
+                            due_streams = self.schedule_timed(
+                                &mut evaluator,
+                                &mut deadline_cycle,
+                                due_streams,
+                                &mut next_deadline,
+                            );
                         }
                     }
                     WorkItem::Time(_, _) => panic!("Received time command in offline mode."),
@@ -168,19 +179,19 @@ impl Controller {
         Ok(())
     }
 
-    fn schedule_timed(
-        &self,
+    fn schedule_timed<'a>(
+        &'a self,
         evaluator: &mut Evaluator,
-        time_manager: &TimeDrivenManager,
+        deadline_iter: &mut Iterator<Item = &'a Deadline>,
         due_streams: &Vec<OutputReference>,
         next_deadline: &mut Time,
-    ) -> Vec<OutputReference> {
+    ) -> &'a Vec<OutputReference> {
         self.output_handler.debug(|| format!("Schedule Timed-Event {:?}.", (due_streams, *next_deadline)));
         self.evaluate_timed_item(evaluator, due_streams, *next_deadline);
-        let (wait_time, due) = time_manager.get_current_deadline(*next_deadline);
-        assert!(wait_time > Duration::from_secs(0));
-        *next_deadline += wait_time;
-        due
+        let deadline = deadline_iter.next().unwrap();
+        assert!(deadline.pause > Duration::from_secs(0));
+        *next_deadline += deadline.pause;
+        &deadline.due
     }
 
     #[inline]
