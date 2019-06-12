@@ -56,19 +56,18 @@ pub(crate) fn analyze<'a, 'b>(spec: &'a LolaSpec, handler: &'b Handler) -> Analy
     }
 
     let mut naming_analyzer = NamingAnalysis::new(&handler);
-    let decl_table = naming_analyzer.check(spec);
+    let mut decl_table = naming_analyzer.check(spec);
 
     if handler.contains_error() {
         handler.error("aborting due to previous error");
         return result;
-    } else {
-        result.declaration_table = Some(decl_table);
     }
 
-    let mut type_analysis =
-        TypeAnalysis::new(&handler, result.declaration_table.as_ref().expect("We already checked for naming errors"));
+    let mut type_analysis = TypeAnalysis::new(&handler, &mut decl_table);
     let type_table = type_analysis.check(&spec);
     assert_eq!(type_table.is_none(), handler.contains_error());
+
+    result.declaration_table = Some(decl_table);
 
     if handler.contains_error() {
         handler.error("aborting due to previous error");

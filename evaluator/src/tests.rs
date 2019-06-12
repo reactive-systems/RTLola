@@ -133,7 +133,7 @@ fn regex_simple() {
             input a: String
 
             output x := matches(a, regex: "sub")
-            output y := matches(a, regex: "^sub")
+            output y := a.matches(regex: "^sub")
 
             trigger x "sub"
             trigger y "^sub"

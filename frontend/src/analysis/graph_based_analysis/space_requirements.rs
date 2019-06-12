@@ -195,8 +195,8 @@ mod tests {
         let spec = parse(content).unwrap_or_else(|e| panic!("{}", e));
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), content));
         let mut naming_analyzer = NamingAnalysis::new(&handler);
-        let decl_table = naming_analyzer.check(&spec);
-        let mut type_analysis = TypeAnalysis::new(&handler, &decl_table);
+        let mut decl_table = naming_analyzer.check(&spec);
+        let mut type_analysis = TypeAnalysis::new(&handler, &mut decl_table);
         let type_table = type_analysis.check(&spec);
         let mut version_analyzer = LolaVersionAnalysis::new(
             &handler,
@@ -240,8 +240,8 @@ mod tests {
         let spec = parse(content).unwrap_or_else(|e| panic!("{}", e));
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), content));
         let mut naming_analyzer = NamingAnalysis::new(&handler);
-        let decl_table = naming_analyzer.check(&spec);
-        let mut type_analysis = TypeAnalysis::new(&handler, &decl_table);
+        let mut decl_table = naming_analyzer.check(&spec);
+        let mut type_analysis = TypeAnalysis::new(&handler, &mut decl_table);
         let type_table = type_analysis.check(&spec);
         let mut version_analyzer = LolaVersionAnalysis::new(
             &handler,
@@ -250,7 +250,7 @@ mod tests {
         let _version = version_analyzer.analyse(&spec);
 
         let dependency_analysis = analyse_dependencies(&spec, &version_analyzer.result, &decl_table, &handler);
-        let mut type_analysis = TypeAnalysis::new(&handler, &decl_table);
+        let mut type_analysis = TypeAnalysis::new(&handler, &mut decl_table);
         let type_table = type_analysis.check(&spec).expect("We expect that the spec is well typed");
         let (_, pruned_graph) = determine_evaluation_order(dependency_analysis.dependency_graph);
 

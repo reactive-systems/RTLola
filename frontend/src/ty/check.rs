@@ -26,10 +26,10 @@ use uom::si::bigrational::{Frequency, Time};
 use uom::si::frequency::hertz;
 use uom::si::time::second;
 
-pub(crate) struct TypeAnalysis<'a, 'b> {
+pub(crate) struct TypeAnalysis<'a, 'b, 'c> {
     handler: &'b Handler,
-    declarations: &'a DeclarationTable<'a>,
-    method_lookup: MethodLookup,
+    declarations: &'c mut DeclarationTable<'a>,
+    method_lookup: MethodLookup<'a>,
     unifier: ValueUnifier<ValueTy>,
     stream_unifier: ValueUnifier<StreamTy>,
     /// maps `NodeId`'s to the variables used in `unifier`
@@ -64,8 +64,8 @@ impl TypeTable {
     }
 }
 
-impl<'a, 'b> TypeAnalysis<'a, 'b> {
-    pub(crate) fn new(handler: &'b Handler, declarations: &'a DeclarationTable<'a>) -> TypeAnalysis<'a, 'b> {
+impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
+    pub(crate) fn new(handler: &'b Handler, declarations: &'c mut DeclarationTable<'a>) -> TypeAnalysis<'a, 'b, 'c> {
         TypeAnalysis {
             handler,
             declarations,
@@ -663,6 +663,8 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
                             types.as_slice(),
                             parameters.as_slice(),
                         )?;
+
+                        self.declarations.insert(expr.id, fun_decl.into());
                     } else {
                         panic!("could not find `{}`", name);
                     }
@@ -1087,9 +1089,9 @@ mod tests {
             Ok(s) => s,
         };
         let mut na = NamingAnalysis::new(&handler);
-        let decl_table = na.check(&spec);
+        let mut decl_table = na.check(&spec);
         assert!(!handler.contains_error(), "Spec produces errors in naming analysis.");
-        let mut type_analysis = TypeAnalysis::new(&handler, &decl_table);
+        let mut type_analysis = TypeAnalysis::new(&handler, &mut decl_table);
         type_analysis.check(&spec);
         handler.emitted_errors()
     }
@@ -1102,9 +1104,9 @@ mod tests {
             Ok(s) => s,
         };
         let mut na = NamingAnalysis::new(&handler);
-        let decl_table = na.check(&spec);
+        let mut decl_table = na.check(&spec);
         assert!(!handler.contains_error(), "Spec produces errors in naming analysis.");
-        let mut type_analysis = TypeAnalysis::new(&handler, &decl_table);
+        let mut type_analysis = TypeAnalysis::new(&handler, &mut decl_table);
         type_analysis.check(&spec);
         handler.emitted_warnings()
     }
@@ -1118,9 +1120,9 @@ mod tests {
             Ok(s) => s,
         };
         let mut na = NamingAnalysis::new(&handler);
-        let decl_table = na.check(&spec);
+        let mut decl_table = na.check(&spec);
         assert!(!handler.contains_error(), "Spec produces errors in naming analysis.");
-        let mut type_analysis = TypeAnalysis::new(&handler, &decl_table);
+        let mut type_analysis = TypeAnalysis::new(&handler, &mut decl_table);
         type_analysis.check(&spec);
         type_analysis.get_type(spec.outputs.last().expect("spec needs at least one output").id)
     }
@@ -1133,9 +1135,9 @@ mod tests {
             Ok(s) => s,
         };
         let mut na = NamingAnalysis::new(&handler);
-        let decl_table = na.check(&spec);
+        let mut decl_table = na.check(&spec);
         assert!(!handler.contains_error(), "Spec produces errors in naming analysis.");
-        let mut type_analysis = TypeAnalysis::new(&handler, &decl_table);
+        let mut type_analysis = TypeAnalysis::new(&handler, &mut decl_table);
         type_analysis.check(&spec);
         type_analysis.extract_type_table(&spec)
     }

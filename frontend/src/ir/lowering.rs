@@ -346,7 +346,10 @@ impl<'a> Lowering<'a> {
             Tuple(exprs) | Function(_, _, exprs) => {
                 exprs.iter().for_each(|e| self.find_dependencies(e, deps));
             }
-            Method(_, _, _, _) => unimplemented!("Methods not supported, yet."),
+            Method(inner, _, _, params) => {
+                self.find_dependencies(inner, deps);
+                params.iter().for_each(|e| self.find_dependencies(e, deps));
+            }
         }
     }
 
@@ -529,11 +532,32 @@ impl<'a> Lowering<'a> {
                     func_expr
                 }
             }
+            ExpressionKind::Method(inner, name, _, args) => {
+                let args: Vec<&ast::Expression> = std::iter::once(inner).chain(args).map(Box::as_ref).collect();
+
+                let generics = self.tt.get_func_arg_types(expr.id);
+                let (arg_types, ret_type) = if let Declaration::Func(fd) = self.get_decl(expr.id) {
+                    fd.get_types_for_args_and_ret(generics)
+                } else {
+                    unreachable!("Function not declared as such.")
+                };
+                let arg_types: Vec<ir::Type> = arg_types.into_iter().map(|ty| (&ty).into()).collect();
+                let ret_type: ir::Type = (&ret_type).into();
+
+                let args = self.handle_func_args(&arg_types, &args[..]);
+                let fun_ty = ir::Type::Function(arg_types, Box::new(ret_type.clone()));
+
+                let func_expr = ir::Expression::Function(name.name.name.clone(), args, fun_ty);
+                if ret_type != result_type {
+                    ir::Expression::Convert { from: ret_type, to: result_type.clone(), expr: func_expr.into() }
+                } else {
+                    func_expr
+                }
+            }
             ExpressionKind::Field(expr, ident) => {
                 let num: usize = ident.name.parse::<usize>().expect("checked in AST verifier");
                 ir::Expression::TupleAccess(self.lower_expression(expr).0.into(), num)
             }
-            ExpressionKind::Method(_, _, _, _) => unimplemented!(),
         };
         (expr, result_type)
     }

@@ -184,24 +184,24 @@ pub(crate) fn import_regex_method(lookup: &mut MethodLookup) {
     lookup.add(ValueTy::String, &MATCHES_REGEX);
 }
 
-pub(crate) struct MethodLookup {
-    lookup_table: HashMap<ValueTy, HashMap<String, FuncDecl>>,
+pub(crate) struct MethodLookup<'a> {
+    lookup_table: HashMap<ValueTy, HashMap<String, &'a FuncDecl>>,
 }
 
-impl MethodLookup {
-    pub(crate) fn new() -> MethodLookup {
+impl<'a> MethodLookup<'a> {
+    pub(crate) fn new() -> Self {
         MethodLookup { lookup_table: HashMap::new() }
     }
 
-    pub(crate) fn add(&mut self, ty: ValueTy, decl: &FuncDecl) {
+    pub(crate) fn add(&mut self, ty: ValueTy, decl: &'a FuncDecl) {
         let entry = self.lookup_table.entry(ty).or_insert_with(HashMap::new);
         let mut name = decl.name.clone();
         assert!(name.arg_names[0] == None);
         name.arg_names.remove(0);
-        entry.insert(name.to_string(), decl.clone());
+        entry.insert(name.to_string(), decl);
     }
 
-    pub(crate) fn get(&self, ty: &ValueTy, name: &FunctionName) -> Option<FuncDecl> {
+    pub(crate) fn get(&self, ty: &ValueTy, name: &FunctionName) -> Option<&'a FuncDecl> {
         self.lookup_table.get(ty).and_then(|func_decls| func_decls.get(&name.to_string())).map(|decl| decl.clone())
     }
 }

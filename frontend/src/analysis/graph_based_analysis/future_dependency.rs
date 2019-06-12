@@ -96,8 +96,8 @@ mod tests {
         let spec = parse(content).unwrap_or_else(|e| panic!("{}", e));
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), content));
         let mut naming_analyzer = NamingAnalysis::new(&handler);
-        let decl_table = naming_analyzer.check(&spec);
-        let mut type_analysis = TypeAnalysis::new(&handler, &decl_table);
+        let mut decl_table = naming_analyzer.check(&spec);
+        let mut type_analysis = TypeAnalysis::new(&handler, &mut decl_table);
         let type_table = type_analysis.check(&spec);
         let mut version_analyzer = LolaVersionAnalysis::new(
             &handler,
