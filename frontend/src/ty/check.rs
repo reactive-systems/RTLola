@@ -666,7 +666,10 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
 
                         self.declarations.insert(expr.id, fun_decl.into());
                     } else {
-                        panic!("could not find `{}`", name);
+                        self.handler.error_with_span(
+                            &format!("unknown method `{}`", name),
+                            LabeledSpan::new(expr.span, &format!("no method `{}` for `{}`", name, infered), true),
+                        );
                     }
                 } else {
                     panic!("could not get type of `{}`", base);
