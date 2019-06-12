@@ -90,6 +90,20 @@ fn add_sliding_windows<'a>(
                 };
             }
         }
+        Method(inner, _, _, params) => {
+            match add_sliding_windows(inner, type_table, declaration_table) {
+                MemoryBound::Bounded(u) => required_memory += u,
+                MemoryBound::Unbounded => return MemoryBound::Unbounded,
+                MemoryBound::Unknown => unknown_size = true,
+            };
+            for expr in params {
+                match add_sliding_windows(expr, type_table, declaration_table) {
+                    MemoryBound::Bounded(u) => required_memory += u,
+                    MemoryBound::Unbounded => return MemoryBound::Unbounded,
+                    MemoryBound::Unknown => unknown_size = true,
+                };
+            }
+        }
         Field(expr, ident) => {
             let num: usize = ident.name.parse::<usize>().expect("checked in AST verifier");
             if let Some(inner) = expr.get_expr_from_tuple(num) {
@@ -106,7 +120,6 @@ fn add_sliding_windows<'a>(
                 };
             }
         }
-        Method(_, _, _, _) => unimplemented!(),
         SlidingWindowAggregation { expr, duration, aggregation } => {
             if let Ident(_) = &expr.kind {
             } else {

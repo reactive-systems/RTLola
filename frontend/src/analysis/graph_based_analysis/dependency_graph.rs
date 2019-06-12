@@ -360,7 +360,12 @@ impl<'a> DependencyAnalyser<'a> {
                     self.add_edges_for_expression(current_node, expr, location, mapping);
                 }
             }
-            ExpressionKind::Method(_, _, _, _) => unimplemented!(),
+            ExpressionKind::Method(inner, _, _, params) => {
+                self.add_edges_for_expression(current_node, inner, location, mapping);
+                params.iter().for_each(|element| {
+                    self.add_edges_for_expression(current_node, element, location, mapping)
+                });
+            }
         }
     }
 
