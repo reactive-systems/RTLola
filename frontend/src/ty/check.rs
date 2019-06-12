@@ -15,6 +15,7 @@ use crate::ast::{
 };
 use crate::parse::{NodeId, Span};
 use crate::reporting::{Handler, LabeledSpan};
+use crate::stdlib;
 use crate::stdlib::{FuncDecl, MethodLookup};
 use log::{debug, trace};
 use num::traits::ops::inv::Inv;
@@ -78,6 +79,7 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
     }
 
     pub(crate) fn check(&mut self, spec: &'a LolaSpec) -> Option<TypeTable> {
+        self.imports(spec);
         self.infer_types(spec);
         if self.handler.contains_error() {
             return None;
@@ -113,6 +115,19 @@ impl<'a, 'b> TypeAnalysis<'a, 'b> {
             stream_nids.iter().flat_map(|&nid| self.get_activation_condition(spec, nid).map(|ac| (nid, ac))).collect();
 
         TypeTable { value_tt: vtt, stream_tt: stt, func_tt, acti_cond }
+    }
+
+    fn imports(&mut self, spec: &'a LolaSpec) {
+        for import in &spec.imports {
+            match import.name.name.as_str() {
+                "math" => stdlib::import_math_method(&mut self.method_lookup),
+                "regex" => stdlib::import_regex_method(&mut self.method_lookup),
+                n => self.handler.error_with_span(
+                    &format!("unresolved import `{}`", n),
+                    LabeledSpan::new(import.name.span, &format!("no `{}` in the root", n), true),
+                ),
+            }
+        }
     }
 
     fn infer_types(&mut self, spec: &'a LolaSpec) {
@@ -1307,8 +1322,15 @@ mod tests {
     }
 
     #[test]
-    fn test_regex() {
+    fn test_regex_function() {
         let spec = "import regex\ninput s: String\noutput o: Bool := matches(s[0], regex: r\"(a+b)\")";
+        assert_eq!(0, num_type_errors(spec));
+        assert_eq!(get_type(spec), ValueTy::Bool);
+    }
+
+    #[test]
+    fn test_regex_method() {
+        let spec = "import regex\ninput s: String\noutput o: Bool := s.matches(regex: r\"(a+b)\")";
         assert_eq!(0, num_type_errors(spec));
         assert_eq!(get_type(spec), ValueTy::Bool);
     }

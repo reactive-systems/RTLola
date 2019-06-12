@@ -2,16 +2,17 @@
 
 use crate::analysis::naming::ScopedDecl;
 use crate::ast::{BinOp, FunctionName, UnOp};
-use crate::ty::{TypeConstraint, ValueTy};
+use crate::ty::{FloatTy, TypeConstraint, ValueTy};
 use lazy_static::lazy_static;
+use std::collections::HashMap;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Generic {
     pub constraint: ValueTy,
 }
 
 /// A (possibly generic) function declaration
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FuncDecl {
     pub name: FunctionName,
     pub generics: Vec<Generic>,
@@ -165,14 +166,42 @@ pub(crate) fn import_regex_module<'a>(fun_scope: &mut ScopedDecl<'a>) {
     fun_scope.add_fun_decl(&MATCHES_REGEX);
 }
 
-pub(crate) struct MethodLookup {}
+pub(crate) fn import_math_method(lookup: &mut MethodLookup) {
+    lookup.add(ValueTy::Float(FloatTy::F32), &SQRT);
+    lookup.add(ValueTy::Float(FloatTy::F32), &COS);
+    lookup.add(ValueTy::Float(FloatTy::F32), &SIN);
+    lookup.add(ValueTy::Float(FloatTy::F32), &ABS);
+    lookup.add(ValueTy::Float(FloatTy::F32), &ARCTAN);
+
+    lookup.add(ValueTy::Float(FloatTy::F64), &SQRT);
+    lookup.add(ValueTy::Float(FloatTy::F64), &COS);
+    lookup.add(ValueTy::Float(FloatTy::F64), &SIN);
+    lookup.add(ValueTy::Float(FloatTy::F64), &ABS);
+    lookup.add(ValueTy::Float(FloatTy::F64), &ARCTAN);
+}
+
+pub(crate) fn import_regex_method(lookup: &mut MethodLookup) {
+    lookup.add(ValueTy::String, &MATCHES_REGEX);
+}
+
+pub(crate) struct MethodLookup {
+    lookup_table: HashMap<ValueTy, HashMap<String, FuncDecl>>,
+}
 
 impl MethodLookup {
     pub(crate) fn new() -> MethodLookup {
-        MethodLookup {}
+        MethodLookup { lookup_table: HashMap::new() }
+    }
+
+    pub(crate) fn add(&mut self, ty: ValueTy, decl: &FuncDecl) {
+        let entry = self.lookup_table.entry(ty).or_insert_with(HashMap::new);
+        let mut name = decl.name.clone();
+        assert!(name.arg_names[0] == None);
+        name.arg_names.remove(0);
+        entry.insert(name.to_string(), decl.clone());
     }
 
     pub(crate) fn get(&self, ty: &ValueTy, name: &FunctionName) -> Option<FuncDecl> {
-        unimplemented!("method lookup {} {}", ty, name)
+        self.lookup_table.get(ty).and_then(|func_decls| func_decls.get(&name.to_string())).map(|decl| decl.clone())
     }
 }
