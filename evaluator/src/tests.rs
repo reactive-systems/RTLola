@@ -22,7 +22,6 @@ fn run(spec: &str, data: &str) -> Result<Controller, Box<dyn std::error::Error>>
 }
 
 #[test]
-#[ignore] // needs to be fixed after merge (see https://gitlab.com/reactive-systems/lolaparser/issues/47)
 fn zero_wait_time_regression() {
     let spec = r#"
 input a: Int32
