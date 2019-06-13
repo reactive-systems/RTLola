@@ -198,7 +198,9 @@ impl<'a> MethodLookup<'a> {
         let mut name = decl.name.clone();
         assert!(name.arg_names[0] == None);
         name.arg_names.remove(0);
-        entry.insert(name.to_string(), decl);
+        let key = name.to_string();
+        assert!(!entry.contains_key(&key));
+        entry.insert(key, decl);
     }
 
     pub(crate) fn get(&self, ty: &ValueTy, name: &FunctionName) -> Option<&'a FuncDecl> {
