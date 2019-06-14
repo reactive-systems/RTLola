@@ -2,8 +2,8 @@ use super::WorkItem;
 use crate::basics::{OutputHandler, Time};
 
 use crossbeam_channel::Sender;
+use spin_sleep::SpinSleeper;
 use std::sync::Arc;
-use std::thread::sleep;
 use std::time::Instant;
 use streamlab_frontend::ir::{LolaIR, OutputReference};
 
@@ -57,7 +57,7 @@ impl TimeDrivenManager {
 
             if time < due_time {
                 let wait_time = due_time - time;
-                sleep(wait_time);
+                SpinSleeper::new(1_000_000).sleep(wait_time);
             }
 
             let item = WorkItem::Time(deadline.due.clone(), due_time);
