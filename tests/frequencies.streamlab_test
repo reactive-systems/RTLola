@@ -1,0 +1,61 @@
+{
+  "spec_file": "../tests/specs/different_frequencies.lola",
+  "input_file": "../traces/tests/alternating_single_int32-every0.1s.csv",
+  "rationale": "Streams using different frequencies, accessing an alternating stream.",
+  "triggers": {
+    "b is 1": {
+      "expected_count": 4,
+      "time_info": [
+        "0.000000000",
+        "0.200000000",
+        "0.400000000",
+        "0.600000000"
+      ]
+    },
+    "b is 2": {
+      "expected_count": 4,
+      "time_info": [
+        "0.100000000",
+        "0.300000000",
+        "0.500000000",
+        "0.700000000"
+      ]
+    },
+    "c is 1": {
+      "expected_count": 4,
+      "time_info": [
+        "0.000000000",
+        "0.200000000",
+        "0.400000000",
+        "0.600000000"
+      ]
+    },
+    "c is 2": {
+      "expected_count": 0,
+      "time_info": []
+    },
+    "d is 2": {
+      "expected_count": 2,
+      "time_info": [
+        "0.000000000",
+        "0.400000000"
+      ]
+    },
+    "d is 3": {
+      "expected_count": 0,
+      "time_info": []
+    },
+    "d is 4": {
+      "expected_count": 0,
+      "time_info": []
+    },
+    "unexpected default used for b": {
+      "expected_count": 0,
+      "time_info": []
+    },
+    "unexpected default used for c": {
+      "expected_count": 0,
+      "time_info": []
+    }
+  }
+}

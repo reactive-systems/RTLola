@@ -2,5 +2,14 @@ input a: Int32
 
 output b @ 10Hz := a.hold().defaults(to:10)
 output c @ 5Hz := a.hold().defaults(to:10)
+output d @ 2.5Hz := b+c
 
-
+trigger b == 1 "b is 1"
+trigger b == 2 "b is 2"
+trigger c == 1 "c is 1"
+trigger c == 2 "c is 2"
+trigger d == 2 "d is 2"
+trigger d == 3 "d is 3"
+trigger d == 4 "d is 4"
+trigger b == 10 "unexpected default used for b"
+trigger c == 10 "unexpected default used for c"
