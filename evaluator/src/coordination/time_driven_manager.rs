@@ -7,7 +7,7 @@ use std::sync::Arc;
 use std::time::Instant;
 use streamlab_frontend::ir::{LolaIR, OutputReference};
 
-use common::schedule::{Deadline, Schedule};
+use streamlab_common::schedule::{Deadline, Schedule};
 
 pub(crate) type TimeEvaluation = Vec<OutputReference>;
 

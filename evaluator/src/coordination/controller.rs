@@ -4,12 +4,12 @@ use super::{WorkItem, CAP_WORK_QUEUE};
 use crate::basics::{EvalConfig, ExecutionMode::*, OutputHandler, Time};
 use crate::coordination::{EventEvaluation, TimeEvaluation};
 use crate::evaluator::{Evaluator, EvaluatorData};
-use common::schedule::Deadline;
 use crossbeam_channel::{bounded, unbounded};
 use std::error::Error;
 use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
+use streamlab_common::schedule::Deadline;
 use streamlab_frontend::ir::{LolaIR, OutputReference};
 
 pub struct Controller {

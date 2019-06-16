@@ -14,13 +14,13 @@ name = "streamlab"
 path = "src/bin/streamlab.rs"
 
 [dependencies]
+streamlab-common = {path = "../common/"}
 streamlab-frontend = {path = "../frontend/"}
 ordered-float = "1.0.2"
 csv = "1.0.7"
 itertools = "0.8"
 clap = "2.33.0"  # command line parsing
 byteorder = "1.3.2"
-common = {path = "../common/"}
 crossterm = "0.9.6"  # terminal output
 bit-set = "0.5.1"
 crossbeam-channel = "0.3"
