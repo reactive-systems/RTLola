@@ -7,11 +7,12 @@ use crate::analysis::TypeTable;
 use crate::ast;
 use crate::ast::{ExpressionKind, LolaSpec, WindowOperation};
 use crate::ty::StreamTy;
-use num::{BigRational, ToPrimitive};
+use num::rational::Rational64 as Rational;
+use num::ToPrimitive;
 use std::cmp::min;
 use std::str::FromStr as _;
-use uom::si::bigrational::Time;
 use uom::si::frequency::hertz;
+use uom::si::rational64::Time as UOM_Time;
 use uom::si::time::second;
 
 fn is_efficient_operator(op: WindowOperation) -> bool {
@@ -151,10 +152,11 @@ fn add_sliding_windows<'a>(
                     return MemoryBound::Unbounded;
                 }
                 (StreamTy::RealTime(freq), false) => {
-                    let window_size =
-                        Time::from_str(duration.to_uom_string().expect("durations have been checked before").as_str())
-                            .expect("durations have been checked before");
-                    let number_of_full_periods_in_window: BigRational =
+                    let window_size = UOM_Time::from_str(
+                        duration.to_uom_string().expect("durations have been checked before").as_str(),
+                    )
+                    .expect("durations have been checked before");
+                    let number_of_full_periods_in_window: Rational =
                         window_size.get::<second>() / &freq.freq.get::<hertz>();
                     required_memory += number_of_full_periods_in_window
                         .to_integer()
@@ -168,10 +170,11 @@ fn add_sliding_windows<'a>(
                 }
                 (StreamTy::RealTime(freq), true) => {
                     let number_of_panes = 64;
-                    let window_size =
-                        Time::from_str(duration.to_uom_string().expect("durations have been checked before").as_str())
-                            .expect("durations have been checked before");
-                    let number_of_full_periods_in_window: BigRational =
+                    let window_size = UOM_Time::from_str(
+                        duration.to_uom_string().expect("durations have been checked before").as_str(),
+                    )
+                    .expect("durations have been checked before");
+                    let number_of_full_periods_in_window: Rational =
                         window_size.get::<second>() / &freq.freq.get::<hertz>();
                     let number_of_elements = min(
                         number_of_full_periods_in_window

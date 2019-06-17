@@ -6,10 +6,11 @@ pub(crate) mod check;
 pub(crate) mod unifier;
 
 use lazy_static::lazy_static;
-use num::{BigRational, Integer, Zero};
+use num::rational::Rational64 as Rational;
+use num::{Integer, Zero};
 use unifier::{StreamVar, ValueVar};
-use uom::si::bigrational::Frequency;
 use uom::si::frequency::hertz;
+use uom::si::rational64::Frequency as UOM_Frequency;
 
 /// The type of an expression consists of both, a value type (`Bool`, `String`, etc.) and
 /// a stream type (periodic or event-based).
@@ -75,9 +76,9 @@ pub enum FloatTy {
 }
 use self::FloatTy::*;
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Hash)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
 pub struct Freq {
-    pub(crate) freq: Frequency,
+    pub(crate) freq: UOM_Frequency,
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Hash)]
@@ -113,7 +114,7 @@ impl StreamTy {
 }
 
 impl Freq {
-    pub(crate) fn new(freq: Frequency) -> Self {
+    pub(crate) fn new(freq: UOM_Frequency) -> Self {
         Freq { freq }
     }
 
@@ -130,9 +131,12 @@ impl Freq {
         let denom_left = self.freq.get::<hertz>().denom().clone();
         let denom_right = other.freq.get::<hertz>().denom().clone();
         // lcm(self, other) = lcm(numer_left, numer_right) / gcd(denom_left, denom_right)
-        // only works if rational numbers are reduced, which ist the default for `BigRational`
+        // only works if rational numbers are reduced, which ist the default for `Rational`
         Freq {
-            freq: Frequency::new::<hertz>(BigRational::new(numer_left.lcm(&numer_right), denom_left.gcd(&denom_right))),
+            freq: UOM_Frequency::new::<hertz>(Rational::new(
+                numer_left.lcm(&numer_right),
+                denom_left.gcd(&denom_right),
+            )),
         }
     }
 }
@@ -359,9 +363,9 @@ mod tests {
 
     #[test]
     fn test_freq_conjunction() {
-        let a = Freq::new(Frequency::new::<hertz>(BigRational::from_i64(2).unwrap()));
-        let b = Freq::new(Frequency::new::<hertz>(BigRational::from_i64(3).unwrap()));
-        let c = Freq::new(Frequency::new::<hertz>(BigRational::from_i64(6).unwrap()));
+        let a = Freq::new(UOM_Frequency::new::<hertz>(Rational::from_i64(2).unwrap()));
+        let b = Freq::new(UOM_Frequency::new::<hertz>(Rational::from_i64(3).unwrap()));
+        let c = Freq::new(UOM_Frequency::new::<hertz>(Rational::from_i64(6).unwrap()));
         assert_eq!(a.conjunction(&b), c)
     }
 }

@@ -13,7 +13,7 @@ use crate::reporting::Handler;
 use crate::ty::check::TypeTable;
 use petgraph::Directed;
 use petgraph::Graph;
-use uom::si::bigrational::Time;
+use uom::si::rational64::Time as UOM_Time;
 
 pub(crate) use self::evaluation_order::EvaluationOrderResult;
 pub(crate) use self::future_dependency::FutureDependentStreams;
@@ -108,8 +108,8 @@ pub(crate) enum ComputeStep {
 
 #[derive(Debug, Clone)]
 pub(crate) enum TimeOffset {
-    UpToNow(Time),
-    Future(Time),
+    UpToNow(UOM_Time),
+    Future(UOM_Time),
 }
 
 #[derive(Debug, Clone)]

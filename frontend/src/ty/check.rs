@@ -22,8 +22,8 @@ use num::traits::ops::inv::Inv;
 use num::Signed;
 use std::collections::HashMap;
 use std::str::FromStr as _;
-use uom::si::bigrational::Frequency;
 use uom::si::frequency::hertz;
+use uom::si::rational64::Frequency as UOM_Frequency;
 use uom::si::time::second;
 
 pub(crate) struct TypeAnalysis<'a, 'b, 'c> {
@@ -256,7 +256,7 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
         if let Some(expr) = &output.extend.expr {
             if expr.parse_timespec().is_some() {
                 frequency = Some(Freq::new(
-                    Frequency::from_str(expr.to_uom_string().expect("offsets have been checked before").as_str())
+                    UOM_Frequency::from_str(expr.to_uom_string().expect("offsets have been checked before").as_str())
                         .expect("valid frequency has been checked before"),
                 ));
             } else if let Some(act) = self.parse_activation_condition(expr) {
@@ -765,7 +765,7 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
                 }
                 // get frequency
                 let time = offset.to_uom_time().expect("guaranteed to be real-time");
-                let freq = Frequency::new::<hertz>(time.get::<second>().abs().inv());
+                let freq = UOM_Frequency::new::<hertz>(time.get::<second>().abs().inv());
 
                 // target stream type
                 let target_stream_ty = StreamTy::new_periodic(Freq::new(freq));

@@ -1,8 +1,12 @@
 use super::{Expression, ExpressionKind, LitKind, NodeId, Offset, TimeSpec, TimeUnit};
 use crate::ast::Literal;
-use num::{BigInt, BigRational, FromPrimitive, One, Signed, ToPrimitive};
+use num::rational::Rational64 as Rational;
+use num::{FromPrimitive, One, Signed, ToPrimitive, Zero};
 use std::str::FromStr;
 use std::time::Duration;
+use uom::si::rational64::Time as UOM_Time;
+
+type RationalType = i64;
 
 impl Expression {
     pub(crate) fn parse_offset(&self) -> Result<Offset, String> {
@@ -30,28 +34,28 @@ impl Expression {
             _ => return None,
         };
 
-        let (factor, invert): (BigRational, bool) = match unit.as_str() {
-            "ns" => (BigRational::from_u64(1_u64).unwrap(), false),
-            "μs" | "us" => (BigRational::from_u64(10_u64.pow(3)).unwrap(), false),
-            "ms" => (BigRational::from_u64(10_u64.pow(6)).unwrap(), false),
-            "s" => (BigRational::from_u64(10_u64.pow(9)).unwrap(), false),
-            "min" => (BigRational::from_u64(10_u64.pow(9) * 60).unwrap(), false),
-            "h" => (BigRational::from_u64(10_u64.pow(9) * 60 * 60).unwrap(), false),
-            "d" => (BigRational::from_u64(10_u64.pow(9) * 60 * 60 * 24).unwrap(), false),
-            "w" => (BigRational::from_u64(10_u64.pow(9) * 60 * 60 * 24 * 7).unwrap(), false),
-            "a" => (BigRational::from_u64(10_u64.pow(9) * 60 * 60 * 24 * 365).unwrap(), false),
-            "μHz" | "uHz" => (BigRational::from_u64(10_u64.pow(15)).unwrap(), true),
-            "mHz" => (BigRational::from_u64(10_u64.pow(12)).unwrap(), true),
-            "Hz" => (BigRational::from_u64(10_u64.pow(9)).unwrap(), true),
-            "kHz" => (BigRational::from_u64(10_u64.pow(6)).unwrap(), true),
-            "MHz" => (BigRational::from_u64(10_u64.pow(3)).unwrap(), true),
-            "GHz" => (BigRational::from_u64(1).unwrap(), true),
+        let (factor, invert): (Rational, bool) = match unit.as_str() {
+            "ns" => (Rational::from_u64(1_u64).unwrap(), false),
+            "μs" | "us" => (Rational::from_u64(10_u64.pow(3)).unwrap(), false),
+            "ms" => (Rational::from_u64(10_u64.pow(6)).unwrap(), false),
+            "s" => (Rational::from_u64(10_u64.pow(9)).unwrap(), false),
+            "min" => (Rational::from_u64(10_u64.pow(9) * 60).unwrap(), false),
+            "h" => (Rational::from_u64(10_u64.pow(9) * 60 * 60).unwrap(), false),
+            "d" => (Rational::from_u64(10_u64.pow(9) * 60 * 60 * 24).unwrap(), false),
+            "w" => (Rational::from_u64(10_u64.pow(9) * 60 * 60 * 24 * 7).unwrap(), false),
+            "a" => (Rational::from_u64(10_u64.pow(9) * 60 * 60 * 24 * 365).unwrap(), false),
+            "μHz" | "uHz" => (Rational::from_u64(10_u64.pow(15)).unwrap(), true),
+            "mHz" => (Rational::from_u64(10_u64.pow(12)).unwrap(), true),
+            "Hz" => (Rational::from_u64(10_u64.pow(9)).unwrap(), true),
+            "kHz" => (Rational::from_u64(10_u64.pow(6)).unwrap(), true),
+            "MHz" => (Rational::from_u64(10_u64.pow(3)).unwrap(), true),
+            "GHz" => (Rational::from_u64(1).unwrap(), true),
             _ => unreachable!(),
         };
 
-        let mut period: BigRational = parse_rational(val);
+        let mut period: Rational = parse_rational(val);
         if invert {
-            period = BigRational::one() / period;
+            period = Rational::one() / period;
         }
         period *= factor;
         let (rounded_period, signum) = if period.is_negative() {
@@ -79,25 +83,25 @@ impl Expression {
     }
 }
 
-fn parse_rational(repr: &str) -> BigRational {
+fn parse_rational(repr: &str) -> Rational {
     // precondition: repr is a valid floating point literal
     assert!(repr.parse::<f64>().is_ok());
 
-    let mut value: BigRational = num::Zero::zero();
+    let mut value: Rational = Rational::zero();
     let mut char_indices = repr.char_indices();
     let mut negated = false;
 
-    let ten = num::BigRational::from_i64(10).unwrap();
-    let zero: BigRational = num::Zero::zero();
-    let one = num::BigRational::from_i64(1).unwrap();
-    let two = num::BigRational::from_i64(2).unwrap();
-    let three = num::BigRational::from_i64(3).unwrap();
-    let four = num::BigRational::from_i64(4).unwrap();
-    let five = num::BigRational::from_i64(5).unwrap();
-    let six = num::BigRational::from_i64(6).unwrap();
-    let seven = num::BigRational::from_i64(7).unwrap();
-    let eight = num::BigRational::from_i64(8).unwrap();
-    let nine = num::BigRational::from_i64(9).unwrap();
+    let zero = Rational::from_i64(1).unwrap();
+    let one = Rational::from_i64(1).unwrap();
+    let two = Rational::from_i64(2).unwrap();
+    let three = Rational::from_i64(3).unwrap();
+    let four = Rational::from_i64(4).unwrap();
+    let five = Rational::from_i64(5).unwrap();
+    let six = Rational::from_i64(6).unwrap();
+    let seven = Rational::from_i64(7).unwrap();
+    let eight = Rational::from_i64(8).unwrap();
+    let nine = Rational::from_i64(9).unwrap();
+    let ten = Rational::from_i64(10).unwrap();
 
     let mut contains_fractional = false;
     let mut contains_exponent = false;
@@ -165,7 +169,7 @@ fn parse_rational(repr: &str) -> BigRational {
     }
 
     if contains_fractional {
-        let mut number_of_fractional_positions: BigRational = zero.clone();
+        let mut number_of_fractional_positions: Rational = zero.clone();
         loop {
             match char_indices.next() {
                 Some((_, 'e')) => {
@@ -235,7 +239,7 @@ fn parse_rational(repr: &str) -> BigRational {
 
     if contains_exponent {
         let mut negated_exponent = false;
-        let mut exponent: BigRational = zero.clone();
+        let mut exponent: Rational = zero.clone();
         loop {
             match char_indices.next() {
                 Some((_, '+')) => {}
@@ -355,23 +359,32 @@ impl Expression {
 }
 
 impl Offset {
-    pub(crate) fn to_uom_time(&self) -> Option<uom::si::bigrational::Time> {
+    pub(crate) fn to_uom_time(&self) -> Option<UOM_Time> {
         match self {
             Offset::Discrete(_) => None,
             Offset::RealTime(val, unit) => {
                 let coefficient = match unit {
-                    TimeUnit::Nanosecond => BigRational::new(BigInt::from(1), BigInt::from(10_u64.pow(9))),
-                    TimeUnit::Microsecond => BigRational::new(BigInt::from(1), BigInt::from(10_u64.pow(6))),
-                    TimeUnit::Millisecond => BigRational::new(BigInt::from(1), BigInt::from(10_u64.pow(3))),
-                    TimeUnit::Second => BigRational::from_u64(1_u64).unwrap(),
-                    TimeUnit::Minute => BigRational::from_u64(60).unwrap(),
-                    TimeUnit::Hour => BigRational::from_u64(60 * 60).unwrap(),
-                    TimeUnit::Day => BigRational::from_u64(60 * 60 * 24).unwrap(),
-                    TimeUnit::Week => BigRational::from_u64(60 * 60 * 24 * 7).unwrap(),
-                    TimeUnit::Year => BigRational::from_u64(60 * 60 * 24 * 365).unwrap(),
+                    TimeUnit::Nanosecond => Rational::new(
+                        RationalType::from_u64(1).unwrap(),
+                        RationalType::from_u64(10_u64.pow(9)).unwrap(),
+                    ),
+                    TimeUnit::Microsecond => Rational::new(
+                        RationalType::from_u64(1).unwrap(),
+                        RationalType::from_u64(10_u64.pow(6)).unwrap(),
+                    ),
+                    TimeUnit::Millisecond => Rational::new(
+                        RationalType::from_u64(1).unwrap(),
+                        RationalType::from_u64(10_u64.pow(3)).unwrap(),
+                    ),
+                    TimeUnit::Second => Rational::from_u64(1).unwrap(),
+                    TimeUnit::Minute => Rational::from_u64(60).unwrap(),
+                    TimeUnit::Hour => Rational::from_u64(60 * 60).unwrap(),
+                    TimeUnit::Day => Rational::from_u64(60 * 60 * 24).unwrap(),
+                    TimeUnit::Week => Rational::from_u64(60 * 60 * 24 * 7).unwrap(),
+                    TimeUnit::Year => Rational::from_u64(60 * 60 * 24 * 365).unwrap(),
                 };
                 let time = val * coefficient;
-                Some(uom::si::bigrational::Time::new::<uom::si::time::second>(time))
+                Some(UOM_Time::new::<uom::si::time::second>(time))
             }
         }
     }

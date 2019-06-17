@@ -7,7 +7,7 @@ pub(crate) mod verify;
 use super::parse::Ident;
 use crate::parse::NodeId;
 use crate::parse::Span;
-use num::BigRational;
+use num::rational::Rational64 as Rational;
 use std::time::Duration;
 
 /// The root Lola specification
@@ -144,7 +144,7 @@ pub(crate) type Signum = i8;
 pub struct TimeSpec {
     pub signum: Signum,
     pub period: Duration,
-    pub exact_period: BigRational,
+    pub exact_period: Rational,
     pub(crate) id: NodeId,
     pub(crate) span: Span,
 }
@@ -302,7 +302,7 @@ pub enum StreamAccessKind {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Offset {
     Discrete(i16),
-    RealTime(BigRational, TimeUnit),
+    RealTime(Rational, TimeUnit),
 }
 
 /// Supported time unit for real time expressions

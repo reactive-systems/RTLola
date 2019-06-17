@@ -2,7 +2,7 @@
 
 use super::*;
 use crate::parse::Ident;
-use num::{BigInt, Signed, ToPrimitive, Zero};
+use num::{BigInt, ToPrimitive, Zero};
 use std::fmt::{Display, Formatter, Result};
 use std::ops::Rem;
 
@@ -120,7 +120,7 @@ impl Display for ExtendSpec {
 impl Display for TimeSpec {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         let value = self.exact_period.to_integer();
-        let abs_value = value.abs();
+        let abs_value = BigInt::from(value.abs());
 
         if !value.is_zero() {
             if (&abs_value).rem(10_u64.pow(9) * 60 * 60 * 24 * 365).is_zero() {
