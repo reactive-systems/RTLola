@@ -126,6 +126,38 @@ subsub,25.0"#;
 }
 
 #[test]
+fn timed_dependencies() {
+    let spec = r#"
+        output a @ 1Hz := b
+        output b @ 1Hz := true
+        output c @ 1Hz := d[-1].defaults(to: false)
+        output d @ 1Hz := !d[-1].defaults(to: false)
+        trigger a "a"
+        trigger b "b"
+        trigger c "c"
+        trigger d "d"
+    "#;
+
+    let data = r#"time
+0.0
+1.0"#;
+
+    let ctrl = run(spec, data).unwrap_or_else(|e| panic!("E2E test failed: {}", e));
+    // The test case is 1secs.
+    // The execution should look as follows:
+    //
+    // time     | 0 | 1 |
+    // a        | 1 | 1 |
+    // b        | 1 | 1 |
+    // c        | 0 | 1 |
+    // d        | 1 | 0 |
+    assert_eq!(ctrl.output_handler.statistics.as_ref().unwrap().get_num_trigger(0), 2);
+    assert_eq!(ctrl.output_handler.statistics.as_ref().unwrap().get_num_trigger(1), 2);
+    assert_eq!(ctrl.output_handler.statistics.as_ref().unwrap().get_num_trigger(2), 1);
+    assert_eq!(ctrl.output_handler.statistics.as_ref().unwrap().get_num_trigger(3), 1);
+}
+
+#[test]
 fn event_based_parallel_past_lookup() {
     let spec = r#"
 input time : Float32
