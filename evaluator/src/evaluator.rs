@@ -379,7 +379,7 @@ impl<'a> ExpressionEvaluator<'a> {
                 }
             }
 
-            SyncStreamLookup(str_ref) => self.lookup_latest(*str_ref),
+            SyncStreamLookup(str_ref) => self.lookup_latest_check(*str_ref),
 
             OffsetLookup { target: str_ref, offset } => match offset {
                 Offset::FutureDiscreteOffset(_) | Offset::FutureRealTimeOffset(_) => unimplemented!(),
@@ -509,6 +509,20 @@ impl<'a> ExpressionEvaluator<'a> {
         inst.get_value(0).unwrap_or(Value::None)
     }
 
+    fn lookup_latest_check(&self, stream_ref: StreamReference) -> Value {
+        let inst = match stream_ref {
+            StreamReference::InRef(ix) => {
+                debug_assert!(self.fresh_inputs.contains(ix));
+                self.global_store.get_in_instance(ix)
+            }
+            StreamReference::OutRef(ix) => {
+                debug_assert!(self.fresh_outputs.contains(ix));
+                self.global_store.get_out_instance(ix).expect("no out instance")
+            }
+        };
+        inst.get_value(0).unwrap_or(Value::None)
+    }
+
     fn lookup_with_offset(&self, stream_ref: StreamReference, offset: i16) -> Value {
         let (inst, fresh) = match stream_ref {
             StreamReference::InRef(ix) => (self.global_store.get_in_instance(ix), self.fresh_inputs.contains(ix)),
@@ -533,6 +547,20 @@ impl<'e> EvaluationContext<'e> {
         let inst = match stream_ref {
             StreamReference::InRef(ix) => self.global_store.get_in_instance(ix),
             StreamReference::OutRef(ix) => self.global_store.get_out_instance(ix).expect("no out instance"),
+        };
+        inst.get_value(0).unwrap_or(Value::None)
+    }
+
+    pub(crate) fn lookup_latest_check(&self, stream_ref: StreamReference) -> Value {
+        let inst = match stream_ref {
+            StreamReference::InRef(ix) => {
+                debug_assert!(self.fresh_inputs.contains(ix));
+                self.global_store.get_in_instance(ix)
+            }
+            StreamReference::OutRef(ix) => {
+                debug_assert!(self.fresh_outputs.contains(ix));
+                self.global_store.get_out_instance(ix).expect("no out instance")
+            }
         };
         inst.get_value(0).unwrap_or(Value::None)
     }

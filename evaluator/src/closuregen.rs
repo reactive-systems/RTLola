@@ -143,7 +143,7 @@ impl<'s> Expr<'s> for Expression {
                 }
             }
 
-            SyncStreamLookup(str_ref) => CompiledExpr::new(move |ctx| ctx.lookup_latest(str_ref)),
+            SyncStreamLookup(str_ref) => CompiledExpr::new(move |ctx| ctx.lookup_latest_check(str_ref)),
 
             WindowLookup(win_ref) => CompiledExpr::new(move |ctx| ctx.lookup_window(win_ref)),
 
