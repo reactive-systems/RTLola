@@ -1,7 +1,7 @@
 use crate::duration::*;
 use crate::math;
 use std::time::Duration;
-use streamlab_frontend::ir::{LolaIR, OutputReference};
+use streamlab_frontend::ir::{LolaIR, OutputReference, Stream};
 
 #[derive(Debug, Clone)]
 pub struct Deadline {
@@ -23,7 +23,8 @@ impl Schedule {
 
         let extend_steps = Self::build_extend_steps(ir, gcd, hyper_period);
         let extend_steps = Self::apply_periodicity(&extend_steps);
-        let deadlines = Self::condense_deadlines(gcd, extend_steps);
+        let mut deadlines = Self::condense_deadlines(gcd, extend_steps);
+        Self::sort_deadlines(ir, &mut deadlines);
 
         Schedule { deadlines, gcd, hyper_period }
     }
@@ -100,6 +101,11 @@ impl Schedule {
         // There cannot be some gcd periods left at the end of the hyper period.
         assert!(empty_counter == 0);
         deadlines
+    }
+    fn sort_deadlines(ir: &LolaIR, deadlines: &mut Vec<Deadline>) {
+        for deadline in deadlines {
+            deadline.due.sort_by_key(|s| ir.outputs[*s].eval_layer());
+        }
     }
 }
 
