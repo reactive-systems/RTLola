@@ -1,5 +1,6 @@
 use super::{Expression, ExpressionKind, LitKind, NodeId, Offset, TimeSpec, TimeUnit};
 use crate::ast::Literal;
+use lazy_static::lazy_static;
 use num::rational::Rational64 as Rational;
 use num::{FromPrimitive, One, Signed, ToPrimitive, Zero};
 use std::str::FromStr;
@@ -83,233 +84,75 @@ impl Expression {
     }
 }
 
+lazy_static! {
+    static ref DIGITS: Vec<RationalType> = (0..=10).map(|d| RationalType::from_u8(d).unwrap()).collect();
+}
+
 fn parse_rational(repr: &str) -> Rational {
     // precondition: repr is a valid floating point literal
     assert!(repr.parse::<f64>().is_ok());
 
-    let mut value: Rational = Rational::zero();
-    let mut char_indices = repr.char_indices();
+    let mut numer = RationalType::zero();
+    let mut denom = RationalType::one();
+
     let mut negated = false;
+    let mut decimal_places = None;
+    let mut exponent = None;
 
-    let zero = Rational::from_i64(1).unwrap();
-    let one = Rational::from_i64(1).unwrap();
-    let two = Rational::from_i64(2).unwrap();
-    let three = Rational::from_i64(3).unwrap();
-    let four = Rational::from_i64(4).unwrap();
-    let five = Rational::from_i64(5).unwrap();
-    let six = Rational::from_i64(6).unwrap();
-    let seven = Rational::from_i64(7).unwrap();
-    let eight = Rational::from_i64(8).unwrap();
-    let nine = Rational::from_i64(9).unwrap();
-    let ten = Rational::from_i64(10).unwrap();
-
-    let mut contains_fractional = false;
-    let mut contains_exponent = false;
-
-    //parse the before the point/exponent
-
-    loop {
-        match char_indices.next() {
-            Some((_, '+')) => {}
-            Some((_, '-')) => {
-                negated = true;
+    let mut chars = repr.chars();
+    while let Some(c) = chars.next() {
+        match c {
+            '+' => {}
+            '-' => {
+                if let Some((_, ref mut negated)) = exponent {
+                    *negated = true;
+                } else {
+                    negated = true;
+                }
             }
-            Some((_, '.')) => {
-                contains_fractional = true;
-                break;
+            'e' => {
+                // switch to parsing exponent
+                exponent = Some((0, false));
             }
-            Some((_, 'e')) => {
-                contains_exponent = true;
-                break;
+            '.' => {
+                // start counting decimal places
+                decimal_places = Some(0_u32);
             }
-            Some((_, '0')) => {
-                value *= &ten;
+            _ if c.is_digit(10) => {
+                let d = c.to_digit(10).unwrap();
+                if let Some((ref mut exp, _)) = exponent {
+                    *exp *= 10;
+                    *exp += d;
+                } else {
+                    numer *= &DIGITS[10];
+                    numer += &DIGITS[d as usize];
+                    if let Some(ref mut n) = decimal_places {
+                        *n += 1
+                    }
+                }
             }
-            Some((_, '1')) => {
-                value *= &ten;
-                value += &one;
-            }
-            Some((_, '2')) => {
-                value *= &ten;
-                value += &two;
-            }
-            Some((_, '3')) => {
-                value *= &ten;
-                value += &three;
-            }
-            Some((_, '4')) => {
-                value *= &ten;
-                value += &four;
-            }
-            Some((_, '5')) => {
-                value *= &ten;
-                value += &five;
-            }
-            Some((_, '6')) => {
-                value *= &ten;
-                value += &six;
-            }
-            Some((_, '7')) => {
-                value *= &ten;
-                value += &seven;
-            }
-            Some((_, '8')) => {
-                value *= &ten;
-                value += &eight;
-            }
-            Some((_, '9')) => {
-                value *= &ten;
-                value += &nine;
-            }
-            Some((_, _)) => unreachable!(),
-            None => {
-                break;
-            }
+            _ => unreachable!("incorrectly formated float"),
         }
     }
 
-    if contains_fractional {
-        let mut number_of_fractional_positions: Rational = zero.clone();
-        loop {
-            match char_indices.next() {
-                Some((_, 'e')) => {
-                    contains_exponent = true;
-                    break;
-                }
-                Some((_, '0')) => {
-                    value *= &ten;
-                    number_of_fractional_positions += &one;
-                }
-                Some((_, '1')) => {
-                    value *= &ten;
-                    value += &one;
-                    number_of_fractional_positions += &one;
-                }
-                Some((_, '2')) => {
-                    value *= &ten;
-                    value += &two;
-                    number_of_fractional_positions += &one;
-                }
-                Some((_, '3')) => {
-                    value *= &ten;
-                    value += &three;
-                    number_of_fractional_positions += &one;
-                }
-                Some((_, '4')) => {
-                    value *= &ten;
-                    value += &four;
-                    number_of_fractional_positions += &one;
-                }
-                Some((_, '5')) => {
-                    value *= &ten;
-                    value += &five;
-                    number_of_fractional_positions += &one;
-                }
-                Some((_, '6')) => {
-                    value *= &ten;
-                    value += &six;
-                    number_of_fractional_positions += &one;
-                }
-                Some((_, '7')) => {
-                    value *= &ten;
-                    value += &seven;
-                    number_of_fractional_positions += &one;
-                }
-                Some((_, '8')) => {
-                    value *= &ten;
-                    value += &eight;
-                    number_of_fractional_positions += &one;
-                }
-                Some((_, '9')) => {
-                    value *= &ten;
-                    value += &nine;
-                    number_of_fractional_positions += &one;
-                }
-                Some((_, _)) => unreachable!(),
-                None => {
-                    break;
-                }
-            }
-        }
-        while number_of_fractional_positions > zero {
-            value /= &ten;
-            number_of_fractional_positions -= &one;
-        }
-    }
-
-    if contains_exponent {
-        let mut negated_exponent = false;
-        let mut exponent: Rational = zero.clone();
-        loop {
-            match char_indices.next() {
-                Some((_, '+')) => {}
-                Some((_, '-')) => {
-                    negated_exponent = true;
-                }
-                Some((_, '0')) => {
-                    exponent *= &ten;
-                }
-                Some((_, '1')) => {
-                    exponent *= &ten;
-                    exponent += &one;
-                }
-                Some((_, '2')) => {
-                    exponent *= &ten;
-                    exponent += &two;
-                }
-                Some((_, '3')) => {
-                    exponent *= &ten;
-                    exponent += &three;
-                }
-                Some((_, '4')) => {
-                    exponent *= &ten;
-                    exponent += &four;
-                }
-                Some((_, '5')) => {
-                    exponent *= &ten;
-                    exponent += &five;
-                }
-                Some((_, '6')) => {
-                    exponent *= &ten;
-                    exponent += &six;
-                }
-                Some((_, '7')) => {
-                    exponent *= &ten;
-                    exponent += &seven;
-                }
-                Some((_, '8')) => {
-                    exponent *= &ten;
-                    exponent += &eight;
-                }
-                Some((_, '9')) => {
-                    exponent *= &ten;
-                    exponent += &nine;
-                }
-                Some((_, _)) => unreachable!(),
-                None => {
-                    break;
-                }
-            }
-        }
-        let mut new_value = value.clone();
-        if negated_exponent {
-            while exponent > zero {
-                new_value /= &ten;
-                exponent -= &one;
-            }
-        } else {
-            while exponent > zero {
-                new_value *= &ten;
-                exponent -= &one;
-            }
-        }
-        value = new_value;
-    }
     if negated {
-        value = -value;
+        numer = -numer;
     }
 
-    value
+    if let Some(n) = decimal_places {
+        denom *= DIGITS[10].pow(n);
+    }
+
+    if let Some((exp, negated)) = exponent {
+        let e_factor = DIGITS[10].pow(exp);
+        if negated {
+            denom *= e_factor;
+        } else {
+            numer *= e_factor;
+        }
+    }
+
+    Rational::new(numer, denom)
 }
 
 impl Expression {
@@ -452,6 +295,26 @@ impl Expression {
 mod tests {
     use super::*;
     use crate::ast::{Literal, Span};
+
+    #[test]
+    fn test_parse_rational() {
+        macro_rules! check_on {
+            ($f:expr) => {
+                let f_string = format!("{}", $f);
+                let f = f_string.parse::<f64>().unwrap();
+                assert_eq!(parse_rational(f_string.as_str()), Rational::from_f64(f).unwrap());
+            };
+        };
+        check_on!(0);
+        check_on!(42);
+        check_on!(-1);
+        check_on!(0.1);
+        check_on!(42.12);
+        check_on!(-1.123);
+        check_on!(0.1e-0);
+        check_on!(42.12e+1);
+        check_on!(-1.123e-2);
+    }
 
     fn time_spec_int(val: &str, unit: &str) -> Duration {
         let expr = Expression::new(
