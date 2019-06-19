@@ -222,21 +222,24 @@ impl<'e, 'c> Evaluator<'e, 'c> {
             }
         };
 
-        // Register value in global store.
-        self.global_store.get_out_instance_mut(output).unwrap().push_value(res.clone()); // TODO: unsafe unwrap.
-        self.fresh_outputs.insert(ix);
+        match self.is_trigger(output) {
+            None => {
+                // Register value in global store.
+                self.global_store.get_out_instance_mut(output).unwrap().push_value(res.clone()); // TODO: unsafe unwrap.
+                self.fresh_outputs.insert(ix);
 
-        self.handler.output(|| format!("OutputStream[{}] := {:?}.", ix, res.clone()));
+                self.handler.output(|| format!("OutputStream[{}] := {:?}.", ix, res.clone()));
+            }
 
-        // Check if we have to emit a warning.
-        if let Value::Bool(true) = res {
-            //TODO(marvin): cache trigger info in vector
-            if let Some(trig) = self.is_trigger(output) {
-                self.handler.trigger(
-                    || format!("Trigger: {}", trig.message.as_ref().unwrap_or(&String::from("Warning!"))),
-                    trig.trigger_idx,
-                    ts,
-                )
+            Some(trig) => {
+                // Check if we have to emit a warning.
+                if let Value::Bool(true) = res {
+                    self.handler.trigger(
+                        || format!("Trigger: {}", trig.message.as_ref().unwrap_or(&String::from("Warning!"))),
+                        trig.trigger_idx,
+                        ts,
+                    )
+                }
             }
         }
 
@@ -935,6 +938,7 @@ mod tests {
         assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), v2)
     }
 
+    #[ignore] // triggers no longer store values
     #[test]
     fn test_trigger() {
         let (_, mut eval, start) =

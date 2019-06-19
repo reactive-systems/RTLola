@@ -158,7 +158,7 @@ impl<'a> Lowering<'a> {
             expr,
             dependent_streams: Vec::new(),
             dependent_windows: Vec::new(),
-            memory_bound: MemorizationBound::Bounded(1),
+            memory_bound: MemorizationBound::Bounded(0),
             layer: self.get_layer(trigger.id),
             reference,
             outgoing_dependencies,
