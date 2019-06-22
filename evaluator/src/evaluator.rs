@@ -206,6 +206,7 @@ impl<'e, 'c> Evaluator<'e, 'c> {
         for output in outputs {
             self.eval_stream(*output, ts);
         }
+        self.clear_freshness();
     }
 
     fn prepare_evaluation(&mut self, ts: Time) {

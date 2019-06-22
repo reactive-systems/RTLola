@@ -162,9 +162,14 @@ impl Controller {
                     }
                     WorkItem::Time(_, _) => panic!("Received time command in offline mode."),
                     WorkItem::End => {
-                        if has_time_driven && current_time == next_deadline {
+                        while has_time_driven && current_time == next_deadline {
                             // schedule last timed event before terminating
-                            self.schedule_timed(&mut evaluator, &mut deadline_cycle, due_streams, &mut next_deadline);
+                            due_streams = self.schedule_timed(
+                                &mut evaluator,
+                                &mut deadline_cycle,
+                                due_streams,
+                                &mut next_deadline,
+                            );
                         }
                         self.output_handler.output(|| "Finished entire input. Terminating.");
                         self.output_handler.terminate();
