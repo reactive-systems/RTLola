@@ -525,12 +525,18 @@ impl<'a> Lowering<'a> {
                     unreachable!("Function not declared as such.")
                 };
                 let arg_types: Vec<ir::Type> = arg_types.into_iter().map(|ty| (&ty).into()).collect();
-                let ret_type: ir::Type = (&ret_type).into();
-
                 let args = self.handle_func_args(&arg_types, &args[..]);
-                let fun_ty = ir::Type::Function(arg_types, Box::new(ret_type.clone()));
 
-                let func_expr = ir::Expression::Function(name.name.name.clone(), args, fun_ty);
+                let (func_expr, ret_type) = if name.name.name == "cast" {
+                    // cast is no actual function
+                    assert!(!args.is_empty());
+                    assert!(!arg_types.is_empty());
+                    (args[0].clone(), arg_types[0].clone())
+                } else {
+                    let ret_type: ir::Type = (&ret_type).into();
+                    let fun_ty = ir::Type::Function(arg_types, Box::new(ret_type.clone()));
+                    (ir::Expression::Function(name.name.name.clone(), args, fun_ty), ret_type)
+                };
                 if ret_type != result_type {
                     ir::Expression::Convert { from: ret_type, to: result_type.clone(), expr: func_expr.into() }
                 } else {
@@ -877,7 +883,7 @@ mod tests {
         assert_eq!(stream.ty, ty);
 
         let expr = &stream.expr;
-        assert_eq!("cast(In(0): Float64) -> Float32", format!("{}", expr))
+        assert_eq!("In(0).cast::<Float64,Float32>()", format!("{}", expr))
     }
 
     #[ignore] // Needs to be adapted to new lowering.
