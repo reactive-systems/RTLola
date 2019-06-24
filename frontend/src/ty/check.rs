@@ -21,7 +21,6 @@ use log::{debug, trace};
 use num::traits::ops::inv::Inv;
 use num::Signed;
 use std::collections::HashMap;
-use std::str::FromStr as _;
 use uom::si::frequency::hertz;
 use uom::si::rational64::Frequency as UOM_Frequency;
 use uom::si::time::second;
@@ -254,13 +253,10 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
         let mut frequency = None;
         let mut activation = None;
         if let Some(expr) = &output.extend.expr {
-            if expr.parse_timespec().is_some() {
-                frequency = Some(Freq::new(
-                    UOM_Frequency::from_str(expr.to_uom_string().expect("offsets have been checked before").as_str())
-                        .expect("valid frequency has been checked before"),
-                ));
+            if let Some(freq) = expr.parse_frequency() {
+                frequency = Some(Freq::new(freq));
             } else if let Some(act) = self.parse_activation_condition(expr) {
-                activation = Some(act)
+                activation = Some(act);
             } else {
                 unreachable!("only frequency annotations are currently implemented for activation conditions");
             }

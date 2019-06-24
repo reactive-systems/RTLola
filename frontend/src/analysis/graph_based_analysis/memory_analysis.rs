@@ -10,9 +10,7 @@ use crate::ty::StreamTy;
 use num::rational::Rational64 as Rational;
 use num::ToPrimitive;
 use std::cmp::min;
-use std::str::FromStr as _;
 use uom::si::frequency::hertz;
-use uom::si::rational64::Time as UOM_Time;
 use uom::si::time::second;
 
 fn is_efficient_operator(op: WindowOperation) -> bool {
@@ -152,10 +150,7 @@ fn add_sliding_windows<'a>(
                     return MemoryBound::Unbounded;
                 }
                 (StreamTy::RealTime(freq), false) => {
-                    let window_size = UOM_Time::from_str(
-                        duration.to_uom_string().expect("durations have been checked before").as_str(),
-                    )
-                    .expect("durations have been checked before");
+                    let window_size = duration.parse_duration().expect("durations have been checked before");
                     let number_of_full_periods_in_window: Rational =
                         window_size.get::<second>() / &freq.freq.get::<hertz>();
                     required_memory += number_of_full_periods_in_window
@@ -170,10 +165,7 @@ fn add_sliding_windows<'a>(
                 }
                 (StreamTy::RealTime(freq), true) => {
                     let number_of_panes = 64;
-                    let window_size = UOM_Time::from_str(
-                        duration.to_uom_string().expect("durations have been checked before").as_str(),
-                    )
-                    .expect("durations have been checked before");
+                    let window_size = duration.parse_duration().expect("durations have been checked before");
                     let number_of_full_periods_in_window: Rational =
                         window_size.get::<second>() / &freq.freq.get::<hertz>();
                     let number_of_elements = min(

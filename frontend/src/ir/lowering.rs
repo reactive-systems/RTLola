@@ -17,12 +17,11 @@ use crate::analysis::graph_based_analysis::space_requirements::{
     SpaceRequirements as MemoryTable, TrackingRequirements,
 };
 use crate::analysis::graph_based_analysis::{ComputeStep, RequiredInputs, StorageRequirement, TrackingRequirement};
-
 use crate::analysis::AnalysisResult;
-use num::traits::ops::inv::Inv;
-use uom::si::frequency::gigahertz;
 
-use num::ToPrimitive;
+use num::{traits::Inv, ToPrimitive};
+use uom::si::frequency::gigahertz;
+use uom::si::time::nanosecond;
 
 type EvalTable = HashMap<NodeId, u32>;
 
@@ -396,7 +395,10 @@ impl<'a> Lowering<'a> {
     }
 
     fn lower_duration(&self, duration: &ast::Expression) -> Duration {
-        duration.parse_timespec().expect("Duration literal needs to be a time specification.").period
+        let exact_duration = duration.parse_duration().expect("Duration literal needs to be a duration specification.");
+        Duration::from_nanos(
+            exact_duration.get::<nanosecond>().to_integer().to_u64().expect("Period [ns] too large for u64!"),
+        )
     }
 
     fn lower_window_op(&self, op: ast::WindowOperation) -> ir::WindowOperation {

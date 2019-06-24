@@ -1,11 +1,13 @@
-use super::{Expression, ExpressionKind, LitKind, NodeId, Offset, TimeSpec, TimeUnit};
+use super::{Expression, ExpressionKind, LitKind, Offset, TimeUnit};
 use crate::ast::Literal;
 use lazy_static::lazy_static;
 use num::rational::Rational64 as Rational;
-use num::{FromPrimitive, One, Signed, ToPrimitive, Zero};
+use num::{traits::Inv, FromPrimitive, One, Signed, Zero};
 use std::str::FromStr;
-use std::time::Duration;
+use uom::si::frequency::hertz;
+use uom::si::rational64::Frequency as UOM_Frequency;
 use uom::si::rational64::Time as UOM_Time;
+use uom::si::time::second;
 
 type RationalType = i64;
 
@@ -26,61 +28,78 @@ impl Expression {
         }
     }
 
-    pub(crate) fn parse_timespec(&self) -> Option<TimeSpec> {
+    pub(crate) fn parse_duration(&self) -> Option<UOM_Time> {
         let (val, unit) = match &self.kind {
             ExpressionKind::Lit(l) => match &l.kind {
-                LitKind::Numeric(val, Some(unit)) => (val, unit),
+                LitKind::Numeric(val, Some(unit)) => (parse_rational(val), unit),
                 _ => return None,
             },
             _ => return None,
         };
 
-        let (factor, invert): (Rational, bool) = match unit.as_str() {
-            "ns" => (Rational::from_u64(1_u64).unwrap(), false),
-            "μs" | "us" => (Rational::from_u64(10_u64.pow(3)).unwrap(), false),
-            "ms" => (Rational::from_u64(10_u64.pow(6)).unwrap(), false),
-            "s" => (Rational::from_u64(10_u64.pow(9)).unwrap(), false),
-            "min" => (Rational::from_u64(10_u64.pow(9) * 60).unwrap(), false),
-            "h" => (Rational::from_u64(10_u64.pow(9) * 60 * 60).unwrap(), false),
-            "d" => (Rational::from_u64(10_u64.pow(9) * 60 * 60 * 24).unwrap(), false),
-            "w" => (Rational::from_u64(10_u64.pow(9) * 60 * 60 * 24 * 7).unwrap(), false),
-            "a" => (Rational::from_u64(10_u64.pow(9) * 60 * 60 * 24 * 365).unwrap(), false),
-            "μHz" | "uHz" => (Rational::from_u64(10_u64.pow(15)).unwrap(), true),
-            "mHz" => (Rational::from_u64(10_u64.pow(12)).unwrap(), true),
-            "Hz" => (Rational::from_u64(10_u64.pow(9)).unwrap(), true),
-            "kHz" => (Rational::from_u64(10_u64.pow(6)).unwrap(), true),
-            "MHz" => (Rational::from_u64(10_u64.pow(3)).unwrap(), true),
-            "GHz" => (Rational::from_u64(1).unwrap(), true),
-            _ => unreachable!(),
+        match unit.as_str() {
+            "ns" | "μs" | "us" | "ms" | "s" | "min" | "h" | "d" | "w" | "a" => {
+                use uom::si::time::*;
+                let factor = match unit.as_str() {
+                    "ns" => UOM_Time::new::<nanosecond>(Rational::one()),
+                    "μs" | "us" => UOM_Time::new::<microsecond>(Rational::one()),
+                    "ms" => UOM_Time::new::<millisecond>(Rational::one()),
+                    "s" => UOM_Time::new::<second>(Rational::one()),
+                    "min" => UOM_Time::new::<minute>(Rational::one()),
+                    "h" => UOM_Time::new::<hour>(Rational::one()),
+                    "d" => UOM_Time::new::<day>(Rational::one()),
+                    "w" => UOM_Time::new::<day>(Rational::from_u64(7).unwrap()),
+                    "a" => UOM_Time::new::<day>(Rational::from_u64(365).unwrap()),
+                    _ => unreachable!(),
+                };
+                let duration = val * factor.get::<second>();
+                Some(UOM_Time::new::<second>(duration))
+            }
+            _ => None,
+        }
+    }
+
+    pub(crate) fn parse_frequency(&self) -> Option<UOM_Frequency> {
+        let (val, unit) = match &self.kind {
+            ExpressionKind::Lit(l) => match &l.kind {
+                LitKind::Numeric(val, Some(unit)) => (parse_rational(val), unit),
+                _ => return None,
+            },
+            _ => return None,
         };
 
-        let mut period: Rational = parse_rational(val);
-        if invert {
-            period = Rational::one() / period;
+        assert!(val.is_positive());
+
+        match unit.as_str() {
+            "μHz" | "uHz" | "mHz" | "Hz" | "kHz" | "MHz" | "GHz" => {
+                use uom::si::frequency::*;
+                let factor = match unit.as_str() {
+                    "μHz" | "uHz" => UOM_Frequency::new::<microhertz>(Rational::one()),
+                    "mHz" => UOM_Frequency::new::<millihertz>(Rational::one()),
+                    "Hz" => UOM_Frequency::new::<hertz>(Rational::one()),
+                    "kHz" => UOM_Frequency::new::<kilohertz>(Rational::one()),
+                    "MHz" => UOM_Frequency::new::<megahertz>(Rational::one()),
+                    "GHz" => UOM_Frequency::new::<gigahertz>(Rational::one()),
+                    _ => unreachable!(),
+                };
+                let freq = val * factor.get::<hertz>();
+                Some(UOM_Frequency::new::<hertz>(freq))
+            }
+            _ => None,
         }
-        period *= factor;
-        let (rounded_period, signum) = if period.is_negative() {
-            let rounded_period: Duration =
-                Duration::from_nanos((-period.clone()).to_integer().to_u64().expect("Period [ns] too large for u64!"));
-            (
-                rounded_period,
-                match rounded_period.as_nanos() {
-                    0 => 0,
-                    _ => -1,
-                },
-            )
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn parse_freqspec(&self) -> Option<UOM_Frequency> {
+        if let Some(freq) = self.parse_frequency() {
+            Some(freq)
+        } else if let Some(period) = self.parse_duration() {
+            let seconds = period.get::<second>();
+            assert!(seconds.is_positive());
+            Some(UOM_Frequency::new::<hertz>(seconds.inv()))
         } else {
-            let rounded_period: Duration =
-                Duration::from_nanos(period.to_integer().to_u64().expect("Period [ns] too large for u64!"));
-            (
-                rounded_period,
-                match rounded_period.as_nanos() {
-                    0 => 0,
-                    _ => 1,
-                },
-            )
-        };
-        Some(TimeSpec { period: rounded_period, exact_period: period, signum, id: NodeId::DUMMY, span: self.span })
+            None
+        }
     }
 }
 
@@ -185,22 +204,6 @@ impl Literal {
     }
 }
 
-impl Expression {
-    /// Attempts to extract the numeric, constant, unit-less value out of an `Expression::Lit`.
-    pub(crate) fn to_uom_string(&self) -> Option<String> {
-        match &self.kind {
-            ExpressionKind::Lit(l) => match &l.kind {
-                LitKind::Numeric(val, Some(unit)) => {
-                    let parsed = parse_rational(val);
-                    Some(format!("{} {}", parsed, unit))
-                }
-                _ => None,
-            },
-            _ => None,
-        }
-    }
-}
-
 impl Offset {
     pub(crate) fn to_uom_time(&self) -> Option<UOM_Time> {
         match self {
@@ -295,6 +298,8 @@ impl Expression {
 mod tests {
     use super::*;
     use crate::ast::{Literal, Span};
+    use num::ToPrimitive;
+    use std::time::Duration;
 
     #[test]
     fn test_parse_rational() {
@@ -321,8 +326,9 @@ mod tests {
             ExpressionKind::Lit(Literal::new_numeric(val, Some(unit.to_string()), Span::unknown())),
             Span::unknown(),
         );
-        let time_spec = expr.parse_timespec().unwrap();
-        time_spec.period
+        let freq = expr.parse_freqspec().unwrap();
+        let period = UOM_Time::new::<second>(freq.get::<hertz>().inv());
+        Duration::from_nanos(period.get::<uom::si::time::nanosecond>().to_integer().to_u64().unwrap())
     }
 
     #[test]
@@ -330,10 +336,10 @@ mod tests {
         assert_eq!(time_spec_int("1", "s"), Duration::new(1, 0));
         assert_eq!(time_spec_int("2", "min"), Duration::new(2 * 60, 0));
         assert_eq!(time_spec_int("33", "h"), Duration::new(33 * 60 * 60, 0));
-        assert_eq!(time_spec_int("12354", "ns"), Duration::new(0, 12354));
-        assert_eq!(time_spec_int("90351", "us"), Duration::new(0, 90351 * 1_000));
-        assert_eq!(time_spec_int("248", "ms"), Duration::new(0, 248 * 1_000_000));
-        assert_eq!(time_spec_int("29489232", "ms"), Duration::new(29_489, 232 * 1_000_000));
+        assert_eq!(time_spec_int("12354", "ns"), Duration::from_nanos(12354));
+        assert_eq!(time_spec_int("90351", "us"), Duration::from_nanos(90351 * 1_000));
+        assert_eq!(time_spec_int("248", "ms"), Duration::from_nanos(248 * 1_000_000));
+        assert_eq!(time_spec_int("29489232", "ms"), Duration::from_nanos(29489232 * 1_000_000));
     }
 
     #[test]
