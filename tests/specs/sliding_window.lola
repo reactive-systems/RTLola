@@ -1,9 +1,10 @@
 input a: Int64
 
-output s @ 10Hz := a.aggregate(over: 0.1s, using: sum)
-output c @ 10Hz := a.aggregate(over: 0.1s, using: count)
-output av @ 10Hz := a.aggregate(over: 0.1s, using: avg).defaults(to: 10)
-//output i @ 10Hz := a.aggregate(over: 0.1s, using: integral).defaults(to: 10)
+output sum @ 10Hz := a.aggregate(over: 0.1s, using: sum)
+output count @ 10Hz := a.aggregate(over: 0.1s, using: count)
+output average @ 10Hz := a.aggregate(over: 0.1s, using: avg).defaults(to: 10)
+//output a_float: Float32 := cast(a)
+//output integral @ 10Hz := a.aggregate(over: 0.1s, using: integral).defaults(to: 10)
 
-trigger c == 1 "count is 1"
-trigger c == 2 "count is 2"
+trigger count == 1 "count is 1"
+trigger count == 2 "count is 2"
