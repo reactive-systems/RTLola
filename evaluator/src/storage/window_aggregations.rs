@@ -47,22 +47,15 @@ pub(crate) struct AvgIV<G: WindowGeneric> {
 }
 
 impl<G: WindowGeneric> WindowIV for AvgIV<G> {
-    fn default(time: Time) -> AvgIV<G> {
-        let v = (G::from_value(Value::Unsigned(0)), time);
-        Self::from(v)
-    }
-}
-
-impl<G: WindowGeneric> Default for AvgIV<G> {
-    fn default() -> AvgIV<G> {
-        let with_mock_ts = (G::from_value(Value::Unsigned(0)), Time::default());
-        Self::from(with_mock_ts)
+    fn default(_time: Time) -> AvgIV<G> {
+        AvgIV { sum: Value::None, num: 0, _marker: PhantomData }
     }
 }
 
 impl<G: WindowGeneric> Into<Value> for AvgIV<G> {
     fn into(self) -> Value {
         match self.sum {
+            Value::None => Value::None,
             Value::Unsigned(u) => Value::Unsigned(u / self.num),
             Value::Signed(u) => Value::Signed(u / self.num as i64),
             Value::Float(u) => Value::Float(u / self.num as f64),
@@ -74,9 +67,16 @@ impl<G: WindowGeneric> Into<Value> for AvgIV<G> {
 impl<G: WindowGeneric> Add for AvgIV<G> {
     type Output = AvgIV<G>;
     fn add(self, other: AvgIV<G>) -> AvgIV<G> {
-        let sum = self.sum + other.sum;
-        let num = self.num + other.num;
-        AvgIV { sum, num, _marker: PhantomData }
+        match (&self.sum, &other.sum) {
+            (Value::None, Value::None) => Self::default(Time::default()),
+            (_, Value::None) => self,
+            (Value::None, _) => other,
+            _ => {
+                let sum = self.sum + other.sum;
+                let num = self.num + other.num;
+                AvgIV { sum, num, _marker: PhantomData }
+            }
+        }
     }
 }
 
