@@ -209,28 +209,8 @@ impl Offset {
         match self {
             Offset::Discrete(_) => None,
             Offset::RealTime(val, unit) => {
-                let coefficient = match unit {
-                    TimeUnit::Nanosecond => Rational::new(
-                        RationalType::from_u64(1).unwrap(),
-                        RationalType::from_u64(10_u64.pow(9)).unwrap(),
-                    ),
-                    TimeUnit::Microsecond => Rational::new(
-                        RationalType::from_u64(1).unwrap(),
-                        RationalType::from_u64(10_u64.pow(6)).unwrap(),
-                    ),
-                    TimeUnit::Millisecond => Rational::new(
-                        RationalType::from_u64(1).unwrap(),
-                        RationalType::from_u64(10_u64.pow(3)).unwrap(),
-                    ),
-                    TimeUnit::Second => Rational::from_u64(1).unwrap(),
-                    TimeUnit::Minute => Rational::from_u64(60).unwrap(),
-                    TimeUnit::Hour => Rational::from_u64(60 * 60).unwrap(),
-                    TimeUnit::Day => Rational::from_u64(60 * 60 * 24).unwrap(),
-                    TimeUnit::Week => Rational::from_u64(60 * 60 * 24 * 7).unwrap(),
-                    TimeUnit::Year => Rational::from_u64(60 * 60 * 24 * 365).unwrap(),
-                };
-                let time = val * coefficient;
-                Some(UOM_Time::new::<uom::si::time::second>(time))
+                let seconds = val * &unit.to_uom_time().get::<second>();
+                Some(UOM_Time::new::<second>(seconds))
             }
         }
     }
@@ -251,6 +231,29 @@ impl FromStr for TimeUnit {
             "a" => Ok(TimeUnit::Year),
             _ => Err(format!("unknown time unit `{}`", unit)),
         }
+    }
+}
+
+impl TimeUnit {
+    fn to_uom_time(&self) -> UOM_Time {
+        let f = match self {
+            TimeUnit::Nanosecond => {
+                Rational::new(RationalType::from_u64(1).unwrap(), RationalType::from_u64(10_u64.pow(9)).unwrap())
+            }
+            TimeUnit::Microsecond => {
+                Rational::new(RationalType::from_u64(1).unwrap(), RationalType::from_u64(10_u64.pow(6)).unwrap())
+            }
+            TimeUnit::Millisecond => {
+                Rational::new(RationalType::from_u64(1).unwrap(), RationalType::from_u64(10_u64.pow(3)).unwrap())
+            }
+            TimeUnit::Second => Rational::from_u64(1).unwrap(),
+            TimeUnit::Minute => Rational::from_u64(60).unwrap(),
+            TimeUnit::Hour => Rational::from_u64(60 * 60).unwrap(),
+            TimeUnit::Day => Rational::from_u64(60 * 60 * 24).unwrap(),
+            TimeUnit::Week => Rational::from_u64(60 * 60 * 24 * 7).unwrap(),
+            TimeUnit::Year => Rational::from_u64(60 * 60 * 24 * 365).unwrap(),
+        };
+        UOM_Time::new::<second>(f)
     }
 }
 
