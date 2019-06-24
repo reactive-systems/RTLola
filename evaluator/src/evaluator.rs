@@ -420,6 +420,7 @@ impl<'a> ExpressionEvaluator<'a> {
 
             Function(name, args, _ty) => {
                 //TODO(marvin): handle type
+                assert!(!args.is_empty());
                 let arg = self.eval_expr(&args[0], ts);
                 match arg {
                     Value::Float(f) => {
@@ -429,14 +430,14 @@ impl<'a> ExpressionEvaluator<'a> {
                             "cos" => f.cos(),
                             "arctan" => f.atan(),
                             "abs" => f.abs(),
-                            _ => panic!("Unknown function: {}", name),
+                            _ => panic!("Unknown function: {}, args: {:?}", name, args),
                         };
                         Value::Float(NotNan::new(res).expect("TODO: Handle"))
                     }
                     Value::Signed(i) => {
                         let res = match name.as_ref() {
                             "abs" => i.abs(),
-                            _ => panic!("Unknown function: {}", name),
+                            _ => panic!("Unknown function: {}, args: {:?}", name, args),
                         };
                         Value::Signed(res)
                     }
@@ -451,9 +452,9 @@ impl<'a> ExpressionEvaluator<'a> {
                             let re = Regex::new(&re_str).expect("Given regular expression was invalid");
                             Value::Bool(re.is_match(&s))
                         }
-                        _ => unreachable!("unknown `String` function {}", name),
+                        _ => unreachable!("unknown `String` function: {}, args: {:?}", name, args),
                     },
-                    _ => panic!("Unknown function: {}", name),
+                    _ => panic!("Unknown function: {}, args: {:?}", name, args),
                 }
             }
 
@@ -467,21 +468,21 @@ impl<'a> ExpressionEvaluator<'a> {
                         UInt(_) => Value::Unsigned(u as u64),
                         Int(_) => Value::Signed(u as i64),
                         Float(_) => Value::new_float(u as f64),
-                        _ => unimplemented!(),
+                        _ => unreachable!(),
                     },
                     (Int(_), Value::Signed(i)) => match to {
                         UInt(_) => Value::Unsigned(i as u64),
                         Int(_) => Value::Signed(i as i64),
                         Float(_) => Value::new_float(i as f64),
-                        _ => unimplemented!(),
+                        _ => unreachable!(),
                     },
                     (Float(_), Value::Float(f)) => match to {
                         UInt(_) => Value::Unsigned(f.into_inner() as u64),
                         Int(_) => Value::Signed(f.into_inner() as i64),
                         Float(_) => Value::new_float(f.into_inner() as f64),
-                        _ => unimplemented!(),
+                        _ => unreachable!(),
                     },
-                    _ => unimplemented!(),
+                    (from, v) => panic!("Value type of {:?} does not match convert from type {:?}", v, from),
                 }
             }
 

@@ -169,6 +169,7 @@ impl<'s> Expr<'s> for Expression {
 
             Function(name, args, _ty) => {
                 //TODO(marvin): handle type
+                assert!(!args.is_empty());
                 let f_arg = args[0].clone().compile();
 
                 macro_rules! create_floatfn {
@@ -193,10 +194,11 @@ impl<'s> Expr<'s> for Expression {
                         match arg {
                             Value::Float(f) => Value::new_float(f.abs()),
                             Value::Signed(i) => Value::Signed(i.abs()),
-                            _ => panic!(),
+                            v => panic!("wrong Value type of {:?}, for function abs", v),
                         }
                     }),
                     "matches" => {
+                        assert!(args.len() >= 2);
                         let re_str = match &args[1] {
                             Expression::LoadConstant(Constant::Str(s)) => s,
                             _ => unreachable!("regex should be a string literal"),
@@ -211,7 +213,7 @@ impl<'s> Expr<'s> for Expression {
                             }
                         })
                     }
-                    _ => panic!("Unknown function."),
+                    f => panic!("Unknown function: {}, args: {:?}", f, args),
                 }
             }
 
@@ -225,7 +227,11 @@ impl<'s> Expr<'s> for Expression {
                             let v = f_expr.execute(ctx);
                             match v {
                                 Value::Float(f) => Value::$to(f.into_inner() as $ty),
-                                _ => panic!(),
+                                v => panic!(
+                                    "Value type of {:?} does not match convert from type {:?}",
+                                    v,
+                                    Value::new_float(0.0)
+                                ),
                             }
                         })
                     };
@@ -234,7 +240,11 @@ impl<'s> Expr<'s> for Expression {
                             let v = f_expr.execute(ctx);
                             match v {
                                 Value::$from(v) => Value::new_float(v as $ty),
-                                _ => panic!(),
+                                v => panic!(
+                                    "Value type of {:?} does not match convert from type {:?}",
+                                    v,
+                                    Value::$from(0)
+                                ),
                             }
                         })
                     };
@@ -243,7 +253,11 @@ impl<'s> Expr<'s> for Expression {
                             let v = f_expr.execute(ctx);
                             match v {
                                 Value::$from(v) => Value::$to(v as $ty),
-                                _ => panic!(),
+                                v => panic!(
+                                    "Value type of {:?} does not match convert from type {:?}",
+                                    v,
+                                    Value::$from(0)
+                                ),
                             }
                         })
                     };
@@ -260,7 +274,7 @@ impl<'s> Expr<'s> for Expression {
                     (Float(_), UInt(_)) => create_convert!(Float, Unsigned, u64),
                     (Float(_), Int(_)) => create_convert!(Float, Signed, i64),
                     (Float(_), Float(_)) => CompiledExpr::new(move |ctx| f_expr.execute(ctx)),
-                    _ => unimplemented!(),
+                    (from, to) => unreachable!("from: {:?}, to: {:?}", from, to),
                 }
             }
 
