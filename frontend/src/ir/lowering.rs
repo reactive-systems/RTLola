@@ -857,7 +857,7 @@ mod tests {
         let stream = &ir.outputs[0];
 
         let expr = &stream.expr;
-        assert_eq!("In(0).cast::<UInt8,UInt16>()", format!("{}", expr))
+        assert_eq!("cast<UInt8,UInt16>(In(0))", format!("{}", expr))
     }
 
     #[test]
@@ -870,7 +870,7 @@ mod tests {
         assert_eq!(stream.ty, ty);
 
         let expr = &stream.expr;
-        assert_eq!("sqrt(In(0): Float32) -> Float32.cast::<Float32,Float64>()", format!("{}", expr))
+        assert_eq!("cast<Float32,Float64>(sqrt(In(0): Float32) -> Float32)", format!("{}", expr))
     }
 
     #[test]
@@ -883,7 +883,7 @@ mod tests {
         assert_eq!(stream.ty, ty);
 
         let expr = &stream.expr;
-        assert_eq!("In(0).cast::<Float64,Float32>()", format!("{}", expr))
+        assert_eq!("cast<Float64,Float32>(In(0))", format!("{}", expr))
     }
 
     #[ignore] // Needs to be adapted to new lowering.

@@ -19,7 +19,7 @@ impl Display for Expression {
                     panic!("The type of a function needs to be a function.")
                 }
             }
-            Expression::Convert { from, to, expr } => write!(f, "{}.cast::<{},{}>()", expr, from, to),
+            Expression::Convert { from, to, expr } => write!(f, "cast<{},{}>({})", from, to, expr),
             Expression::Tuple(elems) => write_delim_list(f, elems, "(", ")", ","),
             Expression::Ite { condition, consequence, alternative } => {
                 write!(f, "if {} then {} else {}", condition, consequence, alternative)
