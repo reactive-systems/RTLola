@@ -115,6 +115,7 @@ impl Into<Value> for IntegralIV {
     }
 }
 
+#[allow(clippy::suspicious_arithmetic_impl)]
 impl Add for IntegralIV {
     type Output = IntegralIV;
     fn add(self, other: IntegralIV) -> IntegralIV {
@@ -127,10 +128,8 @@ impl Add for IntegralIV {
 
         let start_volume = self.volume + other.volume;
 
-        let ts2 = other.start_time;
-        let ts1 = self.end_time;
-        assert!(ts2 >= ts1, "Time does not behave monotonically!");
-        let time_diff = ts2 - ts1;
+        assert!(other.start_time >= self.end_time, "Time does not behave monotonically!");
+        let time_diff = other.start_time - self.end_time;
         let time_diff_secs = (time_diff.as_secs() as f64) + (f64::from(time_diff.subsec_nanos())) / (100_000_000f64);
         let time_diff = Value::new_float(time_diff_secs);
         let value_sum = other.start_value.clone() + self.end_value.clone();

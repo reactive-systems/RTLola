@@ -204,6 +204,6 @@ impl<'a> MethodLookup<'a> {
     }
 
     pub(crate) fn get(&self, ty: &ValueTy, name: &FunctionName) -> Option<&'a FuncDecl> {
-        self.lookup_table.get(ty).and_then(|func_decls| func_decls.get(&name.to_string())).map(|decl| decl.clone())
+        self.lookup_table.get(ty).and_then(|func_decls| func_decls.get(&name.to_string())).cloned() // cloned for dereferencing once && -> &
     }
 }

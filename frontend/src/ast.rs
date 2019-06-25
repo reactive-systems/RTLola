@@ -246,7 +246,7 @@ impl Expression {
     }
 }
 
-#[allow(clippy::large_enum_variant)]
+#[allow(clippy::large_enum_variant, clippy::vec_box)]
 #[derive(Debug, Clone)]
 pub enum ExpressionKind {
     /// A literal, e.g., `1`, `"foo"`

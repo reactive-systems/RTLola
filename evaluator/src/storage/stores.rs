@@ -41,8 +41,8 @@ impl GlobalStore {
         assert!(index_map.iter().all(Option::is_some));
 
         let index_map = index_map.into_iter().flatten().collect();
-        let np_outputs = nps.iter().map(|o| InstanceStore::new(&o.ty, &o.memory_bound)).collect();
-        let inputs = ir.inputs.iter().map(|i| InstanceStore::new(&i.ty, &i.memory_bound)).collect();
+        let np_outputs = nps.iter().map(|o| InstanceStore::new(&o.ty, o.memory_bound)).collect();
+        let inputs = ir.inputs.iter().map(|i| InstanceStore::new(&i.ty, i.memory_bound)).collect();
         let np_windows = ir.sliding_windows.iter().map(|w| SlidingWindow::new(w.duration, w.op, ts, &w.ty)).collect();
 
         GlobalStore { inputs, index_map, np_outputs, np_windows }
@@ -89,13 +89,13 @@ pub(crate) struct InstanceStore {
 const SIZE: usize = 256;
 
 impl InstanceStore {
-    // _for type might be used later.
-    pub(crate) fn new(_for_type: &Type, bound: &MemorizationBound) -> InstanceStore {
+    // _type might be used later.
+    pub(crate) fn new(_type: &Type, bound: MemorizationBound) -> InstanceStore {
         match bound {
             MemorizationBound::Bounded(limit) => {
-                InstanceStore { buffer: VecDeque::with_capacity(*limit as usize), bound: *bound }
+                InstanceStore { buffer: VecDeque::with_capacity(limit as usize), bound }
             }
-            MemorizationBound::Unbounded => InstanceStore { buffer: VecDeque::with_capacity(SIZE), bound: *bound },
+            MemorizationBound::Unbounded => InstanceStore { buffer: VecDeque::with_capacity(SIZE), bound },
         }
     }
 

@@ -215,19 +215,19 @@ fn parse_template_spec(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> TemplateSpe
     let span = pair.as_span().into();
     let mut decls = pair.into_inner();
     let mut pair = decls.next();
-    let mut rule = pair.as_ref().map(|p| p.as_rule());
+    let mut rule = pair.as_ref().map(Pair::as_rule);
 
     let mut inv_spec = None;
     if let Some(Rule::InvokeDecl) = rule {
         inv_spec = Some(parse_inv_spec(spec, pair.unwrap()));
         pair = decls.next();
-        rule = pair.as_ref().map(|p| p.as_rule());
+        rule = pair.as_ref().map(Pair::as_rule);
     }
     let mut ext_spec = None;
     if let Some(Rule::ExtendDecl) = rule {
         ext_spec = Some(parse_ext_spec(spec, pair.unwrap()));
         pair = decls.next();
-        rule = pair.as_ref().map(|p| p.as_rule());
+        rule = pair.as_ref().map(Pair::as_rule);
     }
     let mut ter_spec = None;
     if let Some(Rule::TerminateDecl) = rule {
@@ -831,7 +831,7 @@ mod tests {
             .unwrap_or_else(|e| panic!("{}", e));
     }
 
-    #[allow(clippy::cyclomatic_complexity)]
+    #[allow(clippy::cognitive_complexity)]
     #[test]
     fn parse_constant() {
         parses_to! {
@@ -915,7 +915,7 @@ mod tests {
         cmp_ast_spec(&ast, spec);
     }
 
-    #[allow(clippy::cyclomatic_complexity)]
+    #[allow(clippy::cognitive_complexity)]
     #[test]
     fn parse_output() {
         parses_to! {
@@ -953,7 +953,7 @@ mod tests {
         assert_eq!(format!("{}", ast), "output out: Int := in + 1")
     }
 
-    #[allow(clippy::cyclomatic_complexity)]
+    #[allow(clippy::cognitive_complexity)]
     #[test]
     fn parse_trigger() {
         parses_to! {
@@ -1169,7 +1169,7 @@ mod tests {
         cmp_ast_spec(&ast, spec);
     }
 
-    #[allow(clippy::cyclomatic_complexity)]
+    #[allow(clippy::cognitive_complexity)]
     #[test]
     fn parse_precedence_not_regression() {
         parses_to! {

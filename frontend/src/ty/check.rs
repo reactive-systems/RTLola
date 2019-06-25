@@ -254,7 +254,7 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
         let mut frequency = None;
         let mut activation = None;
         if let Some(expr) = &output.extend.expr {
-            if let Some(_) = expr.parse_timespec() {
+            if expr.parse_timespec().is_some() {
                 frequency = Some(Freq::new(
                     Frequency::from_str(expr.to_uom_string().expect("offsets have been checked before").as_str())
                         .expect("valid frequency has been checked before"),
@@ -626,7 +626,7 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
                     self.infer_type(ty)?;
                 }
 
-                let params: Vec<&Expression> = params.iter().map(|e| e.as_ref()).collect();
+                let params: Vec<&Expression> = params.iter().map(Box::as_ref).collect();
 
                 self.infer_function_application(
                     expr.id,
@@ -651,15 +651,14 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
                             self.infer_type(ty)?;
                         }
 
-                        let mut parameters = vec![base.as_ref()];
-                        parameters.extend(params.iter().map(|e| e.as_ref()));
+                        let parameters: Vec<_> = std::iter::once(base).chain(params).map(Box::as_ref).collect();
 
                         self.infer_function_application(
                             expr.id,
                             var,
                             stream_var,
                             expr.span,
-                            &fun_decl,
+                            fun_decl,
                             types.as_slice(),
                             parameters.as_slice(),
                         )?;
