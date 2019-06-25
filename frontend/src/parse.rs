@@ -765,6 +765,7 @@ impl SourceMapper {
         SourceMapper { path, content: content.to_string() }
     }
 
+    #[allow(dead_code)]
     pub(crate) fn get_line(&self, span: Span) -> Option<CodeLine> {
         let mut byte_offset = 0;
         for (num, line) in self.content.split('\n').enumerate() {

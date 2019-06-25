@@ -4,8 +4,11 @@ use self::Level::*;
 use crate::parse::Span;
 use crate::parse::{CodeLine, SourceMapper};
 use std::cell::RefCell;
+#[cfg(not(test))]
 use std::io::Write;
-use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
+use termcolor::{Color, ColorSpec};
+#[cfg(not(test))]
+use termcolor::{ColorChoice, StandardStream, WriteColor};
 
 /// A handler is responsible for emitting warnings and errors
 #[derive(Debug)]
@@ -155,6 +158,7 @@ impl Emitter for StderrEmitter {
 }
 
 impl StderrEmitter {
+    #[allow(dead_code)]
     fn render(&mut self, mapper: &SourceMapper, diagnostic: &Diagnostic) -> Vec<ColoredLine> {
         let mut lines = Vec::new();
 
