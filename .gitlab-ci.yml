@@ -45,7 +45,7 @@ cargo:clippy:
     - rustup component add clippy-preview
   script:
     - rustc --version && cargo --version      # Print version info for debugging
-    - cargo clippy -- -D warnings
+    - cargo clippy
   allow_failure: true                         # allow lint failures for now
 
 # Use cargo to test the project on nightly toolchain
