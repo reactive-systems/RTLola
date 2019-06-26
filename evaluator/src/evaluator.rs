@@ -657,9 +657,21 @@ mod tests {
         };
     }
 
+    macro_rules! eval_stream_timed {
+        ($eval:expr, $ix:expr, $time:expr) => {
+            $eval.eval_stream($ix, $time);
+        };
+    }
+
     macro_rules! accept_input {
         ($eval:expr, $str_ref:expr, $v:expr) => {
             $eval.accept_input($str_ref.in_ix(), $v.clone(), Time::default());
+        };
+    }
+
+    macro_rules! accept_input_timed {
+        ($eval:expr, $str_ref:expr, $v:expr, $time:expr) => {
+            $eval.accept_input($str_ref.in_ix(), $v.clone(), $time);
         };
     }
 
@@ -960,12 +972,12 @@ mod tests {
         let in_ref = StreamReference::InRef(0);
         let n = 25;
         for v in 1..=n {
-            accept_input!(eval, in_ref, Value::Signed(v));
+            accept_input_timed!(eval, in_ref, Value::Signed(v), time);
             time += Duration::from_secs(1);
         }
         time += Duration::from_secs(1);
         // 71 secs have passed. All values should be within the window.
-        eval_stream!(eval, 0);
+        eval_stream_timed!(eval, 0, time);
         let expected = Value::Signed((n * n + n) / 2);
         assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), expected);
     }
@@ -980,12 +992,12 @@ mod tests {
         let in_ref = StreamReference::InRef(0);
         let n = 25;
         for v in 1..=n {
-            accept_input!(eval, in_ref, Value::Unsigned(v));
+            accept_input_timed!(eval, in_ref, Value::Unsigned(v), time);
             time += Duration::from_secs(1);
         }
         time += Duration::from_secs(1);
         // 71 secs have passed. All values should be within the window.
-        eval_stream!(eval, 0);
+        eval_stream_timed!(eval, 0, time);
         let expected = Value::Unsigned(n);
         assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), expected);
     }
@@ -1004,22 +1016,22 @@ mod tests {
             Value::Float(NotNan::new(f).unwrap())
         }
 
-        eval.accept_input(in_ref.in_ix(), mv(1f64), time);
+        accept_input_timed!(eval, in_ref, mv(1f64), time);
         time += Duration::from_secs(2);
-        eval.accept_input(in_ref.in_ix(), mv(5f64), time);
+        accept_input_timed!(eval, in_ref, mv(5f64), time);
         // Value so far: (1+5) / 2 * 2 = 6
         time += Duration::from_secs(5);
-        eval.accept_input(in_ref.in_ix(), mv(25f64), time);
+        accept_input_timed!(eval, in_ref, mv(25f64), time);
         // Value so far: 6 + (5+25) / 2 * 5 = 6 + 75 = 81
         time += Duration::from_secs(1);
-        eval.accept_input(in_ref.in_ix(), mv(0f64), time);
+        accept_input_timed!(eval, in_ref, mv(0f64), time);
         // Value so far: 81 + (25+0) / 2 * 1 = 81 + 12.5 = 93.5
         time += Duration::from_secs(10);
-        eval.accept_input(in_ref.in_ix(), mv(-40f64), time);
+        accept_input_timed!(eval, in_ref, mv(-40f64), time);
         // Value so far: 93.5 + (0+(-40)) / 2 * 10 = 93.5 - 200 = -106.5
         // Time passed: 2 + 5 + 1 + 10 = 18.
 
-        eval_stream!(eval, 0);
+        eval_stream_timed!(eval, 0, time);
 
         let expected = Value::Float(NotNan::new(-106.5).unwrap());
         assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), expected);
