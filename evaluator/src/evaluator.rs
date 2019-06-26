@@ -1021,6 +1021,35 @@ mod tests {
     }
 
     #[test]
+    fn test_average_window() {
+        let (_, mut eval, mut time) = setup_time(
+            "input a: Float32\noutput b @0.25Hz := a.aggregate(over: 40s, using: average).defaults(to: -3.0)",
+        );
+        let mut eval = eval.as_Evaluator();
+        time += Duration::from_secs(45);
+        let out_ref = StreamReference::OutRef(0);
+        let in_ref = StreamReference::InRef(0);
+
+        // No time has passed. No values should be within the window. We should se the default value.
+        eval_stream_timed!(eval, 0, time);
+        let expected = Value::new_float(-3.0);
+        assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), expected);
+
+        let n = 25;
+        for v in 1..=n {
+            accept_input_timed!(eval, in_ref, Value::new_float(v as f64), time);
+            time += Duration::from_secs(1);
+        }
+        time += Duration::from_secs(1);
+
+        // 71 secs have passed. All values should be within the window.
+        eval_stream_timed!(eval, 0, time);
+        let n = n as f64;
+        let expected = Value::new_float(((n * n + n) / 2.0) / 25.0);
+        assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), expected);
+    }
+
+    #[test]
     fn test_integral_window() {
         let (_, mut eval, mut time) = setup_time(
             "input a: Float64\noutput b: Float64 @0.25Hz := a.aggregate(over: 40s, using: integral).defaults(to: -3.0)",
