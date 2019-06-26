@@ -634,26 +634,26 @@ mod tests {
 
     use super::*;
     use crate::storage::Value::*;
-    use std::time::Duration;
+    use std::time::{Duration, Instant};
     use streamlab_frontend::ir::LolaIR;
 
-    fn setup(spec: &str) -> (LolaIR, EvaluatorData) {
+    fn setup(spec: &str) -> (LolaIR, EvaluatorData, Instant) {
         let ir = streamlab_frontend::parse(spec);
         let mut config = EvalConfig::default();
         config.verbosity = crate::basics::Verbosity::WarningsOnly;
         let handler = Arc::new(OutputHandler::new(&config, ir.triggers.len()));
         let eval = EvaluatorData::new(ir.clone(), config, handler);
-        (ir, eval)
+        (ir, eval, Instant::now())
     }
 
     fn setup_time(spec: &str) -> (LolaIR, EvaluatorData, Time) {
-        let (ir, eval) = setup(spec);
+        let (ir, eval, _) = setup(spec);
         (ir, eval, Time::default())
     }
 
     macro_rules! eval_stream {
-        ($eval:expr, $ix:expr) => {
-            $eval.eval_stream($ix, Time::default());
+        ($eval:expr, $start:expr, $ix:expr) => {
+            $eval.eval_stream($ix, $start.elapsed());
         };
     }
 
@@ -664,8 +664,8 @@ mod tests {
     }
 
     macro_rules! accept_input {
-        ($eval:expr, $str_ref:expr, $v:expr) => {
-            $eval.accept_input($str_ref.in_ix(), $v.clone(), Time::default());
+        ($eval:expr, $start:expr, $str_ref:expr, $v:expr) => {
+            $eval.accept_input($str_ref.in_ix(), $v.clone(), $start.elapsed());
         };
     }
 
@@ -676,8 +676,8 @@ mod tests {
     }
 
     macro_rules! peek_assert_eq {
-        ($eval:expr,$ix:expr,$value:expr) => {
-            eval_stream!($eval, $ix);
+        ($eval:expr, $start:expr, $ix:expr, $value:expr) => {
+            eval_stream!($eval, $start, $ix);
             assert_eq!($eval.__peek_value(StreamReference::OutRef($ix), &Vec::new(), 0).unwrap(), $value);
         };
     }
@@ -689,7 +689,7 @@ mod tests {
 
     #[test]
     fn test_const_output_literals() {
-        let (_, mut eval) = setup(
+        let (_, mut eval, start) = setup(
             r#"
         output o_0: Bool := true
         output o_1: UInt8 := 3
@@ -699,16 +699,16 @@ mod tests {
         "#,
         );
         let mut eval = eval.as_Evaluator();
-        peek_assert_eq!(eval, 0, Bool(true));
-        peek_assert_eq!(eval, 1, Unsigned(3));
-        peek_assert_eq!(eval, 2, Signed(-5));
-        peek_assert_eq!(eval, 3, Value::new_float(-123.456));
-        peek_assert_eq!(eval, 4, Str("foobar".into()));
+        peek_assert_eq!(eval, start, 0, Bool(true));
+        peek_assert_eq!(eval, start, 1, Unsigned(3));
+        peek_assert_eq!(eval, start, 2, Signed(-5));
+        peek_assert_eq!(eval, start, 3, Value::new_float(-123.456));
+        peek_assert_eq!(eval, start, 4, Str("foobar".into()));
     }
 
     #[test]
     fn test_const_output_arithlog() {
-        let (_, mut eval) = setup(
+        let (_, mut eval, start) = setup(
             r#"
         output o_0:   Bool := !false
         output o_1:   Bool := !true
@@ -745,79 +745,79 @@ mod tests {
         "#,
         );
         let mut eval = eval.as_Evaluator();
-        peek_assert_eq!(eval, 0, Bool(!false));
-        peek_assert_eq!(eval, 1, Bool(!true));
-        peek_assert_eq!(eval, 2, Unsigned(8 + 3));
-        peek_assert_eq!(eval, 3, Unsigned(8 - 3));
-        peek_assert_eq!(eval, 4, Unsigned(8 * 3));
-        peek_assert_eq!(eval, 5, Unsigned(8 / 3));
-        peek_assert_eq!(eval, 6, Unsigned(8 % 3));
-        peek_assert_eq!(eval, 7, Unsigned(8 * 8 * 8));
-        peek_assert_eq!(eval, 8, Bool(false || false));
-        peek_assert_eq!(eval, 9, Bool(false || true));
-        peek_assert_eq!(eval, 10, Bool(true || false));
-        peek_assert_eq!(eval, 11, Bool(true || true));
-        peek_assert_eq!(eval, 12, Bool(false && false));
-        peek_assert_eq!(eval, 13, Bool(false && true));
-        peek_assert_eq!(eval, 14, Bool(true && false));
-        peek_assert_eq!(eval, 15, Bool(true && true));
-        peek_assert_eq!(eval, 16, Bool(0 < 1));
-        peek_assert_eq!(eval, 17, Bool(0 < 0));
-        peek_assert_eq!(eval, 18, Bool(1 < 0));
-        peek_assert_eq!(eval, 19, Bool(0 <= 1));
-        peek_assert_eq!(eval, 20, Bool(0 <= 0));
-        peek_assert_eq!(eval, 21, Bool(1 <= 0));
-        peek_assert_eq!(eval, 22, Bool(0 >= 1));
-        peek_assert_eq!(eval, 23, Bool(0 >= 0));
-        peek_assert_eq!(eval, 24, Bool(1 >= 0));
-        peek_assert_eq!(eval, 25, Bool(0 > 1));
-        peek_assert_eq!(eval, 26, Bool(0 > 0));
-        peek_assert_eq!(eval, 27, Bool(1 > 0));
-        peek_assert_eq!(eval, 28, Bool(0 == 0));
-        peek_assert_eq!(eval, 29, Bool(0 == 1));
-        peek_assert_eq!(eval, 30, Bool(0 != 0));
-        peek_assert_eq!(eval, 31, Bool(0 != 1));
+        peek_assert_eq!(eval, start, 0, Bool(!false));
+        peek_assert_eq!(eval, start, 1, Bool(!true));
+        peek_assert_eq!(eval, start, 2, Unsigned(8 + 3));
+        peek_assert_eq!(eval, start, 3, Unsigned(8 - 3));
+        peek_assert_eq!(eval, start, 4, Unsigned(8 * 3));
+        peek_assert_eq!(eval, start, 5, Unsigned(8 / 3));
+        peek_assert_eq!(eval, start, 6, Unsigned(8 % 3));
+        peek_assert_eq!(eval, start, 7, Unsigned(8 * 8 * 8));
+        peek_assert_eq!(eval, start, 8, Bool(false || false));
+        peek_assert_eq!(eval, start, 9, Bool(false || true));
+        peek_assert_eq!(eval, start, 10, Bool(true || false));
+        peek_assert_eq!(eval, start, 11, Bool(true || true));
+        peek_assert_eq!(eval, start, 12, Bool(false && false));
+        peek_assert_eq!(eval, start, 13, Bool(false && true));
+        peek_assert_eq!(eval, start, 14, Bool(true && false));
+        peek_assert_eq!(eval, start, 15, Bool(true && true));
+        peek_assert_eq!(eval, start, 16, Bool(0 < 1));
+        peek_assert_eq!(eval, start, 17, Bool(0 < 0));
+        peek_assert_eq!(eval, start, 18, Bool(1 < 0));
+        peek_assert_eq!(eval, start, 19, Bool(0 <= 1));
+        peek_assert_eq!(eval, start, 20, Bool(0 <= 0));
+        peek_assert_eq!(eval, start, 21, Bool(1 <= 0));
+        peek_assert_eq!(eval, start, 22, Bool(0 >= 1));
+        peek_assert_eq!(eval, start, 23, Bool(0 >= 0));
+        peek_assert_eq!(eval, start, 24, Bool(1 >= 0));
+        peek_assert_eq!(eval, start, 25, Bool(0 > 1));
+        peek_assert_eq!(eval, start, 26, Bool(0 > 0));
+        peek_assert_eq!(eval, start, 27, Bool(1 > 0));
+        peek_assert_eq!(eval, start, 28, Bool(0 == 0));
+        peek_assert_eq!(eval, start, 29, Bool(0 == 1));
+        peek_assert_eq!(eval, start, 30, Bool(0 != 0));
+        peek_assert_eq!(eval, start, 31, Bool(0 != 1));
     }
 
     #[test]
     fn test_input_only() {
-        let (_, mut eval) = setup("input a: UInt8");
+        let (_, mut eval, start) = setup("input a: UInt8");
         let mut eval = eval.as_Evaluator();
         let sr = StreamReference::InRef(0);
         let v = Value::Unsigned(3);
-        accept_input!(eval, sr, v.clone());
+        accept_input!(eval, start, sr, v.clone());
         assert_eq!(eval.__peek_value(sr, &Vec::new(), 0).unwrap(), v)
     }
 
     #[test]
     fn test_sync_lookup() {
-        let (_, mut eval) = setup("input a: UInt8 output b: UInt8 := a");
+        let (_, mut eval, start) = setup("input a: UInt8 output b: UInt8 := a");
         let mut eval = eval.as_Evaluator();
         let out_ref = StreamReference::OutRef(0);
         let in_ref = StreamReference::InRef(0);
         let v = Value::Unsigned(9);
-        accept_input!(eval, in_ref, v.clone());
-        eval_stream!(eval, 0);
+        accept_input!(eval, start, in_ref, v.clone());
+        eval_stream!(eval, start, 0);
         assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), v)
     }
 
     #[test]
     fn test_oob_lookup() {
-        let (_, mut eval) =
+        let (_, mut eval, start) =
             setup("input a: UInt8\noutput b := a.offset(by: -1)\noutput x: UInt8 @5Hz := b.hold().defaults(to: 3)");
         let mut eval = eval.as_Evaluator();
         let out_ref = StreamReference::OutRef(1);
         let in_ref = StreamReference::InRef(0);
         let v1 = Value::Unsigned(1);
-        accept_input!(eval, in_ref, v1);
-        eval_stream!(eval, 0);
-        eval_stream!(eval, 1);
+        accept_input!(eval, start, in_ref, v1);
+        eval_stream!(eval, start, 0);
+        eval_stream!(eval, start, 1);
         assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), Value::Unsigned(3));
     }
 
     #[test]
     fn test_output_lookup() {
-        let (_, mut eval) = setup(
+        let (_, mut eval, start) = setup(
             "input a: UInt8\noutput mirror: UInt8 := a\noutput mirror_offset := mirror.offset(by: -1)\noutput c: UInt8 @5Hz := mirror_offset.hold().defaults(to: 3)",
         );
         let mut eval = eval.as_Evaluator();
@@ -825,45 +825,46 @@ mod tests {
         let in_ref = StreamReference::InRef(0);
         let v1 = Value::Unsigned(1);
         let v2 = Value::Unsigned(2);
-        accept_input!(eval, in_ref, v1.clone());
-        eval_stream!(eval, 0);
-        eval_stream!(eval, 1);
-        accept_input!(eval, in_ref, v2);
-        eval_stream!(eval, 0);
-        eval_stream!(eval, 1);
-        eval_stream!(eval, 2);
+        accept_input!(eval, start, in_ref, v1.clone());
+        eval_stream!(eval, start, 0);
+        eval_stream!(eval, start, 1);
+        accept_input!(eval, start, in_ref, v2);
+        eval_stream!(eval, start, 0);
+        eval_stream!(eval, start, 1);
+        eval_stream!(eval, start, 2);
         assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), v1);
     }
 
     #[test]
     fn test_conversion_if() {
-        let (_, mut eval) = setup("input a: UInt8\noutput b: UInt16 := if true then a else a[-1].defaults(to: 0)");
+        let (_, mut eval, start) =
+            setup("input a: UInt8\noutput b: UInt16 := if true then a else a[-1].defaults(to: 0)");
         let mut eval = eval.as_Evaluator();
         let out_ref = StreamReference::OutRef(0);
         let in_ref = StreamReference::InRef(0);
         let v1 = Value::Unsigned(1);
-        accept_input!(eval, in_ref, v1.clone());
-        eval_stream!(eval, 0);
+        accept_input!(eval, start, in_ref, v1.clone());
+        eval_stream!(eval, start, 0);
         assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), v1);
     }
 
     #[test]
     #[ignore] // See issue #32 in LolaParser.
     fn test_conversion_lookup() {
-        let (_, mut eval) = setup("input a: UInt8\noutput b: UInt32 := a + 100000");
+        let (_, mut eval, start) = setup("input a: UInt8\noutput b: UInt32 := a + 100000");
         let mut eval = eval.as_Evaluator();
         let out_ref = StreamReference::OutRef(0);
         let in_ref = StreamReference::InRef(0);
         let expected = Value::Unsigned(7 + 100000);
         let v1 = Value::Unsigned(7);
-        accept_input!(eval, in_ref, v1);
-        eval_stream!(eval, 0);
+        accept_input!(eval, start, in_ref, v1);
+        eval_stream!(eval, start, 0);
         assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), expected);
     }
 
     #[test]
     fn test_bin_op() {
-        let (_, mut eval) = setup("input a: UInt16\n input b: UInt16\noutput c: UInt16 := a + b");
+        let (_, mut eval, start) = setup("input a: UInt16\n input b: UInt16\noutput c: UInt16 := a + b");
         let mut eval = eval.as_Evaluator();
         let out_ref = StreamReference::OutRef(0);
         let a = StreamReference::InRef(0);
@@ -871,15 +872,15 @@ mod tests {
         let v1 = Value::Unsigned(1);
         let v2 = Value::Unsigned(2);
         let expected = Value::Unsigned(1 + 2);
-        accept_input!(eval, a, v1.clone());
-        accept_input!(eval, b, v2.clone());
-        eval_stream!(eval, 0);
+        accept_input!(eval, start, a, v1.clone());
+        accept_input!(eval, start, b, v2.clone());
+        eval_stream!(eval, start, 0);
         assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), expected);
     }
 
     #[test]
     fn test_bin_op_float() {
-        let (_, mut eval) = setup("input a: Float64\n input b: Float64\noutput c: Float64 := a + b");
+        let (_, mut eval, start) = setup("input a: Float64\n input b: Float64\noutput c: Float64 := a + b");
         let mut eval = eval.as_Evaluator();
         let out_ref = StreamReference::OutRef(0);
         let a = StreamReference::InRef(0);
@@ -887,15 +888,16 @@ mod tests {
         let v1 = Value::Float(NotNan::new(3.5f64).unwrap());
         let v2 = Value::Float(NotNan::new(39.347568f64).unwrap());
         let expected = Value::Float(NotNan::new(3.5f64 + 39.347568f64).unwrap());
-        accept_input!(eval, a, v1.clone());
-        accept_input!(eval, b, v2.clone());
-        eval_stream!(eval, 0);
+        accept_input!(eval, start, a, v1.clone());
+        accept_input!(eval, start, b, v2.clone());
+        eval_stream!(eval, start, 0);
         assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), expected);
     }
 
     #[test]
     fn test_bin_tuple() {
-        let (_, mut eval) = setup("input a: Int32\n input b: Bool\noutput c := (a, b) output d := c.0 output e := c.1");
+        let (_, mut eval, start) =
+            setup("input a: Int32\n input b: Bool\noutput c := (a, b) output d := c.0 output e := c.1");
         let mut eval = eval.as_Evaluator();
         let out_ref = StreamReference::OutRef(0);
         let out_ref0 = StreamReference::OutRef(1);
@@ -905,11 +907,11 @@ mod tests {
         let v1 = Value::Signed(1);
         let v2 = Value::Bool(true);
         let expected = Value::Tuple(Box::new([v1.clone(), v2.clone()]));
-        accept_input!(eval, a, v1.clone());
-        accept_input!(eval, b, v2.clone());
-        eval_stream!(eval, 0);
-        eval_stream!(eval, 1);
-        eval_stream!(eval, 2);
+        accept_input!(eval, start, a, v1.clone());
+        accept_input!(eval, start, b, v2.clone());
+        eval_stream!(eval, start, 0);
+        eval_stream!(eval, start, 1);
+        eval_stream!(eval, start, 2);
         assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), expected);
         assert_eq!(eval.__peek_value(out_ref0, &Vec::new(), 0).unwrap(), v1);
         assert_eq!(eval.__peek_value(out_ref1, &Vec::new(), 0).unwrap(), v2);
@@ -917,7 +919,7 @@ mod tests {
 
     #[test]
     fn test_regular_lookup() {
-        let (_, mut eval) =
+        let (_, mut eval, start) =
             setup("input a: UInt8 output b := a.offset(by: -1) output x: UInt8 @5Hz := b.hold().defaults(to: 3)");
         let mut eval = eval.as_Evaluator();
         let out_ref = StreamReference::OutRef(1);
@@ -925,38 +927,38 @@ mod tests {
         let v1 = Value::Unsigned(1);
         let v2 = Value::Unsigned(2);
         let v3 = Value::Unsigned(3);
-        accept_input!(eval, in_ref, v1);
-        accept_input!(eval, in_ref, v2.clone());
-        accept_input!(eval, in_ref, v3);
-        eval_stream!(eval, 0);
-        eval_stream!(eval, 1);
+        accept_input!(eval, start, in_ref, v1);
+        accept_input!(eval, start, in_ref, v2.clone());
+        accept_input!(eval, start, in_ref, v3);
+        eval_stream!(eval, start, 0);
+        eval_stream!(eval, start, 1);
         assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), v2)
     }
 
     #[test]
     fn test_trigger() {
-        let (_, mut eval) =
+        let (_, mut eval, start) =
             setup("input a: UInt8 output b := a.offset(by: -1) output x: UInt8 @5Hz := b.hold().defaults(to: 3)\n trigger x > 4");
         let mut eval = eval.as_Evaluator();
         let out_ref = StreamReference::OutRef(1);
         let trig_ref = StreamReference::OutRef(2);
         let in_ref = StreamReference::InRef(0);
         let v1 = Value::Unsigned(8);
-        eval_stream!(eval, 0);
-        eval_stream!(eval, 1);
-        eval_stream!(eval, 2);
+        eval_stream!(eval, start, 0);
+        eval_stream!(eval, start, 1);
+        eval_stream!(eval, start, 2);
         assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), Value::Unsigned(3));
         assert_eq!(eval.__peek_value(trig_ref, &Vec::new(), 0).unwrap(), Value::Bool(false));
-        accept_input!(eval, in_ref, v1.clone());
-        eval_stream!(eval, 0);
-        eval_stream!(eval, 1);
-        eval_stream!(eval, 2);
+        accept_input!(eval, start, in_ref, v1.clone());
+        eval_stream!(eval, start, 0);
+        eval_stream!(eval, start, 1);
+        eval_stream!(eval, start, 2);
         assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), Value::Unsigned(3));
         assert_eq!(eval.__peek_value(trig_ref, &Vec::new(), 0).unwrap(), Value::Bool(false));
-        accept_input!(eval, in_ref, Value::Unsigned(17));
-        eval_stream!(eval, 0);
-        eval_stream!(eval, 1);
-        eval_stream!(eval, 2);
+        accept_input!(eval, start, in_ref, Value::Unsigned(17));
+        eval_stream!(eval, start, 0);
+        eval_stream!(eval, start, 1);
+        eval_stream!(eval, start, 2);
         assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), v1);
         assert_eq!(eval.__peek_value(trig_ref, &Vec::new(), 0).unwrap(), Value::Bool(true));
     }
@@ -1039,12 +1041,12 @@ mod tests {
 
     #[test]
     fn test_window_type_count() {
-        let (_, mut eval) = setup("input a: Int32\noutput b @ 10Hz := a.aggregate(over: 0.1s, using: count)");
+        let (_, mut eval, start) = setup("input a: Int32\noutput b @ 10Hz := a.aggregate(over: 0.1s, using: count)");
         let mut eval = eval.as_Evaluator();
         let out_ref = StreamReference::OutRef(0);
         let _a = StreamReference::InRef(0);
         let expected = Value::Unsigned(0);
-        eval_stream!(eval, 0);
+        eval_stream!(eval, start, 0);
         assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), expected);
     }
 }
