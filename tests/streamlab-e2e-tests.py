@@ -145,21 +145,27 @@ for (mode, config) in [('interpreted', ["--interpreted"]), ('closure', []), ('ti
                         if trigger in expected_triggers:
                             actual_time_info = triggers_in_output[trigger] if trigger in triggers_in_output else []
                             actual_count = len(actual_time_info)
-                            expected_count = 0
-                            expected_time_info = []
-                            if trigger in expected_triggers:
-                                expected_count = test_json["triggers"][trigger]["expected_count"]
-                                expected_time_info = test_json["triggers"][trigger]["time_info"]
-                                assert expected_count == len(expected_time_info)
-                            if actual_count != expected_count:
+                            expected_time_info = test_json["triggers"][trigger]["time_info"]
+                            expected_count = test_json["triggers"][trigger]["expected_count"]
+                            if expected_count != len(expected_time_info):
+                                print_fail("trigger \"{}\": 'time_info' does not match 'expected_count'".format(trigger))
+                                something_wrong = True
+                            elif actual_count != expected_count:
                                 print_trigger(trigger, expected_count, actual_count)
                                 something_wrong = True
-                            if check_time_info and actual_time_info != expected_time_info:
-                                print_fail("time info for trigger \"{}\" incorrect".format(trigger))
-                                #TODO give better info where the error is located
+                            elif check_time_info and actual_time_info != expected_time_info:
+                                print_fail("time info for trigger \"{}\" incorrect:".format(trigger))
+                                print_info("got | wanted")
+                                for (actual, expected) in zip(actual_time_info, expected_time_info):
+                                    row = "{} | {}".format(actual, expected)
+                                    if actual != expected:
+                                        print_fail(row)
+                                    else:
+                                        print_pass(row)
+                                print()
                                 something_wrong = True
                         else:
-                            print_additional_trigger(trigger, triggers_in_output[trigger])
+                            print_additional_trigger(trigger, len(triggers_in_output[trigger]))
                             something_wrong = True
                     if something_wrong:
                         tests_wrong_out.append(test_name)
