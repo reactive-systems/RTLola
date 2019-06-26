@@ -523,9 +523,9 @@ fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>, handler: &H
                                         ExpressionKind::Ident(i) => match i.name.as_str() {
                                             "Σ" | "sum" => WindowOperation::Sum,
                                             "#" | "count" => WindowOperation::Count,
-                                            "Π" | "prod" => WindowOperation::Product,
+                                            "Π" | "prod" | "product" => WindowOperation::Product,
                                             "∫" | "integral" => WindowOperation::Integral,
-                                            "avg" => WindowOperation::Average,
+                                            "avg" | "average" => WindowOperation::Average,
                                             fun => {
                                                 handler.error_with_span(
                                                     &format!("unknown aggregation function {}", fun),

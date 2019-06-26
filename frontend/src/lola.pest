@@ -113,10 +113,10 @@ Equal = { "="{1,2} }
 CompOp = _{LessThanOrEqual | MoreThanOrEqual | LessThan | MoreThan | NotEqual | Equal}
 
 Sum = {"Σ" | "sum"}
-Count = {"#"|"count"}
-Product = {"Π" | "prod"}
+Count = {"#" | "count"}
+Product = {"Π" | "prod" | "product"}
 Integral = {"∫"  | "integral"}
-Average = { "avg" }
+Average = { "avg"| "average" }
 
 WindowOp = _{ Sum | Product | Average | Count | Integral}
 
