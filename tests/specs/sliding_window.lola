@@ -1,10 +1,29 @@
 input a: Int64
 
-output sum @ 10Hz := a.aggregate(over: 0.1s, using: sum)
 output count @ 10Hz := a.aggregate(over: 0.1s, using: count)
+output sum @ 10Hz := a.aggregate(over: 0.1s, using: sum)
 output average @ 10Hz := a.aggregate(over: 0.1s, using: avg).defaults(to: 10)
 //output a_float: Float32 := cast(a)
 //output integral @ 10Hz := a.aggregate(over: 0.1s, using: integral).defaults(to: 10)
 
 trigger count == 1 "count is 1"
 trigger count == 2 "count is 2"
+
+trigger sum == 0 "sum is 0"
+trigger sum == 1 "sum is 1"
+trigger sum == 2 "sum is 2"
+trigger sum == 3 "sum is 3"
+trigger sum == 4 "sum is 4"
+trigger sum == 5 "sum is 5"
+trigger sum == 6 "sum is 6"
+trigger sum == 7 "sum is 7"
+trigger sum == 8 "sum is 8"
+trigger sum == 9 "sum is 9"
+trigger sum == 10 "sum is 10"
+trigger sum == 11 "sum is 11"
+trigger sum == 12 "sum is 12"
+trigger sum == 13 "sum is 13"
+trigger sum == 14 "sum is 14"
+trigger sum == 15 "sum is 15"
+trigger sum == 16 "sum is 16"
+trigger sum == 17 "sum is 17"
