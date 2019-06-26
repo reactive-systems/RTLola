@@ -27,7 +27,10 @@ pub trait LolaBackend {
 pub fn parse(spec_str: &str) -> LolaIR {
     let spec = match crate::parse::parse(&spec_str) {
         Result::Ok(spec) => spec,
-        Result::Err(e) => panic!("{}", e),
+        Result::Err(e) => {
+            eprintln!("error: invalid syntax:\n{}", e);
+            std::process::exit(1);
+        }
     };
     let mapper = crate::parse::SourceMapper::new(std::path::PathBuf::new(), spec_str);
     let handler = reporting::Handler::new(mapper);
@@ -35,6 +38,7 @@ pub fn parse(spec_str: &str) -> LolaIR {
     if analysis_result.is_success() {
         ir::lowering::Lowering::new(&spec, &analysis_result).lower()
     } else {
-        panic!("Error in analysis.")
+        eprintln!("Analysis failed due to errors in the specification");
+        std::process::exit(1);
     }
 }
