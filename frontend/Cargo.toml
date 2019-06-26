@@ -25,3 +25,4 @@ color-backtrace = "0.2.1"
 uom = { version = "0.24.0", default-features = false, features = [ "autoconvert", "rational64", "si", "std", "use_serde"]}
 
 [features]
+types-only-64bit = []

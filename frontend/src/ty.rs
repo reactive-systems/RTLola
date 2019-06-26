@@ -156,11 +156,24 @@ lazy_static! {
         ("Float64", &ValueTy::Float(F64)),
         ("String", &ValueTy::String),
     ];
+    static ref REDUCED_PRIMITIVE_TYPES: Vec<(&'static str, &'static ValueTy)> = vec![
+        ("Bool", &ValueTy::Bool),
+        ("Int64", &ValueTy::Int(I64)),
+        ("UInt64", &ValueTy::UInt(U64)),
+        ("Float64", &ValueTy::Float(F64)),
+        ("String", &ValueTy::String),
+    ];
 }
 
 impl ValueTy {
-    pub(crate) fn primitive_types() -> std::slice::Iter<'static, (&'static str, &'static ValueTy)> {
-        PRIMITIVE_TYPES.iter()
+    pub(crate) fn primitive_types() -> Vec<(&'static str, &'static ValueTy)> {
+        let mut types = vec![];
+        if cfg!(feature = "types-only-64bit") {
+            types.extend_from_slice(&REDUCED_PRIMITIVE_TYPES)
+        } else {
+            types.extend_from_slice(&PRIMITIVE_TYPES)
+        }
+        types
     }
 
     pub(crate) fn satisfies(&self, constraint: &TypeConstraint) -> bool {
