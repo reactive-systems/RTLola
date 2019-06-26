@@ -19,13 +19,13 @@ JSON format (needs extension for specifying the timestamps)
 
 - activation condition
     - implicit
-        - `add_two_int32.streamlab_test`
+        - `add_two_int.streamlab_test`
     - explicit
-        - `add_two_int32-explicit_ac.streamlab_test`
+        - `add_two_int-explicit_ac.streamlab_test`
         - `conjunct_in_ac.streamlab_test`
 - access
     - synchronous
-        - `add_two_int32.streamlab_test` (E➜E))
+        - `add_two_int.streamlab_test` (E➜E))
     - hold
         - `hold_access.streamlab_test` (E➜E)
     - get
@@ -46,7 +46,7 @@ JSON format (needs extension for specifying the timestamps)
             - `simple_sliding_window.streamlab_test` (T➜E)
 - stream kinds
     - event-based
-        - `add_two_int32.streamlab_test`
+        - `add_two_int.streamlab_test`
         - ...
     - frequency-based
         - `frequencies.streamlab_test` (T➜E) (T➜T)

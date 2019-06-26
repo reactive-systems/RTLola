@@ -1,5 +1,5 @@
-input a: Int32
-input b: Int32
+input a: Int64
+input b: Int64
 
 output c @ a := a + b.hold().defaults(to: 0)
 

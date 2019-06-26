@@ -1,4 +1,4 @@
-input a: Int32
+input a: Int64
 
 output b := a.offset(by:-256).defaults(to:0)
 

@@ -1,6 +1,6 @@
 {
   "spec_file": "../tests/specs/different_frequencies.lola",
-  "input_file": "../traces/tests/alternating_single_int32-every0.1s.csv",
+  "input_file": "../traces/tests/alternating_single_int-every0.1s.csv",
   "rationale": "Streams using different frequencies, accessing an alternating stream.",
   "triggers": {
     "b is 1": {

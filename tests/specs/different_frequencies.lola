@@ -1,4 +1,4 @@
-input a: Int32
+input a: Int64
 
 output b @ 10Hz := a.hold().defaults(to:10)
 output c @ 5Hz := a.hold().defaults(to:10)

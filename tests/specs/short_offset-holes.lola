@@ -1,4 +1,4 @@
-input a: Int32
+input a: Int64
 
 output b @ a := a.offset(by:-6).defaults(to:300)
 

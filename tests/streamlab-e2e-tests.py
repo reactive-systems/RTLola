@@ -76,9 +76,9 @@ streamlab_executable_path = repo_base_dir / "target" / build_mode / executable_n
 streamlab_executable_path_string = str(streamlab_executable_path)
 
 if build_mode == "debug":
-    cargo_build = subprocess.run(["cargo", "build"], cwd=str(repo_base_dir))
+    cargo_build = subprocess.run(["cargo", "build", "--bin", "streamlab", "--all-features"], cwd=str(repo_base_dir))
 elif build_mode == "release":
-    cargo_build = subprocess.run(["cargo", "build", "--release"], cwd=str(repo_base_dir))
+    cargo_build = subprocess.run(["cargo", "build", "--bin", "streamlab", "--all-features", "--release"], cwd=str(repo_base_dir))
 else:
     print("invalid BUILD_MODE '{}'".format(build_mode))
     sys.exit(EXIT_FAILURE)

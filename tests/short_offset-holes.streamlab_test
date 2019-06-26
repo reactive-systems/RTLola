@@ -1,6 +1,6 @@
 {
   "spec_file": "../tests/specs/short_offset-holes.lola",
-  "input_file": "../traces/tests/int32-holes.csv",
+  "input_file": "../traces/tests/int-holes.csv",
   "rationale": "Short offset of 6 into a stream with holes.\nWe should see the default value default value 6 times.",
   "triggers": {
     "b is 7": {

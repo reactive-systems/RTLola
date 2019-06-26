@@ -1,4 +1,4 @@
-input a: Int32
+input a: Int64
 output d := a.get().defaults(to:10)
 
 trigger d == 2 || d == 3 "value used"

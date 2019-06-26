@@ -1,6 +1,6 @@
 {
   "spec_file": "../tests/specs/conjunct_in_ac.lola",
-  "input_file": "../traces/tests/three_int32_streams.csv",
+  "input_file": "../traces/tests/three_int_streams.csv",
   "rationale": "Check that the hold access works",
   "triggers": {
     "1 used": {

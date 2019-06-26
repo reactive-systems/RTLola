@@ -1,6 +1,6 @@
 {
   "spec_file": "../tests/specs/get_access.lola",
-  "input_file": "../traces/tests/three_int32_streams.csv",
+  "input_file": "../traces/tests/three_int_streams.csv",
   "rationale": "Check that the optional access with get works",
   "triggers": {
     "value used": {

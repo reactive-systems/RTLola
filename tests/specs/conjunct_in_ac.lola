@@ -1,6 +1,6 @@
-input a: Int32
-input b: Int32
-input c: Int32
+input a: Int64
+input b: Int64
+input c: Int64
 output d @ (a || c) := b.hold().defaults(to:10)
 
 trigger d == 1 "1 used"

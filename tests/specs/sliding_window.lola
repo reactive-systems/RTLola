@@ -1,4 +1,4 @@
-input a: Int32
+input a: Int64
 
 output s @ 10Hz := a.aggregate(over: 0.1s, using: sum)
 output c @ 10Hz := a.aggregate(over: 0.1s, using: count)
