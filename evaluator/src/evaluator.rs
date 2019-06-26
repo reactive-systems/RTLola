@@ -430,14 +430,14 @@ impl<'a> ExpressionEvaluator<'a> {
                             "cos" => f.cos(),
                             "arctan" => f.atan(),
                             "abs" => f.abs(),
-                            _ => panic!("Unknown function: {}, args: {:?}", name, args),
+                            _ => unreachable!("Unknown function: {}, args: {:?}", name, args),
                         };
                         Value::Float(NotNan::new(res).expect("TODO: Handle"))
                     }
                     Value::Signed(i) => {
                         let res = match name.as_ref() {
                             "abs" => i.abs(),
-                            _ => panic!("Unknown function: {}, args: {:?}", name, args),
+                            _ => unreachable!("Unknown function: {}, args: {:?}", name, args),
                         };
                         Value::Signed(res)
                     }
@@ -454,7 +454,7 @@ impl<'a> ExpressionEvaluator<'a> {
                         }
                         _ => unreachable!("unknown `String` function: {}, args: {:?}", name, args),
                     },
-                    _ => panic!("Unknown function: {}, args: {:?}", name, args),
+                    _ => unreachable!("Unknown function: {}, args: {:?}", name, args),
                 }
             }
 

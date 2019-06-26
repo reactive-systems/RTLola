@@ -178,7 +178,7 @@ impl<'s> Expr<'s> for Expression {
                             let arg = f_arg.execute(ctx);
                             match arg {
                                 Value::Float(f) => Value::new_float(f.$fn()),
-                                _ => panic!(),
+                                _ => unreachable!(),
                             }
                         })
                     };
@@ -194,7 +194,7 @@ impl<'s> Expr<'s> for Expression {
                         match arg {
                             Value::Float(f) => Value::new_float(f.abs()),
                             Value::Signed(i) => Value::Signed(i.abs()),
-                            v => panic!("wrong Value type of {:?}, for function abs", v),
+                            v => unreachable!("wrong Value type of {:?}, for function abs", v),
                         }
                     }),
                     "matches" => {
@@ -213,7 +213,7 @@ impl<'s> Expr<'s> for Expression {
                             }
                         })
                     }
-                    f => panic!("Unknown function: {}, args: {:?}", f, args),
+                    f => unreachable!("Unknown function: {}, args: {:?}", f, args),
                 }
             }
 
@@ -227,7 +227,7 @@ impl<'s> Expr<'s> for Expression {
                             let v = f_expr.execute(ctx);
                             match v {
                                 Value::Float(f) => Value::$to(f.into_inner() as $ty),
-                                v => panic!(
+                                v => unreachable!(
                                     "Value type of {:?} does not match convert from type {:?}",
                                     v,
                                     Value::new_float(0.0)
@@ -240,7 +240,7 @@ impl<'s> Expr<'s> for Expression {
                             let v = f_expr.execute(ctx);
                             match v {
                                 Value::$from(v) => Value::new_float(v as $ty),
-                                v => panic!(
+                                v => unreachable!(
                                     "Value type of {:?} does not match convert from type {:?}",
                                     v,
                                     Value::$from(0)
@@ -253,7 +253,7 @@ impl<'s> Expr<'s> for Expression {
                             let v = f_expr.execute(ctx);
                             match v {
                                 Value::$from(v) => Value::$to(v as $ty),
-                                v => panic!(
+                                v => unreachable!(
                                     "Value type of {:?} does not match convert from type {:?}",
                                     v,
                                     Value::$from(0)

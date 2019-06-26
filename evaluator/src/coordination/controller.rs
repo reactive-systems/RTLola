@@ -107,12 +107,12 @@ impl Controller {
                 let event_manager = EventDrivenManager::setup(ir_clone, cfg_clone, output_copy_handler, Instant::now());
                 event_manager
                     .start_offline(work_tx, time_tx)
-                    .unwrap_or_else(|e| panic!("EventDrivenManager failed: {}", e));
+                    .unwrap_or_else(|e| unreachable!("EventDrivenManager failed: {}", e));
             })
-            .unwrap_or_else(|e| panic!("Failed to start EventDrivenManager thread: {}", e));
+            .unwrap_or_else(|e| unreachable!("Failed to start EventDrivenManager thread: {}", e));
 
         let start_time = match time_rx.recv() {
-            Err(e) => panic!("Did not receive a start event in offline mode! {}", e),
+            Err(e) => unreachable!("Did not receive a start event in offline mode! {}", e),
             Ok(ts) => ts,
         };
 

@@ -52,10 +52,10 @@ impl ColumnMapping {
         let str2col: Vec<usize> = names
             .iter()
             .map(|name| {
-                header
-                    .iter()
-                    .position(|entry| &entry == name)
-                    .unwrap_or_else(|| panic!("CVS header does not contain an entry for stream {}.", name))
+                header.iter().position(|entry| &entry == name).unwrap_or_else(|| {
+                    eprintln!("error: CVS header does not contain an entry for stream {}.", name);
+                    std::process::exit(1)
+                })
             })
             .collect();
 
@@ -176,7 +176,10 @@ impl EventSource {
     }
 
     pub(crate) fn has_event(&mut self) -> bool {
-        self.read_blocking().unwrap_or_else(|e| panic!("Error reading data. {}", e))
+        self.read_blocking().unwrap_or_else(|e| {
+            eprintln!("error: failed to read data. {}", e);
+            std::process::exit(1)
+        })
     }
 
     pub(crate) fn get_event(&mut self) -> (Vec<Value>, Time) {
@@ -212,8 +215,10 @@ impl EventSource {
             if let Some(str_ix) = self.mapping.col2str[col_ix] {
                 if s != "#" {
                     let t = &self.in_types[str_ix];
-                    buffer[str_ix] = Value::try_from(s, t)
-                        .unwrap_or_else(|| panic!("Failed to parse {} as value of type {:?}.", s, t))
+                    buffer[str_ix] = Value::try_from(s, t).unwrap_or_else(|| {
+                        eprintln!("error: problem with data source; failed to parse {} as value of type {:?}.", s, t);
+                        std::process::exit(1)
+                    })
                 }
             }
         }
@@ -229,11 +234,17 @@ impl EventSource {
         let mut time_str_split = time_str.split('.');
         let secs_str: &str = match time_str_split.next() {
             Some(s) => s,
-            None => panic!("Failed to parse time string {}.", time_str),
+            None => {
+                eprintln!("error: problem with data source; failed to parse time string {}.", time_str);
+                std::process::exit(1)
+            }
         };
         let secs = match secs_str.parse::<u64>() {
             Ok(u) => u,
-            Err(e) => panic!("Failed to parse time string {}: {}", time_str, e),
+            Err(e) => {
+                eprintln!("error: problem with data source; fFailed to parse time string {}: {}", time_str, e);
+                std::process::exit(1)
+            }
         };
         let d: Duration = if let Some(nanos_str) = time_str_split.next() {
             let mut chars = nanos_str.chars();
