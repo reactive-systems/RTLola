@@ -129,7 +129,13 @@ impl Config {
         let contents =
             fs::read_to_string(&filename).unwrap_or_else(|e| panic!("Could not read file {}: {}", filename, e));
 
-        let ir = streamlab_frontend::parse(contents.as_str());
+        let ir = match streamlab_frontend::parse(contents.as_str()) {
+            Ok(ir) => ir,
+            Err(err) => {
+                eprintln!("{}", err);
+                std::process::exit(1);
+            }
+        };
 
         let delay = match parse_matches.value_of("DELAY") {
             None => None,

@@ -116,7 +116,7 @@ mod tests {
     use streamlab_frontend::ir::LolaIR;
 
     fn to_ir(spec: &str) -> LolaIR {
-        streamlab_frontend::parse(spec)
+        streamlab_frontend::parse(spec).expect("spec was invalid")
     }
 
     #[test]

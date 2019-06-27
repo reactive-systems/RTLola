@@ -24,23 +24,21 @@ pub trait LolaBackend {
 }
 
 // Replace by more elaborate interface.
-pub fn parse(spec_str: &str) -> LolaIR {
+pub fn parse(spec_str: &str) -> Result<LolaIR, String> {
     let mapper = crate::parse::SourceMapper::new(std::path::PathBuf::new(), spec_str);
     let handler = reporting::Handler::new(mapper);
 
     let spec = match crate::parse::parse(&spec_str, &handler) {
         Result::Ok(spec) => spec,
         Result::Err(e) => {
-            eprintln!("error: invalid syntax:\n{}", e);
-            std::process::exit(1);
+            return Err(format!("error: invalid syntax:\n{}", e));
         }
     };
 
     let analysis_result = analysis::analyze(&spec, &handler);
     if analysis_result.is_success() {
-        ir::lowering::Lowering::new(&spec, &analysis_result).lower()
+        Ok(ir::lowering::Lowering::new(&spec, &analysis_result).lower())
     } else {
-        eprintln!("Analysis failed due to errors in the specification");
-        std::process::exit(1);
+        Err("Analysis failed due to errors in the specification".to_string())
     }
 }

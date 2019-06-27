@@ -5,7 +5,7 @@ use std::io::Write;
 use tempfile::NamedTempFile;
 
 fn run(spec: &str, data: &str) -> Result<Controller, Box<dyn std::error::Error>> {
-    let ir = streamlab_frontend::parse(spec);
+    let ir = streamlab_frontend::parse(spec).expect("spec is invalid");
     let mut file = NamedTempFile::new().expect("failed to create temporary file");
     write!(file, "{}", data).expect("writing tempfile failed");
     let cfg = EvalConfig::new(
