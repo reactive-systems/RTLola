@@ -1,6 +1,7 @@
 //! This module contains the parser for the Lola Language.
 
 use super::ast::*;
+use crate::reporting::{Handler, LabeledSpan};
 use lazy_static::lazy_static;
 use pest;
 use pest::iterators::{Pair, Pairs};
@@ -38,7 +39,7 @@ lazy_static! {
  * Transforms a textual representation of a Lola specification into
  * an AST representation.
  */
-pub(crate) fn parse(content: &str) -> Result<LolaSpec, pest::error::Error<Rule>> {
+pub(crate) fn parse<'a, 'b>(content: &'a str, handler: &'b Handler) -> Result<LolaSpec, pest::error::Error<Rule>> {
     let mut pairs = LolaParser::parse(Rule::Spec, content)?;
     let mut spec = LolaSpec::new();
     assert!(pairs.clone().count() == 1, "Spec must not be empty.");
@@ -62,11 +63,11 @@ pub(crate) fn parse(content: &str) -> Result<LolaSpec, pest::error::Error<Rule>>
                 spec.inputs.extend(input);
             }
             Rule::OutputStream => {
-                let output = parse_output(&mut spec, pair);
+                let output = parse_output(&mut spec, pair, handler);
                 spec.outputs.push(output);
             }
             Rule::Trigger => {
-                let trigger = parse_trigger(&mut spec, pair);
+                let trigger = parse_trigger(&mut spec, pair, handler);
                 spec.trigger.push(trigger);
             }
             Rule::TypeDecl => {
@@ -148,7 +149,7 @@ fn parse_inputs(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> Vec<Input> {
  * - `Rule::Type`
  * - `Rule::Expr`
  */
-fn parse_output(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> Output {
+fn parse_output(spec: &mut LolaSpec, pair: Pair<'_, Rule>, handler: &Handler) -> Output {
     assert_eq!(pair.as_rule(), Rule::OutputStream);
     let span = pair.as_span().into();
     let mut pairs = pair.into_inner();
@@ -174,7 +175,7 @@ fn parse_output(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> Output {
     // Parse the `@ [Expr]` part of output declaration
     let extend = if let Rule::ActivationCondition = pair.as_rule() {
         let span: Span = pair.as_span().into();
-        let expr = build_expression_ast(spec, pair.into_inner());
+        let expr = build_expression_ast(spec, pair.into_inner(), handler);
         pair = pairs.next().expect("mismatch between grammar and AST");
         ActivationCondition { expr: Some(expr), id: NodeId::DUMMY, span }
     } else {
@@ -183,12 +184,12 @@ fn parse_output(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> Output {
 
     let mut tspec = None;
     if let Rule::TemplateSpec = pair.as_rule() {
-        tspec = Some(parse_template_spec(spec, pair));
+        tspec = Some(parse_template_spec(spec, pair, handler));
         pair = pairs.next().expect("mismatch between grammar and AST");
     };
 
     // Parse expression
-    let expression = build_expression_ast(spec, pair.into_inner());
+    let expression = build_expression_ast(spec, pair.into_inner(), handler);
     Output { id: NodeId::DUMMY, name, ty, extend, params, template_spec: tspec, expression, span }
 }
 
@@ -210,7 +211,7 @@ fn parse_parameter_list(spec: &mut LolaSpec, param_list: Pairs<'_, Rule>) -> Vec
     params
 }
 
-fn parse_template_spec(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> TemplateSpec {
+fn parse_template_spec(spec: &mut LolaSpec, pair: Pair<'_, Rule>, handler: &Handler) -> TemplateSpec {
     let span = pair.as_span().into();
     let mut decls = pair.into_inner();
     let mut pair = decls.next();
@@ -218,13 +219,13 @@ fn parse_template_spec(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> TemplateSpe
 
     let mut inv_spec = None;
     if let Some(Rule::InvokeDecl) = rule {
-        inv_spec = Some(parse_inv_spec(spec, pair.unwrap()));
+        inv_spec = Some(parse_inv_spec(spec, pair.unwrap(), handler));
         pair = decls.next();
         rule = pair.as_ref().map(Pair::as_rule);
     }
     let mut ext_spec = None;
     if let Some(Rule::ExtendDecl) = rule {
-        ext_spec = Some(parse_ext_spec(spec, pair.unwrap()));
+        ext_spec = Some(parse_ext_spec(spec, pair.unwrap(), handler));
         pair = decls.next();
         rule = pair.as_ref().map(Pair::as_rule);
     }
@@ -233,29 +234,29 @@ fn parse_template_spec(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> TemplateSpe
         let exp = pair.unwrap();
         let span_ter = exp.as_span().into();
         let expr = exp.into_inner().next().expect("mismatch between grammar and AST");
-        let expr = build_expression_ast(spec, expr.into_inner());
+        let expr = build_expression_ast(spec, expr.into_inner(), handler);
         ter_spec = Some(TerminateSpec { target: expr, id: NodeId::DUMMY, span: span_ter });
     }
     TemplateSpec { inv: inv_spec, ext: ext_spec, ter: ter_spec, id: NodeId::DUMMY, span }
 }
 
-fn parse_ext_spec(spec: &mut LolaSpec, ext_pair: Pair<'_, Rule>) -> ExtendSpec {
+fn parse_ext_spec(spec: &mut LolaSpec, ext_pair: Pair<'_, Rule>, handler: &Handler) -> ExtendSpec {
     let span_ext = ext_pair.as_span().into();
     let mut children = ext_pair.into_inner();
 
     let first_child = children.next().expect("mismatch between grammar and ast");
     let target = match first_child.as_rule() {
-        Rule::Expr => build_expression_ast(spec, first_child.into_inner()),
+        Rule::Expr => build_expression_ast(spec, first_child.into_inner(), handler),
         _ => unreachable!(),
     };
     ExtendSpec { target, id: NodeId::DUMMY, span: span_ext }
 }
 
-fn parse_inv_spec(spec: &mut LolaSpec, inv_pair: Pair<'_, Rule>) -> InvokeSpec {
+fn parse_inv_spec(spec: &mut LolaSpec, inv_pair: Pair<'_, Rule>, handler: &Handler) -> InvokeSpec {
     let span_inv = inv_pair.as_span().into();
     let mut inv_children = inv_pair.into_inner();
     let expr_pair = inv_children.next().expect("mismatch between grammar and AST");
-    let inv_target = build_expression_ast(spec, expr_pair.into_inner());
+    let inv_target = build_expression_ast(spec, expr_pair.into_inner(), handler);
     // Compute invocation condition:
     let mut is_if = false;
     let mut cond_expr = None;
@@ -266,7 +267,7 @@ fn parse_inv_spec(spec: &mut LolaSpec, inv_pair: Pair<'_, Rule>) -> InvokeSpec {
             _ => unreachable!(),
         };
         let condition = inv_cond_pair.into_inner().next().expect("mismatch between grammar and AST");
-        cond_expr = Some(build_expression_ast(spec, condition.into_inner()))
+        cond_expr = Some(build_expression_ast(spec, condition.into_inner(), handler))
     }
     InvokeSpec { condition: cond_expr, is_if, target: inv_target, id: NodeId::DUMMY, span: span_inv }
 }
@@ -279,7 +280,7 @@ fn parse_inv_spec(spec: &mut LolaSpec, inv_pair: Pair<'_, Rule>) -> InvokeSpec {
  * - `Rule::Expr`
  * - (`Rule::StringLiteral`)?
  */
-fn parse_trigger(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> Trigger {
+fn parse_trigger(spec: &mut LolaSpec, pair: Pair<'_, Rule>, handler: &Handler) -> Trigger {
     assert_eq!(pair.as_rule(), Rule::Trigger);
     let span = pair.as_span().into();
     let mut pairs = pair.into_inner();
@@ -293,7 +294,7 @@ fn parse_trigger(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> Trigger {
         name = Some(parse_ident(&pair));
         pair = pairs.next().expect("mismatch between grammar and AST");
     }
-    let expression = build_expression_ast(spec, pair.into_inner());
+    let expression = build_expression_ast(spec, pair.into_inner(), handler);
 
     if let Some(pair) = pairs.next() {
         assert_eq!(pair.as_rule(), Rule::String);
@@ -388,15 +389,15 @@ fn parse_literal(pair: Pair<'_, Rule>) -> Literal {
 }
 
 #[allow(clippy::vec_box)]
-fn parse_vec_of_expressions(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>) -> Vec<Box<Expression>> {
-    pairs.map(|expr| build_expression_ast(spec, expr.into_inner())).map(Box::new).collect()
+fn parse_vec_of_expressions(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>, handler: &Handler) -> Vec<Box<Expression>> {
+    pairs.map(|expr| build_expression_ast(spec, expr.into_inner(), handler)).map(Box::new).collect()
 }
 
 fn parse_vec_of_types(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>) -> Vec<Type> {
     pairs.map(|expr| parse_type(spec, expr)).collect()
 }
 
-fn build_function_expression(spec: &mut LolaSpec, pair: Pair<'_, Rule>, span: Span) -> Expression {
+fn build_function_expression(spec: &mut LolaSpec, pair: Pair<'_, Rule>, span: Span, handler: &Handler) -> Expression {
     let mut children = pair.into_inner();
     let fun_name = parse_ident(&children.next().unwrap());
     let mut next = children.next().expect("Mismatch between AST and parser");
@@ -423,7 +424,7 @@ fn build_function_expression(spec: &mut LolaSpec, pair: Pair<'_, Rule>, span: Sp
         } else {
             arg_names.push(None);
         }
-        args.push(build_expression_ast(spec, pair.into_inner()).into());
+        args.push(build_expression_ast(spec, pair.into_inner(), handler).into());
     }
     let name = FunctionName { name: fun_name, arg_names };
     Expression::new(ExpressionKind::Function(name, type_params, args), span)
@@ -432,10 +433,10 @@ fn build_function_expression(spec: &mut LolaSpec, pair: Pair<'_, Rule>, span: Sp
 /**
  * Builds the Expr AST.
  */
-fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>) -> Expression {
+fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>, handler: &Handler) -> Expression {
     PREC_CLIMBER.climb(
         pairs,
-        |pair: Pair<'_, Rule>| build_term_ast(spec, pair),
+        |pair: Pair<'_, Rule>| build_term_ast(spec, pair, handler),
         |lhs: Expression, op: Pair<'_, Rule>, rhs: Expression| {
             // Reduce function combining `Expression`s to `Expression`s with the correct precs
             let span = Span { start: lhs.span.start, end: rhs.span.end };
@@ -471,7 +472,11 @@ fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>) -> Expressi
                                     Ident::new(val.clone(), l.span)
                                 }
                                 _ => {
-                                    panic!("expected unsigned integer, found {}", l);
+                                    handler.error_with_span(
+                                        &format!("expected unsigned integer, found {}", l),
+                                        LabeledSpan::new(rhs.span, "unexpected", true),
+                                    );
+                                    std::process::exit(1);
                                 }
                             };
                             let binop_expr = Expression::new(ExpressionKind::Field(inner, ident), binop_span);
@@ -494,7 +499,13 @@ fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>) -> Expressi
                                     let offset_expr = &args[0];
                                     let offset = match offset_expr.parse_offset() {
                                         Ok(offset) => offset,
-                                        Err(reason) => panic!("{}", reason),
+                                        Err(reason) => {
+                                            handler.error_with_span(
+                                                "failed to parse offset",
+                                                LabeledSpan::new(rhs.span, &format!("{}", reason), true),
+                                            );
+                                            std::process::exit(1);
+                                        }
                                     };
                                     ExpressionKind::Offset(inner, offset)
                                 }
@@ -515,9 +526,21 @@ fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>) -> Expressi
                                             "Π" | "prod" => WindowOperation::Product,
                                             "∫" | "integral" => WindowOperation::Integral,
                                             "avg" => WindowOperation::Average,
-                                            fun => panic!("unknown aggregation function {}", fun),
+                                            fun => {
+                                                handler.error_with_span(
+                                                    &format!("unknown aggregation function {}", fun),
+                                                    LabeledSpan::new(i.span, "try count, sum, average", true),
+                                                );
+                                                std::process::exit(1);
+                                            }
                                         },
-                                        _ => panic!("unknown aggregation function {}", args[1]),
+                                        _ => {
+                                            handler.error_with_span(
+                                                "expected aggregation function",
+                                                LabeledSpan::new(args[1].span, "try count, sum, average", true),
+                                            );
+                                            std::process::exit(1);
+                                        }
                                     };
                                     ExpressionKind::SlidingWindowAggregation {
                                         expr: inner,
@@ -535,13 +558,25 @@ fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>) -> Expressi
                                 }
                             }
                         }
-                        _ => panic!("expected method call or tuple access, found {}", rhs),
+                        _ => {
+                            handler.error_with_span(
+                                &format!("expected method call or tuple access, found {}", rhs),
+                                LabeledSpan::new(rhs.span, "unexpected", true),
+                            );
+                            std::process::exit(1);
+                        }
                     }
                 }
                 Rule::OpeningBracket => {
                     let offset = match rhs.parse_offset() {
                         Ok(offset) => offset,
-                        Err(reason) => panic!("{}", reason),
+                        Err(reason) => {
+                            handler.error_with_span(
+                                "failed to parse offset expression",
+                                LabeledSpan::new(rhs.span, &format!("{}", reason), true),
+                            );
+                            std::process::exit(1);
+                        }
                     };
                     match lhs.kind {
                         ExpressionKind::Unary(unop, inner) => {
@@ -559,7 +594,7 @@ fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>) -> Expressi
     )
 }
 
-fn build_term_ast(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> Expression {
+fn build_term_ast(spec: &mut LolaSpec, pair: Pair<'_, Rule>, handler: &Handler) -> Expression {
     let span = pair.as_span();
     match pair.as_rule() {
         // Map function from `Pair` to AST data structure `Expression`
@@ -591,7 +626,7 @@ fn build_term_ast(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> Expression {
             Expression::new(
                 ExpressionKind::ParenthesizedExpression(
                     opening_parenthesis,
-                    Box::new(build_expression_ast(spec, inner_expression.into_inner())),
+                    Box::new(build_expression_ast(spec, inner_expression.into_inner(), handler)),
                     closing_parenthesis,
                 ),
                 span.into(),
@@ -602,7 +637,7 @@ fn build_term_ast(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> Expression {
             let mut children = pair.into_inner();
             let pest_operator = children.next().expect("Unary expressions need to have an operator.");
             let operand = children.next().expect("Unary expressions need to have an operand.");
-            let operand = build_term_ast(spec, operand);
+            let operand = build_term_ast(spec, operand, handler);
             let operator = match pest_operator.as_rule() {
                 Rule::Add => return operand, // Discard unary plus because it is semantically null.
                 Rule::Subtract => UnOp::Neg,
@@ -612,7 +647,7 @@ fn build_term_ast(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> Expression {
             Expression::new(ExpressionKind::Unary(operator, Box::new(operand)), span.into())
         }
         Rule::TernaryExpr => {
-            let mut children = parse_vec_of_expressions(spec, pair.into_inner());
+            let mut children = parse_vec_of_expressions(spec, pair.into_inner(), handler);
             assert_eq!(children.len(), 3, "A ternary expression needs exactly three children.");
             Expression::new(
                 ExpressionKind::Ite(children.remove(0), children.remove(0), children.remove(0)),
@@ -620,12 +655,12 @@ fn build_term_ast(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> Expression {
             )
         }
         Rule::Tuple => {
-            let elements = parse_vec_of_expressions(spec, pair.into_inner());
+            let elements = parse_vec_of_expressions(spec, pair.into_inner(), handler);
             assert!(elements.len() != 1, "Tuples may not have exactly one element.");
             Expression::new(ExpressionKind::Tuple(elements), span.into())
         }
-        Rule::Expr => build_expression_ast(spec, pair.into_inner()),
-        Rule::FunctionExpr => build_function_expression(spec, pair, span.into()),
+        Rule::Expr => build_expression_ast(spec, pair.into_inner(), handler),
+        Rule::FunctionExpr => build_function_expression(spec, pair, span.into(), handler),
         Rule::IntegerLiteral => {
             let span = span.into();
             Expression::new(ExpressionKind::Lit(Literal::new_numeric(pair.as_str(), None, span)), span)
@@ -634,7 +669,7 @@ fn build_term_ast(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> Expression {
             let span = span.into();
             Expression::new(ExpressionKind::MissingExpression, span)
         }
-        _ => panic!("Unexpected rule when parsing expression ast: {:?}", pair.as_rule()),
+        _ => unreachable!("Unexpected rule when parsing expression ast: {:?}", pair.as_rule()),
     }
 }
 
@@ -896,7 +931,8 @@ mod tests {
     fn build_ast_parameterized_input() {
         let spec = "input in <ab: Int8>: Int8\n";
         let throw = |e| panic!("{}", e);
-        let ast = parse(spec).unwrap_or_else(throw);
+        let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
+        let ast = parse(spec, &handler).unwrap_or_else(throw);
         cmp_ast_spec(&ast, spec);
     }
 
@@ -929,13 +965,12 @@ mod tests {
 
     #[test]
     fn parse_output_ast() {
-        let pair = LolaParser::parse(Rule::OutputStream, "output out: Int := in + 1")
-            .unwrap_or_else(|e| panic!("{}", e))
-            .next()
-            .unwrap();
-        let mut spec = LolaSpec::new();
-        let ast = super::parse_output(&mut spec, pair);
-        assert_eq!(format!("{}", ast), "output out: Int := in + 1")
+        let spec = "output out: Int := in + 1";
+        let pair = LolaParser::parse(Rule::OutputStream, spec).unwrap_or_else(|e| panic!("{}", e)).next().unwrap();
+        let mut lola = LolaSpec::new();
+        let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
+        let ast = super::parse_output(&mut lola, pair, &handler);
+        assert_eq!(format!("{}", ast), spec)
     }
 
     #[allow(clippy::cognitive_complexity)]
@@ -960,44 +995,50 @@ mod tests {
 
     #[test]
     fn parse_trigger_ast() {
-        let pair = LolaParser::parse(Rule::Trigger, "trigger in ≠ out \"some message\"")
-            .unwrap_or_else(|e| panic!("{}", e))
-            .next()
-            .unwrap();
-        let mut spec = LolaSpec::new();
-        let ast = super::parse_trigger(&mut spec, pair);
+        let spec = "trigger in ≠ out \"some message\"";
+        let pair = LolaParser::parse(Rule::Trigger, spec).unwrap_or_else(|e| panic!("{}", e)).next().unwrap();
+        let mut lola = LolaSpec::new();
+        let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
+        let ast = super::parse_trigger(&mut lola, pair, &handler);
         assert_eq!(format!("{}", ast), "trigger in ≠ out \"some message\"")
     }
 
     #[test]
     fn parse_expression() {
-        let expr = LolaParser::parse(Rule::Expr, "in + 1\n").unwrap_or_else(|e| panic!("{}", e)).next().unwrap();
+        let content = "in + 1";
+        let expr = LolaParser::parse(Rule::Expr, content).unwrap_or_else(|e| panic!("{}", e)).next().unwrap();
         let mut spec = LolaSpec::new();
-        let ast = build_expression_ast(&mut spec, expr.into_inner());
-        assert_eq!(format!("{}", ast), "in + 1")
+        let handler = Handler::new(SourceMapper::new(PathBuf::new(), content));
+        let ast = build_expression_ast(&mut spec, expr.into_inner(), &handler);
+        assert_eq!(format!("{}", ast), content)
     }
 
     #[test]
     fn parse_expression_precedence() {
-        let expr = LolaParser::parse(Rule::Expr, "(a ∨ b ∧ c)").unwrap_or_else(|e| panic!("{}", e)).next().unwrap();
+        let content = "(a ∨ b ∧ c)";
+        let expr = LolaParser::parse(Rule::Expr, content).unwrap_or_else(|e| panic!("{}", e)).next().unwrap();
         let mut spec = LolaSpec::new();
-        let ast = build_expression_ast(&mut spec, expr.into_inner());
-        assert_eq!(format!("{}", ast), "(a ∨ b ∧ c)")
+        let handler = Handler::new(SourceMapper::new(PathBuf::new(), content));
+        let ast = build_expression_ast(&mut spec, expr.into_inner(), &handler);
+        assert_eq!(format!("{}", ast), content)
     }
 
     #[test]
     fn parse_missing_closing_parenthesis() {
-        let expr = LolaParser::parse(Rule::Expr, "(a ∨ b ∧ c").unwrap_or_else(|e| panic!("{}", e)).next().unwrap();
+        let content = "(a ∨ b ∧ c";
+        let expr = LolaParser::parse(Rule::Expr, content).unwrap_or_else(|e| panic!("{}", e)).next().unwrap();
         let mut spec = LolaSpec::new();
-        let ast = build_expression_ast(&mut spec, expr.into_inner());
-        assert_eq!(format!("{}", ast), "(a ∨ b ∧ c")
+        let handler = Handler::new(SourceMapper::new(PathBuf::new(), content));
+        let ast = build_expression_ast(&mut spec, expr.into_inner(), &handler);
+        assert_eq!(format!("{}", ast), content)
     }
 
     #[test]
     fn build_simple_ast() {
         let spec = "input in: Int\noutput out: Int := in\ntrigger in ≠ out\n";
         let throw = |e| panic!("{}", e);
-        let ast = parse(spec).unwrap_or_else(throw);
+        let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
+        let ast = parse(spec, &handler).unwrap_or_else(throw);
         cmp_ast_spec(&ast, spec);
     }
 
@@ -1005,7 +1046,8 @@ mod tests {
     fn build_ast_input() {
         let spec = "input in: Int\ninput in2: Int\ninput in3: (Int, Bool)\ninput in4: Bool\n";
         let throw = |e| panic!("{}", e);
-        let ast = parse(spec).unwrap_or_else(throw);
+        let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
+        let ast = parse(spec, &handler).unwrap_or_else(throw);
         cmp_ast_spec(&ast, spec);
     }
 
@@ -1013,7 +1055,8 @@ mod tests {
     fn build_parenthesized_expression() {
         let spec = "output s: Bool := (true ∨ true)\n";
         let throw = |e| panic!("{}", e);
-        let ast = parse(spec).unwrap_or_else(throw);
+        let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
+        let ast = parse(spec, &handler).unwrap_or_else(throw);
         cmp_ast_spec(&ast, spec);
     }
 
@@ -1021,7 +1064,8 @@ mod tests {
     fn build_lookup_expression_default() {
         let spec = "output s: Int := s.offset(by: -1).defaults(to: (3 * 4))\n";
         let throw = |e| panic!("{}", e);
-        let ast = parse(spec).unwrap_or_else(throw);
+        let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
+        let ast = parse(spec, &handler).unwrap_or_else(throw);
         cmp_ast_spec(&ast, spec);
     }
 
@@ -1029,7 +1073,8 @@ mod tests {
     fn build_lookup_expression_hold() {
         let spec = "output s: Int := s.offset(by: -1).hold().defaults(to: 3 * 4)\n";
         let throw = |e| panic!("{}", e);
-        let ast = parse(spec).unwrap_or_else(throw);
+        let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
+        let ast = parse(spec, &handler).unwrap_or_else(throw);
         cmp_ast_spec(&ast, spec);
     }
 
@@ -1037,7 +1082,8 @@ mod tests {
     fn build_ternary_expression() {
         let spec = "input in: Int\noutput s: Int := if in = 3 then 4 else in + 2\n";
         let throw = |e| panic!("{}", e);
-        let ast = parse(spec).unwrap_or_else(throw);
+        let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
+        let ast = parse(spec, &handler).unwrap_or_else(throw);
         cmp_ast_spec(&ast, spec);
     }
 
@@ -1045,7 +1091,8 @@ mod tests {
     fn build_function_expression() {
         let spec = "input in: (Int, Bool)\noutput s: Int := nroot(1, sin(1, in))\n";
         let throw = |e| panic!("{}", e);
-        let ast = parse(spec).unwrap_or_else(throw);
+        let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
+        let ast = parse(spec, &handler).unwrap_or_else(throw);
         cmp_ast_spec(&ast, spec);
     }
 
@@ -1053,7 +1100,8 @@ mod tests {
     fn build_trigger() {
         let spec = "input in: Int\ntrigger in > 5\n";
         let throw = |e| panic!("{}", e);
-        let ast = parse(spec).unwrap_or_else(throw);
+        let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
+        let ast = parse(spec, &handler).unwrap_or_else(throw);
         cmp_ast_spec(&ast, spec);
     }
 
@@ -1062,7 +1110,8 @@ mod tests {
         let spec =
             "output s: Double := if !((s.offset(by: -1).defaults(to: (3 * 4)) + -4) = 12) ∨ true = false then 2.0 else 4.1\n";
         let throw = |e| panic!("{}", e);
-        let ast = parse(spec).unwrap_or_else(throw);
+        let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
+        let ast = parse(spec, &handler).unwrap_or_else(throw);
         cmp_ast_spec(&ast, spec);
     }
 
@@ -1070,7 +1119,8 @@ mod tests {
     fn build_type_declaration() {
         let spec = "type VerifiedUser { name: String }\n";
         let throw = |e| panic!("{}", e);
-        let ast = parse(spec).unwrap_or_else(throw);
+        let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
+        let ast = parse(spec, &handler).unwrap_or_else(throw);
         cmp_ast_spec(&ast, spec);
     }
 
@@ -1078,7 +1128,8 @@ mod tests {
     fn build_parameter_list() {
         let spec = "output s <a: B, c: D>: E := 3\n";
         let throw = |e| panic!("{}", e);
-        let ast = parse(spec).unwrap_or_else(throw);
+        let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
+        let ast = parse(spec, &handler).unwrap_or_else(throw);
         cmp_ast_spec(&ast, spec);
     }
 
@@ -1086,7 +1137,8 @@ mod tests {
     fn build_template_spec() {
         let spec = "output s: Int { invoke inp unless 3 > 5 extend b terminate false } := 3\n";
         let throw = |e| panic!("{}", e);
-        let ast = parse(spec).unwrap_or_else(throw);
+        let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
+        let ast = parse(spec, &handler).unwrap_or_else(throw);
         // 0.5GHz correspond to 2ns.
         let spec = spec.replace("0.5GHz", "2ns");
         cmp_ast_spec(&ast, spec.as_str());
@@ -1096,7 +1148,8 @@ mod tests {
     fn build_tuple_expression() {
         let spec = "input in: (Int, Bool)\noutput s: Int := (1, in.0).1\n";
         let throw = |e| panic!("{}", e);
-        let ast = parse(spec).unwrap_or_else(throw);
+        let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
+        let ast = parse(spec, &handler).unwrap_or_else(throw);
         cmp_ast_spec(&ast, spec);
     }
 
@@ -1104,7 +1157,8 @@ mod tests {
     fn parse_string() {
         let spec = r#"constant s: String := "a string with \n newline"
 "#;
-        let ast = parse(spec).unwrap_or_else(|e| panic!("{}", e));
+        let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
+        let ast = parse(spec, &handler).unwrap_or_else(|e| panic!("{}", e));
         cmp_ast_spec(&ast, spec);
     }
 
@@ -1112,42 +1166,48 @@ mod tests {
     fn parse_raw_string() {
         let spec = r##"constant s: String := r#"a raw \ string that " needs padding"#
 "##;
-        let ast = parse(spec).unwrap_or_else(|e| panic!("{}", e));
+        let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
+        let ast = parse(spec, &handler).unwrap_or_else(|e| panic!("{}", e));
         cmp_ast_spec(&ast, spec);
     }
 
     #[test]
     fn parse_import() {
         let spec = "import math\ninput in: UInt8\n";
-        let ast = parse(spec).unwrap_or_else(|e| panic!("{}", e));
+        let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
+        let ast = parse(spec, &handler).unwrap_or_else(|e| panic!("{}", e));
         cmp_ast_spec(&ast, spec);
     }
 
     #[test]
     fn parse_method_call() {
         let spec = "output count := count.offset(-1).default(0) + 1\n";
-        let ast = parse(spec).unwrap_or_else(|e| panic!("{}", e));
+        let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
+        let ast = parse(spec, &handler).unwrap_or_else(|e| panic!("{}", e));
         cmp_ast_spec(&ast, spec);
     }
 
     #[test]
     fn parse_method_call_with_param() {
         let spec = "output count := count.offset<Int8>(-1).default(0) + 1\n";
-        let ast = parse(spec).unwrap_or_else(|e| panic!("{}", e));
+        let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
+        let ast = parse(spec, &handler).unwrap_or_else(|e| panic!("{}", e));
         cmp_ast_spec(&ast, spec);
     }
 
     #[test]
     fn parse_realtime_offset() {
         let spec = "output a := b.offset(by: -1s)\n";
-        let ast = parse(spec).unwrap_or_else(|e| panic!("{}", e));
+        let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
+        let ast = parse(spec, &handler).unwrap_or_else(|e| panic!("{}", e));
         cmp_ast_spec(&ast, spec);
     }
 
     #[test]
     fn parse_function_argument_name() {
         let spec = "output a := b.hold().defaults(to: 0)\n";
-        let ast = parse(spec).unwrap_or_else(|e| panic!("{}", e));
+        let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
+        let ast = parse(spec, &handler).unwrap_or_else(|e| panic!("{}", e));
         cmp_ast_spec(&ast, spec);
     }
 

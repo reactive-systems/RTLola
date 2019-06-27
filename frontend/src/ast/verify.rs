@@ -100,16 +100,16 @@ mod tests {
 
     /// Parses the content, runs AST verifier, and returns number of warnings
     fn number_of_warnings(content: &str) -> usize {
-        let ast = parse(content).unwrap_or_else(|e| panic!("{}", e));
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), content));
+        let ast = parse(content, &handler).unwrap_or_else(|e| panic!("{}", e));
         super::Verifier::new(&ast, &handler).check();
         handler.emitted_warnings()
     }
 
     /// Parses the content, runs AST verifier, and returns number of errors
     fn number_of_errors(content: &str) -> usize {
-        let ast = parse(content).unwrap_or_else(|e| panic!("{}", e));
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), content));
+        let ast = parse(content, &handler).unwrap_or_else(|e| panic!("{}", e));
         super::Verifier::new(&ast, &handler).check();
         handler.emitted_errors()
     }

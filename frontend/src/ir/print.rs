@@ -16,7 +16,7 @@ impl Display for Expression {
                     }
                     write!(f, ") -> {}", res)
                 } else {
-                    panic!("The type of a function needs to be a function.")
+                    unreachable!("The type of a function needs to be a function.")
                 }
             }
             Expression::Convert { from, to, expr } => write!(f, "cast<{},{}>({})", from, to, expr),

@@ -89,33 +89,47 @@ impl Config {
         let mut contents = String::new();
         file.read_to_string(&mut contents)?;
         let mapper = SourceMapper::new(PathBuf::from(&self.filename), &contents);
+        let handler = Handler::new(mapper);
         match &self.which {
             Analysis::Parse => {
-                let result = LolaParser::parse(Rule::Spec, &contents).unwrap_or_else(|e| panic!("{}", e));
+                let result = LolaParser::parse(Rule::Spec, &contents).unwrap_or_else(|e| {
+                    eprintln!("parse error:\n{}", e);
+                    std::process::exit(1)
+                });
                 println!("{:#?}", result);
                 Ok(())
             }
             Analysis::AST => {
-                let spec = crate::parse::parse(&contents).unwrap_or_else(|e| panic!("{}", e));
+                let spec = crate::parse::parse(&contents, &handler).unwrap_or_else(|e| {
+                    eprintln!("parse error:\n{}", e);
+                    std::process::exit(1)
+                });
                 println!("{:#?}", spec);
                 Ok(())
             }
             Analysis::Prettyprint => {
-                let spec = crate::parse::parse(&contents).unwrap_or_else(|e| panic!("{}", e));
+                let spec = crate::parse::parse(&contents, &handler).unwrap_or_else(|e| {
+                    eprintln!("parse error:\n{}", e);
+                    std::process::exit(1)
+                });
                 println!("{}", spec);
                 Ok(())
             }
             Analysis::Analyze => {
-                let spec = crate::parse::parse(&contents).unwrap_or_else(|e| panic!("{}", e));
-                let handler = Handler::new(mapper);
+                let spec = crate::parse::parse(&contents, &handler).unwrap_or_else(|e| {
+                    eprintln!("parse error:\n{}", e);
+                    std::process::exit(1)
+                });
                 let _ = analysis::analyze(&spec, &handler);
                 //println!("{:?}", report);
                 Ok(())
             }
             Analysis::IR => {
-                let spec = crate::parse::parse(&contents).unwrap_or_else(|e| panic!("{}", e));
+                let spec = crate::parse::parse(&contents, &handler).unwrap_or_else(|e| {
+                    eprintln!("parse error:\n{}", e);
+                    std::process::exit(1)
+                });
 
-                let handler = Handler::new(mapper);
                 let analysis_result = crate::analysis::analyze(&spec, &handler);
                 if !analysis_result.is_success() {
                     return Ok(()); // TODO throw a good `Error`

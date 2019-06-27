@@ -314,7 +314,7 @@ impl<'a> DependencyAnalyser<'a> {
             ExpressionKind::Offset(expr, offset) => {
                 if let ExpressionKind::Ident(_) = &expr.kind {
                 } else {
-                    panic!("Offsets can only be applied on direct stream access");
+                    unreachable!("Offsets can only be applied on direct stream access");
                 }
                 let target_stream_id = match &self.naming_table[&expr.id] {
                     Declaration::Out(output) => output.id,
@@ -334,7 +334,7 @@ impl<'a> DependencyAnalyser<'a> {
             ExpressionKind::SlidingWindowAggregation { expr, duration: _duration, aggregation: _aggregation } => {
                 if let ExpressionKind::Ident(_) = &expr.kind {
                 } else {
-                    panic!("Sliding Windows can only be applied on direct stream access");
+                    unreachable!("Sliding Windows can only be applied on direct stream access");
                 }
                 let target_stream_id = match &self.naming_table[&expr.id] {
                     Declaration::Out(output) => output.id,
@@ -833,8 +833,8 @@ mod tests {
 
     /// Parses the content, runs naming analysis, and check expected number of errors and version
     fn check_graph(content: &str, num_errors: usize, num_warnings: usize) {
-        let ast = parse(content).unwrap_or_else(|e| panic!("{}", e));
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), content));
+        let ast = parse(content, &handler).unwrap_or_else(|e| panic!("{}", e));
         let mut naming_analyzer = NamingAnalysis::new(&handler);
         let mut decl_table = naming_analyzer.check(&ast);
         let mut type_analysis = TypeAnalysis::new(&handler, &mut decl_table);

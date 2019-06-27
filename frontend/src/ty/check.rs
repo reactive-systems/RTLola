@@ -667,7 +667,10 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
                         );
                     }
                 } else {
-                    panic!("could not get type of `{}`", base);
+                    self.handler.error_with_span(
+                        &format!("could not determine type of `{}`", base),
+                        LabeledSpan::new(base.span, "consider giving a type annotation", true),
+                    );
                 }
             }
             Tuple(expressions) => {
@@ -1070,7 +1073,7 @@ mod tests {
     fn num_type_errors(spec: &str) -> usize {
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
 
-        let spec = match parse(spec) {
+        let spec = match parse(spec, &handler) {
             Err(e) => panic!("Spec {} cannot be parsed: {}.", spec, e),
             Ok(s) => s,
         };
@@ -1085,7 +1088,7 @@ mod tests {
     fn num_type_warnings(spec: &str) -> usize {
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
 
-        let spec = match parse(spec) {
+        let spec = match parse(spec, &handler) {
             Err(e) => panic!("Spec {} cannot be parsed: {}.", spec, e),
             Ok(s) => s,
         };
@@ -1101,7 +1104,7 @@ mod tests {
     fn get_type(spec: &str) -> ValueTy {
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
 
-        let spec = match parse(spec) {
+        let spec = match parse(spec, &handler) {
             Err(e) => panic!("Spec {} cannot be parsed: {}.", spec, e),
             Ok(s) => s,
         };
@@ -1116,7 +1119,7 @@ mod tests {
     fn type_check(spec: &str) -> TypeTable {
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
 
-        let spec = match parse(spec) {
+        let spec = match parse(spec, &handler) {
             Err(e) => panic!("Spec {} cannot be parsed: {}.", spec, e),
             Ok(s) => s,
         };

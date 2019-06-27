@@ -280,7 +280,7 @@ impl<'a> Lowering<'a> {
                 ExpressionKind::ParenthesizedExpression(_, e, _) => {
                     pre.chain(Lowering::collect_expression(e, map, filter, pre_order)).chain(post()).collect()
                 }
-                ExpressionKind::MissingExpression => panic!("Cannot happen."),
+                ExpressionKind::MissingExpression => unreachable!(),
                 ExpressionKind::Tuple(exprs) => {
                     let elems = exprs.iter().flat_map(|a| recursion(a));
                     pre.chain(elems).chain(post()).collect()
@@ -512,7 +512,7 @@ impl<'a> Lowering<'a> {
                 }
             }
             ExpressionKind::ParenthesizedExpression(_, e, _) => self.lower_expression(e).0,
-            ExpressionKind::MissingExpression => panic!("How wasn't this caught in a preceding step‽"),
+            ExpressionKind::MissingExpression => unreachable!(),
             ExpressionKind::Tuple(exprs) => {
                 let exprs = exprs.iter().map(|e| self.lower_expression(e).0).collect();
                 ir::Expression::Tuple(exprs)
@@ -638,13 +638,13 @@ impl<'a> Lowering<'a> {
                 assert!(unit.is_none());
                 match expected_type {
                     ir::Type::Float(_) => {
-                        ir::Constant::Float(lit.parse_numeric::<f64>().expect("Checked by TypeChecker."))
+                        ir::Constant::Float(lit.parse_numeric::<f64>().expect("checked by type checker"))
                     }
                     ir::Type::UInt(_) => {
-                        ir::Constant::UInt(lit.parse_numeric::<u64>().expect("Checked by TypeChecker."))
+                        ir::Constant::UInt(lit.parse_numeric::<u64>().expect("checked by type checker"))
                     }
-                    ir::Type::Int(_) => ir::Constant::Int(lit.parse_numeric::<i64>().expect("Checked by TypeChecker.")),
-                    _ => panic!("Checked by TypeChecker."),
+                    ir::Type::Int(_) => ir::Constant::Int(lit.parse_numeric::<i64>().expect("checked by type checker")),
+                    _ => unreachable!("checked by type checker"),
                 }
             }
             LitKind::Bool(b) => ir::Constant::Bool(*b),
@@ -755,7 +755,7 @@ impl<'a> Lowering<'a> {
             Declaration::In(inp) => self.get_ref_for_stream(inp.id),
             Declaration::Out(out) => self.get_ref_for_stream(out.id),
             Declaration::Param(_) | Declaration::Const(_) => unimplemented!(),
-            Declaration::Type(_) | Declaration::Func(_) => panic!("Types and functions are not streams."),
+            Declaration::Type(_) | Declaration::Func(_) => unreachable!("Types and functions are not streams."),
         }
     }
 }
@@ -909,23 +909,23 @@ mod tests {
         //                assert!(arguments.is_empty(), "Lookup does not have arguments.");
         //                match reference {
         //                    StreamReference::InRef(0) => {}
-        //                    _ => panic!("Incorrect StreamReference"),
+        //                    _ => unreachable!("Incorrect StreamReference"),
         //                }
         //            }
-        //            _ => panic!("Need to load the constant first."),
+        //            _ => unreachable!("Need to load the constant first."),
         //        };
         //
         //        let constant = &expr.stmts[1];
         //        match &constant.op {
         //            Op::LoadConstant(Constant::Str(s)) => assert_eq!(s, "a*b"),
-        //            c => panic!("expected constant, found {:?}", c),
+        //            c => unreachable!("expected constant, found {:?}", c),
         //        }
         //
         //        let regex_match = &expr.stmts[2];
         //
         //        match &regex_match.op {
         //            Op::Function(s) => assert_eq!(s, "matches_regex"),
-        //            _ => panic!("Need to apply the function!"),
+        //            _ => unreachable!("Need to apply the function!"),
         //        }
     }
 

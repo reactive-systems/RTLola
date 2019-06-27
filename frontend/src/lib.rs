@@ -25,15 +25,17 @@ pub trait LolaBackend {
 
 // Replace by more elaborate interface.
 pub fn parse(spec_str: &str) -> LolaIR {
-    let spec = match crate::parse::parse(&spec_str) {
+    let mapper = crate::parse::SourceMapper::new(std::path::PathBuf::new(), spec_str);
+    let handler = reporting::Handler::new(mapper);
+
+    let spec = match crate::parse::parse(&spec_str, &handler) {
         Result::Ok(spec) => spec,
         Result::Err(e) => {
             eprintln!("error: invalid syntax:\n{}", e);
             std::process::exit(1);
         }
     };
-    let mapper = crate::parse::SourceMapper::new(std::path::PathBuf::new(), spec_str);
-    let handler = reporting::Handler::new(mapper);
+
     let analysis_result = analysis::analyze(&spec, &handler);
     if analysis_result.is_success() {
         ir::lowering::Lowering::new(&spec, &analysis_result).lower()

@@ -93,8 +93,8 @@ mod tests {
         // index of output stream with future dependence
         expected_future_dependent: Vec<usize>,
     ) {
-        let spec = parse(content).unwrap_or_else(|e| panic!("{}", e));
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), content));
+        let spec = parse(content, &handler).unwrap_or_else(|e| panic!("{}", e));
         let mut naming_analyzer = NamingAnalysis::new(&handler);
         let mut decl_table = naming_analyzer.check(&spec);
         let mut type_analysis = TypeAnalysis::new(&handler, &mut decl_table);

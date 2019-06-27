@@ -302,8 +302,8 @@ mod tests {
         expected_version: Option<LanguageSpec>,
         expected_versions: Vec<(StreamIndex, LanguageSpec)>,
     ) {
-        let ast = parse(content).unwrap_or_else(|e| panic!("{}", e));
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), content));
+        let ast = parse(content, &handler).unwrap_or_else(|e| panic!("{}", e));
         let mut naming_analyzer = NamingAnalysis::new(&handler);
         let mut decl_table = naming_analyzer.check(&ast);
         let mut type_analysis = TypeAnalysis::new(&handler, &mut decl_table);

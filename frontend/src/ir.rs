@@ -306,14 +306,14 @@ pub enum StreamReference {
 impl StreamReference {
     pub fn out_ix(&self) -> usize {
         match self {
-            StreamReference::InRef(_) => panic!(),
+            StreamReference::InRef(_) => unreachable!(),
             StreamReference::OutRef(ix) => *ix,
         }
     }
 
     pub fn in_ix(&self) -> usize {
         match self {
-            StreamReference::OutRef(_) => panic!(),
+            StreamReference::OutRef(_) => unreachable!(),
             StreamReference::InRef(ix) => *ix,
         }
     }
@@ -339,7 +339,9 @@ impl MemorizationBound {
     pub fn unwrap(self) -> u16 {
         match self {
             MemorizationBound::Bounded(b) => b,
-            MemorizationBound::Unbounded => panic!("Called `MemorizationBound::unwrap()` on an `Unbounded` value."),
+            MemorizationBound::Unbounded => {
+                unreachable!("Called `MemorizationBound::unwrap()` on an `Unbounded` value.")
+            }
         }
     }
     pub fn unwrap_or(self, dft: u16) -> u16 {
@@ -398,27 +400,27 @@ impl LolaIR {
     pub(crate) fn get_in_mut(&mut self, reference: StreamReference) -> &mut InputStream {
         match reference {
             StreamReference::InRef(ix) => &mut self.inputs[ix],
-            StreamReference::OutRef(_) => panic!("Called `LolaIR::get_in` with a `StreamReference::OutRef`."),
+            StreamReference::OutRef(_) => unreachable!("Called `LolaIR::get_in` with a `StreamReference::OutRef`."),
         }
     }
 
     pub fn get_in(&self, reference: StreamReference) -> &InputStream {
         match reference {
             StreamReference::InRef(ix) => &self.inputs[ix],
-            StreamReference::OutRef(_) => panic!("Called `LolaIR::get_in` with a `StreamReference::OutRef`."),
+            StreamReference::OutRef(_) => unreachable!("Called `LolaIR::get_in` with a `StreamReference::OutRef`."),
         }
     }
 
     pub(crate) fn get_out_mut(&mut self, reference: StreamReference) -> &mut OutputStream {
         match reference {
-            StreamReference::InRef(_) => panic!("Called `LolaIR::get_out` with a `StreamReference::InRef`."),
+            StreamReference::InRef(_) => unreachable!("Called `LolaIR::get_out` with a `StreamReference::InRef`."),
             StreamReference::OutRef(ix) => &mut self.outputs[ix],
         }
     }
 
     pub fn get_out(&self, reference: StreamReference) -> &OutputStream {
         match reference {
-            StreamReference::InRef(_) => panic!("Called `LolaIR::get_out` with a `StreamReference::InRef`."),
+            StreamReference::InRef(_) => unreachable!("Called `LolaIR::get_out` with a `StreamReference::InRef`."),
             StreamReference::OutRef(ix) => &self.outputs[ix],
         }
     }
