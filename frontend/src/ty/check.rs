@@ -20,7 +20,7 @@ use crate::stdlib::{FuncDecl, MethodLookup};
 use log::{debug, trace};
 use num::traits::ops::inv::Inv;
 use num::Signed;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use uom::si::frequency::hertz;
 use uom::si::rational64::Frequency as UOM_Frequency;
 use uom::si::time::second;
@@ -1024,31 +1024,42 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
         } else {
             return None;
         };
-        if !self.normalize_stream_ty_to_inputs(&mut stream_ty) {
+        let stream_var = self.stream_vars[&id];
+        let mut stream_vars = HashSet::new();
+        stream_vars.insert(stream_var);
+        if !self.normalize_stream_ty_to_inputs(&mut stream_ty, &mut stream_vars) {
             return None;
         }
         match &stream_ty {
-            StreamTy::Event(ac) => Some(self.translate_activation_condition(spec, ac)),
+            StreamTy::Event(ac) => self.translate_activation_condition(spec, ac),
             _ => None,
         }
     }
 
     /// Returns false if the normalization failed
-    fn normalize_stream_ty_to_inputs(&mut self, ty: &mut StreamTy) -> bool {
+    fn normalize_stream_ty_to_inputs(&mut self, ty: &mut StreamTy, stream_vars: &mut HashSet<StreamVar>) -> bool {
         match ty {
-            StreamTy::Event(ac) => self.normalize_activation_condition(ac),
+            StreamTy::Event(ac) => self.normalize_activation_condition(ac, stream_vars),
             StreamTy::RealTime(_) => false,
             StreamTy::Infer(_) => unreachable!("ensured as only called after type inference is complete"),
         }
     }
 
     /// Returns false if the normalization failed
-    fn normalize_activation_condition(&mut self, ac: &mut Activation<StreamVar>) -> bool {
+    fn normalize_activation_condition(
+        &mut self,
+        ac: &mut Activation<StreamVar>,
+        stream_vars: &mut HashSet<StreamVar>,
+    ) -> bool {
         match ac {
             Activation::Conjunction(args) | Activation::Disjunction(args) => {
-                args.iter_mut().all(|arg| self.normalize_activation_condition(arg))
+                args.iter_mut().all(|arg| self.normalize_activation_condition(arg, stream_vars))
             }
             Activation::Stream(var) => {
+                if stream_vars.contains(var) {
+                    return true;
+                }
+                stream_vars.insert(*var);
                 *ac = match self.stream_unifier.get_normalized_type(*var) {
                     // make stream types default to event stream with empty conjunction, i.e., true
                     Some(StreamTy::Infer(_)) | None => Activation::True,
@@ -1061,7 +1072,7 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
                         return false;
                     }
                 };
-                self.normalize_activation_condition(ac)
+                self.normalize_activation_condition(ac, stream_vars)
             }
             Activation::True => true,
         }
@@ -1071,26 +1082,25 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
         &self,
         spec: &'a LolaSpec,
         ac: &Activation<StreamVar>,
-    ) -> Activation<crate::ir::StreamReference> {
-        match ac {
-            Activation::Conjunction(args) => {
-                Activation::Conjunction(args.iter().map(|ac| self.translate_activation_condition(spec, ac)).collect())
-            }
-            Activation::Disjunction(args) => {
-                Activation::Disjunction(args.iter().map(|ac| self.translate_activation_condition(spec, ac)).collect())
-            }
+    ) -> Option<Activation<crate::ir::StreamReference>> {
+        Some(match ac {
+            Activation::Conjunction(args) => Activation::Conjunction(
+                args.iter().flat_map(|ac| self.translate_activation_condition(spec, ac)).collect(),
+            ),
+            Activation::Disjunction(args) => Activation::Disjunction(
+                args.iter().flat_map(|ac| self.translate_activation_condition(spec, ac)).collect(),
+            ),
             Activation::Stream(var) => {
-                let idx = spec
-                    .inputs
-                    .iter()
-                    .enumerate()
-                    .find(|(_, val)| self.stream_vars[&val.id] == *var)
-                    .expect("activation condition is assumed to be over input-streams only")
-                    .0;
-                Activation::Stream(crate::ir::StreamReference::InRef(idx))
+                if let Some(idx) =
+                    spec.inputs.iter().enumerate().find(|(_, val)| self.stream_vars[&val.id] == *var).map(|x| x.0)
+                {
+                    Activation::Stream(crate::ir::StreamReference::InRef(idx))
+                } else {
+                    return None;
+                }
             }
             Activation::True => Activation::True,
-        }
+        })
     }
 }
 
