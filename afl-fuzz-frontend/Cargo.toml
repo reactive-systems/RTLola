@@ -1,0 +1,11 @@
+[package]
+name = "afl-fuzz-frontend"
+version = "0.1.0"
+authors = ["Leander Tentrup <tentrup@react.uni-saarland.de>"]
+edition = "2018"
+
+[dependencies]
+afl = "0.4"
+streamlab-frontend = {path = "../frontend/"}
+
+[workspace]
