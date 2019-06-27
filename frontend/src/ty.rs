@@ -163,6 +163,8 @@ lazy_static! {
         ("Float64", &ValueTy::Float(F64)),
         ("String", &ValueTy::String),
     ];
+    static ref PRIMITIVE_TYPES_ALIASES: Vec<(&'static str, &'static ValueTy)> =
+        vec![("Int", &ValueTy::Int(I64)), ("UInt", &ValueTy::UInt(U64)), ("Float", &ValueTy::Float(F64)),];
 }
 
 impl ValueTy {
@@ -172,6 +174,9 @@ impl ValueTy {
             types.extend_from_slice(&REDUCED_PRIMITIVE_TYPES)
         } else {
             types.extend_from_slice(&PRIMITIVE_TYPES)
+        }
+        if cfg!(feature = "types-no-aliases") == false {
+            types.extend_from_slice(&PRIMITIVE_TYPES_ALIASES)
         }
         types
     }

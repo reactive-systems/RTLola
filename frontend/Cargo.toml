@@ -26,3 +26,4 @@ uom = { version = "0.24.0", default-features = false, features = [ "autoconvert"
 
 [features]
 types-only-64bit = []
+types-no-aliases = []
