@@ -73,7 +73,8 @@ impl<'a> Lowering<'a> {
 
     fn lower_ast(&mut self) {
         self.ast.inputs.iter().for_each(|i| self.lower_input(i));
-        self.ast.outputs.iter().for_each(|o| self.lower_output(o));
+        self.ast.outputs.iter().for_each(|o| self.lower_output_declaration(o));
+        self.ast.outputs.iter().for_each(|o| self.lower_output_expression(o));
         self.link_windows();
         self.ast.trigger.iter().for_each(|t| self.lower_trigger(t));
     }
@@ -186,8 +187,8 @@ impl<'a> Lowering<'a> {
         dependent.into_iter().map(|(trackee, req)| self.lower_tracking_req(time_driven, trackee, req)).collect()
     }
 
-    /// Creates outputs and adds them to the LolaIR. Does *not* link depending windows, yet.
-    fn lower_output(&mut self, ast_output: &ast::Output) {
+    /// Creates outputs and adds them to the LolaIR. Does *not* lower expression nor link depending windows, yet.
+    fn lower_output_declaration(&mut self, ast_output: &ast::Output) {
         let nid = ast_output.id;
         let ast_req = self.get_memory(nid);
         let memory_bound = self.lower_storage_req(ast_req);
@@ -196,33 +197,22 @@ impl<'a> Lowering<'a> {
         let time_driven = self.check_time_driven(ast_output.id, reference);
 
         let trackings = self.collect_tracking_info(nid, time_driven);
-        let mut outgoing_dependencies = Vec::new();
-        self.find_dependencies(&ast_output.expression, &mut outgoing_dependencies);
-        let mut dep_map: HashMap<StreamReference, Vec<ir::Offset>> = HashMap::new();
-        outgoing_dependencies.into_iter().for_each(|dep| {
-            dep_map.entry(dep.stream).or_insert_with(Vec::new).extend_from_slice(dep.offsets.as_slice())
-        });
 
-        let outgoing_dependencies =
-            dep_map.into_iter().map(|(sr, offsets)| ir::Dependency { stream: sr, offsets }).collect();
-
-        let output_type = self.lower_node_type(nid);
-        let input_dependencies = self.gather_dependent_inputs(nid);
-        let ac = match self.check_time_driven(ast_output.id, reference) {
+        let ac = match time_driven {
             None => Some(self.tt.get_acti_cond(ast_output.id).clone()),
             Some(_tds) => None,
         };
         let output = ir::OutputStream {
             name: ast_output.name.name.clone(),
-            ty: output_type.clone(),
-            expr: self.lower_stream_expression(&ast_output.expression, &output_type),
-            outgoing_dependencies,
+            ty: ir::Type::Bool,
+            expr: ir::Expression::LoadConstant(ir::Constant::Str(String::from("not yet initialized"))),
+            outgoing_dependencies: Vec::new(),
             dependent_streams: trackings,
             dependent_windows: Vec::new(),
             memory_bound,
             layer,
             reference,
-            input_dependencies,
+            input_dependencies: Vec::new(),
             ac,
         };
 
@@ -239,6 +229,31 @@ impl<'a> Lowering<'a> {
         } else {
             self.ir.event_driven.push(EventDrivenStream { reference })
         }
+    }
+
+    /// Lowers output expression and adds them to the LolaIR. Does *not* link depending windows, yet.
+    fn lower_output_expression(&mut self, ast_output: &ast::Output) {
+        let nid = ast_output.id;
+        let reference = self.get_ref_for_stream(nid);
+
+        let input_dependencies = self.gather_dependent_inputs(nid);
+        let mut outgoing_dependencies = Vec::new();
+        self.find_dependencies(&ast_output.expression, &mut outgoing_dependencies);
+        let mut dep_map: HashMap<StreamReference, Vec<ir::Offset>> = HashMap::new();
+        outgoing_dependencies.into_iter().for_each(|dep| {
+            dep_map.entry(dep.stream).or_insert_with(Vec::new).extend_from_slice(dep.offsets.as_slice())
+        });
+        let outgoing_dependencies =
+            dep_map.into_iter().map(|(sr, offsets)| ir::Dependency { stream: sr, offsets }).collect();
+
+        let output_type = self.lower_node_type(nid);
+        let expr = self.lower_stream_expression(&ast_output.expression, &output_type);
+        let output = self.ir.get_out_mut(reference);
+
+        output.ty = output_type;
+        output.input_dependencies = input_dependencies;
+        output.outgoing_dependencies = outgoing_dependencies;
+        output.expr = expr;
     }
 
     /// Returns the flattened result of calling `map` on each node recursively in `pre_order` or post_order.
@@ -304,22 +319,7 @@ impl<'a> Lowering<'a> {
             Offset(inner, offset) => match &inner.kind {
                 Ident(_ident) => {
                     let sr = self.get_ref_for_ident(inner.id);
-                    let offset = match offset {
-                        &ast::Offset::Discrete(val) => {
-                            if val <= 0 {
-                                ir::Offset::PastDiscreteOffset(
-                                    val.abs().try_into().expect("conversion from i16.abs() => u32 cannot fail"),
-                                )
-                            } else {
-                                ir::Offset::FutureDiscreteOffset(
-                                    val.try_into().expect("conversion from positive i16 => u32 cannot fail"),
-                                )
-                            }
-                        }
-                        ast::Offset::RealTime(_val, _unit) => {
-                            unimplemented!();
-                        }
-                    };
+                    let offset = self.lower_offset(sr, offset);
                     deps.push(ir::Dependency { stream: sr, offsets: vec![offset] })
                 }
                 _ => {
@@ -482,7 +482,7 @@ impl<'a> Lowering<'a> {
             },
             ExpressionKind::Offset(stream, offset) => {
                 let target = self.get_ref_for_ident(stream.id);
-                let offset = self.lower_offset(offset);
+                let offset = self.lower_offset(target, offset);
                 ir::Expression::OffsetLookup { target, offset }
             }
             ExpressionKind::SlidingWindowAggregation { .. } => {
@@ -633,7 +633,7 @@ impl<'a> Lowering<'a> {
             .collect()
     }
 
-    fn lower_offset(&self, offset: &ast::Offset) -> ir::Offset {
+    fn lower_offset(&self, target: ir::StreamReference, offset: &ast::Offset) -> ir::Offset {
         match offset {
             &ast::Offset::Discrete(val) => {
                 assert!(val < 0); // Should be checked by type checker, though.
@@ -641,7 +641,25 @@ impl<'a> Lowering<'a> {
                     val.abs().try_into().expect("conversion from i16.abs() => u32 cannot fail"),
                 )
             }
-            ast::Offset::RealTime(_, _) => unimplemented!(),
+            ast::Offset::RealTime(_, _) => {
+                let uom_offset = offset.to_uom_time().expect("ast::Offset::RealTime should return uom_time");
+                let offset_nanos = uom_offset
+                    .get::<nanosecond>()
+                    .to_integer()
+                    .abs()
+                    .to_u128()
+                    .expect("extend duration [ns] does not fit in u128");
+                let period_nanos = self
+                    .ir
+                    .time_driven
+                    .iter()
+                    .find(|td| td.reference == target)
+                    .expect("target should exist in ir.time_driven")
+                    .extend_rate
+                    .as_nanos();
+                debug_assert!(offset_nanos % period_nanos == 0, "offset:{}, period:{}", offset_nanos, period_nanos); // should be checked already
+                ir::Offset::PastDiscreteOffset((offset_nanos / period_nanos) as u32)
+            }
         }
     }
 
