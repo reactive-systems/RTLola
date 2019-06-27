@@ -28,13 +28,13 @@ impl Expression {
         }
     }
 
-    pub(crate) fn parse_duration(&self) -> Option<UOM_Time> {
+    pub(crate) fn parse_duration(&self) -> Result<UOM_Time, String> {
         let (val, unit) = match &self.kind {
             ExpressionKind::Lit(l) => match &l.kind {
                 LitKind::Numeric(val, Some(unit)) => (parse_rational(val), unit),
-                _ => return None,
+                _ => return Err(format!("expected numeric value with unit, found `{}`", l)),
             },
-            _ => return None,
+            _ => return Err(format!("expected numeric value with unit, found `{}`", self)),
         };
 
         match unit.as_str() {
@@ -50,22 +50,22 @@ impl Expression {
                     "d" => UOM_Time::new::<day>(Rational::one()),
                     "w" => UOM_Time::new::<day>(Rational::from_u64(7).unwrap()),
                     "a" => UOM_Time::new::<day>(Rational::from_u64(365).unwrap()),
-                    _ => unreachable!(),
+                    u => unreachable!("'{}' should not have been catched by outer match", u),
                 };
                 let duration = val * factor.get::<second>();
-                Some(UOM_Time::new::<second>(duration))
+                Ok(UOM_Time::new::<second>(duration))
             }
-            _ => None,
+            u => return Err(format!("expected duration unit, found `{}`", u)),
         }
     }
 
-    pub(crate) fn parse_frequency(&self) -> Option<UOM_Frequency> {
+    pub(crate) fn parse_frequency(&self) -> Result<UOM_Frequency, String> {
         let (val, unit) = match &self.kind {
             ExpressionKind::Lit(l) => match &l.kind {
                 LitKind::Numeric(val, Some(unit)) => (parse_rational(val), unit),
-                _ => return None,
+                _ => return Err(format!("expected numeric value with unit, found `{}`", l)),
             },
-            _ => return None,
+            _ => return Err(format!("expected numeric value with unit, found `{}`", self)),
         };
 
         assert!(val.is_positive());
@@ -80,25 +80,25 @@ impl Expression {
                     "kHz" => UOM_Frequency::new::<kilohertz>(Rational::one()),
                     "MHz" => UOM_Frequency::new::<megahertz>(Rational::one()),
                     "GHz" => UOM_Frequency::new::<gigahertz>(Rational::one()),
-                    _ => unreachable!(),
+                    u => unreachable!("'{}' should not have been catched by outer match", u),
                 };
                 let freq = val * factor.get::<hertz>();
-                Some(UOM_Frequency::new::<hertz>(freq))
+                Ok(UOM_Frequency::new::<hertz>(freq))
             }
-            _ => None,
+            u => return Err(format!("expected frequency unit, found `{}`", u)),
         }
     }
 
     #[allow(dead_code)]
-    pub(crate) fn parse_freqspec(&self) -> Option<UOM_Frequency> {
-        if let Some(freq) = self.parse_frequency() {
-            Some(freq)
-        } else if let Some(period) = self.parse_duration() {
+    pub(crate) fn parse_freqspec(&self) -> Result<UOM_Frequency, String> {
+        if let Ok(freq) = self.parse_frequency() {
+            Ok(freq)
+        } else if let Ok(period) = self.parse_duration() {
             let seconds = period.get::<second>();
             assert!(seconds.is_positive());
-            Some(UOM_Frequency::new::<hertz>(seconds.inv()))
+            Ok(UOM_Frequency::new::<hertz>(seconds.inv()))
         } else {
-            None
+            Err(format!("expected frequency or duration, found `{}`", self))
         }
     }
 }

@@ -253,12 +253,19 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
         let mut frequency = None;
         let mut activation = None;
         if let Some(expr) = &output.extend.expr {
-            if let Some(freq) = expr.parse_frequency() {
+            if let Ok(freq) = expr.parse_frequency() {
                 frequency = Some(Freq::new(freq));
             } else if let Some(act) = self.parse_activation_condition(expr) {
                 activation = Some(act);
             } else {
-                unreachable!("only frequency annotations are currently implemented for activation conditions");
+                self.handler.error_with_span(
+                    "expected frequency or activation conditon",
+                    LabeledSpan::new(
+                        expr.span,
+                        "allowed are frequencies (`1Hz`) or Boolean conditions (`x | y`)",
+                        true,
+                    ),
+                );
             }
         }
 
