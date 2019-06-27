@@ -192,10 +192,12 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
         }
 
         // generate constraint from literal
-        self.unifier
-            .unify_var_ty(var, self.get_constraint_for_literal(&constant.literal))
-            .map_err(|err| self.handle_error(err, constant.literal.span))?;
-        Ok(())
+        if let Some(constraint) = self.get_constraint_for_literal(&constant.literal) {
+            self.unifier.unify_var_ty(var, constraint).map_err(|err| self.handle_error(err, constant.literal.span))?;
+            Ok(())
+        } else {
+            Err(())
+        }
     }
 
     fn infer_input(&mut self, input: &'a Input) -> Result<(), ()> {
@@ -421,12 +423,19 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
         self.infer_expression(&trigger.expression, Some(ValueTy::Infer(var)), Some(StreamVarOrTy::Var(stream_var)))
     }
 
-    fn get_constraint_for_literal(&self, lit: &Literal) -> ValueTy {
+    fn get_constraint_for_literal(&self, lit: &Literal) -> Option<ValueTy> {
         use crate::ast::LitKind::*;
-        match &lit.kind {
+        Some(match &lit.kind {
             Str(_) | RawStr(_) => ValueTy::String,
             Bool(_) => ValueTy::Bool,
             Numeric(val, unit) => {
+                if let Some(unit) = unit {
+                    self.handler.error_with_span(
+                        &format!("unexpected unit `{}`", unit),
+                        LabeledSpan::new(lit.span, "remove unit from numeric value", true),
+                    );
+                    return None;
+                }
                 assert!(unit.is_none());
                 if val.contains('.') {
                     // Floating Point
@@ -437,7 +446,7 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
                     ValueTy::Constr(TypeConstraint::Integer)
                 }
             }
-        }
+        })
     }
 
     fn infer_expression(
@@ -469,9 +478,11 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
         match &expr.kind {
             Lit(l) => {
                 // generate value type constraint from literal
-                self.unifier
-                    .unify_var_ty(var, self.get_constraint_for_literal(&l))
-                    .map_err(|err| self.handle_error(err, expr.span))?;
+                if let Some(constraint) = self.get_constraint_for_literal(&l) {
+                    self.unifier.unify_var_ty(var, constraint).map_err(|err| self.handle_error(err, expr.span))?;
+                } else {
+                    return Err(());
+                }
 
                 // no stream type constraint is needed
             }
