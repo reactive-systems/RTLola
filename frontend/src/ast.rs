@@ -222,12 +222,8 @@ pub enum TypeKind {
     Simple(String),
     /// A tuple type, e.g., (Int32, Float32)
     Tuple(Vec<Type>),
-    /// A duration, e.g., `22s`
-    Duration(Duration),
     /// Should be inferred, i.e., is not annotated
     Inferred,
-    /// Malformed type, e.g, `mis$ing`
-    Malformed(String),
 }
 
 /// An expression

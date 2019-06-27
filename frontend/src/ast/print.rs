@@ -188,9 +188,7 @@ impl Display for TypeKind {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         match &self {
             TypeKind::Simple(name) => write!(f, "{}", name),
-            TypeKind::Malformed(s) => write!(f, "{}", s),
             TypeKind::Tuple(types) => write_delim_list(f, types, "(", ")", ", "),
-            TypeKind::Duration(dur) => write!(f, "{:?}", dur), // TODO: Improve
             TypeKind::Inferred => write!(f, "?"),
         }
     }

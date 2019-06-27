@@ -347,7 +347,7 @@ fn parse_type(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> Type {
                 return Type::new_simple(pair.as_str().to_string(), pair.as_span().into());
             }
             Rule::Type => tuple.push(parse_type(spec, pair)),
-            _ => unreachable!("{:?} is not a type", pair.as_rule()),
+            _ => unreachable!("{:?} is not a type, ensured by grammar", pair.as_rule()),
         }
     }
     Type::new_tuple(tuple, span.into())

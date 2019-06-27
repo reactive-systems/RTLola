@@ -86,7 +86,12 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
 
         self.assign_types(spec);
 
-        Some(self.extract_type_table(spec))
+        let type_table = self.extract_type_table(spec);
+        if self.handler.contains_error() {
+            None
+        } else {
+            Some(type_table)
+        }
     }
 
     fn extract_type_table(&mut self, spec: &'a LolaSpec) -> TypeTable {
@@ -325,7 +330,7 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
                             .unify_var_ty(ty_var, (*ty).clone())
                             .map_err(|err| self.handle_error(err, ast_ty.span))
                     }
-                    _ => unreachable!(),
+                    _ => unreachable!("ensured by naming analysis"),
                 }
             }
             TypeKind::Tuple(tuple) => {
@@ -333,7 +338,6 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
                 // ?ty_var = `ty`
                 self.unifier.unify_var_ty(ty_var, ty).map_err(|err| self.handle_error(err, ast_ty.span))
             }
-            _ => unreachable!(),
         }
     }
 
@@ -506,7 +510,9 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
                         let param_var = self.value_vars[&param.id];
                         self.unifier.unify_var_var(var, param_var).map_err(|err| self.handle_error(err, expr.span))?;
                     }
-                    _ => unreachable!("unreachable ident {:?}", decl),
+                    Declaration::Type(_) | Declaration::Func(_) => {
+                        unreachable!("ensured by naming analysis {:?}", decl)
+                    }
                 }
             }
             Offset(inner, offset) => self.infer_offset_expr(var, stream_var, expr.span, inner, offset)?,
@@ -604,7 +610,7 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
                 let decl = self.declarations[&expr.id];
                 let fun_decl = match decl {
                     Declaration::Func(fun_decl) => fun_decl,
-                    _ => unreachable!("expected function declaration"),
+                    _ => unreachable!("ensured by naming analysis"),
                 };
                 if params.len() != fun_decl.parameters.len() {
                     self.handler.error_with_span(
@@ -862,7 +868,7 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
                 let var = self.unifier.new_var();
                 match &gen.constraint {
                     ValueTy::Constr(_) => {}
-                    _ => unreachable!("currently, only constraints are allowed for generic types"),
+                    _ => unreachable!("function declarations are not user-definable and currently, only constraints are allowed for generic types"),
                 }
                 self.unifier.unify_var_ty(var, gen.constraint.clone()).expect("cannot fail as var is freshly created");
                 var
@@ -905,11 +911,14 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
                     let ty = self.declarations[&t.id];
                     match ty {
                         Declaration::Type(ty) => inner.push(ty.clone()),
-                        _ => unreachable!(),
+                        _ => unreachable!("ensured by naming analysis"),
                     }
                 }
                 TypeKind::Tuple(types) => inner.push(self.get_tuple_type(&types)),
-                _ => unreachable!(),
+                TypeKind::Inferred => {
+                    let fresh = self.unifier.new_var();
+                    inner.push(ValueTy::Infer(fresh));
+                }
             }
         }
         ValueTy::Tuple(inner)
@@ -1004,39 +1013,46 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
         } else {
             return None;
         };
-        self.normalize_stream_ty_to_inputs(&mut stream_ty);
+        if !self.normalize_stream_ty_to_inputs(&mut stream_ty) {
+            return None;
+        }
         match &stream_ty {
             StreamTy::Event(ac) => Some(self.translate_activation_condition(spec, ac)),
             _ => None,
         }
     }
 
-    fn normalize_stream_ty_to_inputs(&mut self, ty: &mut StreamTy) {
+    /// Returns false if the normalization failed
+    fn normalize_stream_ty_to_inputs(&mut self, ty: &mut StreamTy) -> bool {
         match ty {
             StreamTy::Event(ac) => self.normalize_activation_condition(ac),
-            StreamTy::RealTime(_) => {}
-            StreamTy::Infer(_) => unreachable!(),
+            StreamTy::RealTime(_) => false,
+            StreamTy::Infer(_) => unreachable!("ensured as only called after type inference is complete"),
         }
     }
 
-    fn normalize_activation_condition(&mut self, ac: &mut Activation<StreamVar>) {
+    /// Returns false if the normalization failed
+    fn normalize_activation_condition(&mut self, ac: &mut Activation<StreamVar>) -> bool {
         match ac {
             Activation::Conjunction(args) | Activation::Disjunction(args) => {
-                args.iter_mut().for_each(|arg| self.normalize_activation_condition(arg))
+                args.iter_mut().all(|arg| self.normalize_activation_condition(arg))
             }
             Activation::Stream(var) => {
                 *ac = match self.stream_unifier.get_normalized_type(*var) {
                     // make stream types default to event stream with empty conjunction, i.e., true
                     Some(StreamTy::Infer(_)) | None => Activation::True,
                     Some(StreamTy::Event(Activation::Stream(v))) if *var == v => {
-                        return;
+                        return true;
                     }
                     Some(StreamTy::Event(ac)) => ac,
-                    _ => unreachable!(),
+                    Some(StreamTy::RealTime(_)) => {
+                        self.handler.error("real-time streams cannot be used in activation conditions");
+                        return false;
+                    }
                 };
-                self.normalize_activation_condition(ac);
+                self.normalize_activation_condition(ac)
             }
-            Activation::True => {}
+            Activation::True => true,
         }
     }
 
