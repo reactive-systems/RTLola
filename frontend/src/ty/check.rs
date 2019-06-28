@@ -810,7 +810,7 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
         stream_var: StreamVar,
         span: Span,
         expr: &'a Expression,
-        _duration: &'a Expression,
+        duration: &'a Expression,
         window_op: WindowOperation,
     ) -> Result<(), ()> {
         // the stream variable has to be real-time
@@ -823,6 +823,11 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
                 );
                 return Err(());
             }
+        }
+
+        // check duration
+        if let Err(message) = duration.parse_duration() {
+            self.handler.error_with_span("expected duration", LabeledSpan::new(duration.span, &message, true));
         }
 
         // value type depends on the aggregation function
