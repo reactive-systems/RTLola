@@ -9,6 +9,8 @@ pub mod ir;
 mod parse;
 mod reporting;
 mod stdlib;
+#[cfg(test)]
+mod tests;
 mod ty;
 
 // module containing the code for the executables
