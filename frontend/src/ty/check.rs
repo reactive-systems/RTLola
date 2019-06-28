@@ -714,7 +714,13 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
                 // recursion
                 self.infer_expression(base, None, Some(StreamVarOrTy::Var(stream_var)))?;
 
-                let ty = self.unifier.get_type(self.value_vars[&base.id]).expect("should have type at this point");
+                let ty = match self.unifier.get_type(self.value_vars[&base.id]) {
+                    Some(ty) => ty,
+                    None => {
+                        // could not determine type, thus, there was a previous error
+                        return Err(());
+                    }
+                };
                 let infered = ty.normalize_ty(&mut self.unifier);
 
                 debug!("{} {}", base, infered);
