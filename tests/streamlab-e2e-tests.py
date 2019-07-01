@@ -5,12 +5,9 @@ import platform
 import sys
 import argparse
 import re
+import os
 
-
-BUILD_VERSIONS = ["release", "debug"]
 EXIT_FAILURE = 1
-
-
 
 def build_path(base_dir, parts):
     path = base_dir
@@ -64,9 +61,7 @@ parser = argparse.ArgumentParser(description='Run end-to-end tests for StreamLab
 running_on_windows = platform.system() == "Windows"
 executable_name = "streamlab.exe" if running_on_windows else "streamlab"
 
-# TODO get build_version from command line an check against BUILD_VERSIONS
-# debug build is used during development so probably already build
-build_version = "debug"
+build_mode = os.getenv("BUILD_MODE", default="debug")
 
 repo_base_dir = Path(".").resolve()
 if not Path(".gitlab-ci.yml").exists():
@@ -75,13 +70,16 @@ if not Path(".gitlab-ci.yml").exists():
     else:
         print_fail("Run this script from the repo base or from te tests directory!")
         sys.exit(EXIT_FAILURE)
-streamlab_executable_path = repo_base_dir / "target" / build_version / executable_name
+streamlab_executable_path = repo_base_dir / "target" / build_mode / executable_name
 streamlab_executable_path_string = str(streamlab_executable_path)
 
-if build_version == "debug":
+if build_mode == "debug":
     cargo_build = subprocess.run(["cargo", "build"], cwd=str(repo_base_dir))
-else:
+elif build_mode == "release":
     cargo_build = subprocess.run(["cargo", "build", "--release"], cwd=str(repo_base_dir))
+else:
+    print("invalid BUILD_MODE '{}'".format(build_mode))
+    sys.exit(EXIT_FAILURE)
 if cargo_build.returncode != 0:
     sys.exit(EXIT_FAILURE)
 

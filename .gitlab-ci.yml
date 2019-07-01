@@ -71,6 +71,8 @@ check-ignored-tests:
 integration_tests:
   stage: test
   image: rust:latest
+  variables:
+    BUILD_MODE: "release"
   script:
     - cd tests && python3 ./streamlab-e2e-tests.py
 
