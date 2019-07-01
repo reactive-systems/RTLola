@@ -62,7 +62,9 @@ cargo:test-nightly:
 # Check that every ignored test has an accompanying comment
 check-ignored-tests:
   stage: check
-  image: rust:latest
+  image: alpine:latest
+  before_script:
+    - apk update && apk add --no-cache bash
   script:
     - ./check_ignored_tests_without_comment.sh
   allow_failure: true
