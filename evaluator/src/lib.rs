@@ -11,7 +11,8 @@ mod tests;
 
 use crate::coordination::Controller;
 use basics::{
-    EvalConfig, EvaluatorChoice, ExecutionMode, InputSource, OutputChannel, TimeFormat, TimeRepresentation, Verbosity,
+    EvalConfig, EvaluatorChoice, ExecutionMode, InputSource, OutputChannel, Statistics, TimeFormat, TimeRepresentation,
+    Verbosity,
 };
 use clap::{App, Arg, ArgGroup};
 use std::fs;
@@ -194,7 +195,7 @@ impl Config {
             _ => unreachable!(),
         };
 
-        let cfg = EvalConfig::new(src, verbosity, out, evaluator, mode, time_representation);
+        let cfg = EvalConfig::new(src, Statistics::None, verbosity, out, evaluator, mode, time_representation);
 
         Config { cfg, ir }
     }

@@ -3,11 +3,18 @@ use super::{InputSource, OutputChannel};
 #[derive(Clone, Debug)]
 pub struct EvalConfig {
     pub source: InputSource,
+    pub statistics: Statistics,
     pub verbosity: Verbosity,
     pub output_channel: OutputChannel,
     pub evaluator: EvaluatorChoice,
     pub mode: ExecutionMode,
     pub time_presentation: TimeRepresentation,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
+pub enum Statistics {
+    None,
+    Debug,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
@@ -57,17 +64,19 @@ pub enum TimeFormat {
 impl EvalConfig {
     pub fn new(
         source: InputSource,
+        statistics: Statistics,
         verbosity: Verbosity,
         output: OutputChannel,
         evaluator: EvaluatorChoice,
         mode: ExecutionMode,
         time_presentation: TimeRepresentation,
     ) -> Self {
-        EvalConfig { source, verbosity, output_channel: output, evaluator, mode, time_presentation }
+        EvalConfig { source, statistics, verbosity, output_channel: output, evaluator, mode, time_presentation }
     }
 
     pub fn debug() -> Self {
         let mut cfg = EvalConfig::default();
+        cfg.statistics = Statistics::Debug;
         cfg.verbosity = Verbosity::Debug;
         cfg
     }
@@ -81,6 +90,7 @@ impl EvalConfig {
     ) -> Self {
         EvalConfig::new(
             InputSource::file(path, None, None),
+            Statistics::None,
             Verbosity::Triggers,
             output,
             evaluator,
@@ -94,6 +104,7 @@ impl Default for EvalConfig {
     fn default() -> EvalConfig {
         EvalConfig {
             source: InputSource::StdIn,
+            statistics: Statistics::None,
             verbosity: Verbosity::Triggers,
             output_channel: OutputChannel::StdOut,
             evaluator: EvaluatorChoice::ClosureBased,

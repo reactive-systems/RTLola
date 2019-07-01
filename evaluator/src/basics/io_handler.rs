@@ -274,11 +274,20 @@ pub(crate) struct OutputHandler {
 
 impl OutputHandler {
     pub(crate) fn new(config: &EvalConfig, num_trigger: usize) -> OutputHandler {
+        let statistics = if config.verbosity == Verbosity::Progress {
+            let stats = Statistics::new(num_trigger);
+            stats.start_print_progress();
+            Some(stats)
+        } else if config.statistics == crate::basics::Statistics::Debug {
+            Some(Statistics::new(num_trigger))
+        } else {
+            None
+        };
         OutputHandler {
             verbosity: config.verbosity,
             channel: config.output_channel.clone(),
             file: None,
-            statistics: if config.verbosity == Verbosity::Progress { Some(Statistics::new(num_trigger)) } else { None },
+            statistics,
             start_time: Mutex::new(SystemTime::now()),
             time_representation: config.time_presentation,
         }
@@ -386,7 +395,9 @@ impl OutputHandler {
 
     pub(crate) fn terminate(&self) {
         if let Some(statistics) = &self.statistics {
-            statistics.terminate();
+            if self.verbosity == Verbosity::Progress {
+                statistics.terminate();
+            }
         }
     }
 }
@@ -416,9 +427,13 @@ pub(crate) struct Statistics {
 impl Statistics {
     fn new(num_trigger: usize) -> Self {
         let data = Arc::new(StatisticsData::new(num_trigger));
+        Statistics { data }
+    }
+
+    fn start_print_progress(&self) {
         // print intitial info
-        Self::print_progress_info(&data, ' ');
-        let copy = data.clone();
+        Self::print_progress_info(&self.data, ' ');
+        let copy = self.data.clone();
         thread::spawn(move || {
             // this thread is responsible for displaying progress information
             let mut spinner = "⠁⠁⠉⠙⠚⠒⠂⠂⠒⠲⠴⠤⠄⠄⠤⠠⠠⠤⠦⠖⠒⠐⠐⠒⠓⠋⠉⠈⠈ "
@@ -435,8 +450,6 @@ impl Statistics {
                 Self::print_progress_info(&copy, spinner.next().unwrap());
             }
         });
-
-        Statistics { data }
     }
 
     fn new_event(&self) {

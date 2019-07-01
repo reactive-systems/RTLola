@@ -10,7 +10,8 @@ fn run(spec: &str, data: &str) -> Result<Controller, Box<dyn std::error::Error>>
     write!(file, "{}", data).expect("writing tempfile failed");
     let cfg = EvalConfig::new(
         InputSource::file(file.path().to_str().unwrap().to_string(), None, None),
-        Verbosity::Progress,
+        Statistics::Debug,
+        Verbosity::Silent,
         OutputChannel::StdErr,
         EvaluatorChoice::ClosureBased,
         ExecutionMode::Offline,
