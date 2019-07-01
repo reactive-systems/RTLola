@@ -682,7 +682,7 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
     fn parse_at_expression(&mut self, output: &'a Output) -> Result<(Option<Freq>, Option<Activation<NodeId>>), ()> {
         if let Some(expr) = &output.extend.expr {
             match &expr.kind {
-                ExpressionKind::Lit(_) => match expr.parse_frequency() {
+                ExpressionKind::Lit(_) => match expr.parse_freqspec() {
                     Ok(f) => Ok((Some(Freq::new(f)), None)),
                     Err(s) => {
                         self.handler.error_with_span(&s, LabeledSpan::new(expr.span, "", true));

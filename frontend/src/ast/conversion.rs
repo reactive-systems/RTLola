@@ -111,7 +111,6 @@ impl Expression {
         }
     }
 
-    #[allow(dead_code)]
     pub(crate) fn parse_freqspec(&self) -> Result<UOM_Frequency, String> {
         if let Ok(freq) = self.parse_frequency() {
             Ok(freq)
