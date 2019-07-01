@@ -33,17 +33,17 @@ impl Schedule {
     /// due deadlines without missing one.
     fn find_extend_period(rates: &[Duration]) -> Duration {
         assert!(!rates.is_empty());
-        let rates: Vec<u128> = rates.iter().map(|r| dur_as_nanos(*r)).collect();
+        let rates: Vec<u128> = rates.iter().map(|r| r.as_nanos()).collect();
         let gcd = math::gcd_all(&rates);
-        dur_from_nanos(gcd)
+        Duration::from_nanos(gcd as u64)
     }
 
     /// Determines the hyper period of the given `rates`.
     fn find_hyper_period(rates: &[Duration]) -> Duration {
         assert!(!rates.is_empty());
-        let rates: Vec<u128> = rates.iter().map(|r| dur_as_nanos(*r)).collect();
+        let rates: Vec<u128> = rates.iter().map(|r| r.as_nanos()).collect();
         let lcm = math::lcm_all(&rates);
-        dur_from_nanos(lcm)
+        Duration::from_nanos(lcm as u64)
     }
 
     /// Takes a vec of gcd-sized intervals. In each interval, there are streams that need
@@ -138,7 +138,7 @@ mod tests {
         for (spec, expected) in cases.iter() {
             let rates: Vec<std::time::Duration> = to_ir(spec).time_driven.iter().map(|s| s.extend_rate).collect();
             let was = Schedule::find_extend_period(&rates);
-            let was = crate::duration::dur_as_nanos(was);
+            let was = was.as_nanos();
             assert_eq!(*expected, was);
         }
     }
