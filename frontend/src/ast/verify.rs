@@ -1,6 +1,7 @@
 use super::*;
 use crate::reporting::{Handler, LabeledSpan};
-use num::traits::sign::Signed;
+use num::Signed;
+use uom::si::time::second;
 
 /// The grammar is an over-approximation of syntactical valid specifications
 /// The verifier checks for those over-approximations and reports errors.
@@ -32,6 +33,7 @@ impl<'a, 'b> Verifier<'a, 'b> {
         expr.iter().for_each(|inner| Self::check_direct_access(self.handler, inner));
         expr.iter().for_each(|inner| Self::check_field_access(self.handler, inner));
         expr.iter().for_each(|inner| Self::check_non_positive_offset(self.handler, inner));
+        expr.iter().for_each(|inner| Self::check_sliding_window_duration(self.handler, inner));
     }
 
     fn check_missing_paranthesis(handler: &Handler, expr: &Expression) {
@@ -106,6 +108,28 @@ impl<'a, 'b> Verifier<'a, 'b> {
                     "field access has to be an integer",
                     LabeledSpan::new(ident.span, "expected an integer", true),
                 );
+            }
+        }
+    }
+
+    fn check_sliding_window_duration(handler: &Handler, expr: &Expression) {
+        use ExpressionKind::*;
+        if let SlidingWindowAggregation { expr: _, duration, aggregation: _ } = &expr.kind {
+            match duration.parse_duration() {
+                Err(_) => {
+                    handler.error_with_span(
+                        "aggregation duration invalid",
+                        LabeledSpan::new(duration.span, "duration invalid", true),
+                    );
+                }
+                Ok(dur) => {
+                    if !dur.get::<second>().is_positive() {
+                        handler.error_with_span(
+                            "only positive aggregation durations are supported",
+                            LabeledSpan::new(duration.span, "duration non-positive", true),
+                        );
+                    }
+                }
             }
         }
     }
