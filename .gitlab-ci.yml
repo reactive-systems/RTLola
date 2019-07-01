@@ -1,6 +1,8 @@
 stages:
+  - check
   - build
   - test
+  - bench
 
 # Install additional packages, like a C compiler and cmake
 #before_script:
@@ -29,7 +31,7 @@ cargo:test:windows:
 
 # Use cargo to check the source code formatting
 cargo:check-format:
-  stage: test
+  stage: check
   image: rust:latest
   before_script:
     - rustup component add rustfmt-preview
@@ -39,7 +41,7 @@ cargo:check-format:
 
 # Use cargo to run clippy (Rust linter)
 cargo:clippy:
-  stage: test
+  stage: check
   image: rust:latest
   before_script:
     - rustup component add clippy-preview
@@ -59,7 +61,7 @@ cargo:test-nightly:
 
 # Check that every ignored test has an accompanying comment
 check-ignored-tests:
-  stage: test
+  stage: check
   image: rust:latest
   script:
     - ./check_ignored_tests_without_comment.sh
@@ -74,7 +76,7 @@ integration_tests:
 
 # Use cargo to run the benchmarks
 cargo:bench:
-  stage: test
+  stage: bench
   tags:
     - benchmarking
   image: rustlang/rust:nightly
