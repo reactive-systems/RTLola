@@ -1652,6 +1652,14 @@ mod tests {
     }
 
     #[test]
+    fn test_window_invalid_duration() {
+        let spec = "input in: Int8\n output out: Bool @5Hz := in.aggregate(over: 0s, using: Σ)";
+        assert_eq!(1, num_type_errors(spec));
+        let spec = "input in: Int8\n output out: Bool @5Hz := in.aggregate(over: -3s, using: Σ)";
+        assert_eq!(1, num_type_errors(spec));
+    }
+
+    #[test]
     fn test_timed() {
         let spec = "output o1: Bool @10Hz:= false\noutput o2: Bool @10Hz:= o1";
         assert_eq!(0, num_type_errors(spec));
