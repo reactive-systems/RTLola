@@ -63,6 +63,7 @@ check-ignored-tests:
   image: rust:latest
   script:
     - ./check_ignored_tests_without_comment.sh
+  allow_failure: true
 
 # Run the tool by checking the number of triggers fired
 integration_tests:
