@@ -9,6 +9,11 @@ fn fuzzed_unknown_unit() {
 }
 
 #[test]
+fn fuzzed_bad_floating() {
+    assert!(parse("output d @ 2.5ez := 0").is_err());
+}
+
+#[test]
 fn fuzzed_denominator_eq_0() {
     assert!(parse(
         "input a: Int32\n\noutput b @ 00Hz := a.hold().defaults(to:10)\noutput c @ 5Hz := a.hold().defaults(to:10)"
