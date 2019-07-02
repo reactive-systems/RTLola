@@ -644,7 +644,7 @@ impl<'a> Lowering<'a> {
                         ir::Constant::UInt(lit.parse_numeric::<u64>().expect("checked by type checker"))
                     }
                     ir::Type::Int(_) => ir::Constant::Int(lit.parse_numeric::<i64>().expect("checked by type checker")),
-                    _ => unreachable!("checked by type checker"),
+                    _ => unreachable!("checked by type checker {}", expected_type),
                 }
             }
             LitKind::Bool(b) => ir::Constant::Bool(*b),

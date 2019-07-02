@@ -1,5 +1,6 @@
 use super::*;
 use crate::reporting::{Handler, LabeledSpan};
+use num::traits::sign::Signed;
 
 /// The grammar is an over-approximation of syntactical valid specifications
 /// The verifier checks for those over-approximations and reports errors.
@@ -30,6 +31,7 @@ impl<'a, 'b> Verifier<'a, 'b> {
         expr.iter().for_each(|inner| Self::check_missing_expression(self.handler, inner));
         expr.iter().for_each(|inner| Self::check_direct_access(self.handler, inner));
         expr.iter().for_each(|inner| Self::check_field_access(self.handler, inner));
+        expr.iter().for_each(|inner| Self::check_non_positive_offset(self.handler, inner));
     }
 
     fn check_missing_paranthesis(handler: &Handler, expr: &Expression) {
@@ -75,6 +77,24 @@ impl<'a, 'b> Verifier<'a, 'b> {
                 }
             }
             _ => {}
+        }
+    }
+
+    /// Currently, offsets can only be negative
+    fn check_non_positive_offset(handler: &Handler, expr: &Expression) {
+        use ExpressionKind::*;
+        if let Offset(_, offset) = &expr.kind {
+            if let super::Offset::Discrete(val) = offset {
+                if *val >= 0 {
+                    handler
+                        .error_with_span("only negative offsets are supported", LabeledSpan::new(expr.span, "", true));
+                }
+            } else if let super::Offset::RealTime(val, _) = offset {
+                if !val.is_negative() {
+                    handler
+                        .error_with_span("only negative offsets are supported", LabeledSpan::new(expr.span, "", true));
+                }
+            }
         }
     }
 
@@ -136,8 +156,13 @@ mod tests {
 
     #[test]
     fn test_offsets_direct_access() {
-        assert_eq!(0, number_of_errors("output a := x.offset(by: 1)"));
-        assert_eq!(1, number_of_errors("output a := x.hold().offset(by: 1)"));
+        assert_eq!(0, number_of_errors("output a := x.offset(by: -1)"));
+        assert_eq!(1, number_of_errors("output a := x.offset(by: 0)"));
+        assert_eq!(1, number_of_errors("output a := x.offset(by: 1)"));
+        assert_eq!(0, number_of_errors("output a := x.offset(by: -1s)"));
+        assert_eq!(1, number_of_errors("output a := x.offset(by: 0s)"));
+        assert_eq!(1, number_of_errors("output a := x.offset(by: 1s)"));
+        assert_eq!(1, number_of_errors("output a := x.hold().offset(by: -1)"));
         assert_eq!(1, number_of_errors("output a := (x+1).hold()"));
         assert_eq!(1, number_of_errors("output a := (x+1).aggregate(over: 1h, using: avg)"));
     }
