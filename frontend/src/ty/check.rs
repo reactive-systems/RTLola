@@ -1973,6 +1973,18 @@ mod tests {
     }
 
     #[test]
+    #[ignore] // ignore until implemented
+    fn test_aggregation_implicit_cast() {
+        let spec = "input in: UInt8\n output out: Int16 @5Hz := in.aggregate(over: 3s, using: Σ)";
+        assert_eq!(0, num_type_errors(spec));
+        let spec = "input in: Int8\n output out: Float32 @5Hz := in.aggregate(over: 3s, using: avg).defaults(to: 5.0)";
+        assert_eq!(0, num_type_errors(spec));
+        let spec =
+            "input in: Int8\n output out: Float32 @5Hz := in.aggregate(over: 3s, using: integral).defaults(to: 5.0)";
+        assert_eq!(0, num_type_errors(spec));
+    }
+
+    #[test]
     fn test_timed() {
         let spec = "output o1: Bool @10Hz:= false\noutput o2: Bool @10Hz:= o1";
         assert_eq!(0, num_type_errors(spec));
