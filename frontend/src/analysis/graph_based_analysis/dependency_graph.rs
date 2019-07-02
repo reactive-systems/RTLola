@@ -375,8 +375,11 @@ impl<'a> DependencyAnalyser<'a> {
                 .edge_weight(edge)
                 .expect("We do not modify the graph so every EdgeIndex should still be valid.")
             {
-                StreamDependency::Access(_, offset, _) => match offset {
-                    Offset::Time(_, ..) | Offset::SlidingWindow => true,
+                StreamDependency::Access(_, offset, span) => match offset {
+                    Offset::Time(_, ..) | Offset::SlidingWindow => {
+                        self.handler.error_with_span("cycle with periodic stream", LabeledSpan::new(*span, "", true));
+                        true
+                    }
                     Offset::Discrete(_) => false,
                 },
                 _ => false,
@@ -385,7 +388,7 @@ impl<'a> DependencyAnalyser<'a> {
 
         if any_rt {
             // TODO Max
-            unimplemented!()
+            return None;
         }
 
         let mut total_weight = 0;
