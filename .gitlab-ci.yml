@@ -86,5 +86,10 @@ cargo:bench:
   image: rustlang/rust:nightly
   script:
     - rustc --version && cargo --version      # Print version info for debugging
-    - cargo bench # TODO: actually compare the results
+    - cargo bench --quiet | grep -e 'bench:' | tee bench_results.txt # TODO: actually compare the results
+  artifacts:
+      name: "bench_results"
+      paths:
+        - bench_results.txt
+      expire_in: 5 yrs
   allow_failure: true
