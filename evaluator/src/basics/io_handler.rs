@@ -390,7 +390,6 @@ impl OutputHandler {
     }
 
     fn print(&self, msg: String) {
-        use crate::basics::OutputChannel;
         let _ = match self.channel {
             OutputChannel::StdOut => stdout().write((msg + "\n").as_bytes()),
             OutputChannel::StdErr => stderr().write((msg + "\n").as_bytes()),
