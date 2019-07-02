@@ -1985,6 +1985,19 @@ mod tests {
     }
 
     #[test]
+    fn test_aggregation_integer_integral() {
+        let spec =
+            "input in: UInt8\n output out: UInt8 @5Hz := in.aggregate(over: 3s, using: integral).defaults(to: 5)";
+        assert_eq!(1, num_type_errors(spec));
+        let spec = "input in: Int8\n output out: Int8 @5Hz := in.aggregate(over: 3s, using: integral).defaults(to: 5)";
+        assert_eq!(1, num_type_errors(spec));
+        let spec = "input in: UInt8\n output out @5Hz := in.aggregate(over: 3s, using: integral).defaults(to: 5.0)";
+        assert_eq!(0, num_type_errors(spec));
+        let spec = "input in: Int8\n output out @5Hz := in.aggregate(over: 3s, using: integral).defaults(to: 5.0)";
+        assert_eq!(0, num_type_errors(spec));
+    }
+
+    #[test]
     fn test_timed() {
         let spec = "output o1: Bool @10Hz:= false\noutput o2: Bool @10Hz:= o1";
         assert_eq!(0, num_type_errors(spec));
