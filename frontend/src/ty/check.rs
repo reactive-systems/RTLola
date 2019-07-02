@@ -960,7 +960,80 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
         }
         for output in &spec.outputs {
             debug!("{} has type {}", output, self.unifier.get_normalized_type(self.value_vars[&output.id]).unwrap());
+            self.check_literal_sizes(&output.expression);
         }
+        for trigger in &spec.trigger {
+            self.check_literal_sizes(&trigger.expression);
+        }
+    }
+
+    /// Check if literals fit the infered bit-width
+    fn check_literal_sizes(&mut self, expression: &Expression) {
+        use crate::ast::LitKind::*;
+        use crate::ty::{IntTy, UIntTy};
+        expression.iter().for_each(|e| {
+            if let ExpressionKind::Lit(l) = &e.kind {
+                if let Numeric(val, unit) = &l.kind {
+                    if !unit.is_none() {
+                        return;
+                    }
+                    if !val.contains('.') {
+                        // integer
+                        match self.unifier.get_normalized_type(self.value_vars[&e.id]) {
+                            Some(ValueTy::Int(IntTy::I8)) if val.parse::<i8>().is_err() => {
+                                self.handler.error_with_span(
+                                    "literal out of range for `Int8`",
+                                    LabeledSpan::new(e.span, "", true),
+                                );
+                            }
+                            Some(ValueTy::Int(IntTy::I16)) if val.parse::<i16>().is_err() => {
+                                self.handler.error_with_span(
+                                    "literal out of range for `Int16`",
+                                    LabeledSpan::new(e.span, "", true),
+                                );
+                            }
+                            Some(ValueTy::Int(IntTy::I32)) if val.parse::<i32>().is_err() => {
+                                self.handler.error_with_span(
+                                    "literal out of range for `Int32`",
+                                    LabeledSpan::new(e.span, "", true),
+                                );
+                            }
+                            Some(ValueTy::Int(IntTy::I64)) if val.parse::<i64>().is_err() => {
+                                self.handler.error_with_span(
+                                    "literal out of range for `Int64`",
+                                    LabeledSpan::new(e.span, "", true),
+                                );
+                            }
+                            Some(ValueTy::UInt(UIntTy::U8)) if val.parse::<u8>().is_err() => {
+                                self.handler.error_with_span(
+                                    "literal out of range for `UInt8`",
+                                    LabeledSpan::new(e.span, "", true),
+                                );
+                            }
+                            Some(ValueTy::UInt(UIntTy::U16)) if val.parse::<u16>().is_err() => {
+                                self.handler.error_with_span(
+                                    "literal out of range for `UInt16`",
+                                    LabeledSpan::new(e.span, "", true),
+                                );
+                            }
+                            Some(ValueTy::UInt(UIntTy::U32)) if val.parse::<u32>().is_err() => {
+                                self.handler.error_with_span(
+                                    "literal out of range for `UInt32`",
+                                    LabeledSpan::new(e.span, "", true),
+                                );
+                            }
+                            Some(ValueTy::UInt(UIntTy::U64)) if val.parse::<u64>().is_err() => {
+                                self.handler.error_with_span(
+                                    "literal out of range for `UInt64`",
+                                    LabeledSpan::new(e.span, "", true),
+                                );
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
+        })
     }
 
     fn handle_error(&mut self, mut err: InferError, span: Span) {
@@ -1839,5 +1912,11 @@ mod tests {
         let spec = "output a @3Hz := 0\noutput b @2Hz := b[-1].defaults(to: 0) + a[-1].hold().defaults(to: 0)";
         // workaround using sample and hold
         assert_eq!(0, num_type_errors(spec));
+    }
+
+    #[test]
+    fn test_to_large_literals() {
+        let spec = "output a: Int32 := 1111111111111111111111111110";
+        assert_eq!(1, num_type_errors(spec));
     }
 }
