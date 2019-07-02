@@ -9,26 +9,6 @@ stages:
 #- apt-get update -yqq
 #- apt-get install -yqq --no-install-recommends build-essential cmake
 
-# Use cargo to test the project on stable toolchain
-cargo:test:
-  stage: test
-  image: rust:latest
-  script:
-    - rustc --version && cargo --version      # Print version info for debugging
-    - cargo test --all --all-features --verbose
-
-# Use cargo to test the project on stable toolchain
-cargo:test:windows:
-  stage: test
-  tags:
-    - windows
-  image: rust:latest
-  script:
-    - rustup update
-    - rustc --version && cargo --version      # Print version info for debugging
-    - cargo test --all --all-features --verbose
-  allow_failure: true
-
 # Use cargo to check the source code formatting
 cargo:check-format:
   stage: check
@@ -50,15 +30,6 @@ cargo:clippy:
     - cargo clippy
   allow_failure: true                         # allow lint failures for now
 
-# Use cargo to test the project on nightly toolchain
-cargo:test-nightly:
-  stage: test
-  image: rustlang/rust:nightly
-  script:
-    - rustc --version && cargo --version      # Print version info for debugging
-    - cargo test --all --all-features --verbose
-  allow_failure: true
-
 # Check that every ignored test has an accompanying comment
 check-ignored-tests:
   stage: check
@@ -67,6 +38,35 @@ check-ignored-tests:
     - apk update && apk add --no-cache bash
   script:
     - ./check_ignored_tests_without_comment.sh
+  allow_failure: true
+
+# Use cargo to test the project on stable toolchain
+cargo:test:
+  stage: test
+  image: rust:latest
+  script:
+    - rustc --version && cargo --version      # Print version info for debugging
+    - cargo test --all --all-features --verbose
+
+# Use cargo to test the project on stable toolchain on windows
+cargo:test:windows:
+  stage: test
+  tags:
+    - windows
+  image: rust:latest
+  script:
+    - rustup update
+    - rustc --version && cargo --version      # Print version info for debugging
+    - cargo test --all --all-features --verbose
+  allow_failure: true
+
+# Use cargo to test the project on nightly toolchain
+cargo:test-nightly:
+  stage: test
+  image: rustlang/rust:nightly
+  script:
+    - rustc --version && cargo --version      # Print version info for debugging
+    - cargo test --all --all-features --verbose
   allow_failure: true
 
 # Run the tool by checking the number of triggers fired
