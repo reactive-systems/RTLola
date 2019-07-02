@@ -28,7 +28,6 @@ cargo:clippy:
   script:
     - rustc --version && cargo --version      # Print version info for debugging
     - cargo clippy
-  allow_failure: true                         # allow lint failures for now
 
 # Check that every ignored test has an accompanying comment
 check-ignored-tests:
