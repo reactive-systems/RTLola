@@ -68,6 +68,10 @@ impl Expression {
             _ => return Err(format!("expected numeric value with unit, found `{}`", self)),
         };
 
+        if !val.is_positive() {
+            return Err("frequencies have to be positive".to_string());
+        }
+
         assert!(val.is_positive());
 
         match unit.as_str() {
