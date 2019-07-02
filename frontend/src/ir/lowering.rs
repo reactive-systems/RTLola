@@ -818,7 +818,7 @@ mod tests {
 
     #[test]
     fn lower_one_sliding() {
-        let ir = spec_to_ir("input a: Int32 output b: Int64 @1Hz := a.aggregate(over: 3s, using: sum).defaults(to: 4)");
+        let ir = spec_to_ir("input a: Int32 output b: Int64 @1Hz := a.aggregate(over: 3s, using: sum)");
         check_stream_number(&ir, 1, 1, 1, 0, 1, 0);
     }
 
@@ -945,7 +945,7 @@ mod tests {
 
     #[test]
     fn window_lookup() {
-        let ir = spec_to_ir("input a: Int32 output b: Int32 @1Hz := a.aggregate(over: 3s, using: sum).defaults(to: 3)");
+        let ir = spec_to_ir("input a: Int32 output b: Int32 @1Hz := a.aggregate(over: 3s, using: sum)");
         let window = &ir.sliding_windows[0];
         assert_eq!(window, ir.get_window(window.reference));
     }

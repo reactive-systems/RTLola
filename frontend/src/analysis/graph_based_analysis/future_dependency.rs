@@ -122,11 +122,11 @@ mod tests {
 
     #[test]
     fn a_simple_future_dependence() {
-        check_future_dependence("output a := b[+1].defaults(to:0) input b: Int8", 0, 0, 1, vec![0])
+        check_future_dependence("output a := b[+1] input b: Int8", 0, 0, 1, vec![0])
     }
     #[test]
     fn a_simple_same_time_dependence_is_not_a_future_dependence() {
-        check_future_dependence("output a := b[0].defaults(to:0) input b: Int8", 0, 0, 0, vec![])
+        check_future_dependence("output a := b[0] input b: Int8", 0, 0, 0, vec![])
     }
     #[test]
     fn a_simple_past_dependence_is_not_a_future_dependence() {

@@ -578,7 +578,7 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
                     .map_err(|err| self.handle_error(err, inner.span))?;
 
                 // the stream type of `inner` is unconstrained
-                self.infer_expression(inner, Some(ValueTy::Infer(var)), None)?;
+                self.infer_expression(inner, Some(ValueTy::Infer(target_var)), None)?;
 
                 let function = match access_type {
                     StreamAccessKind::Hold => "hold()",
@@ -1632,13 +1632,13 @@ mod tests {
 
     #[test]
     fn test_window_widening() {
-        let spec = "input in: Int8\n output out: Int64 @5Hz:= in.aggregate(over: 3s, using: Σ).defaults(to: 0)";
+        let spec = "input in: Int8\n output out: Int64 @5Hz:= in.aggregate(over: 3s, using: Σ)";
         assert_eq!(0, num_type_errors(spec));
     }
 
     #[test]
     fn test_window() {
-        let spec = "input in: Int8\n output out: Int8 @5Hz := in.aggregate(over: 3s, using: Σ).defaults(to: 0)";
+        let spec = "input in: Int8\n output out: Int8 @5Hz := in.aggregate(over: 3s, using: Σ)";
         assert_eq!(0, num_type_errors(spec));
     }
 
@@ -1909,7 +1909,11 @@ mod tests {
 
     #[test]
     fn test_realtime_stream_integer_offset_sample_and_hold() {
-        let spec = "output a @3Hz := 0\noutput b @2Hz := b[-1].defaults(to: 0) + a[-1].hold().defaults(to: 0)";
+        let spec = "
+            output a @3Hz := 0
+            output a_offset := a[-1].defaults(to: 0)
+            output b @2Hz := b[-1].defaults(to: 0) + a_offset.hold().defaults(to: 0)
+        ";
         // workaround using sample and hold
         assert_eq!(0, num_type_errors(spec));
     }

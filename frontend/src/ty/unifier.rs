@@ -182,11 +182,11 @@ impl UnifiableTy for ValueTy {
     }
 
     /// Checks recursively if the `right` type can be transformed to match `self`.
-    fn coerces_with<U: Unifier<Var = Self::V, Ty = Self>>(&self, unifier: &mut U, right: &ValueTy) -> bool {
+    fn coerces_with<U: Unifier<Var = Self::V, Ty = Self>>(&self, _unifier: &mut U, right: &ValueTy) -> bool {
         debug!("coerce {} {}", self, right);
 
         // Rule 1: Any type `T` can be coerced into `Option<T>`
-        if let ValueTy::Option(ty) = self {
+        /*if let ValueTy::Option(ty) = self {
             // Take snapshot before checking equality to potentially rollback the side effects.
             let ss = unifier.snapshot();
             if ty.equal_to(unifier, right).is_some() {
@@ -195,7 +195,7 @@ impl UnifiableTy for ValueTy {
             } else {
                 unifier.rollback_to(ss);
             }
-        }
+        }*/
 
         // Rule 2: Bit-width increase is allowed
         match right {

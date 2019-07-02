@@ -31,7 +31,7 @@ fn fuzzed_denominator_eq_0() {
 
 #[test]
 fn fuzzed_lowering_bad_assumptions1() {
-    assert!(parse("input a: Int32\n\noutput b @ 10Hz := c.hold().defaults(to:10)\noutput c @ 5Hz := a.hold().defaults(to:10)\n\n\n").is_err());
+    assert!(parse("input a: Int32\n\noutput b @ 10Hz := c.hold().defaults(to:10)\noutput c @ 5Hz := a.hold().defaults(to:10)\n\n\n").is_ok());
     assert!(parse("input a: Int32\n\noutput s @ 10Hz := a.aggregate(over: 0.1s, using: sum)\noutput c @ 10Hz := a.aggregate(over: 0.1s, using: count)\noutput av @ 10Hz := a.aggregate(over: 0.1s, using: avg).defaults(to: 10)\n//output i @ 10Hz := a.aggregate(over: 0.1s, using: integral\n.defaults(to: 10)\n\ntrigger c == 1 \"count is 1\"\ntrigger c == 2 \"count is 2\"").is_err());
 }
 

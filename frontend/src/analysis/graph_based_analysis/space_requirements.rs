@@ -293,7 +293,7 @@ mod tests {
     #[test]
     fn a_simple_current_dependence() {
         check_buffer_size(
-            "output a := b[0].defaults(to:0) input b: Int8",
+            "output a := b[0] input b: Int8",
             0,
             0,
             2,
@@ -307,7 +307,7 @@ mod tests {
     #[test]
     fn a_simple_future_dependence() {
         check_buffer_size(
-            "output a := b[+1].defaults(to:0) input b: Int8",
+            "output a := b[+1] input b: Int8",
             0,
             0,
             2,
@@ -322,7 +322,7 @@ mod tests {
     #[ignore] // fix spec
     fn tracking_the_future() {
         check_tracking_size(
-            "output a :Int8 := b[+1s].defaults(to:0) input b: Int8",
+            "output a :Int8 := b[+1s] input b: Int8",
             0,
             0,
             2,
