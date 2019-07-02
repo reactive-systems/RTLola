@@ -2,6 +2,7 @@ stages:
   - check
   - build
   - test
+  - tests
   - bench
 
 # Install additional packages, like a C compiler and cmake
@@ -49,7 +50,7 @@ cargo:test:
 
 # Use cargo to test the project on stable toolchain on windows
 cargo:test:windows:
-  stage: test
+  stage: tests
   tags:
     - windows
   image: rust:latest
@@ -61,7 +62,7 @@ cargo:test:windows:
 
 # Use cargo to test the project on nightly toolchain
 cargo:test-nightly:
-  stage: test
+  stage: tests
   image: rustlang/rust:nightly
   script:
     - rustc --version && cargo --version      # Print version info for debugging
@@ -70,7 +71,7 @@ cargo:test-nightly:
 
 # Run the tool by checking the number of triggers fired
 integration_tests:
-  stage: test
+  stage: tests
   image: rust:latest
   variables:
     BUILD_MODE: "release"
