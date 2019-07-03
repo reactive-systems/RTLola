@@ -14,7 +14,7 @@ input gps: UInt8
 input time: Float64
 
 // check that the GPS module produces values frequent enough
-output gps_freq_off: Bool @ 1Hz := lat.aggregate(over: 1s, using: count).defaults(to: 9) < 9
+output gps_freq_off: Bool @ 1Hz := lat.aggregate(over: 1s, using: count) < 9
 trigger gps_freq_off "GPS sensor frequency < 9Hz"
 
 // compare the sensed velocity and the velocity based on the GPS coordinates
