@@ -8,7 +8,7 @@ IncompleteSpec = { SOI ~ LanguageSpec? ~ ImportStmts ~ Declaration* }
 Spec = { SOI ~ LanguageSpec? ~ ImportStmts ~ Declaration* ~ EOI }
 LanguageSpec ={ "//!" ~("ClassicLola" | "Lola2.0" | "RTLola") }
 ImportStmts = _{ ImportStmt* }
-ImportStmt  = { "import" ~ Ident }
+ImportStmt  = { "import " ~ Ident }
 Declaration = _{IncludeStatement | TypeDecl | ConstantStream | InputStream | OutputStream | Trigger}
 
 //////////////////////////////////////////////////
@@ -37,15 +37,15 @@ TerminateDecl = { "terminate" ~Expr }
 
 IncludeStatement = { "include"~ StringLiteral}
 
-TypeDecl = { "type"~ Ident ~"{" ~Ident~ ":"~Type~ ("," ~Ident~ ":"~Type)* ~ "}"}
+TypeDecl = { "type "  ~ Ident ~"{" ~Ident~ ":"~Type~ ("," ~Ident~ ":"~Type)* ~ "}"}
 
-ConstantStream = { "constant"~ Ident ~ ":" ~ Type ~":=" ~Literal}
+ConstantStream = { "constant " ~ Ident ~ ":" ~ Type ~":=" ~Literal}
 
-InputStream = { "input" ~ Ident ~ ParamList? ~ ":" ~ Type ~(","~ Ident~ ParamList? ~ ":" ~ Type)*}
+InputStream = { "input " ~ Ident ~ ParamList? ~ ":" ~ Type ~(","~ Ident~ ParamList? ~ ":" ~ Type)*}
 
-OutputStream = { "output"~ Ident ~ ParamList?~ (":" ~ Type)? ~ ActivationCondition? ~ TemplateSpec? ~":="~ Expr}
+OutputStream = { "output " ~ Ident ~ ParamList?~ (":" ~ Type)? ~ ActivationCondition? ~ TemplateSpec? ~":="~ Expr}
 
-Trigger = { "trigger"~ (Ident ~ ":=")? ~ Expr~ StringLiteral?}
+Trigger = { "trigger " ~ (Ident ~ ":=")? ~ Expr~ StringLiteral?}
 
 //////////////////////////////////////////////////
 ////////////////// Expressions ///////////////////
