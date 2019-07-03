@@ -121,8 +121,8 @@ fn fuzzed_type_checker_bad_assumptions() {
 
 #[test]
 fn fuzzed_type_checker_no_whitespace() {
-    assert!(parse("constantc := false").is_err());
-    assert!(parse("constant c := false").is_ok());
+    assert!(parse("constantc : Bool := false").is_err());
+    assert!(parse("constant c : Bool := false").is_ok());
     assert!(parse("inputa: Int32").is_err());
     assert!(parse("input a: Int32").is_ok());
     assert!(parse("input a: Int32\noutputb := a").is_err());

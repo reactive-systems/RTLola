@@ -39,7 +39,7 @@ IncludeStatement = { "include"~ StringLiteral}
 
 TypeDecl = { "type"~ Ident ~"{" ~Ident~ ":"~Type~ ("," ~Ident~ ":"~Type)* ~ "}"}
 
-ConstantStream = { "constant"~ Ident ~ (":" ~ Type)? ~":=" ~Literal}
+ConstantStream = { "constant"~ Ident ~ ":" ~ Type ~":=" ~Literal}
 
 InputStream = { "input" ~ Ident ~ ParamList? ~ ":" ~ Type ~(","~ Ident~ ParamList? ~ ":" ~ Type)*}
 
