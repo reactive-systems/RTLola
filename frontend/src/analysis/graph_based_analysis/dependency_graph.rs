@@ -420,7 +420,6 @@ impl<'a> DependencyAnalyser<'a> {
         let mut paths: Vec<Vec<petgraph::prelude::EdgeIndex>> = Vec::with_capacity(cycles.len());
         let mut path: Vec<petgraph::prelude::EdgeIndex> = Vec::new();
         for cycle in cycles.iter() {
-            println!("Transforming cycle {:?}", cycle);
             enumerate_paths(&self.dependency_graph, cycle, cycle.len(), &mut paths, &mut path, cycle[0]);
         }
         paths

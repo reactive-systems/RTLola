@@ -640,8 +640,6 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
                 }
                 assert_eq!(params.len(), fun_decl.parameters.len());
 
-                //                println!("{:?}", fun_decl);
-
                 for ty in types {
                     self.infer_type(ty)?;
                 }
@@ -897,7 +895,6 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
             })
             .collect();
         for (provided_type, &generic) in types.iter().zip(&generics) {
-            println!("{} {}", provided_type, generic);
             self.unifier
                 .unify_var_var(generic, self.value_vars[&provided_type.id])
                 .map_err(|err| self.handle_error(err, provided_type.span))?;
