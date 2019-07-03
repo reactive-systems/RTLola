@@ -118,3 +118,15 @@ fn fuzzed_type_checker_bad_assumptions() {
     assert!(parse("input a: Int32\ninput b: Int32\n\noutput c @0a := a +!b.hold().defaults(to: 0)\n\ntrigger c > 2 \"c is too large\"").is_err());
     assert!(parse("input a: Int32\ninput b: Int32\n\noutput c @0a := a + b.triggerdefaults(to: 0)\n\ntrigger c > 2 \"c is too large\"").is_err());
 }
+
+#[test]
+fn fuzzed_type_checker_no_whitespace() {
+    assert!(parse("constantc := false").is_err());
+    assert!(parse("constant c := false").is_ok());
+    assert!(parse("inputa: Int32").is_err());
+    assert!(parse("input a: Int32").is_ok());
+    assert!(parse("input a: Int32\noutputb := a").is_err());
+    assert!(parse("input a: Int32\noutput b := a").is_ok());
+    assert!(parse("input a: Int32\ntriggera > 0").is_err());
+    assert!(dbg!(parse("input a: Int32\ntrigger a > 0")).is_ok());
+}
