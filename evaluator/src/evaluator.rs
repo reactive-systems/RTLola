@@ -313,7 +313,7 @@ impl<'a> ExpressionEvaluator<'a> {
     fn eval_expr(&self, expr: &Expression, ts: Time) -> Value {
         use streamlab_frontend::ir::Expression::*;
         match expr {
-            LoadConstant(c) => match c {
+            LoadConstant(c, _) => match c {
                 Constant::Bool(b) => Value::Bool(*b),
                 Constant::UInt(u) => Value::Unsigned(*u),
                 Constant::Int(i) => Value::Signed(*i),
@@ -382,7 +382,7 @@ impl<'a> ExpressionEvaluator<'a> {
                 }
             }
 
-            Ite { condition, consequence, alternative } => {
+            Ite { condition, consequence, alternative, .. } => {
                 if self.eval_expr(condition, ts).get_bool() {
                     self.eval_expr(consequence, ts)
                 } else {
@@ -452,7 +452,7 @@ impl<'a> ExpressionEvaluator<'a> {
                     Value::Str(s) => match name.as_ref() {
                         "matches" => {
                             let re_str = match &args[1] {
-                                Expression::LoadConstant(Constant::Str(s)) => s,
+                                Expression::LoadConstant(Constant::Str(s), _) => s,
                                 _ => unreachable!("regex should be a string literal"),
                             };
                             // compiling regex every time it is used is a performance problem
@@ -494,7 +494,7 @@ impl<'a> ExpressionEvaluator<'a> {
                 }
             }
 
-            Default { expr, default } => {
+            Default { expr, default, .. } => {
                 let v = self.eval_expr(expr, ts);
                 if let Value::None = v {
                     self.eval_expr(default, ts)

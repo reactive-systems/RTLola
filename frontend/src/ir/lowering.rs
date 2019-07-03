@@ -456,7 +456,7 @@ impl<'a> Lowering<'a> {
         let result_type = self.lower_node_type(expr.id);
 
         let expr = match &expr.kind {
-            ExpressionKind::Lit(l) => ir::Expression::LoadConstant(self.lower_literal(l, expr.id)),
+            ExpressionKind::Lit(l) => ir::Expression::LoadConstant(self.lower_literal(l, expr.id), result_type.clone()),
             ExpressionKind::Ident(_) => {
                 let (src_ty, expr) = match self.get_decl(expr.id) {
                     Declaration::In(input) => (
@@ -490,6 +490,7 @@ impl<'a> Lowering<'a> {
             ExpressionKind::Default(e, dft) => ir::Expression::Default {
                 expr: Box::new(self.lower_expression(e).0),
                 default: Box::new(self.lower_expression(dft).0),
+                ty: result_type.clone(),
             },
             ExpressionKind::Offset(stream, offset) => {
                 let target = self.get_ref_for_ident(stream.id);
@@ -536,6 +537,7 @@ impl<'a> Lowering<'a> {
                     condition: Box::new(cond_expr),
                     consequence: Box::new(args.remove(0)),
                     alternative: Box::new(args.remove(0)),
+                    ty: result_type.clone(),
                 }
             }
             ExpressionKind::ParenthesizedExpression(_, e, _) => self.lower_expression(e).0,

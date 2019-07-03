@@ -32,7 +32,7 @@ impl<'s> Expr<'s> for Expression {
     fn compile(self) -> CompiledExpr<'s> {
         use Expression::*;
         match self {
-            LoadConstant(c) => {
+            LoadConstant(c, _) => {
                 let v = match c {
                     Constant::Bool(b) => Value::Bool(b),
                     Constant::UInt(u) => Value::Unsigned(u),
@@ -147,7 +147,7 @@ impl<'s> Expr<'s> for Expression {
 
             WindowLookup(win_ref) => CompiledExpr::new(move |ctx| ctx.lookup_window(win_ref)),
 
-            Ite { condition, consequence, alternative } => {
+            Ite { condition, consequence, alternative, .. } => {
                 let f_condition = condition.compile();
                 let f_consequence = consequence.compile();
                 let f_alternative = alternative.compile();
@@ -200,7 +200,7 @@ impl<'s> Expr<'s> for Expression {
                     "matches" => {
                         assert!(args.len() >= 2);
                         let re_str = match &args[1] {
-                            Expression::LoadConstant(Constant::Str(s)) => s,
+                            Expression::LoadConstant(Constant::Str(s), _) => s,
                             _ => unreachable!("regex should be a string literal"),
                         };
                         let re = Regex::new(&re_str).expect("Given regular expression was invalid");
@@ -278,7 +278,7 @@ impl<'s> Expr<'s> for Expression {
                 }
             }
 
-            Default { expr, default } => {
+            Default { expr, default, .. } => {
                 let f_expr = expr.compile();
                 let f_default = default.compile();
                 CompiledExpr::new(move |ctx| {

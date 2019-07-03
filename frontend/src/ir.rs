@@ -135,7 +135,7 @@ pub struct Trigger {
 pub enum Expression {
     /// Loading a constant
     /// 1st argument -> Constant
-    LoadConstant(Constant),
+    LoadConstant(Constant, Type),
     /// Applying arithmetic or logic operation and its monomorphic type
     /// Arguments never need to be coerced, @see `Expression::Convert`.
     /// Unary: 1st argument -> operand
@@ -159,6 +159,7 @@ pub enum Expression {
         condition: Box<Expression>,
         consequence: Box<Expression>,
         alternative: Box<Expression>,
+        ty: Type,
     },
     /// A tuple expression
     Tuple(Vec<Expression>),
@@ -176,6 +177,7 @@ pub enum Expression {
     Default {
         expr: Box<Expression>,
         default: Box<Expression>,
+        ty: Type,
     },
 }
 

@@ -5,7 +5,7 @@ use std::fmt::{Display, Formatter, Result};
 impl Display for Expression {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         match self {
-            Expression::LoadConstant(c) => write!(f, "{}", c),
+            Expression::LoadConstant(c, _) => write!(f, "{}", c),
             Expression::Function(name, args, ty) => {
                 write!(f, "{}(", name)?;
                 if let Type::Function(arg_tys, res) = ty {
@@ -21,14 +21,14 @@ impl Display for Expression {
             }
             Expression::Convert { from, to, expr } => write!(f, "cast<{},{}>({})", from, to, expr),
             Expression::Tuple(elems) => write_delim_list(f, elems, "(", ")", ","),
-            Expression::Ite { condition, consequence, alternative } => {
+            Expression::Ite { condition, consequence, alternative, .. } => {
                 write!(f, "if {} then {} else {}", condition, consequence, alternative)
             }
             Expression::ArithLog(op, args, ty) => {
                 write_delim_list(f, args, &format!("{}(", op), &format!(") : [{}]", ty), ",")
             }
             Expression::WindowLookup(wr) => write!(f, "{}", wr),
-            Expression::Default { expr, default } => write!(f, "{}.default({})", expr, default),
+            Expression::Default { expr, default, .. } => write!(f, "{}.default({})", expr, default),
             Expression::OffsetLookup { target, offset } => write!(f, "{}.offset({})", target, offset),
             Expression::SyncStreamLookup(sr) => write!(f, "{}", sr),
             Expression::StreamAccess(sr, access) => match access {
