@@ -327,10 +327,17 @@ impl<'a> Lowering<'a> {
                 }
             },
             Lit(_) => {}
-            Ident(_) => {
-                let sr = self.get_ref_for_ident(expr.id);
-                deps.push(ir::Dependency { stream: sr, offsets: vec![ir::Offset::PastDiscreteOffset(0)] })
-            }
+            Ident(_) => match self.get_decl(expr.id) {
+                Declaration::In(inp) => {
+                    let sr = self.get_ref_for_stream(inp.id);
+                    deps.push(ir::Dependency { stream: sr, offsets: vec![ir::Offset::PastDiscreteOffset(0)] })
+                }
+                Declaration::Out(out) => {
+                    let sr = self.get_ref_for_stream(out.id);
+                    deps.push(ir::Dependency { stream: sr, offsets: vec![ir::Offset::PastDiscreteOffset(0)] })
+                }
+                _ => {}
+            },
             StreamAccess(e, _) | Unary(_, e) | ParenthesizedExpression(_, e, _) | Field(e, _) => {
                 self.find_dependencies(e, deps)
             }
@@ -440,16 +447,25 @@ impl<'a> Lowering<'a> {
         let expr = match &expr.kind {
             ExpressionKind::Lit(l) => ir::Expression::LoadConstant(self.lower_literal(l, expr.id)),
             ExpressionKind::Ident(_) => {
-                let src_ty = match self.get_decl(expr.id) {
-                    Declaration::In(input) => self.lower_node_type(input.id),
-                    Declaration::Out(output) => self.lower_node_type(output.id),
+                let (src_ty, expr) = match self.get_decl(expr.id) {
+                    Declaration::In(input) => (
+                        self.lower_node_type(input.id),
+                        ir::Expression::SyncStreamLookup(self.get_ref_for_stream(input.id)),
+                    ),
+                    Declaration::Out(output) => (
+                        self.lower_node_type(output.id),
+                        ir::Expression::SyncStreamLookup(self.get_ref_for_stream(output.id)),
+                    ),
+                    Declaration::Const(constant) => (
+                        self.lower_node_type(constant.id),
+                        ir::Expression::LoadConstant(self.lower_literal(&constant.literal, constant.id)),
+                    ),
                     _ => unreachable!(),
                 };
-                let sync_expr = ir::Expression::SyncStreamLookup(self.get_ref_for_ident(expr.id));
                 if src_ty != result_type {
-                    ir::Expression::Convert { from: src_ty, to: result_type.clone(), expr: sync_expr.into() }
+                    ir::Expression::Convert { from: src_ty, to: result_type.clone(), expr: expr.into() }
                 } else {
-                    sync_expr
+                    expr
                 }
             }
             ExpressionKind::StreamAccess(expr, kind) => {
