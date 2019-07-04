@@ -1641,13 +1641,13 @@ mod tests {
 
     #[test]
     fn test_window_untimed() {
-        let spec = "input in: Int8\n output out: Int16 := in.aggregate(over: 3s, using: Σ).defaults(to: 5)";
+        let spec = "input in: Int8\n output out: Int16 := in.aggregate(over: 3s, using: Σ)";
         assert_eq!(1, num_type_errors(spec));
     }
 
     #[test]
     fn test_window_faulty() {
-        let spec = "input in: Int8\n output out: Bool @5Hz := in.aggregate(over: 3s, using: Σ).defaults(to: 5)";
+        let spec = "input in: Int8\n output out: Bool @5Hz := in.aggregate(over: 3s, using: Σ)";
         assert_eq!(1, num_type_errors(spec));
     }
 

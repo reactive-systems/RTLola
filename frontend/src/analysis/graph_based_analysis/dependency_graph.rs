@@ -870,7 +870,7 @@ mod tests {
     #[test]
     #[ignore] // real time analysis is not yet implemented
     fn self_sliding_window_should_be_no_problem() {
-        check_graph("output a: Int8 := a.aggregate(over: 1s, using: sum).defaults(to: 0)", 0, 0)
+        check_graph("output a: Int8 := a.aggregate(over: 1s, using: sum)", 0, 0)
     }
 
     #[test]
