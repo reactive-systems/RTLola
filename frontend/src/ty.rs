@@ -313,9 +313,9 @@ impl TypeConstraint {
     pub(crate) fn has_default(&self) -> Option<ValueTy> {
         use self::TypeConstraint::*;
         match self {
-            Integer | SignedInteger | Numeric => Some(ValueTy::Int(I32)),
-            UnsignedInteger => Some(ValueTy::UInt(U32)),
-            FloatingPoint => Some(ValueTy::Float(F32)),
+            Integer | SignedInteger | Numeric => Some(ValueTy::Int(I64)),
+            UnsignedInteger => Some(ValueTy::UInt(U64)),
+            FloatingPoint => Some(ValueTy::Float(F64)),
             _ => None,
         }
     }

@@ -976,50 +976,50 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
                     }
                     if !val.contains('.') {
                         // integer
-                        match self.unifier.get_normalized_type(self.value_vars[&e.id]) {
-                            Some(ValueTy::Int(IntTy::I8)) if val.parse::<i8>().is_err() => {
+                        match self.get_type(e.id) {
+                            ValueTy::Int(IntTy::I8) if val.parse::<i8>().is_err() => {
                                 self.handler.error_with_span(
                                     "literal out of range for `Int8`",
                                     LabeledSpan::new(e.span, "", true),
                                 );
                             }
-                            Some(ValueTy::Int(IntTy::I16)) if val.parse::<i16>().is_err() => {
+                            ValueTy::Int(IntTy::I16) if val.parse::<i16>().is_err() => {
                                 self.handler.error_with_span(
                                     "literal out of range for `Int16`",
                                     LabeledSpan::new(e.span, "", true),
                                 );
                             }
-                            Some(ValueTy::Int(IntTy::I32)) if val.parse::<i32>().is_err() => {
+                            ValueTy::Int(IntTy::I32) if val.parse::<i32>().is_err() => {
                                 self.handler.error_with_span(
                                     "literal out of range for `Int32`",
                                     LabeledSpan::new(e.span, "", true),
                                 );
                             }
-                            Some(ValueTy::Int(IntTy::I64)) if val.parse::<i64>().is_err() => {
+                            ValueTy::Int(IntTy::I64) if val.parse::<i64>().is_err() => {
                                 self.handler.error_with_span(
                                     "literal out of range for `Int64`",
                                     LabeledSpan::new(e.span, "", true),
                                 );
                             }
-                            Some(ValueTy::UInt(UIntTy::U8)) if val.parse::<u8>().is_err() => {
+                            ValueTy::UInt(UIntTy::U8) if val.parse::<u8>().is_err() => {
                                 self.handler.error_with_span(
                                     "literal out of range for `UInt8`",
                                     LabeledSpan::new(e.span, "", true),
                                 );
                             }
-                            Some(ValueTy::UInt(UIntTy::U16)) if val.parse::<u16>().is_err() => {
+                            ValueTy::UInt(UIntTy::U16) if val.parse::<u16>().is_err() => {
                                 self.handler.error_with_span(
                                     "literal out of range for `UInt16`",
                                     LabeledSpan::new(e.span, "", true),
                                 );
                             }
-                            Some(ValueTy::UInt(UIntTy::U32)) if val.parse::<u32>().is_err() => {
+                            ValueTy::UInt(UIntTy::U32) if val.parse::<u32>().is_err() => {
                                 self.handler.error_with_span(
                                     "literal out of range for `UInt32`",
                                     LabeledSpan::new(e.span, "", true),
                                 );
                             }
-                            Some(ValueTy::UInt(UIntTy::U64)) if val.parse::<u64>().is_err() => {
+                            ValueTy::UInt(UIntTy::U64) if val.parse::<u64>().is_err() => {
                                 self.handler.error_with_span(
                                     "literal out of range for `UInt64`",
                                     LabeledSpan::new(e.span, "", true),
@@ -1382,14 +1382,14 @@ mod tests {
     fn simple_ite_compare() {
         let spec = "output e := if 1 == 0 then 0 else -1";
         assert_eq!(0, num_type_errors(spec));
-        assert_eq!(get_type(spec), ValueTy::Int(IntTy::I32));
+        assert_eq!(get_type(spec), ValueTy::Int(IntTy::I64));
     }
 
     #[test]
     fn underspecified_ite_type() {
         let spec = "output o := if !false then 1.3 else -2.0";
         assert_eq!(0, num_type_errors(spec));
-        assert_eq!(get_type(spec), ValueTy::Float(FloatTy::F32));
+        assert_eq!(get_type(spec), ValueTy::Float(FloatTy::F64));
     }
 
     #[test]
@@ -1415,7 +1415,7 @@ mod tests {
     fn test_underspecified_type() {
         let spec = "output o := 2";
         assert_eq!(0, num_type_errors(spec));
-        assert_eq!(get_type(spec), ValueTy::Int(IntTy::I32));
+        assert_eq!(get_type(spec), ValueTy::Int(IntTy::I64));
     }
 
     #[test]
@@ -1795,7 +1795,7 @@ mod tests {
         // input `a` has NodeId = 0, StreamVar = 0
         // input `b` has NodeId = 2, StreamVar = 1
         // output `x` has NodeId = 4
-        assert_eq!(type_table.get_value_type(NodeId::new(4)), &ValueTy::Int(IntTy::I32));
+        assert_eq!(type_table.get_value_type(NodeId::new(4)), &ValueTy::Int(IntTy::I64));
         assert_eq!(
             type_table.get_stream_type(NodeId::new(4)),
             &StreamTy::Event(Activation::Disjunction(vec![
