@@ -130,3 +130,9 @@ fn fuzzed_type_checker_no_whitespace() {
     assert!(parse("input a: Int32\ntriggera > 0").is_err());
     assert!(dbg!(parse("input a: Int32\ntrigger a > 0")).is_ok());
 }
+
+#[test]
+fn fuzzed_type_checker_tuple() {
+    assert!(parse("output out: (Int8, Bool) := (1, false)").is_ok());
+    assert!(parse("output out: (Int8, Bool) := ((1), false)").is_err());
+}
