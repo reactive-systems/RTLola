@@ -259,15 +259,10 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
         // check if stream has timing infos
         let mut frequency = None;
         let mut activation = None;
-        if let Some(expr) = &output.extend.expr {
-            if let Ok(freq) = expr.parse_frequency() {
-                frequency = Some(Freq::new(freq));
-            } else {
-                match self.parse_activation_condition(output.id, expr) {
-                    Ok(act) => activation = Some(act),
-                    Err(_) => {}
-                }
-            }
+
+        if let Ok((f, a)) = self.parse_at_expression(output) {
+            frequency = f;
+            activation = a;
         }
 
         assert!(param_types.is_empty(), "Parametric outputs are currently not supported by type checker");
@@ -289,13 +284,28 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
         }
     }
 
+    fn parse_at_expression(&mut self, output: &'a Output) -> Result<(Option<Freq>, Option<Activation<StreamVar>>), ()> {
+        if let Some(expr) = &output.extend.expr {
+            match &expr.kind {
+                ExpressionKind::Lit(_) => match expr.parse_frequency() {
+                    Ok(f) => Ok((Some(Freq::new(f)), None)),
+                    Err(s) => {
+                        self.handler.error_with_span(&s, LabeledSpan::new(expr.span, "", true));
+                        Err(())
+                    }
+                },
+                _ => match self.parse_activation_condition(output.id, expr) {
+                    Ok(act) => Ok((None, Some(act))),
+                    Err(_) => Err(()),
+                },
+            }
+        } else {
+            Ok((None, None))
+        }
+    }
+
     fn parse_activation_condition(&mut self, out_id: NodeId, expr: &Expression) -> Result<Activation<StreamVar>, ()> {
         match &expr.kind {
-            ExpressionKind::Lit(_) => {
-                // may have been a frequency
-                self.handler.error_with_span("expected frequency", LabeledSpan::new(expr.span, "", true));
-                Err(())
-            }
             ExpressionKind::Ident(_) => match self.declarations[&expr.id] {
                 Declaration::In(input) => Ok(Activation::Stream(self.stream_vars[&input.id])),
                 Declaration::Out(output) => {
