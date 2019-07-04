@@ -136,3 +136,8 @@ fn fuzzed_type_checker_tuple() {
     assert!(parse("output out: (Int8, Bool) := (1, false)").is_ok());
     assert!(parse("output out: (Int8, Bool) := ((1), false)").is_err());
 }
+
+#[test]
+fn fuzzed_big_literal() {
+    assert!(parse("output o := 111111111111111111111111111").is_err());
+}
