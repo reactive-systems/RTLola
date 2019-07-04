@@ -141,3 +141,8 @@ fn fuzzed_type_checker_tuple() {
 fn fuzzed_big_literal() {
     assert!(parse("output o := 111111111111111111111111111").is_err());
 }
+
+#[test]
+fn fuzzed_invalid_activation_condition() {
+    assert!(parse("input a: Int32 output x @x := a.hold().defaults(to: 0)").is_err());
+}
