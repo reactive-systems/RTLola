@@ -262,17 +262,11 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
         if let Some(expr) = &output.extend.expr {
             if let Ok(freq) = expr.parse_frequency() {
                 frequency = Some(Freq::new(freq));
-            } else if let Some(act) = self.parse_activation_condition(expr) {
-                activation = Some(act);
             } else {
-                self.handler.error_with_span(
-                    "expected frequency or activation conditon",
-                    LabeledSpan::new(
-                        expr.span,
-                        "allowed are frequencies (`1Hz`) or Boolean conditions (`x | y`)",
-                        true,
-                    ),
-                );
+                match self.parse_activation_condition(output.id, expr) {
+                    Ok(act) => activation = Some(act),
+                    Err(_) => {}
+                }
             }
         }
 
@@ -295,27 +289,60 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
         }
     }
 
-    fn parse_activation_condition(&mut self, expr: &Expression) -> Option<Activation<StreamVar>> {
+    fn parse_activation_condition(&mut self, out_id: NodeId, expr: &Expression) -> Result<Activation<StreamVar>, ()> {
         match &expr.kind {
+            ExpressionKind::Lit(_) => {
+                // may have been a frequency
+                self.handler.error_with_span("expected frequency", LabeledSpan::new(expr.span, "", true));
+                Err(())
+            }
             ExpressionKind::Ident(_) => match self.declarations[&expr.id] {
-                Declaration::In(input) => Some(Activation::Stream(self.stream_vars[&input.id])),
-                Declaration::Out(output) => Some(Activation::Stream(self.stream_vars[&output.id])),
-                _ => None,
+                Declaration::In(input) => Ok(Activation::Stream(self.stream_vars[&input.id])),
+                Declaration::Out(output) => {
+                    if output.id == out_id {
+                        self.handler.error_with_span(
+                            "self-references are not allowed in activation conditions",
+                            LabeledSpan::new(expr.span, "", true),
+                        );
+                        Err(())
+                    } else {
+                        Ok(Activation::Stream(self.stream_vars[&output.id]))
+                    }
+                }
+                _ => {
+                    self.handler.error_with_span("expected stream", LabeledSpan::new(expr.span, "", true));
+                    Err(())
+                }
             },
             ExpressionKind::Binary(op, left, right) => {
-                let (left, right) =
-                    match (self.parse_activation_condition(left), self.parse_activation_condition(right)) {
-                        (Some(left), Some(right)) => (left, right),
-                        _ => return None,
-                    };
+                let (left, right) = match (
+                    self.parse_activation_condition(out_id, left),
+                    self.parse_activation_condition(out_id, right),
+                ) {
+                    (Ok(left), Ok(right)) => (left, right),
+                    (Err(l), _) => return Err(l),
+                    (_, Err(r)) => return Err(r),
+                };
                 match op {
-                    BinOp::And => Some(Activation::Conjunction(vec![left, right])),
-                    BinOp::Or => Some(Activation::Disjunction(vec![left, right])),
-                    _ => None,
+                    BinOp::And => Ok(Activation::Conjunction(vec![left, right])),
+                    BinOp::Or => Ok(Activation::Disjunction(vec![left, right])),
+                    _ => {
+                        self.handler.error_with_span(
+                            "only disjunctions and conjunctions are allowed for activation conditions",
+                            LabeledSpan::new(expr.span, "", true),
+                        );
+                        Err(())
+                    }
                 }
             }
-            ExpressionKind::ParenthesizedExpression(_, expr, _) => self.parse_activation_condition(expr),
-            _ => None,
+            ExpressionKind::ParenthesizedExpression(_, expr, _) => self.parse_activation_condition(out_id, expr),
+            _ => {
+                self.handler.error_with_span(
+                    "only variables, disjunctions, and conjunctions are allowed for activation conditions",
+                    LabeledSpan::new(expr.span, "", true),
+                );
+                Err(())
+            }
         }
     }
 
@@ -1177,7 +1204,8 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
                 {
                     Activation::Stream(crate::ir::StreamReference::InRef(idx))
                 } else {
-                    return None;
+                    // ignore remaining output variables, they are self-refrences
+                    Activation::True
                 }
             }
             Activation::True => Activation::True,
