@@ -146,3 +146,8 @@ fn fuzzed_big_literal() {
 fn fuzzed_invalid_activation_condition() {
     assert!(parse("input a: Int32 output x @x := a.hold().defaults(to: 0)").is_err());
 }
+
+#[test]
+fn fuzzed_big_realtime_offset() {
+    assert!(parse("output a: Int8 @0.5Hz := 1 output b: Int8 @1Hz := a[-1w].defaults(to: 0)").is_err());
+}
