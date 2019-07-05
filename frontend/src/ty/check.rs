@@ -1239,6 +1239,8 @@ mod tests {
     use crate::parse::*;
     use crate::reporting::Handler;
     use crate::ty::{FloatTy, IntTy, UIntTy};
+    use num::rational::Rational64 as Rational;
+    use num::FromPrimitive;
     use std::path::PathBuf;
 
     fn num_type_errors(spec: &str) -> usize {
@@ -1848,6 +1850,20 @@ mod tests {
                 Activation::Stream(StreamVar::new(0)),
                 Activation::Stream(StreamVar::new(1))
             ]))
+        );
+    }
+
+    #[test]
+    fn test_realtime_activation_condition() {
+        let spec = "output a: Int32 @10Hz := 0\noutput b: Int32 @5Hz := 0\noutput x := a+b";
+        let type_table = type_check(spec);
+        // output `a` has NodeId = 0, StreamVar = 0
+        // output `b` has NodeId = 7, StreamVar = 1
+        // output `x` has NodeId = 14
+        assert_eq!(type_table.get_value_type(NodeId::new(14)), &ValueTy::Int(IntTy::I32));
+        assert_eq!(
+            type_table.get_stream_type(NodeId::new(14)),
+            &StreamTy::RealTime(Freq::new(UOM_Frequency::new::<hertz>(Rational::from_u8(5).unwrap())))
         );
     }
 
