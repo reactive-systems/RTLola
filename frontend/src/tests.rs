@@ -143,6 +143,12 @@ fn fuzzed_big_literal() {
 }
 
 #[test]
+fn fuzzed_big_frequency() {
+    assert!(parse("output X @ 15111111111111MHz := 1").is_err());
+    assert!(parse("output X @ 15111111111111mHz := 1").is_ok());
+}
+
+#[test]
 fn fuzzed_invalid_activation_condition() {
     assert!(parse("input a: Int32 output x @x := a.hold().defaults(to: 0)").is_err());
 }
