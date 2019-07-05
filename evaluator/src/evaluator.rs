@@ -642,7 +642,7 @@ mod tests {
     use streamlab_frontend::ir::LolaIR;
 
     fn setup(spec: &str) -> (LolaIR, EvaluatorData, Instant) {
-        let ir = streamlab_frontend::parse(spec).expect("spec is invalid");
+        let ir = streamlab_frontend::parse(spec).unwrap_or_else(|e| panic!("spec is invalid: {}", e));
         let mut config = EvalConfig::default();
         config.verbosity = crate::basics::Verbosity::WarningsOnly;
         let handler = Arc::new(OutputHandler::new(&config, ir.triggers.len()));
