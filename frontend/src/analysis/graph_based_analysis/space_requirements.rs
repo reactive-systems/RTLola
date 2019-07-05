@@ -82,7 +82,7 @@ pub(crate) fn determine_tracking_size(
     dependency_graph: &DependencyGraph,
     type_table: &TypeTable,
     future_dependent_stream: &HashSet<NodeId>,
-) -> TrackingRequirements {
+) -> Result<TrackingRequirements, String> {
     let mut tracking: HashMap<NodeId, Vec<(NodeId, TrackingRequirement)>> = HashMap::new();
     for node_index in dependency_graph.node_indices() {
         let id = get_ast_id(*dependency_graph.node_weight(node_index).expect("We iterate over all node indices"));
@@ -107,10 +107,9 @@ pub(crate) fn determine_tracking_size(
                         let out_timing = &type_table.get_stream_type(id);
                         if let StreamTy::RealTime(freq) = out_timing {
                             let result: Rational = uom_time.get::<second>() / &freq.freq.get::<hertz>();
-                            let needed_space: u16 = if result.is_integer() {
-                                result.trunc().to_integer().to_u16().expect("buffer size does not fit in u16")
-                            } else {
-                                result.ceil().to_integer().to_u16().expect("buffer size does not fit in u16")
+                            let needed_space = match result.ceil().to_integer().to_u16() {
+                                Some(u) => u,
+                                _ => return Err(format!("buffer size does not fit in u16")),
                             };
                             tracking_requirements.push((src_id, TrackingRequirement::Finite(needed_space)));
                         // TODO We might be able to use the max(src_duration, out_duration)
@@ -124,10 +123,9 @@ pub(crate) fn determine_tracking_size(
                             }
                             StreamTy::RealTime(freq) => {
                                 let result: Rational = uom_time.get::<second>() / &freq.freq.get::<hertz>();
-                                let needed_space: u16 = if result.is_integer() {
-                                    result.trunc().to_integer().to_u16().expect("buffer size does not fit in u16")
-                                } else {
-                                    result.ceil().to_integer().to_u16().expect("buffer size does not fit in u16")
+                                let needed_space = match result.ceil().to_integer().to_u16() {
+                                    Some(u) => u,
+                                    _ => return Err(format!("buffer size does not fit in u16")),
                                 };
                                 tracking_requirements.push((src_id, TrackingRequirement::Finite(needed_space)));
                             }
@@ -142,7 +140,7 @@ pub(crate) fn determine_tracking_size(
 
         tracking.insert(id, tracking_requirements);
     }
-    tracking
+    Ok(tracking)
 }
 
 fn is_it_time_based(dependency_graph: &DependencyGraph, node_index: NIx, type_table: &TypeTable) -> bool {
@@ -252,7 +250,8 @@ mod tests {
 
         let future_dependent_stream = future_dependent_stream(&pruned_graph);
 
-        let tracking_requirements = determine_tracking_size(&pruned_graph, &type_table, &future_dependent_stream);
+        let tracking_requirements = determine_tracking_size(&pruned_graph, &type_table, &future_dependent_stream)
+            .expect("determining tracking size failed");
 
         assert_eq!(expected_errors, handler.emitted_errors());
         assert_eq!(expected_warning, handler.emitted_warnings());

@@ -44,13 +44,13 @@ pub(crate) fn analyze<'a>(
     declaration_table: &DeclarationTable<'a>,
     type_table: &TypeTable,
     handler: &Handler,
-) -> Option<GraphAnalysisResult> {
+) -> Result<GraphAnalysisResult, String> {
     let dependency_analysis =
         dependency_graph::analyse_dependencies(spec, version_analysis, declaration_table, &handler);
 
     if handler.contains_error() {
         handler.error("aborting due to previous error");
-        return None;
+        return Err(format!("Error during dependency analysis."));
     }
 
     let (evaluation_order_result, pruned_graph) =
@@ -61,7 +61,7 @@ pub(crate) fn analyze<'a>(
     let space_requirements = space_requirements::determine_buffer_size(&pruned_graph, &future_dependent_streams);
 
     let tracking_requirements =
-        space_requirements::determine_tracking_size(&pruned_graph, type_table, &future_dependent_streams);
+        space_requirements::determine_tracking_size(&pruned_graph, type_table, &future_dependent_streams)?;
 
     let _memory_requirement = memory_analysis::determine_worst_case_memory_consumption(
         spec,
@@ -78,7 +78,7 @@ pub(crate) fn analyze<'a>(
 
     let input_dependencies = input_dependencies::determine_required_inputs(&pruned_graph);
 
-    Some(GraphAnalysisResult {
+    Ok(GraphAnalysisResult {
         evaluation_order: evaluation_order_result,
         future_dependent_streams,
         space_requirements,

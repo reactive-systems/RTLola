@@ -94,11 +94,11 @@ pub(crate) fn analyze<'a, 'b>(spec: &'a LolaSpec, handler: &'b Handler) -> Analy
         &handler,
     );
 
-    if handler.contains_error() || graph_result.is_none() {
+    if handler.contains_error() || graph_result.is_err() {
         handler.error("aborting due to previous error");
         return AnalysisResult::new();
     } else {
-        result.graph_analysis_result = graph_result;
+        result.graph_analysis_result = graph_result.ok();
     }
 
     result
