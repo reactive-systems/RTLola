@@ -783,7 +783,15 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
                     }
                 }
             }
-            ParenthesizedExpression(_, expr, _) => self.infer_expression(expr, target, stream_ty)?,
+            ParenthesizedExpression(_, expr, _) => {
+                self.infer_expression(expr, target, stream_ty)?;
+                self.unifier
+                    .unify_var_var(var, self.value_vars[&expr.id])
+                    .map_err(|err| self.handle_error(err, expr.span))?;
+                self.stream_unifier
+                    .unify_var_var(stream_var, self.stream_vars[&expr.id])
+                    .map_err(|err| self.handle_error(err, expr.span))?;
+            }
             MissingExpression => {
                 // we simply ignore missing expressions and continue with type analysis
             }

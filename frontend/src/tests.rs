@@ -134,7 +134,7 @@ fn fuzzed_type_checker_no_whitespace() {
 #[test]
 fn fuzzed_type_checker_tuple() {
     assert!(parse("output out: (Int8, Bool) := (1, false)").is_ok());
-    assert!(parse("output out: (Int8, Bool) := ((1), false)").is_err());
+    assert!(parse("output out: (Int8, Bool) := ((1), false)").is_ok());
 }
 
 #[test]
