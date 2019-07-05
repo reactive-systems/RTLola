@@ -1,8 +1,8 @@
 use super::{Expression, ExpressionKind, LitKind, Offset, TimeUnit};
 use crate::ast::Literal;
-use lazy_static::lazy_static;
 use num::rational::Rational64 as Rational;
-use num::{traits::Inv, FromPrimitive, One, Signed, Zero};
+use num::traits::{Inv, Pow};
+use num::{BigInt, BigRational, FromPrimitive, One, Signed, ToPrimitive};
 use std::str::FromStr;
 use uom::si::frequency::hertz;
 use uom::si::rational64::Frequency as UOM_Frequency;
@@ -24,14 +24,14 @@ impl Expression {
                 },
                 _ => return Err(format!("expected numeric value with unit, found `{}`", self)),
             };
-            Ok(Offset::RealTime(parse_rational(val), TimeUnit::from_str(unit)?))
+            Ok(Offset::RealTime(parse_rational(val)?, TimeUnit::from_str(unit)?))
         }
     }
 
     pub(crate) fn parse_duration(&self) -> Result<UOM_Time, String> {
         let (val, unit) = match &self.kind {
             ExpressionKind::Lit(l) => match &l.kind {
-                LitKind::Numeric(val, Some(unit)) => (parse_rational(val), unit),
+                LitKind::Numeric(val, Some(unit)) => (parse_rational(val)?, unit),
                 _ => return Err(format!("expected numeric value with unit, found `{}`", l)),
             },
             _ => return Err(format!("expected numeric value with unit, found `{}`", self)),
@@ -62,7 +62,7 @@ impl Expression {
     pub(crate) fn parse_frequency(&self) -> Result<UOM_Frequency, String> {
         let (val, unit) = match &self.kind {
             ExpressionKind::Lit(l) => match &l.kind {
-                LitKind::Numeric(val, Some(unit)) => (parse_rational(val), unit),
+                LitKind::Numeric(val, Some(unit)) => (parse_rational(val)?, unit),
                 _ => return Err(format!("expected numeric value with unit, found `{}`", l)),
             },
             _ => return Err(format!("expected numeric value with unit, found `{}`", self)),
@@ -107,75 +107,56 @@ impl Expression {
     }
 }
 
-lazy_static! {
-    static ref DIGITS: Vec<RationalType> = (0..=10).map(|d| RationalType::from_u8(d).unwrap()).collect();
-}
-
-fn parse_rational(repr: &str) -> Rational {
+fn parse_rational(repr: &str) -> Result<Rational, String> {
     // precondition: repr is a valid floating point literal
-    assert!(repr.parse::<f64>().is_ok());
+    debug_assert!(repr.parse::<f64>().is_ok());
 
-    let mut numer = RationalType::zero();
-    let mut denom = RationalType::one();
-
-    let mut negated = false;
-    let mut decimal_places = None;
-    let mut exponent = None;
-
-    let mut chars = repr.chars();
-    while let Some(c) = chars.next() {
-        match c {
-            '+' => {}
-            '-' => {
-                if let Some((_, ref mut negated)) = exponent {
-                    *negated = true;
-                } else {
-                    negated = true;
-                }
-            }
-            'e' => {
-                // switch to parsing exponent
-                exponent = Some((0, false));
-            }
-            '.' => {
-                // start counting decimal places
-                decimal_places = Some(0_u32);
-            }
-            _ if c.is_digit(10) => {
-                let d = c.to_digit(10).unwrap();
-                if let Some((ref mut exp, _)) = exponent {
-                    *exp *= 10;
-                    *exp += d;
-                } else {
-                    numer *= &DIGITS[10];
-                    numer += &DIGITS[d as usize];
-                    if let Some(ref mut n) = decimal_places {
-                        *n += 1
-                    }
-                }
-            }
-            _ => unreachable!("incorrectly formated float"),
-        }
+    macro_rules! split_at {
+        ($s:expr, $c:literal) => {{
+            let (prefix, suffix) = $s.split_at($s.find($c).unwrap_or($s.len()));
+            let suffix = if suffix.len() > 0 { &suffix[1..] } else { suffix };
+            (prefix, suffix)
+        }};
     }
 
-    if negated {
-        numer = -numer;
+    let (int_digits, suffix) = split_at!(repr, '.'); // actually sign + int_digits
+    let (dec_digits, exp_str) = split_at!(suffix, 'e');
+
+    let digits = int_digits.to_string() + dec_digits; // actually sign + digits
+    let integer = match BigInt::from_str(digits.as_str()) {
+        Ok(i) => i,
+        Err(e) => return Err(format!("parsing rational '{}' failed: {}", repr, e)),
+    };
+    let mut r = BigRational::from(integer);
+    if !dec_digits.is_empty() {
+        // divide by 10 for each decimal place
+        r /= BigInt::from_u8(10).unwrap().pow(dec_digits.len());
     }
 
-    if let Some(n) = decimal_places {
-        denom *= DIGITS[10].pow(n);
-    }
-
-    if let Some((exp, negated)) = exponent {
-        let e_factor = DIGITS[10].pow(exp);
-        if negated {
-            denom *= e_factor;
+    if !exp_str.is_empty() {
+        let exp = match BigInt::from_str(exp_str) {
+            Ok(i) => i,
+            Err(e) => return Err(format!("parsing rational '{}' failed: {}", repr, e)),
+        };
+        let exp = match exp.to_i16() {
+            Some(i) => i,
+            None => {
+                return Err(format!("parsing rational '{}' failed: e exponent {} does not fit into i16", repr, exp))
+            }
+        };
+        let factor = BigInt::from_u8(10).unwrap().pow(exp.abs() as u16);
+        if exp.is_negative() {
+            r /= factor;
         } else {
-            numer *= e_factor;
+            r *= factor;
         }
     }
 
-    Rational::new(numer, denom)
+    let p = match (r.numer().to_i64(), r.denom().to_i64()) {
+        (Some(n), Some(d)) => (n, d),
+        _ => return Err(format!("parsing rational failed: rational {} does not fit into Rational64", r)),
+    };
+    Ok(Rational::from(p))
 }
 
 impl Expression {
@@ -314,7 +295,8 @@ mod tests {
             ($f:expr) => {
                 let f_string = format!("{}", $f);
                 let f = f_string.parse::<f64>().unwrap();
-                assert_eq!(parse_rational(f_string.as_str()), Rational::from_f64(f).unwrap());
+                let was = parse_rational(f_string.as_str()).unwrap_or_else(|e| panic!("parsing failed: {}", e));
+                assert_eq!(was, Rational::from_f64(f).unwrap());
             };
         };
         check_on!(0);
