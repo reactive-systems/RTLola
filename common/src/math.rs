@@ -2,32 +2,6 @@ use num::integer::gcd as num_gcd;
 use num::integer::lcm as num_lcm;
 use num::rational::Rational64 as Rational;
 
-pub(crate) fn gcd(mut a: u128, mut b: u128) -> u128 {
-    // Courtesy of wikipedia.
-    while b != 0 {
-        let temp = b;
-        b = a % b;
-        a = temp;
-    }
-    a
-}
-
-pub(crate) fn lcm(a: u128, b: u128) -> u128 {
-    // Courtesy of wikipedia.
-    let mul = a * b;
-    mul / gcd(a, b)
-}
-
-pub(crate) fn gcd_all(v: &[u128]) -> u128 {
-    assert!(!v.is_empty());
-    v.iter().fold(v[0], |a, b| gcd(a, *b))
-}
-
-pub(crate) fn lcm_all(v: &[u128]) -> u128 {
-    assert!(!v.is_empty());
-    v.iter().fold(v[0], |a, b| lcm(a, *b))
-}
-
 pub(crate) fn rational_gcd(a: Rational, b: Rational) -> Rational {
     let numer = num_gcd(*a.numer(), *b.numer());
     let denom = num_lcm(*a.denom(), *b.denom());
@@ -52,14 +26,30 @@ pub(crate) fn rational_lcm_all(v: &[Rational]) -> Rational {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use num::FromPrimitive;
 
+    macro_rules! rat {
+        ($i:expr) => {
+            Rational::from_i64($i).unwrap()
+        };
+        ($n:expr, $d:expr) => {
+            Rational::new($n, $d)
+        };
+    }
     #[test]
     fn test_gcd() {
-        assert_eq!(super::gcd(3, 18), 3);
-        assert_eq!(super::gcd(18, 3), 3);
-        assert_eq!(super::gcd(1, 25), 1);
-        assert_eq!(super::gcd(5, 13), 1);
-        assert_eq!(super::gcd(25, 40), 5);
-        assert_eq!(super::gcd(7, 7), 7);
+        assert_eq!(rational_gcd(rat!(3), rat!(18)), rat!(3));
+        assert_eq!(rational_gcd(rat!(18), rat!(3)), rat!(3));
+        assert_eq!(rational_gcd(rat!(1), rat!(25)), rat!(1));
+        assert_eq!(rational_gcd(rat!(5), rat!(13)), rat!(1));
+        assert_eq!(rational_gcd(rat!(25), rat!(40)), rat!(5));
+        assert_eq!(rational_gcd(rat!(7), rat!(7)), rat!(7));
+        assert_eq!(rational_gcd(rat!(7), rat!(7)), rat!(7));
+
+        assert_eq!(rational_gcd(rat!(1, 4), rat!(1, 2)), rat!(1, 4));
+        assert_eq!(rational_lcm(rat!(1, 4), rat!(1, 2)), rat!(1, 2));
+        assert_eq!(rational_gcd(rat!(2, 3), rat!(1, 8)), rat!(1, 24));
+        assert_eq!(rational_lcm(rat!(2, 3), rat!(1, 8)), rat!(2));
     }
 }
