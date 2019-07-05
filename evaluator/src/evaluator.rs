@@ -516,11 +516,11 @@ impl<'a> ExpressionEvaluator<'a> {
     fn lookup_latest_check(&self, stream_ref: StreamReference) -> Value {
         let inst = match stream_ref {
             StreamReference::InRef(ix) => {
-                debug_assert!(self.fresh_inputs.contains(ix));
+                debug_assert!(self.fresh_inputs.contains(ix), "ix={}", ix);
                 self.global_store.get_in_instance(ix)
             }
             StreamReference::OutRef(ix) => {
-                debug_assert!(self.fresh_outputs.contains(ix));
+                debug_assert!(self.fresh_outputs.contains(ix), "ix={}", ix);
                 self.global_store.get_out_instance(ix).expect("no out instance")
             }
         };
@@ -558,11 +558,11 @@ impl<'e> EvaluationContext<'e> {
     pub(crate) fn lookup_latest_check(&self, stream_ref: StreamReference) -> Value {
         let inst = match stream_ref {
             StreamReference::InRef(ix) => {
-                debug_assert!(self.fresh_inputs.contains(ix));
+                debug_assert!(self.fresh_inputs.contains(ix), "ix={}", ix);
                 self.global_store.get_in_instance(ix)
             }
             StreamReference::OutRef(ix) => {
-                debug_assert!(self.fresh_outputs.contains(ix));
+                debug_assert!(self.fresh_outputs.contains(ix), "ix={}", ix);
                 self.global_store.get_out_instance(ix).expect("no out instance")
             }
         };
