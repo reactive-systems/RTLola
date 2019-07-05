@@ -117,8 +117,11 @@ impl Expression {
             Ok(freq)
         } else if let Ok(period) = self.parse_duration() {
             let seconds = period.get::<second>();
-            assert!(seconds.is_positive());
-            Ok(UOM_Frequency::new::<hertz>(seconds.inv()))
+            if seconds.is_positive() {
+                Ok(UOM_Frequency::new::<hertz>(seconds.inv()))
+            } else {
+                Err(format!("duration of periodic stream specification must be positiv, found `{:#?}`", period))
+            }
         } else {
             Err(format!("expected frequency or duration, found `{}`", self))
         }
