@@ -1,7 +1,7 @@
 use super::{Expression, ExpressionKind, LitKind, Offset, TimeUnit};
 use crate::ast::Literal;
 use num::rational::Rational64 as Rational;
-use num::traits::{Inv, Pow};
+use num::traits::{CheckedMul, Inv, Pow};
 use num::{BigInt, BigRational, FromPrimitive, One, Signed, ToPrimitive};
 use std::str::FromStr;
 use uom::si::frequency::hertz;
@@ -52,7 +52,16 @@ impl Expression {
                     "a" => UOM_Time::new::<day>(Rational::from_u64(365).unwrap()),
                     u => unreachable!("'{}' should not have been catched by outer match", u),
                 };
-                let duration = val * factor.get::<second>();
+                let factor = factor.get::<second>();
+                let duration = match val.checked_mul(&factor) {
+                    Some(d) => d,
+                    _ => {
+                        return Err(format!(
+                            "parsing duration failed: rational {}*{} does not fit into Rational64",
+                            val, factor
+                        ))
+                    }
+                };
                 Ok(UOM_Time::new::<second>(duration))
             }
             u => return Err(format!("expected duration unit, found `{}`", u)),
@@ -86,7 +95,16 @@ impl Expression {
                     "GHz" => UOM_Frequency::new::<gigahertz>(Rational::one()),
                     u => unreachable!("'{}' should not have been catched by outer match", u),
                 };
-                let freq = val * factor.get::<hertz>();
+                let factor = factor.get::<hertz>();
+                let freq = match val.checked_mul(&factor) {
+                    Some(f) => f,
+                    _ => {
+                        return Err(format!(
+                            "parsing frequency failed: rational {}*{} does not fit into Rational64",
+                            val, factor
+                        ))
+                    }
+                };
                 Ok(UOM_Frequency::new::<hertz>(freq))
             }
             u => return Err(format!("expected frequency unit, found `{}`", u)),
