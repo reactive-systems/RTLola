@@ -163,3 +163,8 @@ fn fuzzed_activation_condition_greedy_lookup() {
     assert!(parse("output a: Int8 @b := 0 output b: Int8 @ 1Hz := 0").is_ok());
     assert!(parse("output b: Int8 @ 1Hz := 0 output a: Int8 @b := 0").is_ok());
 }
+
+#[test]
+fn fuzzed_tuple_access_on_steriods() {
+    assert!(parse("output count := count.8>(-1).defaulM(0) . 1").is_err());
+}
