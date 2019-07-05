@@ -157,3 +157,9 @@ fn fuzzed_invalid_activation_condition() {
 fn fuzzed_big_realtime_offset() {
     assert!(parse("output a: Int8 @0.5Hz := 1 output b: Int8 @1Hz := a[-1w].defaults(to: 0)").is_err());
 }
+
+#[test]
+fn fuzzed_activation_condition_greedy_lookup() {
+    assert!(parse("output a: Int8 @b := 0 output b: Int8 @ 1Hz := 0").is_ok());
+    assert!(parse("output b: Int8 @ 1Hz := 0 output a: Int8 @b := 0").is_ok());
+}
