@@ -130,12 +130,12 @@ impl Freq {
         let numer_right = other.freq.get::<hertz>().numer().clone();
         let denom_left = self.freq.get::<hertz>().denom().clone();
         let denom_right = other.freq.get::<hertz>().denom().clone();
-        // lcm(self, other) = lcm(numer_left, numer_right) / gcd(denom_left, denom_right)
+        // gcd(self, other) = gcd(numer_left, numer_right) / lcm(denom_left, denom_right)
         // only works if rational numbers are reduced, which ist the default for `Rational`
         Freq {
             freq: UOM_Frequency::new::<hertz>(Rational::new(
-                numer_left.lcm(&numer_right),
-                denom_left.gcd(&denom_right),
+                numer_left.gcd(&numer_right),
+                denom_left.lcm(&denom_right),
             )),
         }
     }
@@ -363,9 +363,9 @@ mod tests {
 
     #[test]
     fn test_freq_conjunction() {
-        let a = Freq::new(UOM_Frequency::new::<hertz>(Rational::from_i64(2).unwrap()));
-        let b = Freq::new(UOM_Frequency::new::<hertz>(Rational::from_i64(3).unwrap()));
-        let c = Freq::new(UOM_Frequency::new::<hertz>(Rational::from_i64(6).unwrap()));
+        let a = Freq::new(UOM_Frequency::new::<hertz>(Rational::from_i64(6).unwrap()));
+        let b = Freq::new(UOM_Frequency::new::<hertz>(Rational::from_i64(4).unwrap()));
+        let c = Freq::new(UOM_Frequency::new::<hertz>(Rational::from_i64(2).unwrap()));
         assert_eq!(a.conjunction(&b), c)
     }
 }
