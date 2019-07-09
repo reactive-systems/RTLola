@@ -5,6 +5,8 @@ pub use crate::ast::StreamAccessKind; // Re-export needed for IR
 use crate::ty::ValueTy;
 pub use crate::ty::{Activation, FloatTy, IntTy, UIntTy}; // Re-export needed for IR
 use std::time::Duration;
+use uom::si::rational64::Frequency as UOM_Frequency;
+use uom::si::rational64::Time as UOM_Time;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct LolaIR {
@@ -109,9 +111,11 @@ pub struct OutputStream {
     pub ac: Option<Activation<StreamReference>>,
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct TimeDrivenStream {
     pub reference: StreamReference,
+    pub frequency: UOM_Frequency,
+    pub period: UOM_Time,
     pub extend_rate: Duration,
 }
 

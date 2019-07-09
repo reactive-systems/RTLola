@@ -19,9 +19,10 @@ use crate::analysis::graph_based_analysis::space_requirements::{
 use crate::analysis::graph_based_analysis::{ComputeStep, RequiredInputs, StorageRequirement, TrackingRequirement};
 use crate::analysis::AnalysisResult;
 
-use num::{traits::Inv, ToPrimitive};
-use uom::si::frequency::gigahertz;
-use uom::si::time::nanosecond;
+use num::{traits::Inv, Signed, ToPrimitive};
+use uom::si::frequency::{gigahertz, hertz};
+use uom::si::rational64::Time as UOM_Time;
+use uom::si::time::{nanosecond, second};
 
 type EvalTable = HashMap<NodeId, u32>;
 
@@ -174,7 +175,7 @@ impl<'a> Lowering<'a> {
         self.ir.triggers.push(trig);
     }
 
-    fn collect_tracking_info(&self, nid: NodeId, time_driven: Option<TimeDrivenStream>) -> Vec<ir::Tracking> {
+    fn collect_tracking_info(&self, nid: NodeId, time_driven: Option<&TimeDrivenStream>) -> Vec<ir::Tracking> {
         let dependent = self.find_depending_streams(nid);
         assert!(
             dependent.iter().all(|(_, req)| match req {
@@ -196,9 +197,9 @@ impl<'a> Lowering<'a> {
         let reference = self.get_ref_for_stream(nid);
         let time_driven = self.check_time_driven(ast_output.id, reference);
 
-        let trackings = self.collect_tracking_info(nid, time_driven);
+        let trackings = self.collect_tracking_info(nid, time_driven.as_ref());
 
-        let ac = match time_driven {
+        let ac = match time_driven.as_ref() {
             None => Some(self.tt.get_acti_cond(ast_output.id).clone()),
             Some(_tds) => None,
         };
@@ -366,7 +367,7 @@ impl<'a> Lowering<'a> {
 
     fn lower_tracking_req(
         &self,
-        tracker: Option<TimeDrivenStream>,
+        tracker: Option<&TimeDrivenStream>,
         trackee: NodeId,
         req: TrackingRequirement,
     ) -> ir::Tracking {
@@ -645,22 +646,18 @@ impl<'a> Lowering<'a> {
             }
             ast::Offset::RealTime(_, _) => {
                 let uom_offset = offset.to_uom_time().expect("ast::Offset::RealTime should return uom_time");
-                let offset_nanos = uom_offset
-                    .get::<nanosecond>()
-                    .to_integer()
-                    .abs()
-                    .to_u128()
-                    .expect("extend duration [ns] does not fit in u128");
-                let period_nanos = self
+                let period = self
                     .ir
                     .time_driven
                     .iter()
                     .find(|td| td.reference == target)
                     .expect("target should exist in ir.time_driven")
-                    .extend_rate
-                    .as_nanos();
-                debug_assert!(offset_nanos % period_nanos == 0, "offset:{}, period:{}", offset_nanos, period_nanos); // should be checked already
-                ir::Offset::PastDiscreteOffset((offset_nanos / period_nanos) as u32)
+                    .period;
+                let offset = uom_offset.get::<second>() / period.get::<second>();
+                debug_assert!(offset.is_integer(), "offset={:#?}, period={:#?}", uom_offset, period); // should be checked already
+                debug_assert!(offset.is_negative());
+                let offset = offset.abs().to_integer().to_u32().expect("offset to big for u32");
+                ir::Offset::PastDiscreteOffset(offset)
             }
         }
     }
@@ -718,6 +715,8 @@ impl<'a> Lowering<'a> {
         match &self.tt.get_stream_type(stream_id) {
             StreamTy::RealTime(f) => Some(TimeDrivenStream {
                 reference,
+                frequency: f.freq,
+                period: UOM_Time::new::<second>(f.freq.get::<hertz>().inv()),
                 extend_rate: Duration::from_nanos(
                     f.freq
                         .get::<gigahertz>()
