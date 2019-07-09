@@ -1,3 +1,7 @@
+use num::integer::gcd as num_gcd;
+use num::integer::lcm as num_lcm;
+use num::rational::Rational64 as Rational;
+
 pub(crate) fn gcd(mut a: u128, mut b: u128) -> u128 {
     // Courtesy of wikipedia.
     while b != 0 {
@@ -22,6 +26,28 @@ pub(crate) fn gcd_all(v: &[u128]) -> u128 {
 pub(crate) fn lcm_all(v: &[u128]) -> u128 {
     assert!(!v.is_empty());
     v.iter().fold(v[0], |a, b| lcm(a, *b))
+}
+
+pub(crate) fn rational_gcd(a: Rational, b: Rational) -> Rational {
+    let numer = num_gcd(*a.numer(), *b.numer());
+    let denom = num_lcm(*a.denom(), *b.denom());
+    Rational::new(numer, denom)
+}
+
+pub(crate) fn rational_lcm(a: Rational, b: Rational) -> Rational {
+    let numer = num_lcm(*a.numer(), *b.numer());
+    let denom = num_gcd(*a.denom(), *b.denom());
+    Rational::new(numer, denom)
+}
+
+pub(crate) fn rational_gcd_all(v: &[Rational]) -> Rational {
+    assert!(!v.is_empty());
+    v.iter().fold(v[0], |a, b| rational_gcd(a, *b))
+}
+
+pub(crate) fn rational_lcm_all(v: &[Rational]) -> Rational {
+    assert!(!v.is_empty());
+    v.iter().fold(v[0], |a, b| rational_lcm(a, *b))
 }
 
 #[cfg(test)]

@@ -6,3 +6,4 @@ edition = "2018"
 
 [dependencies]
 streamlab-frontend = {path = "../frontend/"}
+num = "0.2.0"
