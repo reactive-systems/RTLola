@@ -46,7 +46,7 @@ cargo:test:
   image: rust:latest
   script:
     - rustc --version && cargo --version      # Print version info for debugging
-    - cargo test --all --all-features --verbose
+    - cargo test --all --verbose
 
 # Use cargo to test the project on stable toolchain on windows
 cargo:test:windows:
@@ -57,7 +57,7 @@ cargo:test:windows:
   script:
     - rustup update
     - rustc --version && cargo --version      # Print version info for debugging
-    - cargo test --all --all-features --verbose
+    - cargo test --all --verbose
   allow_failure: true
 
 # Use cargo to test the project on nightly toolchain
@@ -66,7 +66,7 @@ cargo:test-nightly:
   image: rustlang/rust:nightly
   script:
     - rustc --version && cargo --version      # Print version info for debugging
-    - cargo test --all --all-features --verbose
+    - cargo test --all --verbose
   allow_failure: true
 
 # Run the tool by checking the number of triggers fired
