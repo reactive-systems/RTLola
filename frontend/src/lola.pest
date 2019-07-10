@@ -45,7 +45,7 @@ InputStream = { "input " ~ Ident ~ ParamList? ~ ":" ~ Type ~(","~ Ident~ ParamLi
 
 OutputStream = { "output " ~ Ident ~ ParamList?~ (":" ~ Type)? ~ ActivationCondition? ~ TemplateSpec? ~":="~ Expr}
 
-Trigger = { "trigger " ~ (Ident ~ ":=")? ~ Expr~ StringLiteral?}
+Trigger = { "trigger " ~ Expr ~ StringLiteral?}
 
 //////////////////////////////////////////////////
 ////////////////// Expressions ///////////////////

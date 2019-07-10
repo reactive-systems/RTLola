@@ -548,7 +548,8 @@ mod tests {
 
     #[test]
     fn self_not_allowed_in_trigger_expression() {
-        assert_eq!(1, number_of_naming_errors("trigger a  := self[-1]"))
+        //assert_eq!(1, number_of_naming_errors("trigger a  := self[-1]"))
+        assert_eq!(1, number_of_naming_errors("trigger self[-1]"))
     }
 
     #[test]

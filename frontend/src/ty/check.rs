@@ -1373,18 +1373,23 @@ mod tests {
     }
 
     #[test]
-    fn simple_tigger() {
-        let spec = "trigger never := false";
+    fn simple_trigger() {
+        //let spec = "trigger never := false";
+        //assert_eq!(0, num_type_errors(spec));
+        let spec = "trigger false";
         assert_eq!(0, num_type_errors(spec));
     }
 
     #[test]
-    fn faulty_tigger() {
-        let spec = "trigger failed := 1";
+    fn faulty_trigger() {
+        //let spec = "trigger failed := 1";
+        //assert_eq!(1, num_type_errors(spec));
+        let spec = "trigger 1";
         assert_eq!(1, num_type_errors(spec));
     }
 
     #[test]
+    #[ignore] // for now we don't allow named triggers
     fn reuse_trigger() {
         let spec = "output a: Float64 @1Hz := 0.0\ntrigger t := a > 5.0\noutput b := if t then 2 else 3";
         assert_eq!(0, num_type_errors(spec));
