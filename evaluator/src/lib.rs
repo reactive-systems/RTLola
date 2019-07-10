@@ -128,8 +128,10 @@ impl Config {
         // Now we have a reference to clone's matches
         let filename = parse_matches.value_of("SPEC").map(|s| s.to_string()).unwrap();
 
-        let contents =
-            fs::read_to_string(&filename).unwrap_or_else(|e| panic!("Could not read file {}: {}", filename, e));
+        let contents = fs::read_to_string(&filename).unwrap_or_else(|e| {
+            eprintln!("Could not read file `{}`: {}", filename, e);
+            std::process::exit(1)
+        });
 
         let ir = match streamlab_frontend::parse(contents.as_str()) {
             Ok(ir) => ir,
@@ -142,17 +144,22 @@ impl Config {
         let delay = match parse_matches.value_of("DELAY") {
             None => None,
             Some(delay_str) => {
-                let d = delay_str
-                    .parse::<humantime::Duration>()
-                    .unwrap_or_else(|e| panic!("Could not parse DELAY value `{}`: {}.", delay_str, e));
+                let d = delay_str.parse::<humantime::Duration>().unwrap_or_else(|e| {
+                    eprintln!("Could not parse DELAY value `{}`: {}.", delay_str, e);
+                    std::process::exit(1);
+                });
                 Some(d.into())
             }
         };
 
         let csv_time_column = parse_matches.value_of("CSV_TIME_COLUMN").map(|col| {
-            let col = col.parse::<usize>().expect("time column needs to be a positive integer");
+            let col = col.parse::<usize>().unwrap_or_else(|_| {
+                eprintln!("time column needs to be a positive integer");
+                std::process::exit(1)
+            });
             if col == 0 {
-                panic!("time column needs to be a positive integer (first column = 1)");
+                eprintln!("time column needs to be a positive integer (first column = 1)");
+                std::process::exit(1);
             }
             col
         });

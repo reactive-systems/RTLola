@@ -45,7 +45,10 @@ impl EventDrivenManager {
     ) -> EventDrivenManager {
         let event_source = match EventSource::from(&config.source, &ir, start_time) {
             Ok(r) => r,
-            Err(e) => panic!("Cannot create input reader: {}", e),
+            Err(e) => {
+                eprintln!("Cannot create input reader: {}", e);
+                std::process::exit(1);
+            }
         };
 
         EDM { current_cycle: 0.into(), out_handler, event_source }
