@@ -53,7 +53,8 @@ impl Controller {
             let work_tx_clone = work_tx.clone();
             let ir_clone = self.ir.clone();
             let _ = thread::Builder::new().name("TimeDrivenManager".into()).spawn(move || {
-                let time_manager = TimeDrivenManager::setup(ir_clone, copy_output_handler);
+                let time_manager =
+                    TimeDrivenManager::setup(ir_clone, copy_output_handler).unwrap_or_else(|s| panic!(s));
                 time_manager.start_online(now, work_tx_clone);
             });
         };
@@ -123,7 +124,7 @@ impl Controller {
         let has_time_driven = !self.ir.time_driven.is_empty();
         let ir_clone = self.ir.clone();
         let output_copy_handler = self.output_handler.clone();
-        let time_manager = TimeDrivenManager::setup(ir_clone, output_copy_handler);
+        let time_manager = TimeDrivenManager::setup(ir_clone, output_copy_handler)?;
         let hlp = vec![];
         let mut due_streams = if has_time_driven {
             // timed streams at time 0

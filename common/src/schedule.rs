@@ -19,18 +19,18 @@ pub struct Schedule {
 }
 
 impl Schedule {
-    pub fn from(ir: &LolaIR) -> Schedule {
+    pub fn from(ir: &LolaIR) -> Result<Schedule, String> {
         let periods: Vec<UOM_Time> = ir.time_driven.iter().map(|s| s.period).collect();
         let gcd = Self::find_extend_period(&periods);
         let hyper_period = Self::find_hyper_period(&periods);
 
-        let extend_steps = Self::build_extend_steps(ir, gcd, hyper_period);
+        let extend_steps = Self::build_extend_steps(ir, gcd, hyper_period)?;
         let extend_steps = Self::apply_periodicity(&extend_steps);
         let mut deadlines = Self::condense_deadlines(gcd, extend_steps);
         Self::sort_deadlines(ir, &mut deadlines);
 
         let hyper_period = Duration::from_nanos(hyper_period.get::<nanosecond>().to_integer().to_u64().unwrap());
-        Schedule { deadlines, hyper_period }
+        Ok(Schedule { deadlines, hyper_period })
     }
 
     /// Determines the max amount of time the process can wait between successive checks for
@@ -80,10 +80,17 @@ impl Schedule {
     /// Hyper period: 2 seconds, gcd: 500ms, streams: (c @ .5Hz), (b @ 1Hz), (a @ 2Hz)
     /// Result: `[[a] [b] [] [c]]`
     /// Meaning: `a` starts being scheduled after one gcd, `b` after two gcds, `c` after 4 gcds.
-    fn build_extend_steps(ir: &LolaIR, gcd: UOM_Time, hyper_period: UOM_Time) -> Vec<Vec<OutputReference>> {
+    fn build_extend_steps(
+        ir: &LolaIR,
+        gcd: UOM_Time,
+        hyper_period: UOM_Time,
+    ) -> Result<Vec<Vec<OutputReference>>, String> {
         let num_steps = hyper_period.get::<second>() / gcd.get::<second>();
         assert!(num_steps.is_integer());
         let num_steps = num_steps.to_integer() as usize;
+        if num_steps >= 10_000_000 {
+            return Err(format!("stream frequencies are too incompatible to generate schedule"));
+        }
         let mut extend_steps = vec![Vec::new(); num_steps];
         for s in ir.time_driven.iter() {
             let ix = s.period.get::<second>() / gcd.get::<second>();
@@ -92,7 +99,7 @@ impl Schedule {
             let ix = ix - 1;
             extend_steps[ix].push(s.reference.out_ix());
         }
-        extend_steps
+        Ok(extend_steps)
     }
 
     fn condense_deadlines(gcd: UOM_Time, extend_steps: Vec<Vec<OutputReference>>) -> Vec<Deadline> {

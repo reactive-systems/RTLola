@@ -18,16 +18,16 @@ pub(crate) struct TimeDrivenManager {
 
 impl TimeDrivenManager {
     /// Creates a new TimeDrivenManager managing time-driven output streams.
-    pub(crate) fn setup(ir: LolaIR, handler: Arc<OutputHandler>) -> TimeDrivenManager {
+    pub(crate) fn setup(ir: LolaIR, handler: Arc<OutputHandler>) -> Result<TimeDrivenManager, String> {
         if ir.time_driven.is_empty() {
             // return dummy
-            return TimeDrivenManager { deadlines: vec![], handler };
+            return Ok(TimeDrivenManager { deadlines: vec![], handler });
         }
 
-        let schedule = Schedule::from(&ir);
+        let schedule = Schedule::from(&ir)?;
         // TODO: Sort by evaluation order!
 
-        TimeDrivenManager { deadlines: schedule.deadlines, handler }
+        Ok(TimeDrivenManager { deadlines: schedule.deadlines, handler })
     }
 
     pub(crate) fn get_last_due(&self) -> &Vec<OutputReference> {
