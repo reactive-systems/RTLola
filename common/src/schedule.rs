@@ -1,7 +1,11 @@
-use crate::duration::*;
 use crate::math;
 use std::time::Duration;
 use streamlab_frontend::ir::{LolaIR, OutputReference, Stream};
+
+use num::rational::Rational64 as Rational;
+use num::{One, ToPrimitive};
+use uom::si::rational64::Time as UOM_Time;
+use uom::si::time::{nanosecond, second};
 
 #[derive(Debug, Clone)]
 pub struct Deadline {
@@ -10,40 +14,41 @@ pub struct Deadline {
 }
 
 pub struct Schedule {
-    pub gcd: Duration,
     pub hyper_period: Duration,
     pub deadlines: Vec<Deadline>,
 }
 
 impl Schedule {
     pub fn from(ir: &LolaIR) -> Schedule {
-        let rates: Vec<Duration> = ir.time_driven.iter().map(|s| s.extend_rate).collect();
-        let gcd = Self::find_extend_period(&rates);
-        let hyper_period = Self::find_hyper_period(&rates);
+        let periods: Vec<UOM_Time> = ir.time_driven.iter().map(|s| s.period).collect();
+        let gcd = Self::find_extend_period(&periods);
+        let hyper_period = Self::find_hyper_period(&periods);
 
         let extend_steps = Self::build_extend_steps(ir, gcd, hyper_period);
         let extend_steps = Self::apply_periodicity(&extend_steps);
         let mut deadlines = Self::condense_deadlines(gcd, extend_steps);
         Self::sort_deadlines(ir, &mut deadlines);
 
-        Schedule { deadlines, gcd, hyper_period }
+        let hyper_period = Duration::from_nanos(hyper_period.get::<nanosecond>().to_integer().to_u64().unwrap());
+        Schedule { deadlines, hyper_period }
     }
 
     /// Determines the max amount of time the process can wait between successive checks for
     /// due deadlines without missing one.
-    fn find_extend_period(rates: &[Duration]) -> Duration {
+    fn find_extend_period(rates: &[UOM_Time]) -> UOM_Time {
         assert!(!rates.is_empty());
-        let rates: Vec<u128> = rates.iter().map(|r| r.as_nanos()).collect();
-        let gcd = math::gcd_all(&rates);
-        Duration::from_nanos(gcd as u64)
+        let rates: Vec<Rational> = rates.iter().map(|r| r.get::<nanosecond>()).collect();
+        let gcd = math::rational_gcd_all(&rates);
+        UOM_Time::new::<nanosecond>(gcd)
     }
 
     /// Determines the hyper period of the given `rates`.
-    fn find_hyper_period(rates: &[Duration]) -> Duration {
+    fn find_hyper_period(rates: &[UOM_Time]) -> UOM_Time {
         assert!(!rates.is_empty());
-        let rates: Vec<u128> = rates.iter().map(|r| r.as_nanos()).collect();
-        let lcm = math::lcm_all(&rates);
-        Duration::from_nanos(lcm as u64)
+        let rates: Vec<Rational> = rates.iter().map(|r| r.get::<nanosecond>()).collect();
+        let lcm = math::rational_lcm_all(&rates);
+        let lcm = math::rational_lcm(lcm, Rational::one()); // needs to be multiple of 1 ns
+        UOM_Time::new::<nanosecond>(lcm)
     }
 
     /// Takes a vec of gcd-sized intervals. In each interval, there are streams that need
@@ -75,17 +80,22 @@ impl Schedule {
     /// Hyper period: 2 seconds, gcd: 500ms, streams: (c @ .5Hz), (b @ 1Hz), (a @ 2Hz)
     /// Result: `[[a] [b] [] [c]]`
     /// Meaning: `a` starts being scheduled after one gcd, `b` after two gcds, `c` after 4 gcds.
-    fn build_extend_steps(ir: &LolaIR, gcd: Duration, hyper_period: Duration) -> Vec<Vec<OutputReference>> {
-        let num_steps = divide_durations(hyper_period, gcd, false);
+    fn build_extend_steps(ir: &LolaIR, gcd: UOM_Time, hyper_period: UOM_Time) -> Vec<Vec<OutputReference>> {
+        let num_steps = hyper_period.get::<second>() / gcd.get::<second>();
+        assert!(num_steps.is_integer());
+        let num_steps = num_steps.to_integer() as usize;
         let mut extend_steps = vec![Vec::new(); num_steps];
         for s in ir.time_driven.iter() {
-            let ix = divide_durations(s.extend_rate, gcd, false) - 1;
+            let ix = s.period.get::<second>() / gcd.get::<second>();
+            assert!(ix.is_integer());
+            let ix = ix.to_integer() as usize;
+            let ix = ix - 1;
             extend_steps[ix].push(s.reference.out_ix());
         }
         extend_steps
     }
 
-    fn condense_deadlines(gcd: Duration, extend_steps: Vec<Vec<OutputReference>>) -> Vec<Deadline> {
+    fn condense_deadlines(gcd: UOM_Time, extend_steps: Vec<Vec<OutputReference>>) -> Vec<Deadline> {
         let mut empty_counter = 0;
         let mut deadlines: Vec<Deadline> = vec![];
         for step in extend_steps.iter() {
@@ -93,7 +103,8 @@ impl Schedule {
                 empty_counter += 1;
                 continue;
             }
-            let pause = (empty_counter + 1) * gcd;
+            let pause = gcd.get::<nanosecond>() * (empty_counter + 1);
+            let pause = Duration::from_nanos(pause.to_integer() as u64);
             empty_counter = 0;
             let deadline = Deadline { pause, due: step.clone() };
             deadlines.push(deadline);
@@ -114,6 +125,8 @@ mod tests {
     #[allow(unused_imports)]
     use super::*;
     use streamlab_frontend::ir::LolaIR;
+
+    use num::ToPrimitive;
 
     fn to_ir(spec: &str) -> LolaIR {
         streamlab_frontend::parse("stdin", spec).expect("spec was invalid")
@@ -136,9 +149,9 @@ mod tests {
 
         let cases = [case1, case2, case3, case4, case5];
         for (spec, expected) in cases.iter() {
-            let rates: Vec<std::time::Duration> = to_ir(spec).time_driven.iter().map(|s| s.extend_rate).collect();
-            let was = Schedule::find_extend_period(&rates);
-            let was = was.as_nanos();
+            let periods: Vec<_> = to_ir(spec).time_driven.iter().map(|s| s.period).collect();
+            let was = Schedule::find_extend_period(&periods);
+            let was = was.get::<nanosecond>().to_integer().to_u64().expect("");
             assert_eq!(*expected, was);
         }
     }

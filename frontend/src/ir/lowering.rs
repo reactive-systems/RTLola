@@ -375,7 +375,11 @@ impl<'a> Lowering<'a> {
         match req {
             TrackingRequirement::Unbounded => ir::Tracking::All(trackee),
             TrackingRequirement::Finite(num) => {
-                let rate = tracker.map_or(Duration::from_secs(0), |tds| tds.extend_rate);
+                let rate = tracker.map_or(Duration::from_secs(0), |tds| {
+                    Duration::from_nanos(
+                        tds.period.get::<nanosecond>().to_integer().to_u64().expect("Period [ns] too large for u64!"),
+                    )
+                });
                 ir::Tracking::Bounded { trackee, num: u128::from(num), rate }
             }
             TrackingRequirement::Future => unimplemented!(),
