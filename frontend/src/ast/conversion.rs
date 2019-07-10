@@ -266,8 +266,7 @@ impl Expression {
         use ExpressionKind::*;
         match &self.kind {
             Tuple(entries) => Some(entries[idx].as_ref()),
-            Ident(_) => None,
-            _ => unimplemented!(),
+            _ => None,
         }
     }
 
