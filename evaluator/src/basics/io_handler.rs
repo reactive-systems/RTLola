@@ -64,8 +64,11 @@ impl ColumnMapping {
             col2str[*header_ix] = Some(str_ix);
         }
 
-        let time_ix =
-            time_col.or_else(|| header.iter().position(|name| name == "time" || name == "ts" || name == "timestamp"));
+        let time_ix = time_col.map(|col| col - 1).or_else(|| {
+            header.iter().position(|name| {
+                name == "time" || name == "ts" || name == "timestamp"
+            })
+        });
         ColumnMapping { str2col, col2str, time_ix }
     }
 

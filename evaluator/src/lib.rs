@@ -147,9 +147,13 @@ impl Config {
             }
         };
 
-        let csv_time_column = parse_matches
-            .value_of("CSV_TIME_COLUMN")
-            .map(|col| col.parse::<usize>().expect("time column needs to be a unsigned integer"));
+        let csv_time_column = parse_matches.value_of("CSV_TIME_COLUMN").map(|col| {
+            let col = col.parse::<usize>().expect("time column needs to be a positive integer");
+            if col == 0 {
+                panic!("time column needs to be a positive integer (first column = 1)");
+            }
+            col
+        });
 
         let src = if let Some(file) = parse_matches.value_of("CSV_INPUT_FILE") {
             InputSource::file(String::from(file), delay, csv_time_column)
