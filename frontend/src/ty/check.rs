@@ -1385,6 +1385,12 @@ mod tests {
     }
 
     #[test]
+    fn reuse_trigger() {
+        let spec = "output a: Float64 @1Hz := 0.0\ntrigger t := a > 5.0\noutput b := if t then 2 else 3";
+        assert_eq!(0, num_type_errors(spec));
+    }
+
+    #[test]
     fn simple_binary() {
         let spec = "output o: Int8 := 3 + 5";
         assert_eq!(0, num_type_errors(spec));
