@@ -66,6 +66,7 @@ impl ColumnMapping {
 
         let time_ix = time_col.map(|col| col - 1).or_else(|| {
             header.iter().position(|name| {
+                let name = name.to_lowercase();
                 name == "time" || name == "ts" || name == "timestamp"
             })
         });

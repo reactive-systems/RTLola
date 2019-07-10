@@ -111,7 +111,7 @@ impl Config {
         .arg(
             Arg::with_name("OFFLINE")
                 .long("offline")
-                .help("Use the timestamps from the input.\nThe column name must be one of [time,timestamp,ts].\nThe column must produce a monotonically increasing sequence of values.")
+                .help("Use the timestamps from the input.\nThe column name must be one of [time,timestamp,ts](case insensitive).\nThe column must produce a monotonically increasing sequence of values.")
         )
         .group(
             ArgGroup::with_name("MODE")
