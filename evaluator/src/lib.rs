@@ -14,7 +14,7 @@ use basics::{
     EvalConfig, EvaluatorChoice, ExecutionMode, InputSource, OutputChannel, Statistics, TimeFormat, TimeRepresentation,
     Verbosity,
 };
-use clap::{App, Arg, ArgGroup};
+use clap::{App, AppSettings, Arg, ArgGroup};
 use std::fs;
 use streamlab_frontend;
 use streamlab_frontend::ir::LolaIR;
@@ -31,6 +31,7 @@ impl Config {
         .version(env!("CARGO_PKG_VERSION"))
         .author(clap::crate_authors!("\n"))
         .about("StreamLAB is a tool to analyze and monitor Lola specifications.") // TODO description
+        .setting(AppSettings::ArgRequiredElseHelp)
         .arg(
             Arg::with_name("SPEC")
                 .help("Sets the specification file to use")
