@@ -155,6 +155,12 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
         }
 
         for output in &spec.outputs {
+            self.infer_output_clock(output).unwrap_or_else(|_| {
+                debug!("type inference failed for {}", output);
+            });
+        }
+
+        for output in &spec.outputs {
             self.infer_output_expression(output).unwrap_or_else(|_| {
                 debug!("type inference failed for {}", output);
             });
@@ -231,6 +237,7 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
             .map_err(|err| self.handle_error(err, input.name.span))
     }
 
+    /// infers value types if given (`:` expression)
     fn infer_output(&mut self, output: &'a Output) -> Result<(), ()> {
         trace!("infer type for {} (NodeId = {})", output, output.id);
 
@@ -244,7 +251,7 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
         self.unifier.unify_var_var(var, ty_var).map_err(|err| self.handle_error(err, output.name.span))?;
 
         // stream type
-        let stream_var = self.new_stream_var(output.id);
+        let _stream_var = self.new_stream_var(output.id);
 
         // collect parameters
         let mut param_types = Vec::new();
@@ -256,6 +263,16 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
             param_types.push(ValueTy::Infer(param_var));
         }
 
+        assert!(param_types.is_empty(), "Parametric outputs are currently not supported by type checker");
+        Ok(())
+    }
+
+    /// infers stream types if given (`@` expression)
+    fn infer_output_clock(&mut self, output: &'a Output) -> Result<(), ()> {
+        trace!("infer type for {} (NodeId = {})", output, output.id);
+
+        let stream_var = self.stream_vars[&output.id];
+
         // check if stream has timing infos
         let mut frequency = None;
         let mut activation = None;
@@ -264,8 +281,6 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
             frequency = f;
             activation = a;
         }
-
-        assert!(param_types.is_empty(), "Parametric outputs are currently not supported by type checker");
 
         // determine whether stream is timed or event based or should be infered
         if let Some(f) = frequency {
