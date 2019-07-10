@@ -29,7 +29,7 @@ impl Config {
     pub fn new(args: &[String]) -> Self {
         let parse_matches = App::new("StreamLAB")
         .version(env!("CARGO_PKG_VERSION"))
-        .author(env!("CARGO_PKG_AUTHORS"))
+        .author(clap::crate_authors!("\n"))
         .about("StreamLAB is a tool to analyze and monitor Lola specifications") // TODO description
         .arg(
             Arg::with_name("SPEC")
