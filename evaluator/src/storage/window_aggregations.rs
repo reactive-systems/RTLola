@@ -89,23 +89,16 @@ impl<G: WindowGeneric> From<(Value, Time)> for AvgIV<G> {
 #[derive(Clone, Debug)]
 pub(crate) struct IntegralIV {
     volume: f64,
-    end_value: Value,
+    end_value: f64,
     end_time: Time,
-    start_value: Value,
+    start_value: f64,
     start_time: Time,
     valid: bool,
 }
 
 impl WindowIV for IntegralIV {
     fn default(time: Time) -> IntegralIV {
-        IntegralIV {
-            volume: 0f64,
-            end_value: Value::new_float(0f64),
-            end_time: time,
-            start_value: Value::new_float(0f64),
-            start_time: time,
-            valid: false,
-        }
+        IntegralIV { volume: 0f64, end_value: 0f64, end_time: time, start_value: 0f64, start_time: time, valid: false }
     }
 }
 
@@ -131,19 +124,15 @@ impl Add for IntegralIV {
         assert!(other.start_time >= self.end_time, "Time does not behave monotonically!");
         let time_diff = other.start_time - self.end_time;
         let time_diff_secs = (time_diff.as_secs() as f64) + (f64::from(time_diff.subsec_nanos())) / (100_000_000f64);
-        let time_diff = Value::new_float(time_diff_secs);
-        let value_sum = other.start_value.clone() + self.end_value.clone();
+        let time_diff = time_diff_secs;
+        let value_sum = other.start_value + self.end_value;
 
-        let additional_volume_v = value_sum * time_diff / Value::new_float(2f64);
-        let additional_volume: f64 = match additional_volume_v {
-            Value::Float(f) => f.into(),
-            _ => unreachable!("only float supported for integral aggregation"),
-        };
+        let additional_volume = value_sum * time_diff / 2f64;
 
         let volume = start_volume + additional_volume;
-        let end_value = other.end_value.clone();
+        let end_value = other.end_value;
         let end_time = other.end_time;
-        let start_value = self.start_value.clone();
+        let start_value = self.start_value;
         let start_time = self.start_time;
 
         IntegralIV { volume, end_value, end_time, start_value, start_time, valid: true }
@@ -152,14 +141,13 @@ impl Add for IntegralIV {
 
 impl From<(Value, Time)> for IntegralIV {
     fn from(v: (Value, Time)) -> IntegralIV {
-        IntegralIV {
-            volume: 0f64,
-            end_value: v.0.clone(),
-            end_time: v.1,
-            start_value: v.0,
-            start_time: v.1,
-            valid: true,
-        }
+        let f = match v.0 {
+            Value::Signed(i) => (i as f64),
+            Value::Unsigned(u) => (u as f64),
+            Value::Float(f) => (f.into()),
+            _ => unreachable!("Type error."),
+        };
+        IntegralIV { volume: 0f64, end_value: f, end_time: v.1, start_value: f, start_time: v.1, valid: true }
     }
 }
 

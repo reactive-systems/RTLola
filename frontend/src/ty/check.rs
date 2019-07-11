@@ -1170,13 +1170,21 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
                 let inner_var = self.value_vars[&expr.id];
                 self.unifier.unify_var_ty(var, ValueTy::Infer(inner_var)).map_err(|err| self.handle_error(err, span))
             }
-            Average | Product | Integral => {
+            Average | Product => {
                 // The value type of the inner stream has to be numeric
                 self.infer_expression(expr, Some(ValueTy::Constr(TypeConstraint::Numeric)))?;
                 // resulting type depends on the inner type
                 let inner_var = self.value_vars[&expr.id];
                 self.unifier
                     .unify_var_ty(var, ValueTy::Option(ValueTy::Infer(inner_var).into()))
+                    .map_err(|err| self.handle_error(err, span))
+            }
+            Integral => {
+                // The value type of the inner stream has to be numeric
+                self.infer_expression(expr, Some(ValueTy::Constr(TypeConstraint::Numeric)))?;
+                // resulting type is optional float
+                self.unifier
+                    .unify_var_ty(var, ValueTy::Option(ValueTy::Constr(TypeConstraint::FloatingPoint).into()))
                     .map_err(|err| self.handle_error(err, span))
             }
         }
