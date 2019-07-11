@@ -66,7 +66,7 @@ impl<G: WindowGeneric> Into<Value> for AvgIV<G> {
             Value::Unsigned(u) => Value::Unsigned(u / self.num),
             Value::Signed(u) => Value::Signed(u / self.num as i64),
             Value::Float(u) => Value::Float(u / self.num as f64),
-            _ => panic!("Type error."),
+            _ => unreachable!("Type error."),
         }
     }
 }
@@ -137,7 +137,7 @@ impl Add for IntegralIV {
         let additional_volume_v = value_sum * time_diff / Value::new_float(2f64);
         let additional_volume: f64 = match additional_volume_v {
             Value::Float(f) => f.into(),
-            _ => panic!("Bug."),
+            _ => unreachable!("only float supported for integral aggregation"),
         };
 
         let volume = start_volume + additional_volume;

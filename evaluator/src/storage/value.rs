@@ -20,7 +20,7 @@ impl Value {
     // TODO: -> Result<Option, ConversionError>
     pub(crate) fn try_from(source: &str, ty: &Type) -> Option<Value> {
         match ty {
-            Type::Option(_) | Type::Function(_, _) => panic!("Cannot occur."),
+            Type::Option(_) | Type::Function(_, _) => unreachable!(),
             Type::String => Some(Value::Str(source.into())),
             Type::Tuple(_) => unimplemented!(),
             Type::Float(_) => source.parse::<f64>().ok().map(|f| Float(NotNan::new(f).unwrap())),
@@ -53,7 +53,7 @@ impl Value {
         if let Value::Bool(b) = *self {
             b
         } else {
-            panic!("failed to extract value")
+            unreachable!()
         }
     }
 }

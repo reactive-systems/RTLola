@@ -619,7 +619,7 @@ impl ActivationCondition {
             True => true,
             Conjunction(bs) => bs.is_subset(inputs),
             General(ac) => Self::eval_(ac, inputs),
-            TimeDriven => panic!(),
+            TimeDriven => unreachable!(),
         }
     }
     fn eval_(ac: &Activation<StreamReference>, inputs: &BitSet) -> bool {
@@ -628,7 +628,7 @@ impl ActivationCondition {
             Stream(var) => inputs.contains(var.in_ix()),
             Conjunction(vec) => vec.iter().all(|ac| Self::eval_(ac, inputs)),
             Disjunction(vec) => vec.iter().any(|ac| Self::eval_(ac, inputs)),
-            True => panic!(),
+            True => unreachable!(),
         }
     }
 }

@@ -201,7 +201,7 @@ impl WindowGeneric for WindowSigned {
         match v {
             Value::Signed(_) => v,
             Value::Unsigned(u) => Value::Signed(u as i64),
-            _ => panic!("Type error."),
+            _ => unreachable!("Type error."),
         }
     }
 }
@@ -212,7 +212,7 @@ impl WindowGeneric for WindowUnsigned {
     fn from_value(v: Value) -> Value {
         match v {
             Value::Unsigned(_) => v,
-            _ => panic!("Type error."),
+            _ => unreachable!("Type error."),
         }
     }
 }
@@ -225,7 +225,7 @@ impl WindowGeneric for WindowFloat {
             Value::Signed(i) => (i as f64),
             Value::Unsigned(u) => (u as f64),
             Value::Float(f) => (f.into()),
-            _ => panic!("Type error."),
+            _ => unreachable!("Type error."),
         };
         Value::Float(NotNan::new(f).unwrap())
     }
