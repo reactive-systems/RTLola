@@ -139,6 +139,7 @@ impl Controller {
 
         let mut evaluator = evaluatordata.as_Evaluator();
 
+        let mut current_time = Time::default();
         'outer: loop {
             let local_queue = work_rx.recv().unwrap_or_else(|e| panic!("EventDrivenManager hung up! {}", e));
             for item in local_queue {
@@ -156,17 +157,14 @@ impl Controller {
                         }
                         self.output_handler.debug(|| format!("Schedule Event {:?}.", (&e, ts)));
                         self.evaluate_event_item(&mut evaluator, &e, ts);
-                        if has_time_driven && ts == next_deadline {
-                            due_streams = self.schedule_timed(
-                                &mut evaluator,
-                                &mut deadline_cycle,
-                                due_streams,
-                                &mut next_deadline,
-                            );
-                        }
+                        current_time = ts;
                     }
                     WorkItem::Time(_, _) => panic!("Received time command in offline mode."),
                     WorkItem::End => {
+                        if has_time_driven && current_time == next_deadline {
+                            // schedule last timed event before terminating
+                            self.schedule_timed(&mut evaluator, &mut deadline_cycle, due_streams, &mut next_deadline);
+                        }
                         self.output_handler.output(|| "Finished entire input. Terminating.");
                         self.output_handler.terminate();
                         break 'outer;

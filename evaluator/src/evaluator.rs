@@ -135,8 +135,8 @@ impl<'c> EvaluatorData<'c> {
 impl<'e, 'c> Evaluator<'e, 'c> {
     pub(crate) fn eval_event(&mut self, event: &[Value], ts: Time) {
         assert!(
-            self.time_last_event.is_none() || self.time_last_event.unwrap() < ts,
-            "time does not behave striclty monotonic"
+            self.time_last_event.is_none() || self.time_last_event.unwrap() <= ts,
+            "time does not behave monotonic"
         );
         *self.time_last_event = Some(ts);
         self.clear_freshness();
