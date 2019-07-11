@@ -10,7 +10,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         setup_panic!(Metadata {
             name: env!("CARGO_PKG_NAME").into(),
             version: env!("CARGO_PKG_VERSION").into(),
-            authors: "".into(),
+            authors: "StreamLAB Team <streamlab@react.uni-saarland.de>".into(),
             homepage: "www.stream-lab.org".into(),
         });
     }
