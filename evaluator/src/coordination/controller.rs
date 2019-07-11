@@ -69,7 +69,7 @@ impl Controller {
         });
 
         let copy_output_handler = self.output_handler.clone();
-        let mut evaluatordata = EvaluatorData::new(self.ir.clone(), self.config.clone(), copy_output_handler);
+        let mut evaluatordata = EvaluatorData::new(self.ir.clone(), self.config.clone(), copy_output_handler, now);
 
         let mut evaluator = evaluatordata.as_Evaluator();
 
@@ -135,7 +135,8 @@ impl Controller {
         let mut deadline_cycle = time_manager.get_deadline_cycle();
 
         let output_copy_handler = self.output_handler.clone();
-        let mut evaluatordata = EvaluatorData::new(self.ir.clone(), self.config.clone(), output_copy_handler);
+        let mut evaluatordata =
+            EvaluatorData::new(self.ir.clone(), self.config.clone(), output_copy_handler, Instant::now());
 
         let mut evaluator = evaluatordata.as_Evaluator();
 

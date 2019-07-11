@@ -1,10 +1,11 @@
-use crate::basics::{EvalConfig, EvaluatorChoice::*, OutputHandler, Time};
+use crate::basics::{EvalConfig, EvaluatorChoice::*, ExecutionMode, OutputHandler, Time};
 use crate::closuregen::{CompiledExpr, Expr};
 use crate::storage::{GlobalStore, Value};
 use bit_set::BitSet;
 use ordered_float::NotNan;
 use regex::Regex;
 use std::sync::Arc;
+use std::time::Instant;
 use streamlab_frontend::ir::{
     Activation, Constant, Expression, InputReference, LolaIR, Offset, OutputReference, StreamAccessKind,
     StreamReference, Trigger, Type, WindowReference,
@@ -27,7 +28,8 @@ pub(crate) struct EvaluatorData<'c> {
     // Indexed by stream reference.
     compiled_exprs: Vec<CompiledExpr<'c>>,
     global_store: GlobalStore,
-    time_last_event: Option<Time>,
+    start_time: Instant,           // only valid in online mode
+    time_last_event: Option<Time>, // only valid in offline mode
     fresh_inputs: BitSet,
     fresh_outputs: BitSet,
     triggers: Vec<Option<Trigger>>,
@@ -46,7 +48,8 @@ pub(crate) struct Evaluator<'e, 'c> {
     // Indexed by stream reference.
     compiled_exprs: &'e Vec<CompiledExpr<'c>>,
     global_store: &'e mut GlobalStore,
-    time_last_event: &'e mut Option<Time>,
+    start_time: &'e Instant,               // only valid in online mode
+    time_last_event: &'e mut Option<Time>, // only valid in offline mode
     fresh_inputs: &'e mut BitSet,
     fresh_outputs: &'e mut BitSet,
     triggers: &'e Vec<Option<Trigger>>,
@@ -69,7 +72,7 @@ pub(crate) struct EvaluationContext<'e> {
 }
 
 impl<'c> EvaluatorData<'c> {
-    pub(crate) fn new(ir: LolaIR, config: EvalConfig, handler: Arc<OutputHandler>) -> Self {
+    pub(crate) fn new(ir: LolaIR, config: EvalConfig, handler: Arc<OutputHandler>, start_time: Instant) -> Self {
         // Layers of event based output streams
         let layers = ir.get_event_driven_layers();
         handler.debug(|| format!("Evaluation layers: {:?}", layers));
@@ -103,6 +106,7 @@ impl<'c> EvaluatorData<'c> {
             exprs,
             compiled_exprs,
             global_store,
+            start_time,
             time_last_event: None,
             fresh_inputs,
             fresh_outputs,
@@ -121,6 +125,7 @@ impl<'c> EvaluatorData<'c> {
             exprs: &self.exprs,
             compiled_exprs: &self.compiled_exprs,
             global_store: &mut self.global_store,
+            start_time: &self.start_time,
             time_last_event: &mut self.time_last_event,
             fresh_inputs: &mut self.fresh_inputs,
             fresh_outputs: &mut self.fresh_outputs,
@@ -133,12 +138,16 @@ impl<'c> EvaluatorData<'c> {
 }
 
 impl<'e, 'c> Evaluator<'e, 'c> {
-    pub(crate) fn eval_event(&mut self, event: &[Value], ts: Time) {
-        assert!(
-            self.time_last_event.is_none() || self.time_last_event.unwrap() <= ts,
-            "time does not behave monotonic"
-        );
-        *self.time_last_event = Some(ts);
+    pub(crate) fn eval_event(&mut self, event: &[Value], mut ts: Time) {
+        if self.config.mode == ExecutionMode::Offline {
+            assert!(
+                self.time_last_event.is_none() || self.time_last_event.unwrap() <= ts,
+                "time does not behave monotonic"
+            );
+            *self.time_last_event = Some(ts);
+        } else {
+            ts = self.start_time.elapsed();
+        }
         self.clear_freshness();
         self.accept_inputs(event, ts);
         self.eval_all_event_driven_outputs(ts);
@@ -182,12 +191,16 @@ impl<'e, 'c> Evaluator<'e, 'c> {
         }
     }
 
-    pub(crate) fn eval_time_driven_outputs(&mut self, outputs: &[OutputReference], ts: Time) {
-        assert!(
-            self.time_last_event.is_none() || self.time_last_event.unwrap() <= ts,
-            "time does not behave monotonic"
-        );
-        *self.time_last_event = Some(ts);
+    pub(crate) fn eval_time_driven_outputs(&mut self, outputs: &[OutputReference], mut ts: Time) {
+        if self.config.mode == ExecutionMode::Offline {
+            assert!(
+                self.time_last_event.is_none() || self.time_last_event.unwrap() <= ts,
+                "time does not behave monotonic"
+            );
+            *self.time_last_event = Some(ts);
+        } else {
+            ts = self.start_time.elapsed();
+        }
         self.clear_freshness();
         self.prepare_evaluation(ts);
         for output in outputs {
@@ -644,8 +657,9 @@ mod tests {
         let mut config = EvalConfig::default();
         config.verbosity = crate::basics::Verbosity::WarningsOnly;
         let handler = Arc::new(OutputHandler::new(&config, ir.triggers.len()));
-        let eval = EvaluatorData::new(ir.clone(), config, handler);
-        (ir, eval, Instant::now())
+        let now = Instant::now();
+        let eval = EvaluatorData::new(ir.clone(), config, handler, now);
+        (ir, eval, now)
     }
 
     fn setup_time(spec: &str) -> (LolaIR, EvaluatorData, Time) {
