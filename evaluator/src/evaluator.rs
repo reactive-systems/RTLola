@@ -187,10 +187,8 @@ impl<'e, 'c> Evaluator<'e, 'c> {
             self.time_last_event.is_none() || self.time_last_event.unwrap() <= ts,
             "time does not behave monotonic"
         );
-        if self.time_last_event.is_some() && ts > self.time_last_event.unwrap() {
-            self.clear_freshness();
-        }
         *self.time_last_event = Some(ts);
+        self.clear_freshness();
         self.prepare_evaluation(ts);
         for output in outputs {
             self.eval_stream(*output, ts);
