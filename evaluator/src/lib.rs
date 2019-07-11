@@ -30,7 +30,7 @@ impl Config {
         let parse_matches = App::new("StreamLAB")
         .version(env!("CARGO_PKG_VERSION"))
         .author(clap::crate_authors!("\n"))
-        .about("StreamLAB is a tool to analyze and monitor Lola specifications") // TODO description
+        .about("StreamLAB is a tool to analyze and monitor Lola specifications.") // TODO description
         .arg(
             Arg::with_name("SPEC")
                 .help("Sets the specification file to use")
@@ -39,7 +39,7 @@ impl Config {
         )
         .arg(
             Arg::with_name("STDIN")
-                .help("Read CSV input from stdin [Default]")
+                .help("Read CSV input from stdin [default]")
                 .long("stdin")
         )
         .arg(
@@ -71,8 +71,7 @@ impl Config {
         )
         .arg(
             Arg::with_name("DELAY")
-                .help("Delay [ms] between reading in two lines from the input. Only used for file input.")
-                .short("d")
+                .help("Delay [ms] between reading in two lines from the input\nOnly used for file input.")
                 .long("delay")
                 .requires("CSV_INPUT_FILE")
                 .conflicts_with("ONLINE")
@@ -81,14 +80,14 @@ impl Config {
         )
         .arg(
             Arg::with_name("VERBOSITY")
-                .short("l")
+                .help("Sets the verbosity\n")
                 .long("verbosity")
                 .possible_values(&["debug", "outputs", "triggers", "warnings", "progress", "silent", "quiet"])
                 .default_value("triggers")
         )
         .arg(
             Arg::with_name("TIMEREPRESENTATION")
-                .help("Sets the trigger time info representation")
+                .help("Sets the trigger time info representation\n")
                 .long("time-info-rep")
                 .possible_values(&[
                     "hide",
@@ -111,7 +110,7 @@ impl Config {
         .arg(
             Arg::with_name("OFFLINE")
                 .long("offline")
-                .help("Use the timestamps from the input.\nThe column name must be one of [time,timestamp,ts](case insensitive).\nThe column must produce a monotonically increasing sequence of values.")
+                .help("Use the timestamps from the input\nThe column name must be one of [time,timestamp,ts](case insensitive).\nThe column must produce a monotonically increasing sequence of values.")
         )
         .group(
             ArgGroup::with_name("MODE")
@@ -119,7 +118,9 @@ impl Config {
                 .args(&["ONLINE", "OFFLINE"])
         )
         .arg(
-            Arg::with_name("INTERPRETED").long("interpreted").help("Interpret expressions instead of compilation")
+            Arg::with_name("INTERPRETED")
+                .long("interpreted")
+                .help("Interpret expressions instead of compilation")
         )
         .get_matches_from(args);
 
