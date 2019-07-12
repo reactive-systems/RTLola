@@ -369,7 +369,7 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
     fn concretize_output_clock(&mut self, output: &'a Output) -> Result<(), ()> {
         trace!("concretize and normalize for {} (NodeId = {})", output, output.id);
 
-        let concretized = match &self.stream_ty[&output.id] {
+        let mut concretized = match &self.stream_ty[&output.id] {
             StreamTy::RealTime(_) => {
                 // already conrete and normalized
                 self.stream_ty[&output.id].clone()
@@ -383,6 +383,7 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
                 self.concretize_stream_ty(&self.stream_ty[&output.id].clone()).unwrap()
             }
         };
+        concretized.simplify();
 
         self.stream_ty.insert(output.id, concretized);
 
@@ -415,12 +416,12 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
         match stream_ty {
             StreamTy::RealTime(_) | StreamTy::Event(_) => Some(stream_ty.clone()),
             StreamTy::Infer(vars) => {
-                if vars.is_empty() {
-                    return Some(StreamTy::Event(Activation::True));
-                }
                 let mut seen_vars = HashSet::new();
                 let stream_types: Vec<StreamTy> =
                     vars.iter().map(|&svar| self.stream_var_to_vec_stream_ty(svar, &mut seen_vars)).flatten().collect();
+                if stream_types.is_empty() {
+                    return Some(StreamTy::Event(Activation::True));
+                }
                 let mut result_ty = None;
                 for stream_ty in stream_types {
                     result_ty = match (result_ty.as_mut(), &stream_ty) {
@@ -584,10 +585,22 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
 
                 // target stream type
                 let target_stream_ty = StreamTy::new_periodic(Freq::new(freq));
+                self.check_stream_types_are_compatible(stream_ty, &target_stream_ty, span)?;
 
                 // recursion
                 // stream types have to match
-                self.check_stream_types_are_compatible(stream_ty, &target_stream_ty, span)
+                if let ExpressionKind::Ident(ident) = &expr.kind {
+                    let decl = self.declarations[&expr.id];
+
+                    let id = match decl {
+                        Declaration::In(input) => input.id,
+                        Declaration::Out(output) => output.id,
+                        _ => unreachable!("ensured by naming analysis {:?}", decl),
+                    };
+                    self.check_stream_types_are_compatible(stream_ty, &self.stream_ty[&id], span)
+                } else {
+                    unreachable!();
+                }
             }
         }
     }
@@ -2032,7 +2045,7 @@ mod tests {
     #[test]
     fn infinite_recursion_regression() {
         // this should fail in type checking as the value type of `c` cannot be determined.
-        let spec = "output c := c[0].defaults(to:0)";
+        let spec = "output c := c.defaults(to:0)";
         assert_eq!(1, num_type_errors(spec));
     }
 
