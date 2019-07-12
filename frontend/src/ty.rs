@@ -5,10 +5,11 @@
 pub(crate) mod check;
 pub(crate) mod unifier;
 
+use crate::parse::NodeId;
 use lazy_static::lazy_static;
 use num::rational::Rational64 as Rational;
 use num::{Integer, Zero};
-use unifier::{StreamVar, ValueVar};
+use unifier::ValueVar;
 use uom::si::frequency::hertz;
 use uom::si::rational64::Frequency as UOM_Frequency;
 
@@ -23,11 +24,11 @@ pub struct Ty {
 #[derive(Debug, PartialEq, Eq, PartialOrd, Clone, Hash)]
 pub enum StreamTy {
     /// An event stream with the given dependencies
-    Event(Activation<StreamVar>),
+    Event(Activation<NodeId>),
     // A real-time stream with given frequency
     RealTime(Freq),
     /// The type of the stream should be inferred as the conjunction of the given `StreamTy`
-    Infer(Vec<StreamVar>),
+    Infer(Vec<NodeId>),
 }
 
 /// The `value` type, storing information about the stored values (`Bool`, `UInt8`, etc.)
@@ -100,7 +101,7 @@ impl std::fmt::Display for Freq {
 }
 
 impl StreamTy {
-    pub(crate) fn new_event(activation: Activation<StreamVar>) -> StreamTy {
+    pub(crate) fn new_event(activation: Activation<NodeId>) -> StreamTy {
         StreamTy::Event(activation)
     }
 
@@ -124,16 +125,31 @@ impl StreamTy {
                 // coercion is only valid if the implication `target -> other` is valid,
                 // for example, `target = a & b` and `other = b` is valid while
                 //              `target = a | b` and `other = b` is invalid.
-                target.implies_valid_(other)
+                target.implies_valid(other)
             }
             _ => false,
         }
     }
+
+    pub(crate) fn simplify(&mut self) {
+        let ac = match self {
+            StreamTy::Event(ac) => ac,
+            _ => return,
+        };
+        match ac {
+            Activation::Conjunction(args) if args.is_empty() => *ac = Activation::True,
+            Activation::Conjunction(args) | Activation::Disjunction(args) => {
+                args.sort();
+                args.dedup();
+            }
+            _ => {}
+        }
+    }
 }
 
-impl Activation<StreamVar> {
+impl Activation<NodeId> {
     /// Checks whether `self -> other` is valid
-    pub(crate) fn implies_valid_(&self, other: &Self) -> bool {
+    pub(crate) fn implies_valid(&self, other: &Self) -> bool {
         if self == other {
             return true;
         }
@@ -147,6 +163,24 @@ impl Activation<StreamVar> {
                 // there are possible many more cases that we want to look at in order to make analysis more precise
                 false
             }
+        }
+    }
+
+    pub(crate) fn conjunction(&self, other: &Self) -> Self {
+        use Activation::*;
+        match (self, other) {
+            (True, _) => other.clone(),
+            (Conjunction(c_l), Conjunction(c_r)) => {
+                let mut con = c_l.clone();
+                con.extend(c_r.iter().cloned());
+                Activation::Conjunction(con)
+            }
+            (Conjunction(c), other) | (other, Conjunction(c)) => {
+                let mut con = c.clone();
+                con.push(other.clone());
+                Activation::Conjunction(con)
+            }
+            (_, _) => Activation::Conjunction(vec![self.clone(), other.clone()]),
         }
     }
 }
@@ -337,7 +371,7 @@ impl std::fmt::Display for StreamTy {
     }
 }
 
-impl std::fmt::Display for Activation<StreamVar> {
+impl std::fmt::Display for Activation<NodeId> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         use crate::ast::print::write_delim_list;
         match self {

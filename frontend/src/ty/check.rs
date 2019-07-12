@@ -6,7 +6,7 @@
 //! * [Unification in Rust](http://smallcultfollowing.com/babysteps/blog/2017/03/25/unification-in-chalk-part-1/)
 //! * [Ena (union-find package)](https://crates.io/crates/ena)
 
-use super::unifier::{InferError, StreamVar, StreamVarOrTy, UnifiableTy, Unifier, ValueUnifier, ValueVar};
+use super::unifier::{InferError, UnifiableTy, Unifier, ValueUnifier, ValueVar};
 use super::{Activation, Freq, StreamTy, TypeConstraint, ValueTy};
 use crate::analysis::naming::{Declaration, DeclarationTable};
 use crate::ast::{
@@ -30,10 +30,8 @@ pub(crate) struct TypeAnalysis<'a, 'b, 'c> {
     declarations: &'c mut DeclarationTable<'a>,
     method_lookup: MethodLookup<'a>,
     unifier: ValueUnifier<ValueTy>,
-    stream_unifier: ValueUnifier<StreamTy>,
     /// maps `NodeId`'s to the variables used in `unifier`
     value_vars: HashMap<NodeId, ValueVar>,
-    stream_vars: HashMap<NodeId, StreamVar>,
     /// maps function-like nodes (UnOp, BinOp, Func, Method) to the generic parameters
     generic_function_vars: HashMap<NodeId, Vec<ValueVar>>,
     stream_ty: HashMap<NodeId, StreamTy>,
@@ -71,9 +69,7 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
             declarations,
             method_lookup: MethodLookup::new(),
             unifier: ValueUnifier::new(),
-            stream_unifier: ValueUnifier::new(),
             value_vars: HashMap::new(),
-            stream_vars: HashMap::new(),
             generic_function_vars: HashMap::new(),
             stream_ty: HashMap::new(),
         }
@@ -99,11 +95,7 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
     fn extract_type_table(&mut self, spec: &'a LolaSpec) -> TypeTable {
         let value_nids: Vec<NodeId> = self.value_vars.keys().cloned().collect();
         let vtt: HashMap<NodeId, ValueTy> = value_nids.into_iter().map(|nid| (nid, self.get_type(nid))).collect();
-
-        // Note: If there is a `None` for a stream, `get_stream_type` would report the error.
-        let stream_nids: Vec<NodeId> = self.stream_vars.keys().cloned().collect();
-        let stt: HashMap<NodeId, StreamTy> =
-            stream_nids.iter().flat_map(|&nid| self.get_stream_type(nid).map(|ty| (nid, ty))).collect();
+        let stt: HashMap<NodeId, StreamTy> = self.stream_ty.clone();
 
         let mut func_tt = HashMap::with_capacity(self.generic_function_vars.len());
         let source = &self.generic_function_vars;
@@ -117,8 +109,12 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
             );
         }
 
-        let acti_cond =
-            stream_nids.iter().flat_map(|&nid| self.get_activation_condition(spec, nid).map(|ac| (nid, ac))).collect();
+        let acti_cond = self
+            .stream_ty
+            .clone()
+            .keys()
+            .flat_map(|&nid| self.get_activation_condition(spec, nid).map(|ac| (nid, ac)))
+            .collect();
 
         TypeTable { value_tt: vtt, stream_tt: stt, func_tt, acti_cond }
     }
@@ -194,13 +190,6 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
         var
     }
 
-    fn new_stream_var(&mut self, node: NodeId) -> StreamVar {
-        assert!(!self.stream_vars.contains_key(&node));
-        let var = self.stream_unifier.new_var();
-        self.stream_vars.insert(node, var);
-        var
-    }
-
     fn infer_constant(&mut self, constant: &'a Constant) -> Result<(), ()> {
         trace!("infer type for {} (NodeId = {})", constant, constant.id);
         let var = self.new_value_var(constant.id);
@@ -232,8 +221,7 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
         self.unifier.unify_var_var(var, ty_var).map_err(|err| self.handle_error(err, input.name.span))?;
 
         // stream type
-        let stream_var = self.new_stream_var(input.id);
-        self.stream_ty.insert(input.id, StreamTy::new_event(Activation::Stream(stream_var)));
+        self.stream_ty.insert(input.id, StreamTy::new_event(Activation::Stream(input.id)));
 
         // determine parameters
         let mut param_types = Vec::new();
@@ -246,10 +234,7 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
         }
 
         assert!(param_types.is_empty(), "parametric types are currently not supported");
-
-        self.stream_unifier
-            .unify_var_ty(stream_var, StreamTy::new_event(Activation::Stream(stream_var)))
-            .map_err(|err| self.handle_error(err, input.name.span))
+        Ok(())
     }
 
     /// infers value types if given (`:` expression)
@@ -264,9 +249,6 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
         let ty_var = self.value_vars[&output.ty.id];
 
         self.unifier.unify_var_var(var, ty_var).map_err(|err| self.handle_error(err, output.name.span))?;
-
-        // stream type
-        let _stream_var = self.new_stream_var(output.id);
 
         // collect parameters
         let mut param_types = Vec::new();
@@ -286,8 +268,6 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
     fn infer_output_clock(&mut self, output: &'a Output) -> Result<(), ()> {
         trace!("infer output clock for {} (NodeId = {})", output, output.id);
 
-        let stream_var = self.stream_vars[&output.id];
-
         // check if stream has timing infos
         let mut frequency = None;
         let mut activation = None;
@@ -299,20 +279,11 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
 
         // determine whether stream is timed or event based or should be infered
         if let Some(f) = frequency {
-            self.stream_unifier
-                .unify_var_ty(stream_var, StreamTy::new_periodic(f))
-                .map_err(|err| self.handle_error(err, output.name.span))?;
             self.stream_ty.insert(output.id, StreamTy::new_periodic(f));
         } else if let Some(act) = activation {
-            self.stream_unifier
-                .unify_var_ty(stream_var, StreamTy::new_event(act.clone()))
-                .map_err(|err| self.handle_error(err, output.name.span))?;
             self.stream_ty.insert(output.id, StreamTy::new_event(act));
         } else {
             // stream type should be inferred
-            self.stream_unifier
-                .unify_var_ty(stream_var, StreamTy::new_inferred())
-                .map_err(|err| self.handle_error(err, output.name.span))?;
             let mut inner = Vec::new();
             self.infer_stream_ty_from_expression(&output.expression, &mut inner);
             self.stream_ty.insert(output.id, StreamTy::Infer(inner));
@@ -320,7 +291,7 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
         Ok(())
     }
 
-    fn infer_stream_ty_from_expression(&mut self, expression: &Expression, inner: &mut Vec<StreamVar>) {
+    fn infer_stream_ty_from_expression(&mut self, expression: &Expression, inner: &mut Vec<NodeId>) {
         use crate::ast::ExpressionKind::*;
         match &expression.kind {
             Lit(l) => {}
@@ -331,13 +302,11 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
                     Declaration::Const(constant) => {}
                     Declaration::In(input) => {
                         // stream type
-                        let in_var = self.stream_vars[&input.id];
-                        inner.push(in_var)
+                        inner.push(input.id)
                     }
                     Declaration::Out(output) => {
                         // stream type
-                        let out_var = self.stream_vars[&output.id];
-                        inner.push(out_var)
+                        inner.push(output.id)
                     }
                     Declaration::Param(param) => {}
                     Declaration::Type(_) | Declaration::Func(_) => {
@@ -424,12 +393,7 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
     ///
     /// Precondition: every stream variable contained has a StreamTy
     /// In order to prevent infinite recursion, `seen_vars` is used to record already seen `var`s
-    fn stream_var_to_vec_stream_ty(
-        &mut self,
-        stream_var: StreamVar,
-        seen_vars: &mut HashSet<StreamVar>,
-    ) -> Vec<StreamTy> {
-        let node_id = self.stream_vars.iter().find(|(k, v)| **v == stream_var).map(|(k, v)| k).unwrap();
+    fn stream_var_to_vec_stream_ty(&mut self, node_id: NodeId, seen_vars: &mut HashSet<NodeId>) -> Vec<StreamTy> {
         match &self.stream_ty[&node_id].clone() {
             StreamTy::Infer(vars) => vars
                 .iter()
@@ -548,7 +512,7 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
                 // check that stream types are not compatible (otherwise one can use stream directly)
                 match (stream_ty, inner_ty) {
                     (StreamTy::Event(left), StreamTy::Event(right)) => {
-                        if left.implies_valid(&right, &mut self.stream_unifier) {
+                        if left.implies_valid(&right) {
                             self.handler.warn_with_span(
                                 &format!("Unnecessary `.{}`", function),
                                 LabeledSpan::new(expr.span, &format!("remove `.{}`", function), true),
@@ -676,7 +640,7 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
         }
     }
 
-    fn parse_at_expression(&mut self, output: &'a Output) -> Result<(Option<Freq>, Option<Activation<StreamVar>>), ()> {
+    fn parse_at_expression(&mut self, output: &'a Output) -> Result<(Option<Freq>, Option<Activation<NodeId>>), ()> {
         if let Some(expr) = &output.extend.expr {
             match &expr.kind {
                 ExpressionKind::Lit(_) => match expr.parse_frequency() {
@@ -696,10 +660,10 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
         }
     }
 
-    fn parse_activation_condition(&mut self, out_id: NodeId, expr: &Expression) -> Result<Activation<StreamVar>, ()> {
+    fn parse_activation_condition(&mut self, out_id: NodeId, expr: &Expression) -> Result<Activation<NodeId>, ()> {
         match &expr.kind {
             ExpressionKind::Ident(_) => match self.declarations[&expr.id] {
-                Declaration::In(input) => Ok(Activation::Stream(self.stream_vars[&input.id])),
+                Declaration::In(input) => Ok(Activation::Stream(input.id)),
                 Declaration::Out(output) => {
                     if output.id == out_id {
                         self.handler.error_with_span(
@@ -708,7 +672,7 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
                         );
                         Err(())
                     } else {
-                        Ok(Activation::Stream(self.stream_vars[&output.id]))
+                        Ok(Activation::Stream(output.id))
                     }
                 }
                 _ => {
@@ -830,14 +794,8 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
             }
         }*/
 
-        let out_stream_var = self.stream_vars[&output.id];
-
         // generate constraint for expression
-        self.infer_expression(
-            &output.expression,
-            Some(ValueTy::Infer(out_var)),
-            Some(StreamVarOrTy::Var(out_stream_var)),
-        )
+        self.infer_expression(&output.expression, Some(ValueTy::Infer(out_var)))
     }
 
     fn infer_trigger_expression(&mut self, trigger: &'a Trigger) -> Result<(), ()> {
@@ -847,9 +805,7 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
         let var = self.new_value_var(trigger.id);
         self.unifier.unify_var_ty(var, ValueTy::Bool).expect("cannot fail as `var` is fresh");
 
-        let stream_var = self.new_stream_var(trigger.id);
-
-        self.infer_expression(&trigger.expression, Some(ValueTy::Infer(var)), Some(StreamVarOrTy::Var(stream_var)))
+        self.infer_expression(&trigger.expression, Some(ValueTy::Infer(var)))
     }
 
     fn get_constraint_for_literal(&self, lit: &Literal) -> Option<ValueTy> {
@@ -878,30 +834,13 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
         })
     }
 
-    fn infer_expression(
-        &mut self,
-        expr: &'a Expression,
-        target: Option<ValueTy>,
-        stream_ty: Option<StreamVarOrTy>,
-    ) -> Result<(), ()> {
+    fn infer_expression(&mut self, expr: &'a Expression, target: Option<ValueTy>) -> Result<(), ()> {
         use crate::ast::ExpressionKind::*;
         trace!("infer expression {} (NodeId = {})", expr, expr.id);
 
         let var = self.new_value_var(expr.id);
         if let Some(target_ty) = &target {
             self.unifier.unify_var_ty(var, target_ty.clone()).expect("unification cannot fail as `var` is fresh");
-        }
-
-        let stream_var = self.new_stream_var(expr.id);
-        match stream_ty.as_ref() {
-            Some(StreamVarOrTy::Ty(ty)) => self
-                .stream_unifier
-                .unify_var_ty(stream_var, ty.clone())
-                .expect("unification cannot fail as `var` is fresh"),
-            Some(&StreamVarOrTy::Var(var)) => {
-                self.stream_unifier.unify_var_var(stream_var, var).expect("unification cannot fail as `var` is fresh")
-            }
-            None => {}
         }
 
         match &expr.kind {
@@ -927,23 +866,11 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
                         // value type
                         let in_var = self.value_vars[&input.id];
                         self.unifier.unify_var_var(var, in_var).map_err(|err| self.handle_error(err, expr.span))?;
-
-                        // stream type
-                        let in_var = self.stream_vars[&input.id];
-                        self.stream_unifier
-                            .unify_var_var(stream_var, in_var)
-                            .map_err(|err| self.handle_error(err, expr.span))?;
                     }
                     Declaration::Out(output) => {
                         // value type
                         let out_var = self.value_vars[&output.id];
                         self.unifier.unify_var_var(var, out_var).map_err(|err| self.handle_error(err, expr.span))?;
-
-                        // stream type
-                        let out_var = self.stream_vars[&output.id];
-                        self.stream_unifier
-                            .unify_var_var(stream_var, out_var)
-                            .map_err(|err| self.handle_error(err, expr.span))?;
                     }
                     Declaration::Param(param) => {
                         // value type only
@@ -955,9 +882,9 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
                     }
                 }
             }
-            Offset(inner, offset) => self.infer_offset_expr(var, stream_var, expr.span, inner, offset)?,
+            Offset(inner, offset) => self.infer_offset_expr(var, expr.span, inner, offset)?,
             SlidingWindowAggregation { expr: inner, duration, aggregation } => {
-                self.infer_sliding_window_expression(var, stream_var, expr.span, inner, duration, *aggregation)?;
+                self.infer_sliding_window_expression(var, expr.span, inner, duration, *aggregation)?;
             }
             Ite(cond, left, right) => {
                 // value type constraints
@@ -965,39 +892,19 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
                 // * `left` = `var`
                 // * `right` = `var`
                 // stream type constraints: all should be the same
-                self.infer_expression(cond, Some(ValueTy::Bool), Some(StreamVarOrTy::Var(stream_var)))?;
-                self.infer_expression(left, Some(ValueTy::Infer(var)), Some(StreamVarOrTy::Var(stream_var)))?;
-                self.infer_expression(right, Some(ValueTy::Infer(var)), Some(StreamVarOrTy::Var(stream_var)))?;
+                self.infer_expression(cond, Some(ValueTy::Bool))?;
+                self.infer_expression(left, Some(ValueTy::Infer(var)))?;
+                self.infer_expression(right, Some(ValueTy::Infer(var)))?;
             }
             Unary(op, appl) => {
-                self.infer_function_application(
-                    expr.id,
-                    var,
-                    stream_var,
-                    expr.span,
-                    &op.get_func_decl(),
-                    &[],
-                    &[appl],
-                )?;
+                self.infer_function_application(expr.id, var, expr.span, &op.get_func_decl(), &[], &[appl])?;
             }
             Binary(op, left, right) => {
-                self.infer_function_application(
-                    expr.id,
-                    var,
-                    stream_var,
-                    expr.span,
-                    &op.get_func_decl(),
-                    &[],
-                    &[left, right],
-                )?;
+                self.infer_function_application(expr.id, var, expr.span, &op.get_func_decl(), &[], &[left, right])?;
             }
             Default(left, right) => {
-                self.infer_expression(
-                    left,
-                    Some(ValueTy::Option(ValueTy::Infer(var).into())),
-                    Some(StreamVarOrTy::Var(stream_var)),
-                )?;
-                self.infer_expression(right, Some(ValueTy::Infer(var)), Some(StreamVarOrTy::Var(stream_var)))?
+                self.infer_expression(left, Some(ValueTy::Option(ValueTy::Infer(var).into())))?;
+                self.infer_expression(right, Some(ValueTy::Infer(var)))?
             }
             StreamAccess(inner, access_type) => {
                 // result type is an optional value
@@ -1007,44 +914,7 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
                     .map_err(|err| self.handle_error(err, inner.span))?;
 
                 // the stream type of `inner` is unconstrained
-                self.infer_expression(inner, Some(ValueTy::Infer(target_var)), None)?;
-
-                let function = match access_type {
-                    StreamAccessKind::Hold => "hold()",
-                    StreamAccessKind::Optional => "get()",
-                };
-
-                // check that stream types are not compatible
-                let inner_var = self.stream_vars[&inner.id];
-                match (
-                    self.stream_unifier.get_type(stream_var).map(|ty| ty.normalize_ty(&mut self.stream_unifier)),
-                    self.stream_unifier.get_type(inner_var),
-                ) {
-                    (Some(StreamTy::Event(left)), Some(StreamTy::Event(right))) => {
-                        if left.implies_valid(&right, &mut self.stream_unifier) {
-                            self.handler.warn_with_span(
-                                &format!("Unnecessary `.{}`", function),
-                                LabeledSpan::new(expr.span, &format!("remove `.{}`", function), true),
-                            )
-                        }
-                    }
-                    (Some(StreamTy::RealTime(left)), Some(StreamTy::RealTime(right))) => {
-                        if right.is_multiple_of(&left) {
-                            self.handler.warn_with_span(
-                                &format!("Unnecessary `.{}`", function),
-                                LabeledSpan::new(expr.span, &format!("remove `.{}`", function), true),
-                            )
-                        }
-                    }
-                    _ => {
-                        if let StreamAccessKind::Optional = access_type {
-                            self.handler.error_with_span(
-                                "`get()` can be only used when both streams are event-based or periodic",
-                                LabeledSpan::new(expr.span, "`get()` not possible here", true),
-                            )
-                        }
-                    }
-                }
+                self.infer_expression(inner, Some(ValueTy::Infer(target_var)))?;
             }
             Function(_name, types, params) => {
                 let decl = self.declarations[&expr.id];
@@ -1078,7 +948,6 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
                 self.infer_function_application(
                     expr.id,
                     var,
-                    stream_var,
                     expr.span,
                     fun_decl,
                     types.as_slice(),
@@ -1087,7 +956,7 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
             }
             Method(base, name, types, params) => {
                 // recursion
-                self.infer_expression(base, None, Some(StreamVarOrTy::Var(stream_var)))?;
+                self.infer_expression(base, None)?;
 
                 if let Some(infered) = self.unifier.get_type(self.value_vars[&base.id]) {
                     debug!("{} {}", base, infered);
@@ -1103,7 +972,6 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
                         self.infer_function_application(
                             expr.id,
                             var,
-                            stream_var,
                             expr.span,
                             fun_decl,
                             types.as_slice(),
@@ -1128,7 +996,7 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
                 // recursion
                 let mut tuples: Vec<ValueTy> = Vec::with_capacity(expressions.len());
                 for element in expressions {
-                    self.infer_expression(element, None, Some(StreamVarOrTy::Var(stream_var)))?;
+                    self.infer_expression(element, None)?;
                     let inner = self.unifier.get_type(self.value_vars[&element.id]).expect("should have type");
                     tuples.push(inner);
                 }
@@ -1139,7 +1007,7 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
             }
             Field(base, ident) => {
                 // recursion
-                self.infer_expression(base, None, Some(StreamVarOrTy::Var(stream_var)))?;
+                self.infer_expression(base, None)?;
 
                 let ty = match self.unifier.get_type(self.value_vars[&base.id]) {
                     Some(ty) => ty,
@@ -1176,12 +1044,9 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
                 }
             }
             ParenthesizedExpression(_, expr, _) => {
-                self.infer_expression(expr, target, stream_ty)?;
+                self.infer_expression(expr, target)?;
                 self.unifier
                     .unify_var_var(var, self.value_vars[&expr.id])
-                    .map_err(|err| self.handle_error(err, expr.span))?;
-                self.stream_unifier
-                    .unify_var_var(stream_var, self.stream_vars[&expr.id])
                     .map_err(|err| self.handle_error(err, expr.span))?;
             }
             MissingExpression => {
@@ -1194,7 +1059,6 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
     fn infer_offset_expr(
         &mut self,
         var: ValueVar,
-        stream_var: StreamVar,
         span: Span,
         expr: &'a Expression,
         offset: &'a Offset,
@@ -1215,7 +1079,7 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
                 }
 
                 // As the recursion checks that the stream types match, any integer offset will match as well.
-                self.infer_expression(expr, Some(ValueTy::Infer(target_var)), Some(StreamVarOrTy::Var(stream_var)))
+                self.infer_expression(expr, Some(ValueTy::Infer(target_var)))
             }
             Offset::RealTime(time, _) => {
                 // target value type
@@ -1227,20 +1091,10 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
                 } else {
                     self.unifier.unify_var_var(var, target_value_var).map_err(|err| self.handle_error(err, span))?;
                 }
-                // get frequency
-                let time = offset.to_uom_time().expect("guaranteed to be real-time");
-                let freq = UOM_Frequency::new::<hertz>(time.get::<second>().abs().inv());
-
-                // target stream type
-                let target_stream_ty = StreamTy::new_periodic(Freq::new(freq));
 
                 // recursion
                 // stream types have to match
-                self.infer_expression(
-                    expr,
-                    Some(ValueTy::Infer(target_value_var)),
-                    Some(StreamVarOrTy::Ty(target_stream_ty)),
-                )
+                self.infer_expression(expr, Some(ValueTy::Infer(target_value_var)))
             }
         }
     }
@@ -1248,24 +1102,11 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
     fn infer_sliding_window_expression(
         &mut self,
         var: ValueVar,
-        stream_var: StreamVar,
         span: Span,
         expr: &'a Expression,
         duration: &'a Expression,
         window_op: WindowOperation,
     ) -> Result<(), ()> {
-        // the stream variable has to be real-time
-        match self.stream_unifier.get_normalized_type(stream_var) {
-            Some(StreamTy::RealTime(_)) => {}
-            _ => {
-                self.handler.error_with_span(
-                    "Sliding windows are only allowed in real-time streams",
-                    LabeledSpan::new(span, "unexpected sliding window", true),
-                );
-                return Err(());
-            }
-        }
-
         // check duration
         if let Err(message) = duration.parse_duration() {
             self.handler.error_with_span("expected duration", LabeledSpan::new(duration.span, &message, true));
@@ -1277,7 +1118,7 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
         match window_op {
             Count => {
                 // The value type of the inner stream is not restricted
-                self.infer_expression(expr, None, None)?;
+                self.infer_expression(expr, None)?;
                 // resulting type is a integer value
                 self.unifier
                     .unify_var_ty(var, ValueTy::Constr(TypeConstraint::UnsignedInteger))
@@ -1285,14 +1126,14 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
             }
             Sum => {
                 // The value type of the inner stream has to be numeric
-                self.infer_expression(expr, Some(ValueTy::Constr(TypeConstraint::Numeric)), None)?;
+                self.infer_expression(expr, Some(ValueTy::Constr(TypeConstraint::Numeric)))?;
                 // resulting type depends on the inner type
                 let inner_var = self.value_vars[&expr.id];
                 self.unifier.unify_var_ty(var, ValueTy::Infer(inner_var)).map_err(|err| self.handle_error(err, span))
             }
             Average | Product | Integral => {
                 // The value type of the inner stream has to be numeric
-                self.infer_expression(expr, Some(ValueTy::Constr(TypeConstraint::Numeric)), None)?;
+                self.infer_expression(expr, Some(ValueTy::Constr(TypeConstraint::Numeric)))?;
                 // resulting type depends on the inner type
                 let inner_var = self.value_vars[&expr.id];
                 self.unifier
@@ -1307,7 +1148,6 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
         &mut self,
         node_id: NodeId,
         var: ValueVar,
-        stream_var: StreamVar,
         span: Span,
         fun_decl: &FuncDecl,
         types: &[Type],
@@ -1345,7 +1185,7 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
                 self.unifier.unify_var_ty(param_var, ty).map_err(|err| self.handle_error(err, parameter.span))?;
             } else {
                 // otherwise, we have to check it now
-                self.infer_expression(parameter, Some(ty), Some(StreamVarOrTy::Var(stream_var)))?;
+                self.infer_expression(parameter, Some(ty))?;
             }
         }
         // return type
@@ -1516,20 +1356,6 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
         }
     }
 
-    pub(crate) fn get_stream_type(&mut self, id: NodeId) -> Option<StreamTy> {
-        match self.stream_vars.get(&id) {
-            Some(&var) => match self.stream_unifier.get_normalized_type(var) {
-                // make stream types default to event stream with empty conjunction, i.e., true
-                Some(StreamTy::Infer(_)) | None => Some(StreamTy::Event(Activation::True)),
-                Some(mut stream_ty) => {
-                    stream_ty.simplify();
-                    Some(stream_ty)
-                }
-            },
-            None => Some(StreamTy::Event(Activation::True)),
-        }
-    }
-
     /// Returns the activation condition (AC) to be used in Lowering/Evaluator.
     /// The resulting AC is a Boolean Condition over Inpuut Stream References.
     pub(crate) fn get_activation_condition(
@@ -1542,9 +1368,8 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
         }
         let mut stream_ty = self.stream_ty[&id].clone();
         stream_ty.simplify();
-        let stream_var = self.stream_vars[&id];
         let mut stream_vars = HashSet::new();
-        stream_vars.insert(stream_var);
+        stream_vars.insert(id);
         if !self.normalize_stream_ty_to_inputs(&mut stream_ty, &mut stream_vars) {
             return None;
         }
@@ -1555,7 +1380,7 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
     }
 
     /// Returns false if the normalization failed
-    fn normalize_stream_ty_to_inputs(&mut self, ty: &mut StreamTy, stream_vars: &mut HashSet<StreamVar>) -> bool {
+    fn normalize_stream_ty_to_inputs(&mut self, ty: &mut StreamTy, stream_vars: &mut HashSet<NodeId>) -> bool {
         match ty {
             StreamTy::Event(ac) => self.normalize_activation_condition(ac, stream_vars),
             StreamTy::RealTime(_) => false,
@@ -1566,8 +1391,8 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
     /// Returns false if the normalization failed
     fn normalize_activation_condition(
         &mut self,
-        ac: &mut Activation<StreamVar>,
-        stream_vars: &mut HashSet<StreamVar>,
+        ac: &mut Activation<NodeId>,
+        stream_vars: &mut HashSet<NodeId>,
     ) -> bool {
         match ac {
             Activation::Conjunction(args) | Activation::Disjunction(args) => {
@@ -1578,14 +1403,14 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
                     return true;
                 }
                 stream_vars.insert(*var);
-                *ac = match self.stream_unifier.get_normalized_type(*var) {
+                *ac = match &self.stream_ty[var] {
                     // make stream types default to event stream with empty conjunction, i.e., true
-                    Some(StreamTy::Infer(_)) | None => Activation::True,
-                    Some(StreamTy::Event(Activation::Stream(v))) if *var == v => {
+                    StreamTy::Infer(_) => unreachable!(),
+                    StreamTy::Event(Activation::Stream(v)) if *var == *v => {
                         return true;
                     }
-                    Some(StreamTy::Event(ac)) => ac,
-                    Some(StreamTy::RealTime(_)) => {
+                    StreamTy::Event(ac) => ac.clone(),
+                    StreamTy::RealTime(_) => {
                         self.handler.error("real-time streams cannot be used in activation conditions");
                         return false;
                     }
@@ -1599,7 +1424,7 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
     fn translate_activation_condition(
         &self,
         spec: &'a LolaSpec,
-        ac: &Activation<StreamVar>,
+        ac: &Activation<NodeId>,
     ) -> Option<Activation<crate::ir::StreamReference>> {
         Some(match ac {
             Activation::Conjunction(args) => Activation::Conjunction(
@@ -1609,9 +1434,7 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
                 args.iter().flat_map(|ac| self.translate_activation_condition(spec, ac)).collect(),
             ),
             Activation::Stream(var) => {
-                if let Some(idx) =
-                    spec.inputs.iter().enumerate().find(|(_, val)| self.stream_vars[&val.id] == *var).map(|x| x.0)
-                {
+                if let Some(idx) = spec.inputs.iter().enumerate().find(|(_, val)| val.id == *var).map(|x| x.0) {
                     Activation::Stream(crate::ir::StreamReference::InRef(idx))
                 } else {
                     // ignore remaining output variables, they are self-refrences
@@ -2171,7 +1994,7 @@ mod tests {
 
     #[test]
     fn test_sample_and_hold_noop() {
-        let spec = "input x: UInt8\noutput y: UInt8 := 3.hold().defaults(to: 0)";
+        let spec = "input x: UInt8\noutput y: UInt8 @ x := x.hold().defaults(to: 0)";
         assert_eq!(0, num_type_errors(spec));
     }
 
@@ -2226,15 +2049,15 @@ mod tests {
     fn test_conjunctive_stream_types() {
         let spec = "input a: Int32\ninput b: Int32\noutput x := a + b";
         let type_table = type_check(spec);
-        // input `a` has NodeId = 0, StreamVar = 0
-        // input `b` has NodeId = 2, StreamVar = 1
+        // input `a` has NodeId = 0
+        // input `b` has NodeId = 2
         // output `x` has NodeId = 4
         assert_eq!(type_table.get_value_type(NodeId::new(4)), &ValueTy::Int(IntTy::I32));
         assert_eq!(
             type_table.get_stream_type(NodeId::new(4)),
             &StreamTy::Event(Activation::Conjunction(vec![
-                Activation::Stream(StreamVar::new(0)),
-                Activation::Stream(StreamVar::new(1))
+                Activation::Stream(NodeId::new(0)),
+                Activation::Stream(NodeId::new(2))
             ]))
         );
     }
@@ -2243,15 +2066,15 @@ mod tests {
     fn test_activation_condition() {
         let spec = "input a: Int32\ninput b: Int32\noutput x @(a | b) := 1";
         let type_table = type_check(spec);
-        // input `a` has NodeId = 0, StreamVar = 0
-        // input `b` has NodeId = 2, StreamVar = 1
+        // input `a` has NodeId = 0
+        // input `b` has NodeId = 2
         // output `x` has NodeId = 4
         assert_eq!(type_table.get_value_type(NodeId::new(4)), &ValueTy::Int(IntTy::I64));
         assert_eq!(
             type_table.get_stream_type(NodeId::new(4)),
             &StreamTy::Event(Activation::Disjunction(vec![
-                Activation::Stream(StreamVar::new(0)),
-                Activation::Stream(StreamVar::new(1))
+                Activation::Stream(NodeId::new(0)),
+                Activation::Stream(NodeId::new(2))
             ]))
         );
     }
@@ -2274,15 +2097,15 @@ mod tests {
     fn test_get() {
         let spec = "input a: Int32\ninput b: Int32\noutput x @(a | b) := a.get().defaults(to: 0)";
         let type_table = type_check(spec);
-        // input `a` has NodeId = 0, StreamVar = 0
-        // input `b` has NodeId = 2, StreamVar = 1
+        // input `a` has NodeId = 0
+        // input `b` has NodeId = 2
         // output `x` has NodeId = 4
         assert_eq!(type_table.get_value_type(NodeId::new(4)), &ValueTy::Int(IntTy::I32));
         assert_eq!(
             type_table.get_stream_type(NodeId::new(4)),
             &StreamTy::Event(Activation::Disjunction(vec![
-                Activation::Stream(StreamVar::new(0)),
-                Activation::Stream(StreamVar::new(1))
+                Activation::Stream(NodeId::new(0)),
+                Activation::Stream(NodeId::new(2))
             ]))
         );
     }
@@ -2315,17 +2138,17 @@ mod tests {
     fn test_normalization_event_streams() {
         let spec = "input a: Int32\ninput b: Int32\ninput c: Int32\noutput x := a + b\noutput y := x + x + c";
         let type_table = type_check(spec);
-        //  input `a` has NodeId =  0, StreamVar = 0
-        //  input `b` has NodeId =  2, StreamVar = 1
-        //  input `c` has NodeId =  4, StreamVar = 2
-        // output `x` has NodeId =  6, StreamVar = 3
-        // output `y` has NodeId = 12, StreamVar = 4
+        //  input `a` has NodeId =  0
+        //  input `b` has NodeId =  2
+        //  input `c` has NodeId =  4
+        // output `x` has NodeId =  6
+        // output `y` has NodeId = 12
         let stream_ty_x = type_table.get_stream_type(NodeId::new(6));
         assert_eq!(
             stream_ty_x,
             &StreamTy::Event(Activation::Conjunction(vec![
-                Activation::Stream(StreamVar::new(0)),
-                Activation::Stream(StreamVar::new(1))
+                Activation::Stream(NodeId::new(0)),
+                Activation::Stream(NodeId::new(2))
             ]))
         );
 
@@ -2333,9 +2156,9 @@ mod tests {
         assert_eq!(
             stream_ty_y,
             &StreamTy::Event(Activation::Conjunction(vec![
-                Activation::Stream(StreamVar::new(0)),
-                Activation::Stream(StreamVar::new(1)),
-                Activation::Stream(StreamVar::new(2))
+                Activation::Stream(NodeId::new(0)),
+                Activation::Stream(NodeId::new(2)),
+                Activation::Stream(NodeId::new(4))
             ]))
         );
 
