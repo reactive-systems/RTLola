@@ -153,20 +153,30 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
         }
 
         for output in &spec.outputs {
+            self.infer_output_expression(output).unwrap_or_else(|_| {
+                debug!("type inference failed for {}", output);
+            });
+        }
+        for trigger in &spec.trigger {
+            self.infer_trigger_expression(trigger).unwrap_or_else(|_| {
+                debug!("type inference failed for {}", trigger);
+            });
+        }
+
+        for output in &spec.outputs {
             self.infer_output_clock(output).unwrap_or_else(|_| {
                 debug!("type inference failed for {}", output);
             });
         }
 
         for output in &spec.outputs {
-            self.infer_output_expression(output).unwrap_or_else(|_| {
+            self.concretize_output_clock(output.id).unwrap_or_else(|_| {
                 debug!("type inference failed for {}", output);
             });
         }
-
-        for output in &spec.outputs {
-            self.concretize_output_clock(output).unwrap_or_else(|_| {
-                debug!("type inference failed for {}", output);
+        for trigger in &spec.trigger {
+            self.concretize_output_clock(trigger.id).unwrap_or_else(|_| {
+                debug!("type inference failed for {}", trigger);
             });
         }
 
@@ -175,11 +185,11 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
                 debug!("type inference failed for {}", output);
             });
         }
-
         for trigger in &spec.trigger {
-            self.infer_trigger_expression(trigger).unwrap_or_else(|_| {
-                debug!("type inference failed for {}", trigger);
-            });
+            self.check_output_clock_expression(&self.stream_ty[&trigger.id].clone(), &trigger.expression)
+                .unwrap_or_else(|_| {
+                    debug!("type inference failed for {}", trigger);
+                });
         }
     }
 
@@ -294,12 +304,12 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
     fn infer_stream_ty_from_expression(&mut self, expression: &Expression, inner: &mut Vec<NodeId>) {
         use crate::ast::ExpressionKind::*;
         match &expression.kind {
-            Lit(l) => {}
+            Lit(_) => {}
             Ident(_) => {
                 let decl = self.declarations[&expression.id];
 
                 match decl {
-                    Declaration::Const(constant) => {}
+                    Declaration::Const(_) => {}
                     Declaration::In(input) => {
                         // stream type
                         inner.push(input.id)
@@ -308,25 +318,25 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
                         // stream type
                         inner.push(output.id)
                     }
-                    Declaration::Param(param) => {}
+                    Declaration::Param(_) => {}
                     Declaration::Type(_) | Declaration::Func(_) => {
                         unreachable!("ensured by naming analysis {:?}", decl)
                     }
                 }
             }
-            Offset(expr, offset) => {
+            Offset(expr, _) => {
                 self.infer_stream_ty_from_expression(&expr, inner);
             }
-            SlidingWindowAggregation { expr: inner, duration, aggregation } => {}
+            SlidingWindowAggregation { expr: _, duration: _, aggregation: _ } => {}
             Ite(cond, left, right) => {
                 self.infer_stream_ty_from_expression(&cond, inner);
                 self.infer_stream_ty_from_expression(&left, inner);
                 self.infer_stream_ty_from_expression(&right, inner);
             }
-            Unary(op, appl) => {
+            Unary(_, appl) => {
                 self.infer_stream_ty_from_expression(&appl, inner);
             }
-            Binary(op, left, right) => {
+            Binary(_, left, right) => {
                 self.infer_stream_ty_from_expression(&left, inner);
                 self.infer_stream_ty_from_expression(&right, inner);
             }
@@ -334,15 +344,15 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
                 self.infer_stream_ty_from_expression(&left, inner);
                 self.infer_stream_ty_from_expression(&right, inner);
             }
-            StreamAccess(inner, access_type) => {
+            StreamAccess(_, _) => {
                 // inner does not influence stream ty
             }
-            Function(_name, types, params) => {
+            Function(_name, _, params) => {
                 for param in params {
                     self.infer_stream_ty_from_expression(&param, inner);
                 }
             }
-            Method(base, name, types, params) => {
+            Method(base, _, _, params) => {
                 self.infer_stream_ty_from_expression(&base, inner);
                 for param in params {
                     self.infer_stream_ty_from_expression(&param, inner);
@@ -353,7 +363,7 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
                     self.infer_stream_ty_from_expression(&element, inner);
                 }
             }
-            Field(base, ident) => {
+            Field(base, _) => {
                 self.infer_stream_ty_from_expression(&base, inner);
             }
             ParenthesizedExpression(_, expr, _) => {
@@ -366,26 +376,26 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
     }
 
     /// computes actual type from inferred stream vars
-    fn concretize_output_clock(&mut self, output: &'a Output) -> Result<(), ()> {
-        trace!("concretize and normalize for {} (NodeId = {})", output, output.id);
+    fn concretize_output_clock(&mut self, node_id: NodeId) -> Result<(), ()> {
+        trace!("concretize and normalize for (NodeId = {})", node_id);
 
-        let mut concretized = match &self.stream_ty[&output.id] {
+        let mut concretized = match &self.stream_ty[&node_id] {
             StreamTy::RealTime(_) => {
                 // already conrete and normalized
-                self.stream_ty[&output.id].clone()
+                self.stream_ty[&node_id].clone()
             }
-            StreamTy::Event(ac) => {
+            StreamTy::Event(_) => {
                 // concrete but not normalized
-                self.stream_ty[&output.id].clone()
+                self.stream_ty[&node_id].clone()
             }
-            StreamTy::Infer(vars) => {
+            StreamTy::Infer(_) => {
                 // neither concrete nor normalized
-                self.concretize_stream_ty(&self.stream_ty[&output.id].clone()).unwrap()
+                self.concretize_stream_ty(&self.stream_ty[&node_id].clone()).unwrap()
             }
         };
         concretized.simplify();
 
-        self.stream_ty.insert(output.id, concretized);
+        self.stream_ty.insert(node_id, concretized);
 
         Ok(())
     }
@@ -456,7 +466,7 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
         use crate::ast::ExpressionKind::*;
 
         match &expr.kind {
-            Lit(l) => {}
+            Lit(_) => {}
             Ident(_) => {
                 let decl = self.declarations[&expr.id];
 
@@ -487,10 +497,10 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
                 self.check_output_clock_expression(stream_ty, left)?;
                 self.check_output_clock_expression(stream_ty, right)?;
             }
-            Unary(op, appl) => {
+            Unary(_, appl) => {
                 self.check_output_clock_expression(stream_ty, appl)?;
             }
-            Binary(op, left, right) => {
+            Binary(_, left, right) => {
                 self.check_output_clock_expression(stream_ty, left)?;
                 self.check_output_clock_expression(stream_ty, right)?;
             }
@@ -538,12 +548,12 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
                     }
                 }
             }
-            Function(_name, types, params) => {
+            Function(_name, _, params) => {
                 for param in params {
                     self.check_output_clock_expression(stream_ty, param)?;
                 }
             }
-            Method(base, name, types, params) => {
+            Method(base, _, _, params) => {
                 // recursion
                 self.check_output_clock_expression(stream_ty, base)?;
                 for param in params {
@@ -555,7 +565,7 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
                     self.check_output_clock_expression(stream_ty, expression)?;
                 }
             }
-            Field(base, ident) => {
+            Field(base, _) => {
                 self.check_output_clock_expression(stream_ty, base)?;
             }
             ParenthesizedExpression(_, expr, _) => {
@@ -577,8 +587,8 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
     ) -> Result<(), ()> {
         // check if offset is discrete or time-based
         match offset {
-            Offset::Discrete(offset) => self.check_output_clock_expression(stream_ty, expr),
-            Offset::RealTime(time, _) => {
+            Offset::Discrete(_) => self.check_output_clock_expression(stream_ty, expr),
+            Offset::RealTime(_, _) => {
                 // get frequency
                 let time = offset.to_uom_time().expect("guaranteed to be real-time");
                 let freq = UOM_Frequency::new::<hertz>(time.get::<second>().abs().inv());
@@ -589,7 +599,7 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
 
                 // recursion
                 // stream types have to match
-                if let ExpressionKind::Ident(ident) = &expr.kind {
+                if let ExpressionKind::Ident(_) = &expr.kind {
                     let decl = self.declarations[&expr.id];
 
                     let id = match decl {
@@ -609,12 +619,12 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
         &mut self,
         stream_ty: &StreamTy,
         span: Span,
-        expr: &'a Expression,
+        _expr: &'a Expression,
         duration: &'a Expression,
-        window_op: WindowOperation,
+        _window_op: WindowOperation,
     ) -> Result<(), ()> {
         // the stream variable has to be real-time
-        let f = match stream_ty {
+        let _f = match stream_ty {
             StreamTy::RealTime(f) => f,
             _ => {
                 self.handler.error_with_span(
@@ -626,7 +636,7 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
         };
 
         // check duration
-        let duration = match duration.parse_duration() {
+        let _duration = match duration.parse_duration() {
             Err(message) => {
                 self.handler.error_with_span("expected duration", LabeledSpan::new(duration.span, &message, true));
                 return Err(());
@@ -814,6 +824,11 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
     fn infer_trigger_expression(&mut self, trigger: &'a Trigger) -> Result<(), ()> {
         trace!("infer type for {}", trigger);
 
+        // for triggers, there are no stream type annotations, so just infer
+        let mut inner = Vec::new();
+        self.infer_stream_ty_from_expression(&trigger.expression, &mut inner);
+        self.stream_ty.insert(trigger.id, StreamTy::Infer(inner));
+
         // make sure that NodeId of trigger is assigned Bool
         let var = self.new_value_var(trigger.id);
         self.unifier.unify_var_ty(var, ValueTy::Bool).expect("cannot fail as `var` is fresh");
@@ -919,7 +934,7 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
                 self.infer_expression(left, Some(ValueTy::Option(ValueTy::Infer(var).into())))?;
                 self.infer_expression(right, Some(ValueTy::Infer(var)))?
             }
-            StreamAccess(inner, access_type) => {
+            StreamAccess(inner, _) => {
                 // result type is an optional value
                 let target_var = self.unifier.new_var();
                 self.unifier

@@ -109,10 +109,6 @@ impl StreamTy {
         StreamTy::RealTime(freq)
     }
 
-    pub(crate) fn new_inferred() -> StreamTy {
-        StreamTy::Infer(Vec::new())
-    }
-
     pub(crate) fn is_valid(&self, right: &StreamTy) -> bool {
         // RealTime<freq_self> -> RealTime<freq_right> if freq_left is multiple of freq_right
         match (&self, &right) {
