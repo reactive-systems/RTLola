@@ -111,6 +111,44 @@ impl StreamTy {
     pub(crate) fn new_inferred() -> StreamTy {
         StreamTy::Infer(Vec::new())
     }
+
+    pub(crate) fn is_valid(&self, right: &StreamTy) -> bool {
+        // RealTime<freq_self> -> RealTime<freq_right> if freq_left is multiple of freq_right
+        match (&self, &right) {
+            (StreamTy::RealTime(target), StreamTy::RealTime(other)) => {
+                // coercion is only valid if `other` is a multiple of `target`,
+                // for example, `target = 3Hz` and `other = 12Hz`
+                other.is_multiple_of(target)
+            }
+            (StreamTy::Event(target), StreamTy::Event(other)) => {
+                // coercion is only valid if the implication `target -> other` is valid,
+                // for example, `target = a & b` and `other = b` is valid while
+                //              `target = a | b` and `other = b` is invalid.
+                target.implies_valid_(other)
+            }
+            _ => false,
+        }
+    }
+}
+
+impl Activation<StreamVar> {
+    /// Checks whether `self -> other` is valid
+    pub(crate) fn implies_valid_(&self, other: &Self) -> bool {
+        if self == other {
+            return true;
+        }
+        match (self, other) {
+            (Activation::Conjunction(left), Activation::Conjunction(right)) => {
+                right.iter().all(|cond| left.contains(cond))
+            }
+            (Activation::Conjunction(left), _) => left.contains(other),
+            (_, Activation::True) => true,
+            _ => {
+                // there are possible many more cases that we want to look at in order to make analysis more precise
+                false
+            }
+        }
+    }
 }
 
 impl Freq {

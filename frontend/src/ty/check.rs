@@ -36,6 +36,7 @@ pub(crate) struct TypeAnalysis<'a, 'b, 'c> {
     stream_vars: HashMap<NodeId, StreamVar>,
     /// maps function-like nodes (UnOp, BinOp, Func, Method) to the generic parameters
     generic_function_vars: HashMap<NodeId, Vec<ValueVar>>,
+    stream_ty: HashMap<NodeId, StreamTy>,
 }
 
 pub(crate) struct TypeTable {
@@ -74,6 +75,7 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
             value_vars: HashMap::new(),
             stream_vars: HashMap::new(),
             generic_function_vars: HashMap::new(),
+            stream_ty: HashMap::new(),
         }
     }
 
@@ -166,6 +168,18 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
             });
         }
 
+        for output in &spec.outputs {
+            self.concretize_output_clock(output).unwrap_or_else(|_| {
+                debug!("type inference failed for {}", output);
+            });
+        }
+
+        for output in &spec.outputs {
+            self.check_output_clock(output).unwrap_or_else(|_| {
+                debug!("type inference failed for {}", output);
+            });
+        }
+
         for trigger in &spec.trigger {
             self.infer_trigger_expression(trigger).unwrap_or_else(|_| {
                 debug!("type inference failed for {}", trigger);
@@ -219,6 +233,7 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
 
         // stream type
         let stream_var = self.new_stream_var(input.id);
+        self.stream_ty.insert(input.id, StreamTy::new_event(Activation::Stream(stream_var)));
 
         // determine parameters
         let mut param_types = Vec::new();
@@ -269,7 +284,7 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
 
     /// infers stream types if given (`@` expression)
     fn infer_output_clock(&mut self, output: &'a Output) -> Result<(), ()> {
-        trace!("infer type for {} (NodeId = {})", output, output.id);
+        trace!("infer output clock for {} (NodeId = {})", output, output.id);
 
         let stream_var = self.stream_vars[&output.id];
 
@@ -286,16 +301,378 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
         if let Some(f) = frequency {
             self.stream_unifier
                 .unify_var_ty(stream_var, StreamTy::new_periodic(f))
-                .map_err(|err| self.handle_error(err, output.name.span))
+                .map_err(|err| self.handle_error(err, output.name.span))?;
+            self.stream_ty.insert(output.id, StreamTy::new_periodic(f));
         } else if let Some(act) = activation {
             self.stream_unifier
-                .unify_var_ty(stream_var, StreamTy::new_event(act))
-                .map_err(|err| self.handle_error(err, output.name.span))
+                .unify_var_ty(stream_var, StreamTy::new_event(act.clone()))
+                .map_err(|err| self.handle_error(err, output.name.span))?;
+            self.stream_ty.insert(output.id, StreamTy::new_event(act));
         } else {
             // stream type should be inferred
             self.stream_unifier
                 .unify_var_ty(stream_var, StreamTy::new_inferred())
-                .map_err(|err| self.handle_error(err, output.name.span))
+                .map_err(|err| self.handle_error(err, output.name.span))?;
+            let mut inner = Vec::new();
+            self.infer_stream_ty_from_expression(&output.expression, &mut inner);
+            self.stream_ty.insert(output.id, StreamTy::Infer(inner));
+        }
+        Ok(())
+    }
+
+    fn infer_stream_ty_from_expression(&mut self, expression: &Expression, inner: &mut Vec<StreamVar>) {
+        use crate::ast::ExpressionKind::*;
+        match &expression.kind {
+            Lit(l) => {}
+            Ident(_) => {
+                let decl = self.declarations[&expression.id];
+
+                match decl {
+                    Declaration::Const(constant) => {}
+                    Declaration::In(input) => {
+                        // stream type
+                        let in_var = self.stream_vars[&input.id];
+                        inner.push(in_var)
+                    }
+                    Declaration::Out(output) => {
+                        // stream type
+                        let out_var = self.stream_vars[&output.id];
+                        inner.push(out_var)
+                    }
+                    Declaration::Param(param) => {}
+                    Declaration::Type(_) | Declaration::Func(_) => {
+                        unreachable!("ensured by naming analysis {:?}", decl)
+                    }
+                }
+            }
+            Offset(expr, offset) => {
+                self.infer_stream_ty_from_expression(&expr, inner);
+            }
+            SlidingWindowAggregation { expr: inner, duration, aggregation } => {}
+            Ite(cond, left, right) => {
+                self.infer_stream_ty_from_expression(&cond, inner);
+                self.infer_stream_ty_from_expression(&left, inner);
+                self.infer_stream_ty_from_expression(&right, inner);
+            }
+            Unary(op, appl) => {
+                self.infer_stream_ty_from_expression(&appl, inner);
+            }
+            Binary(op, left, right) => {
+                self.infer_stream_ty_from_expression(&left, inner);
+                self.infer_stream_ty_from_expression(&right, inner);
+            }
+            Default(left, right) => {
+                self.infer_stream_ty_from_expression(&left, inner);
+                self.infer_stream_ty_from_expression(&right, inner);
+            }
+            StreamAccess(inner, access_type) => {
+                // inner does not influence stream ty
+            }
+            Function(_name, types, params) => {
+                for param in params {
+                    self.infer_stream_ty_from_expression(&param, inner);
+                }
+            }
+            Method(base, name, types, params) => {
+                self.infer_stream_ty_from_expression(&base, inner);
+                for param in params {
+                    self.infer_stream_ty_from_expression(&param, inner);
+                }
+            }
+            Tuple(expressions) => {
+                for element in expressions {
+                    self.infer_stream_ty_from_expression(&element, inner);
+                }
+            }
+            Field(base, ident) => {
+                self.infer_stream_ty_from_expression(&base, inner);
+            }
+            ParenthesizedExpression(_, expr, _) => {
+                self.infer_stream_ty_from_expression(&expr, inner);
+            }
+            MissingExpression => {
+                // we simply ignore missing expressions and continue with type analysis
+            }
+        }
+    }
+
+    /// computes actual type from inferred stream vars
+    fn concretize_output_clock(&mut self, output: &'a Output) -> Result<(), ()> {
+        trace!("concretize and normalize for {} (NodeId = {})", output, output.id);
+
+        let concretized = match &self.stream_ty[&output.id] {
+            StreamTy::RealTime(_) => {
+                // already conrete and normalized
+                self.stream_ty[&output.id].clone()
+            }
+            StreamTy::Event(ac) => {
+                // concrete but not normalized
+                self.stream_ty[&output.id].clone()
+            }
+            StreamTy::Infer(vars) => {
+                // neither concrete nor normalized
+                self.concretize_stream_ty(&self.stream_ty[&output.id].clone()).unwrap()
+            }
+        };
+
+        self.stream_ty.insert(output.id, concretized);
+
+        Ok(())
+    }
+
+    /// Returns a vector of (non-inferred) StreamTy from a stream variable
+    ///
+    /// Precondition: every stream variable contained has a StreamTy
+    /// In order to prevent infinite recursion, `seen_vars` is used to record already seen `var`s
+    fn stream_var_to_vec_stream_ty(
+        &mut self,
+        stream_var: StreamVar,
+        seen_vars: &mut HashSet<StreamVar>,
+    ) -> Vec<StreamTy> {
+        let node_id = self.stream_vars.iter().find(|(k, v)| **v == stream_var).map(|(k, v)| k).unwrap();
+        match &self.stream_ty[&node_id].clone() {
+            StreamTy::Infer(vars) => vars
+                .iter()
+                .flat_map(|&svar| {
+                    if seen_vars.insert(svar) {
+                        Some(self.stream_var_to_vec_stream_ty(svar, seen_vars))
+                    } else {
+                        None
+                    }
+                })
+                .flatten()
+                .collect(),
+            t => vec![t.clone()],
+        }
+    }
+
+    /// Transates StreamTy::Infer to conrete form
+    fn concretize_stream_ty(&mut self, stream_ty: &StreamTy) -> Option<StreamTy> {
+        match stream_ty {
+            StreamTy::RealTime(_) | StreamTy::Event(_) => Some(stream_ty.clone()),
+            StreamTy::Infer(vars) => {
+                if vars.is_empty() {
+                    return Some(StreamTy::Event(Activation::True));
+                }
+                let mut seen_vars = HashSet::new();
+                let stream_types: Vec<StreamTy> =
+                    vars.iter().map(|&svar| self.stream_var_to_vec_stream_ty(svar, &mut seen_vars)).flatten().collect();
+                let mut result_ty = None;
+                for stream_ty in stream_types {
+                    result_ty = match (result_ty.as_mut(), &stream_ty) {
+                        (None, ty) => Some(ty.clone()),
+                        (Some(StreamTy::Event(l)), StreamTy::Event(r)) => Some(StreamTy::Event(l.conjunction(r))),
+                        (Some(StreamTy::RealTime(l)), StreamTy::RealTime(r)) => {
+                            Some(StreamTy::RealTime(l.conjunction(r)))
+                        }
+                        (Some(_), _) => {
+                            // Incompatible types
+                            return None;
+                        }
+                    }
+                }
+                result_ty
+            }
+        }
+    }
+
+    /// check stream types of expression match the inferred/annotated stream_ty
+    fn check_output_clock(&mut self, output: &'a Output) -> Result<(), ()> {
+        trace!("check output clock for {} (NodeId = {})", output, output.id);
+
+        if let StreamTy::Infer(_) = self.stream_ty[&output.id] {
+            unreachable!("stream types should be concrete at this point");
+        }
+
+        self.check_output_clock_expression(&self.stream_ty[&output.id].clone(), &output.expression)
+    }
+
+    fn check_output_clock_expression(&mut self, stream_ty: &StreamTy, expr: &'a Expression) -> Result<(), ()> {
+        use crate::ast::ExpressionKind::*;
+
+        match &expr.kind {
+            Lit(l) => {}
+            Ident(_) => {
+                let decl = self.declarations[&expr.id];
+
+                match decl {
+                    Declaration::Const(_) => {}
+                    Declaration::In(input) => {
+                        // stream type
+                        let in_ty = &self.stream_ty[&input.id];
+                        self.check_stream_types_are_compatible(stream_ty, in_ty, expr.span)?;
+                    }
+                    Declaration::Out(output) => {
+                        // stream type
+                        let out_ty = &self.stream_ty[&output.id];
+                        self.check_stream_types_are_compatible(stream_ty, out_ty, expr.span)?;
+                    }
+                    Declaration::Param(_) => {}
+                    Declaration::Type(_) | Declaration::Func(_) => {
+                        unreachable!("ensured by naming analysis {:?}", decl)
+                    }
+                }
+            }
+            Offset(inner, offset) => self.check_offset_expr(stream_ty, expr.span, inner, offset)?,
+            SlidingWindowAggregation { expr: inner, duration, aggregation } => {
+                self.check_sliding_window_expression(stream_ty, expr.span, inner, duration, *aggregation)?;
+            }
+            Ite(cond, left, right) => {
+                self.check_output_clock_expression(stream_ty, cond)?;
+                self.check_output_clock_expression(stream_ty, left)?;
+                self.check_output_clock_expression(stream_ty, right)?;
+            }
+            Unary(op, appl) => {
+                self.check_output_clock_expression(stream_ty, appl)?;
+            }
+            Binary(op, left, right) => {
+                self.check_output_clock_expression(stream_ty, left)?;
+                self.check_output_clock_expression(stream_ty, right)?;
+            }
+            Default(left, right) => {
+                self.check_output_clock_expression(stream_ty, left)?;
+                self.check_output_clock_expression(stream_ty, right)?;
+            }
+            StreamAccess(inner, access_type) => {
+                let inner_ty = match self.declarations[&inner.id] {
+                    Declaration::In(input) => &self.stream_ty[&input.id],
+                    Declaration::Out(output) => &self.stream_ty[&output.id],
+                    _ => unreachable!(),
+                };
+
+                let function = match access_type {
+                    StreamAccessKind::Hold => "hold()",
+                    StreamAccessKind::Optional => "get()",
+                };
+
+                // check that stream types are not compatible (otherwise one can use stream directly)
+                match (stream_ty, inner_ty) {
+                    (StreamTy::Event(left), StreamTy::Event(right)) => {
+                        if left.implies_valid(&right, &mut self.stream_unifier) {
+                            self.handler.warn_with_span(
+                                &format!("Unnecessary `.{}`", function),
+                                LabeledSpan::new(expr.span, &format!("remove `.{}`", function), true),
+                            )
+                        }
+                    }
+                    (StreamTy::RealTime(left), StreamTy::RealTime(right)) => {
+                        if right.is_multiple_of(&left) {
+                            self.handler.warn_with_span(
+                                &format!("Unnecessary `.{}`", function),
+                                LabeledSpan::new(expr.span, &format!("remove `.{}`", function), true),
+                            )
+                        }
+                    }
+                    _ => {
+                        if let StreamAccessKind::Optional = access_type {
+                            self.handler.error_with_span(
+                                "`get()` can be only used when both streams are event-based or periodic",
+                                LabeledSpan::new(expr.span, "`get()` not possible here", true),
+                            )
+                        }
+                    }
+                }
+            }
+            Function(_name, types, params) => {
+                for param in params {
+                    self.check_output_clock_expression(stream_ty, param)?;
+                }
+            }
+            Method(base, name, types, params) => {
+                // recursion
+                self.check_output_clock_expression(stream_ty, base)?;
+                for param in params {
+                    self.check_output_clock_expression(stream_ty, param)?;
+                }
+            }
+            Tuple(expressions) => {
+                for expression in expressions {
+                    self.check_output_clock_expression(stream_ty, expression)?;
+                }
+            }
+            Field(base, ident) => {
+                self.check_output_clock_expression(stream_ty, base)?;
+            }
+            ParenthesizedExpression(_, expr, _) => {
+                self.check_output_clock_expression(stream_ty, expr)?;
+            }
+            MissingExpression => {
+                // we simply ignore missing expressions and continue with type analysis
+            }
+        }
+        Ok(())
+    }
+
+    fn check_offset_expr(
+        &mut self,
+        stream_ty: &StreamTy,
+        span: Span,
+        expr: &'a Expression,
+        offset: &'a Offset,
+    ) -> Result<(), ()> {
+        // check if offset is discrete or time-based
+        match offset {
+            Offset::Discrete(offset) => self.check_output_clock_expression(stream_ty, expr),
+            Offset::RealTime(time, _) => {
+                // get frequency
+                let time = offset.to_uom_time().expect("guaranteed to be real-time");
+                let freq = UOM_Frequency::new::<hertz>(time.get::<second>().abs().inv());
+
+                // target stream type
+                let target_stream_ty = StreamTy::new_periodic(Freq::new(freq));
+
+                // recursion
+                // stream types have to match
+                self.check_stream_types_are_compatible(stream_ty, &target_stream_ty, span)
+            }
+        }
+    }
+
+    fn check_sliding_window_expression(
+        &mut self,
+        stream_ty: &StreamTy,
+        span: Span,
+        expr: &'a Expression,
+        duration: &'a Expression,
+        window_op: WindowOperation,
+    ) -> Result<(), ()> {
+        // the stream variable has to be real-time
+        let f = match stream_ty {
+            StreamTy::RealTime(f) => f,
+            _ => {
+                self.handler.error_with_span(
+                    "Sliding windows are only allowed in real-time streams",
+                    LabeledSpan::new(span, "unexpected sliding window", true),
+                );
+                return Err(());
+            }
+        };
+
+        // check duration
+        let duration = match duration.parse_duration() {
+            Err(message) => {
+                self.handler.error_with_span("expected duration", LabeledSpan::new(duration.span, &message, true));
+                return Err(());
+            }
+            Ok(d) => d,
+        };
+        /*if duration < f.period {
+            self.handler
+                .warn_with_span("period is smaller than duration in sliding window", LabeledSpan::new(span, "", true));
+        }*/
+        Ok(())
+    }
+
+    /// Produeces user facing error message in case the stream types are incompatible
+    fn check_stream_types_are_compatible(&self, left: &StreamTy, right: &StreamTy, span: Span) -> Result<(), ()> {
+        if !left.is_valid(right) {
+            self.handler.error_with_span(
+                "stream types are incompatible",
+                LabeledSpan::new(span, &format!("expected `{}`, found `{}`", left, right), true),
+            );
+            Err(())
+        } else {
+            Ok(())
         }
     }
 
@@ -1160,11 +1537,11 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
         spec: &'a LolaSpec,
         id: NodeId,
     ) -> Option<Activation<crate::ir::StreamReference>> {
-        let mut stream_ty = if let Some(stream_ty) = self.get_stream_type(id) {
-            stream_ty
-        } else {
+        if !self.stream_ty.contains_key(&id) {
             return None;
-        };
+        }
+        let mut stream_ty = self.stream_ty[&id].clone();
+        stream_ty.simplify();
         let stream_var = self.stream_vars[&id];
         let mut stream_vars = HashSet::new();
         stream_vars.insert(stream_var);
