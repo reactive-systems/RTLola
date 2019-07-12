@@ -542,7 +542,7 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
                         }
                     }
                     (StreamTy::RealTime(left), StreamTy::RealTime(right)) => {
-                        if right.is_multiple_of(&left) {
+                        if right.is_multiple_of(&left) == Ok(true) {
                             self.handler.warn_with_span(
                                 &format!("Unnecessary `.{}`", function),
                                 LabeledSpan::new(expr.span, &format!("remove `.{}`", function), true),
@@ -663,14 +663,19 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
 
     /// Produeces user facing error message in case the stream types are incompatible
     fn check_stream_types_are_compatible(&self, left: &StreamTy, right: &StreamTy, span: Span) -> Result<(), ()> {
-        if !left.is_valid(right) {
-            self.handler.error_with_span(
-                "stream types are incompatible",
-                LabeledSpan::new(span, &format!("expected `{}`, found `{}`", left, right), true),
-            );
-            Err(())
-        } else {
-            Ok(())
+        match left.is_valid(right) {
+            Ok(true) => Ok(()),
+            Ok(false) => {
+                self.handler.error_with_span(
+                    "stream types are incompatible",
+                    LabeledSpan::new(span, &format!("expected `{}`, found `{}`", left, right), true),
+                );
+                Err(())
+            }
+            Err(s) => {
+                self.handler.error_with_span("stream types are incompatible", LabeledSpan::new(span, s.as_ref(), true));
+                Err(())
+            }
         }
     }
 

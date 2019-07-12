@@ -8,7 +8,7 @@ pub(crate) mod unifier;
 use crate::parse::NodeId;
 use lazy_static::lazy_static;
 use num::rational::Rational64 as Rational;
-use num::{Integer, Zero};
+use num::{CheckedDiv, Integer};
 use unifier::ValueVar;
 use uom::si::frequency::hertz;
 use uom::si::rational64::Frequency as UOM_Frequency;
@@ -109,7 +109,7 @@ impl StreamTy {
         StreamTy::RealTime(freq)
     }
 
-    pub(crate) fn is_valid(&self, right: &StreamTy) -> bool {
+    pub(crate) fn is_valid(&self, right: &StreamTy) -> Result<bool, String> {
         // RealTime<freq_self> -> RealTime<freq_right> if freq_left is multiple of freq_right
         match (&self, &right) {
             (StreamTy::RealTime(target), StreamTy::RealTime(other)) => {
@@ -121,9 +121,9 @@ impl StreamTy {
                 // coercion is only valid if the implication `target -> other` is valid,
                 // for example, `target = a & b` and `other = b` is valid while
                 //              `target = a | b` and `other = b` is invalid.
-                target.implies_valid(other)
+                Ok(target.implies_valid(other))
             }
-            _ => false,
+            _ => Ok(false),
         }
     }
 
@@ -186,11 +186,16 @@ impl Freq {
         Freq { freq }
     }
 
-    pub(crate) fn is_multiple_of(&self, other: &Freq) -> bool {
-        if self.freq.get::<hertz>() < other.freq.get::<hertz>() {
-            return false;
+    pub(crate) fn is_multiple_of(&self, other: &Freq) -> Result<bool, String> {
+        let lhs = self.freq.get::<hertz>();
+        let rhs = other.freq.get::<hertz>();
+        if lhs < rhs {
+            return Ok(false);
         }
-        (self.freq.get::<hertz>() % other.freq.get::<hertz>()).is_zero()
+        match lhs.checked_div(&rhs) {
+            Some(q) => Ok(q.is_integer()),
+            None => Err(format!("division of frequencies `{:?}`/`{:?}` failed", &self.freq, &other.freq)),
+        }
     }
 
     pub(crate) fn conjunction(&self, other: &Freq) -> Freq {
