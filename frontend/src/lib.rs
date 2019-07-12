@@ -5,6 +5,7 @@
 
 mod analysis;
 mod ast;
+pub mod export;
 pub mod ir;
 mod parse;
 mod reporting;
