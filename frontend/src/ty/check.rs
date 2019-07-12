@@ -595,7 +595,6 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
 
                 // target stream type
                 let target_stream_ty = StreamTy::new_periodic(Freq::new(freq));
-                self.check_stream_types_are_compatible(stream_ty, &target_stream_ty, span)?;
 
                 // recursion
                 // stream types have to match
@@ -607,7 +606,8 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
                         Declaration::Out(output) => output.id,
                         _ => unreachable!("ensured by naming analysis {:?}", decl),
                     };
-                    self.check_stream_types_are_compatible(stream_ty, &self.stream_ty[&id], span)
+                    self.check_stream_types_are_compatible(stream_ty, &self.stream_ty[&id], span)?;
+                    self.check_stream_types_are_compatible(&target_stream_ty, &self.stream_ty[&id], span)
                 } else {
                     unreachable!();
                 }
@@ -2000,6 +2000,15 @@ mod tests {
     #[test]
     fn test_rt_offset_regression() {
         let spec = "output a @10Hz := a.offset(by: -100ms).defaults(to: 0) + 1";
+        assert_eq!(0, num_type_errors(spec));
+    }
+
+    #[test]
+    fn test_rt_offset_regression2() {
+        let spec = "
+            output x @ 10Hz := 1
+            output x_diff := x - x.offset(by:-1s).defaults(to: x)
+        ";
         assert_eq!(0, num_type_errors(spec));
     }
 
