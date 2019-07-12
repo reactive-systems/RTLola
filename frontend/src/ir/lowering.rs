@@ -20,7 +20,7 @@ use crate::analysis::graph_based_analysis::{ComputeStep, RequiredInputs, Storage
 use crate::analysis::AnalysisResult;
 
 use num::{traits::Inv, Signed, ToPrimitive};
-use uom::si::frequency::{gigahertz, hertz};
+use uom::si::frequency::hertz;
 use uom::si::rational64::Time as UOM_Time;
 use uom::si::time::{nanosecond, second};
 
@@ -721,14 +721,6 @@ impl<'a> Lowering<'a> {
                 reference,
                 frequency: f.freq,
                 period: UOM_Time::new::<second>(f.freq.get::<hertz>().inv()),
-                extend_rate: Duration::from_nanos(
-                    f.freq
-                        .get::<gigahertz>()
-                        .inv()
-                        .to_integer()
-                        .to_u64()
-                        .expect("extend duration [ns] does not fit in u64"),
-                ),
             }),
             _ => None,
         }

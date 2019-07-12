@@ -116,7 +116,6 @@ pub struct TimeDrivenStream {
     pub reference: StreamReference,
     pub frequency: UOM_Frequency,
     pub period: UOM_Time,
-    pub extend_rate: Duration,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
