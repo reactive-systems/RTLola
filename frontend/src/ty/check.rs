@@ -163,32 +163,38 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
             });
         }
 
+        let mut stream_ty_inference_failed = false;
         for output in &spec.outputs {
             self.infer_output_clock(output).unwrap_or_else(|_| {
-                debug!("type inference failed for {}", output);
+                debug!("stream type inference failed for {}", output);
+                stream_ty_inference_failed = true;
             });
+        }
+
+        if stream_ty_inference_failed {
+            return;
         }
 
         for output in &spec.outputs {
             self.concretize_output_clock(output.id).unwrap_or_else(|_| {
-                debug!("type inference failed for {}", output);
+                debug!("stream type concretization failed for {}", output);
             });
         }
         for trigger in &spec.trigger {
             self.concretize_output_clock(trigger.id).unwrap_or_else(|_| {
-                debug!("type inference failed for {}", trigger);
+                debug!("stream type concretization failed for {}", trigger);
             });
         }
 
         for output in &spec.outputs {
             self.check_output_clock(output).unwrap_or_else(|_| {
-                debug!("type inference failed for {}", output);
+                debug!("stream type check failed for {}", output);
             });
         }
         for trigger in &spec.trigger {
             self.check_output_clock_expression(&self.stream_ty[&trigger.id].clone(), &trigger.expression)
                 .unwrap_or_else(|_| {
-                    debug!("type inference failed for {}", trigger);
+                    debug!("stream type check for {}", trigger);
                 });
         }
     }
@@ -279,12 +285,14 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
         trace!("infer output clock for {} (NodeId = {})", output, output.id);
 
         // check if stream has timing infos
-        let mut frequency = None;
-        let mut activation = None;
+        let frequency;
+        let activation;
 
         if let Ok((f, a)) = self.parse_at_expression(output) {
             frequency = f;
             activation = a;
+        } else {
+            return Err(());
         }
 
         // determine whether stream is timed or event based or should be infered
@@ -390,7 +398,10 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
             }
             StreamTy::Infer(_) => {
                 // neither concrete nor normalized
-                self.concretize_stream_ty(&self.stream_ty[&node_id].clone()).unwrap()
+                match self.concretize_stream_ty(&self.stream_ty[&node_id].clone()) {
+                    Some(ty) => ty,
+                    None => return Err(()),
+                }
             }
         };
         concretized.simplify();
