@@ -114,11 +114,11 @@ CompOp = _{LessThanOrEqual | MoreThanOrEqual | LessThan | MoreThan | NotEqual | 
 
 Sum = {"Σ" | "sum"}
 Count = {"#" | "count"}
-Product = {"Π" | "prod" | "product"}
+//Product = {"Π" | "prod" | "product"}
 Integral = {"∫"  | "integral"}
 Average = { "avg"| "average" }
 
-WindowOp = _{ Sum | Product | Average | Count | Integral}
+WindowOp = _{ Sum | /*Product |*/ Average | Count | Integral}
 
 
 //////////////////////////////////////////////////

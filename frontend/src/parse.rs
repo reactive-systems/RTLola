@@ -523,13 +523,13 @@ fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>, handler: &H
                                         ExpressionKind::Ident(i) => match i.name.as_str() {
                                             "Σ" | "sum" => WindowOperation::Sum,
                                             "#" | "count" => WindowOperation::Count,
-                                            "Π" | "prod" | "product" => WindowOperation::Product,
+                                            //"Π" | "prod" | "product" => WindowOperation::Product,
                                             "∫" | "integral" => WindowOperation::Integral,
                                             "avg" | "average" => WindowOperation::Average,
                                             fun => {
                                                 handler.error_with_span(
                                                     &format!("unknown aggregation function {}", fun),
-                                                    LabeledSpan::new(i.span, "try count, sum, average", true),
+                                                    LabeledSpan::new(i.span, "try count, sum, average, integral", true),
                                                 );
                                                 std::process::exit(1);
                                             }
@@ -537,7 +537,11 @@ fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>, handler: &H
                                         _ => {
                                             handler.error_with_span(
                                                 "expected aggregation function",
-                                                LabeledSpan::new(args[1].span, "try count, sum, average", true),
+                                                LabeledSpan::new(
+                                                    args[1].span,
+                                                    "try count, sum, average, integral",
+                                                    true,
+                                                ),
                                             );
                                             std::process::exit(1);
                                         }
