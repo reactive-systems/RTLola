@@ -16,12 +16,12 @@ pub fn analyze(filename: &str) {
         eprintln!("parse error:\n{}", e);
         std::process::exit(1)
     });
-    let report = analysis::analyze(&spec, &handler);
+    let _report = analysis::analyze(&spec, &handler);
     //println!("{:?}", report);
-    use crate::analysis::graph_based_analysis::MemoryBound;
-    report.graph_analysis_result.map(|r| match r.memory_requirements {
-        MemoryBound::Unbounded => println!("The specification has no bound on the memory consumption."),
-        MemoryBound::Bounded(bytes) => println!("The specification uses at most {} bytes.", bytes),
-        MemoryBound::Unknown => println!("Incomplete specification: we cannot determine the memory consumption."),
-    });
+    //use crate::analysis::graph_based_analysis::MemoryBound;
+    //report.graph_analysis_result.map(|r| match r.memory_requirements {
+    //    MemoryBound::Unbounded => println!("The specification has no bound on the memory consumption."),
+    //    MemoryBound::Bounded(bytes) => println!("The specification uses at most {} bytes.", bytes),
+    //    MemoryBound::Unknown => println!("Incomplete specification: we cannot determine the memory consumption."),
+    //});
 }
