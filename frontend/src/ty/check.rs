@@ -1036,7 +1036,7 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
                 let mut tuples: Vec<ValueTy> = Vec::with_capacity(expressions.len());
                 for element in expressions {
                     self.infer_expression(element, None)?;
-                    let inner = self.unifier.get_type(self.value_vars[&element.id]).expect("should have type");
+                    let inner = ValueTy::Infer(self.value_vars[&element.id]);
                     tuples.push(inner);
                 }
                 // ?var = Tuple(?expr1, ?expr2, ..)
