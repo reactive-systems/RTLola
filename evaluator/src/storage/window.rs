@@ -12,6 +12,13 @@ use streamlab_frontend::ir::{Type, WindowOperation as WinOp};
 const SIZE: usize = 64;
 
 pub(crate) enum SlidingWindow {
+    Count(WindowInstance<CountIV>),
+    MinUnsigned(WindowInstance<MinIV<WindowSigned>>),
+    MinSigned(WindowInstance<MinIV<WindowUnsigned>>),
+    MinFloat(WindowInstance<MinIV<WindowFloat>>),
+    MaxUnsigned(WindowInstance<MaxIV<WindowSigned>>),
+    MaxSigned(WindowInstance<MaxIV<WindowUnsigned>>),
+    MaxFloat(WindowInstance<MaxIV<WindowFloat>>),
     SumUnsigned(WindowInstance<SumIV<WindowUnsigned>>),
     SumSigned(WindowInstance<SumIV<WindowSigned>>),
     SumFloat(WindowInstance<SumIV<WindowFloat>>),
@@ -19,12 +26,18 @@ pub(crate) enum SlidingWindow {
     AvgSigned(WindowInstance<AvgIV<WindowSigned>>),
     AvgFloat(WindowInstance<AvgIV<WindowFloat>>),
     Integral(WindowInstance<IntegralIV>),
-    Count(WindowInstance<CountIV>),
 }
 
 impl SlidingWindow {
     pub(crate) fn new(dur: Duration, op: WinOp, ts: Time, ty: &Type) -> SlidingWindow {
         match (op, ty) {
+            (WinOp::Count, _) => SlidingWindow::Count(WindowInstance::new(dur, ts)),
+            (WinOp::Min, Type::UInt(_)) => SlidingWindow::MinUnsigned(WindowInstance::new(dur, ts)),
+            (WinOp::Min, Type::Int(_)) => SlidingWindow::MinSigned(WindowInstance::new(dur, ts)),
+            (WinOp::Min, Type::Float(_)) => SlidingWindow::MinFloat(WindowInstance::new(dur, ts)),
+            (WinOp::Max, Type::UInt(_)) => SlidingWindow::MaxUnsigned(WindowInstance::new(dur, ts)),
+            (WinOp::Max, Type::Int(_)) => SlidingWindow::MaxSigned(WindowInstance::new(dur, ts)),
+            (WinOp::Max, Type::Float(_)) => SlidingWindow::MaxFloat(WindowInstance::new(dur, ts)),
             (WinOp::Sum, Type::UInt(_)) => SlidingWindow::SumUnsigned(WindowInstance::new(dur, ts)),
             (WinOp::Sum, Type::Int(_)) => SlidingWindow::SumSigned(WindowInstance::new(dur, ts)),
             (WinOp::Sum, Type::Float(_)) => SlidingWindow::SumFloat(WindowInstance::new(dur, ts)),
@@ -32,7 +45,6 @@ impl SlidingWindow {
             (WinOp::Average, Type::Int(_)) => SlidingWindow::AvgSigned(WindowInstance::new(dur, ts)),
             (WinOp::Average, Type::Float(_)) => SlidingWindow::AvgFloat(WindowInstance::new(dur, ts)),
             (WinOp::Integral, _) => SlidingWindow::Integral(WindowInstance::new(dur, ts)),
-            (WinOp::Count, _) => SlidingWindow::Count(WindowInstance::new(dur, ts)),
             (_, Type::Option(t)) => SlidingWindow::new(dur, op, ts, t),
             _ => unimplemented!(),
         }
@@ -40,41 +52,59 @@ impl SlidingWindow {
 
     pub(crate) fn update(&mut self, ts: Time) {
         match self {
+            SlidingWindow::Count(wi) => wi.update_buckets(ts),
+            SlidingWindow::MinUnsigned(wi) => wi.update_buckets(ts),
+            SlidingWindow::MinSigned(wi) => wi.update_buckets(ts),
+            SlidingWindow::MinFloat(wi) => wi.update_buckets(ts),
+            SlidingWindow::MaxUnsigned(wi) => wi.update_buckets(ts),
+            SlidingWindow::MaxSigned(wi) => wi.update_buckets(ts),
+            SlidingWindow::MaxFloat(wi) => wi.update_buckets(ts),
             SlidingWindow::SumUnsigned(wi) => wi.update_buckets(ts),
             SlidingWindow::SumSigned(wi) => wi.update_buckets(ts),
             SlidingWindow::SumFloat(wi) => wi.update_buckets(ts),
-            SlidingWindow::Integral(wi) => wi.update_buckets(ts),
-            SlidingWindow::Count(wi) => wi.update_buckets(ts),
             SlidingWindow::AvgUnsigned(wi) => wi.update_buckets(ts),
             SlidingWindow::AvgSigned(wi) => wi.update_buckets(ts),
             SlidingWindow::AvgFloat(wi) => wi.update_buckets(ts),
+            SlidingWindow::Integral(wi) => wi.update_buckets(ts),
         }
     }
 
     /// You should always call `SlidingWindow::update` before calling `SlidingWindow::get_value()`!
     pub(crate) fn get_value(&self, ts: Time) -> Value {
         match self {
+            SlidingWindow::Count(wi) => wi.get_value(ts),
+            SlidingWindow::MinUnsigned(wi) => wi.get_value(ts),
+            SlidingWindow::MinSigned(wi) => wi.get_value(ts),
+            SlidingWindow::MinFloat(wi) => wi.get_value(ts),
+            SlidingWindow::MaxUnsigned(wi) => wi.get_value(ts),
+            SlidingWindow::MaxSigned(wi) => wi.get_value(ts),
+            SlidingWindow::MaxFloat(wi) => wi.get_value(ts),
             SlidingWindow::SumUnsigned(wi) => wi.get_value(ts),
             SlidingWindow::SumSigned(wi) => wi.get_value(ts),
             SlidingWindow::SumFloat(wi) => wi.get_value(ts),
-            SlidingWindow::Integral(wi) => wi.get_value(ts),
-            SlidingWindow::Count(wi) => wi.get_value(ts),
             SlidingWindow::AvgUnsigned(wi) => wi.get_value(ts),
             SlidingWindow::AvgSigned(wi) => wi.get_value(ts),
             SlidingWindow::AvgFloat(wi) => wi.get_value(ts),
+            SlidingWindow::Integral(wi) => wi.get_value(ts),
         }
     }
 
     pub(crate) fn accept_value(&mut self, v: Value, ts: Time) {
         match self {
+            SlidingWindow::Count(wi) => wi.accept_value(v, ts),
+            SlidingWindow::MinUnsigned(wi) => wi.accept_value(v, ts),
+            SlidingWindow::MinSigned(wi) => wi.accept_value(v, ts),
+            SlidingWindow::MinFloat(wi) => wi.accept_value(v, ts),
+            SlidingWindow::MaxUnsigned(wi) => wi.accept_value(v, ts),
+            SlidingWindow::MaxFloat(wi) => wi.accept_value(v, ts),
+            SlidingWindow::MaxSigned(wi) => wi.accept_value(v, ts),
             SlidingWindow::SumUnsigned(wi) => wi.accept_value(v, ts),
             SlidingWindow::SumSigned(wi) => wi.accept_value(v, ts),
             SlidingWindow::SumFloat(wi) => wi.accept_value(v, ts),
-            SlidingWindow::Integral(wi) => wi.accept_value(v, ts),
-            SlidingWindow::Count(wi) => wi.accept_value(v, ts),
             SlidingWindow::AvgUnsigned(wi) => wi.accept_value(v, ts),
             SlidingWindow::AvgSigned(wi) => wi.accept_value(v, ts),
             SlidingWindow::AvgFloat(wi) => wi.accept_value(v, ts),
+            SlidingWindow::Integral(wi) => wi.accept_value(v, ts),
         }
     }
 }

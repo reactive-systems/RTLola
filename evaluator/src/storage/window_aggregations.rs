@@ -178,3 +178,85 @@ impl From<(Value, Time)> for CountIV {
         CountIV(1)
     }
 }
+
+//////////////////// MIN/MAX ////////////////////
+
+#[derive(Clone, Debug)]
+pub(crate) struct MaxIV<G: WindowGeneric> {
+    max: Value,
+    _marker: PhantomData<G>,
+}
+
+impl<G: WindowGeneric> WindowIV for MaxIV<G> {
+    fn default(_ts: Time) -> MaxIV<G> {
+        Self::from((Value::None, Time::default()))
+    }
+}
+
+impl<G: WindowGeneric> Into<Value> for MaxIV<G> {
+    fn into(self) -> Value {
+        self.max
+    }
+}
+
+impl<G: WindowGeneric> Add for MaxIV<G> {
+    type Output = MaxIV<G>;
+    fn add(self, other: MaxIV<G>) -> MaxIV<G> {
+        let max = match (self.max, other.max) {
+            (Value::None, Value::None) => Value::None,
+            (Value::None, rhs) => rhs,
+            (lhs, Value::None) => lhs,
+            (Value::Unsigned(lhs), Value::Unsigned(rhs)) => Value::Unsigned(lhs.max(rhs)),
+            (Value::Signed(lhs), Value::Signed(rhs)) => Value::Signed(lhs.max(rhs)),
+            (Value::Float(lhs), Value::Float(rhs)) => Value::Float(lhs.max(rhs)),
+            _ => unreachable!("Mixed types in sliding window aggregation."),
+        };
+        MaxIV { max, _marker: PhantomData }
+    }
+}
+
+impl<G: WindowGeneric> From<(Value, Time)> for MaxIV<G> {
+    fn from(v: (Value, Time)) -> MaxIV<G> {
+        MaxIV { max: v.0, _marker: PhantomData }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct MinIV<G: WindowGeneric> {
+    min: Value,
+    _marker: PhantomData<G>,
+}
+
+impl<G: WindowGeneric> WindowIV for MinIV<G> {
+    fn default(_ts: Time) -> MinIV<G> {
+        Self::from((Value::None, Time::default()))
+    }
+}
+
+impl<G: WindowGeneric> Into<Value> for MinIV<G> {
+    fn into(self) -> Value {
+        self.min
+    }
+}
+
+impl<G: WindowGeneric> Add for MinIV<G> {
+    type Output = MinIV<G>;
+    fn add(self, other: MinIV<G>) -> MinIV<G> {
+        let min = match (self.min, other.min) {
+            (Value::None, Value::None) => Value::None,
+            (Value::None, rhs) => rhs,
+            (lhs, Value::None) => lhs,
+            (Value::Unsigned(lhs), Value::Unsigned(rhs)) => Value::Unsigned(lhs.min(rhs)),
+            (Value::Signed(lhs), Value::Signed(rhs)) => Value::Signed(lhs.min(rhs)),
+            (Value::Float(lhs), Value::Float(rhs)) => Value::Float(lhs.min(rhs)),
+            _ => unreachable!("Mixed types in sliding window aggregation."),
+        };
+        MinIV { min, _marker: PhantomData }
+    }
+}
+
+impl<G: WindowGeneric> From<(Value, Time)> for MinIV<G> {
+    fn from(v: (Value, Time)) -> MinIV<G> {
+        MinIV { min: v.0, _marker: PhantomData }
+    }
+}

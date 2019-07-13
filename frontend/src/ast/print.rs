@@ -319,6 +319,8 @@ impl Display for WindowOperation {
                 WindowOperation::Average => "avg",
                 WindowOperation::Count => "#",
                 WindowOperation::Integral => "∫",
+                WindowOperation::Min => "min",
+                WindowOperation::Max => "max",
             }
         )
     }

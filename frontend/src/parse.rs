@@ -529,7 +529,11 @@ fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>, handler: &H
                                             fun => {
                                                 handler.error_with_span(
                                                     &format!("unknown aggregation function {}", fun),
-                                                    LabeledSpan::new(i.span, "try count, sum, average, integral", true),
+                                                    LabeledSpan::new(
+                                                        i.span,
+                                                        "available: count, min, max, sum, average, integral",
+                                                        true,
+                                                    ),
                                                 );
                                                 std::process::exit(1);
                                             }
@@ -539,7 +543,7 @@ fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>, handler: &H
                                                 "expected aggregation function",
                                                 LabeledSpan::new(
                                                     args[1].span,
-                                                    "try count, sum, average, integral",
+                                                    "available: count, min, max, sum, average, integral",
                                                     true,
                                                 ),
                                             );

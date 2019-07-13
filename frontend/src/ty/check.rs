@@ -1170,7 +1170,7 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
                 let inner_var = self.value_vars[&expr.id];
                 self.unifier.unify_var_ty(var, ValueTy::Infer(inner_var)).map_err(|err| self.handle_error(err, span))
             }
-            Average => {
+            Min | Max | Average => {
                 // The value type of the inner stream has to be numeric
                 self.infer_expression(expr, Some(ValueTy::Constr(TypeConstraint::Numeric)))?;
                 // resulting type depends on the inner type

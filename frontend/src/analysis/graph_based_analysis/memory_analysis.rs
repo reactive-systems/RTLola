@@ -15,20 +15,23 @@ use uom::si::time::second;
 
 fn is_efficient_operator(op: WindowOperation) -> bool {
     match op {
-        WindowOperation::Average
-        | WindowOperation::Count
+        WindowOperation::Count
+        | WindowOperation::Min
+        | WindowOperation::Max
         | WindowOperation::Sum
         | WindowOperation::Product
+        | WindowOperation::Average
         | WindowOperation::Integral => true,
     }
 }
 
 fn determine_needed_window_memory(type_size: u128, number_of_element: u128, op: WindowOperation) -> u128 {
     match op {
-        WindowOperation::Product | WindowOperation::Sum => type_size * number_of_element,
         WindowOperation::Count => number_of_element * 8,
-        WindowOperation::Integral => number_of_element * (4 * 8 + 1 + 8),
+        WindowOperation::Min | WindowOperation::Max => number_of_element * type_size,
+        WindowOperation::Sum | WindowOperation::Product => number_of_element * type_size,
         WindowOperation::Average => number_of_element * (8 + type_size),
+        WindowOperation::Integral => number_of_element * (4 * 8 + 1 + 8),
     }
 }
 

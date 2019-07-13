@@ -410,11 +410,13 @@ impl<'a> Lowering<'a> {
 
     fn lower_window_op(&self, op: ast::WindowOperation) -> ir::WindowOperation {
         match op {
-            ast::WindowOperation::Average => ir::WindowOperation::Average,
             ast::WindowOperation::Count => ir::WindowOperation::Count,
-            ast::WindowOperation::Integral => ir::WindowOperation::Integral,
-            ast::WindowOperation::Product => ir::WindowOperation::Product,
+            ast::WindowOperation::Min => ir::WindowOperation::Min,
+            ast::WindowOperation::Max => ir::WindowOperation::Max,
             ast::WindowOperation::Sum => ir::WindowOperation::Sum,
+            ast::WindowOperation::Product => ir::WindowOperation::Product,
+            ast::WindowOperation::Average => ir::WindowOperation::Average,
+            ast::WindowOperation::Integral => ir::WindowOperation::Integral,
         }
     }
 

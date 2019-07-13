@@ -279,10 +279,12 @@ pub enum ExpressionKind {
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum WindowOperation {
+    Count,
+    Min,
+    Max,
     Sum,
     Product,
     Average,
-    Count,
     Integral,
 }
 
