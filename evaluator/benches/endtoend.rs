@@ -9,6 +9,7 @@ use test::Bencher;
 fn endtoend_semi_complex_spec(b: &mut Bencher) {
     let config = Config::new(&[
         "streamlab".to_string(),
+        "monitor".to_string(),
         "../traces/spec_offline.lola".to_string(),
         "--csv-in=../traces/timed/trace_0.csv".to_string(),
         "--verbosity=silent".to_string(),
