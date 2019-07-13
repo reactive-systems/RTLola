@@ -5,7 +5,8 @@ Implementation of the StreamLAB monitoring algorithm.
 ## Command Line Usage
 
 ```
-streamlab SPEC --offline --csv-in TRACE --verbosity progress
+streamlab monitor [SPEC] --offline --csv-in [TRACE] --verbosity progress
 ```
+
 
 See all available options with `streamlab --help`
