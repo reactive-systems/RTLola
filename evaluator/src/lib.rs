@@ -125,6 +125,7 @@ impl Config {
                 Arg::with_name("INTERPRETED")
                     .long("interpreted")
                     .help("Interpret expressions instead of compilation")
+                    .hidden(cfg!(feature = "public"))
             )
         )
         .subcommand(
