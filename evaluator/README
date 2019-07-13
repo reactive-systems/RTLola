@@ -1,51 +1,11 @@
-StreamLAB
+# StreamLAB Evaluator
 
-The provided binary was tested on Ubuntu 16.10.
+Implementation of the StreamLAB monitoring algorithm.
 
-We provide the following shell scripts, covering the different scenarios described in the paper:
-- run_online.sh uses the short input file traces/trimmed/trace_0.cs with the spec_online.lola and simulates a delay of 1ms between inputs
-- run_offline_silent.sh uses the long input file (400k events) traces/timed/trace_0.csv with the spec_offline.lola -- took around 15 seconds on our machine
-- run_offline_triggers.sh is the verbose version of run_offline_silent.sh that shows the triggers that fire
+## Command Line Usage
 
+```
+streamlab SPEC --offline --csv-in TRACE --verbosity progress
+```
 
-USAGE
-
-You can run
-$ stream_lab monitor --help
-to get an overview of all possible options and flags:
-------------------------------------------------------------------------------
-USAGE:
-    stream_lab.exe monitor [FLAGS] [OPTIONS] <SPEC> <--online|--offline>
-
-FLAGS:
-        --offline    Use the timestamps from the input.
-                     The column name must be one of [time,timestamp,ts].
-                     The column must produce a monotonically increasing sequence of values.
-        --online     Use the current system time for timestamps
-        --stderr     Output to stderr
-        --stdin      Read CSV input from stdin [Default}
-        --stdout     Output to stdout
-    -h, --help       Prints help information
-    -V, --version    Prints version information
-
-OPTIONS:
-        --csv-in <CSV_INPUT_FILE>    Read CSV input from a file
-    -d, --delay <DELAY>              Delay [ms] between reading in two lines from the input. Only used for file input.
-                                     [default: 0]
-    -l, --verbosity <VERBOSITY>       [default: triggers]  [possible values: debug, outputs, triggers, warnings, silent]
-
-ARGS:
-    <SPEC>    Sets the specification file to use
-------------------------------------------------------------------------------
-
-
-The typical invocation looks like this:
-$ stream_lab monitor --offline --csv-in=./path/to/inputs.csv --verbosity=triggers --stdout ./path/to/specification
-
-Constraints:
-You must specify either --offline or --online to determine where the timestamps come from.
-You must specify either --stdin or --csv-in=./path/to/inputs.csv to determine where the input comes from.
-You can choose either --stderr or --stdout to determine where the output should go.
-You can specify the verbosity.
-You must specify the ./path/to/specification containing a RTLola specification.
-If you use --csv-in=<CSV_INPUT_FILE> and --online, you can add --delay=<DELAY> to add an artificial delay between reading in the lines.
+See all available options with `streamlab --help`

@@ -32,7 +32,7 @@ output y: Int32 @(a | b) := ...
 
 ## Types
 
-Convention that types are written in CamelCase: `Bool`, `Int32`, `UInt32`, ...
+Convention that types are written in CamelCase: `Bool`, `Int64`, `UInt64`, `Float64`, ...
 
 
 ## Expressions
@@ -101,5 +101,7 @@ y.offset(by: -100sec)  // y[-100sec]
 `.aggregate(over: DURATION, using: AGGREGATOR)`
 
 ```
-x.aggregate(over: 1h, using: integral)
+x.aggregate(over: 1h, using: sum)
 ```
+
+possibe aggregates are `count`, `sum`, `average`, and `integral`
