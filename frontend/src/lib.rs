@@ -27,8 +27,8 @@ pub trait LolaBackend {
 }
 
 // Replace by more elaborate interface.
-pub fn parse(spec_str: &str) -> Result<LolaIR, String> {
-    let mapper = crate::parse::SourceMapper::new(std::path::PathBuf::new(), spec_str);
+pub fn parse(filename: &str, spec_str: &str) -> Result<LolaIR, String> {
+    let mapper = crate::parse::SourceMapper::new(std::path::PathBuf::from(filename), spec_str);
     let handler = reporting::Handler::new(mapper);
 
     let spec = match crate::parse::parse(&spec_str, &handler) {

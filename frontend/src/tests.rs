@@ -2,6 +2,10 @@
 
 use super::*;
 
+fn parse(spec: &str) -> Result<LolaIR, String> {
+    super::parse("stdin", spec)
+}
+
 #[test]
 fn fuzzed_unknown_unit() {
     assert!(parse("input a: Int32\ninput b: Int32\n\noutput c @0a := a + b.hold().defaults(to: 0)\n\ntrigger c > 2 \"c is too large\"").is_err());

@@ -801,7 +801,7 @@ mod tests {
     use crate::ir::*;
 
     fn spec_to_ir(spec: &str) -> LolaIR {
-        crate::parse(spec).expect("spec was invalid")
+        crate::parse("stdin", spec).expect("spec was invalid")
     }
 
     fn check_stream_number(

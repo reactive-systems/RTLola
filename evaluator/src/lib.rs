@@ -157,7 +157,7 @@ impl Config {
             std::process::exit(1)
         });
 
-        let ir = match streamlab_frontend::parse(contents.as_str()) {
+        let ir = match streamlab_frontend::parse(&filename, contents.as_str()) {
             Ok(ir) => ir,
             Err(err) => {
                 eprintln!("{}", err);
