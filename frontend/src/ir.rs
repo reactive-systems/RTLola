@@ -125,7 +125,7 @@ pub struct EventDrivenStream {
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Trigger {
-    pub message: Option<String>,
+    pub message: String,
     pub reference: StreamReference,
     pub trigger_idx: usize,
 }

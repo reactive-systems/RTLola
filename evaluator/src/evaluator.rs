@@ -246,11 +246,7 @@ impl<'e, 'c> Evaluator<'e, 'c> {
             Some(trig) => {
                 // Check if we have to emit a warning.
                 if let Value::Bool(true) = res {
-                    self.handler.trigger(
-                        || format!("Trigger: {}", trig.message.as_ref().unwrap_or(&String::from("Warning!"))),
-                        trig.trigger_idx,
-                        ts,
-                    )
+                    self.handler.trigger(|| format!("Trigger: {}", trig.message), trig.trigger_idx, ts)
                 }
             }
         }
