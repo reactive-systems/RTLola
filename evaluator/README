@@ -26,7 +26,7 @@ input a: Int64
 input b: Int64
 
 output x := a + b
-trigger x > 2 "x > 2"
+trigger x > 2
 ```
 
 in file `example.spec` and the CSV
