@@ -798,9 +798,10 @@ impl<'a> Lowering<'a> {
 #[cfg(test)]
 mod tests {
     use crate::ir::*;
+    use crate::ty::TypeConfig;
 
     fn spec_to_ir(spec: &str) -> LolaIR {
-        crate::parse("stdin", spec).expect("spec was invalid")
+        crate::parse("stdin", spec, TypeConfig::default()).expect("spec was invalid")
     }
 
     fn check_stream_number(

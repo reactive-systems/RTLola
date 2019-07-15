@@ -286,6 +286,7 @@ mod tests {
     use crate::parse::parse;
     use crate::parse::SourceMapper;
     use crate::ty::check::TypeAnalysis;
+    use crate::ty::TypeConfig;
     use std::path::PathBuf;
 
     #[derive(Debug, Clone, Copy)]
@@ -304,7 +305,7 @@ mod tests {
     ) {
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), content));
         let ast = parse(content, &handler).unwrap_or_else(|e| panic!("{}", e));
-        let mut naming_analyzer = NamingAnalysis::new(&handler);
+        let mut naming_analyzer = NamingAnalysis::new(&handler, TypeConfig::default());
         let mut decl_table = naming_analyzer.check(&ast);
         let mut type_analysis = TypeAnalysis::new(&handler, &mut decl_table);
         let type_table = type_analysis.check(&ast).expect("We expect the spec to be well-typed");

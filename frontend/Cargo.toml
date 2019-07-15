@@ -22,7 +22,3 @@ ena = "0.13.0" # union-find implementation
 num = "0.2"     # infinite precision rationals
 color-backtrace = "0.2.2"
 uom = { version = "0.24.0", default-features = false, features = [ "autoconvert", "rational64", "si", "std", "use_serde"]}
-
-[features]
-types-only-64bit = []
-types-no-aliases = []

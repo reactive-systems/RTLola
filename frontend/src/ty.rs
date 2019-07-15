@@ -13,6 +13,14 @@ use unifier::ValueVar;
 use uom::si::frequency::hertz;
 use uom::si::rational64::Frequency as UOM_Frequency;
 
+#[derive(Debug, Clone, Copy, Default)]
+pub struct TypeConfig {
+    /// allow only 64bit types, i.e., `Int64`, `UInt64`, and `Float64`
+    pub use_64bit_only: bool,
+    /// include type aliases `Int` -> `Int64`, `UInt` -> `UInt64`, and `Float` -> `Float64`
+    pub type_aliases: bool,
+}
+
 /// The type of an expression consists of both, a value type (`Bool`, `String`, etc.) and
 /// a stream type (periodic or event-based).
 #[derive(Debug, PartialEq, Eq, PartialOrd, Clone, Hash)]
@@ -241,14 +249,14 @@ lazy_static! {
 }
 
 impl ValueTy {
-    pub(crate) fn primitive_types() -> Vec<(&'static str, &'static ValueTy)> {
+    pub(crate) fn primitive_types(config: TypeConfig) -> Vec<(&'static str, &'static ValueTy)> {
         let mut types = vec![];
-        if cfg!(feature = "types-only-64bit") {
+        if config.use_64bit_only {
             types.extend_from_slice(&REDUCED_PRIMITIVE_TYPES)
         } else {
             types.extend_from_slice(&PRIMITIVE_TYPES)
         }
-        if cfg!(feature = "types-no-aliases") == false {
+        if config.type_aliases {
             types.extend_from_slice(&PRIMITIVE_TYPES_ALIASES)
         }
         types

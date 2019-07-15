@@ -21,13 +21,16 @@ pub mod app {
 
 use crate::ir::{FeatureFlag, LolaIR};
 
+// Re-export
+pub use ty::TypeConfig;
+
 pub trait LolaBackend {
     /// Returns collection of feature flags supported by the `LolaBackend`.
     fn supported_feature_flags() -> Vec<FeatureFlag>;
 }
 
 // Replace by more elaborate interface.
-pub fn parse(filename: &str, spec_str: &str) -> Result<LolaIR, String> {
+pub fn parse(filename: &str, spec_str: &str, config: ty::TypeConfig) -> Result<LolaIR, String> {
     let mapper = crate::parse::SourceMapper::new(std::path::PathBuf::from(filename), spec_str);
     let handler = reporting::Handler::new(mapper);
 
@@ -38,7 +41,7 @@ pub fn parse(filename: &str, spec_str: &str) -> Result<LolaIR, String> {
         }
     };
 
-    let analysis_result = analysis::analyze(&spec, &handler);
+    let analysis_result = analysis::analyze(&spec, &handler, config);
     if analysis_result.is_success() {
         Ok(ir::lowering::Lowering::new(&spec, &analysis_result).lower())
     } else {

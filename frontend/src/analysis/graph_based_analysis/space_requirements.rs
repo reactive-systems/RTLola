@@ -171,6 +171,7 @@ mod tests {
     use crate::parse::SourceMapper;
     use crate::reporting::Handler;
     use crate::ty::check::TypeAnalysis;
+    use crate::ty::TypeConfig;
     use std::path::PathBuf;
 
     #[derive(Debug, Clone, Copy)]
@@ -188,7 +189,7 @@ mod tests {
     ) {
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), content));
         let spec = parse(content, &handler).unwrap_or_else(|e| panic!("{}", e));
-        let mut naming_analyzer = NamingAnalysis::new(&handler);
+        let mut naming_analyzer = NamingAnalysis::new(&handler, TypeConfig::default());
         let mut decl_table = naming_analyzer.check(&spec);
         let mut type_analysis = TypeAnalysis::new(&handler, &mut decl_table);
         let type_table = type_analysis.check(&spec);
@@ -233,7 +234,7 @@ mod tests {
     ) {
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), content));
         let spec = parse(content, &handler).unwrap_or_else(|e| panic!("{}", e));
-        let mut naming_analyzer = NamingAnalysis::new(&handler);
+        let mut naming_analyzer = NamingAnalysis::new(&handler, TypeConfig::default());
         let mut decl_table = naming_analyzer.check(&spec);
         let mut type_analysis = TypeAnalysis::new(&handler, &mut decl_table);
         let type_table = type_analysis.check(&spec);

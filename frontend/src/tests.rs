@@ -3,7 +3,7 @@
 use super::*;
 
 fn parse(spec: &str) -> Result<LolaIR, String> {
-    super::parse("stdin", spec)
+    super::parse("stdin", spec, TypeConfig::default())
 }
 
 #[test]

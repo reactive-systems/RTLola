@@ -16,6 +16,7 @@ use super::ast::LolaSpec;
 use crate::ast;
 use crate::reporting::Handler;
 use crate::ty::check::TypeAnalysis;
+use crate::ty::TypeConfig;
 
 pub trait AnalysisError<'a>: std::fmt::Debug {}
 
@@ -45,7 +46,7 @@ impl<'a> AnalysisResult<'a> {
     }
 }
 
-pub(crate) fn analyze<'a, 'b>(spec: &'a LolaSpec, handler: &'b Handler) -> AnalysisResult<'a> {
+pub(crate) fn analyze<'a, 'b>(spec: &'a LolaSpec, handler: &'b Handler, config: TypeConfig) -> AnalysisResult<'a> {
     let mut result = AnalysisResult::new();
 
     ast::verify::Verifier::new(spec, handler).check();
@@ -55,7 +56,7 @@ pub(crate) fn analyze<'a, 'b>(spec: &'a LolaSpec, handler: &'b Handler) -> Analy
         return result;
     }
 
-    let mut naming_analyzer = NamingAnalysis::new(&handler);
+    let mut naming_analyzer = NamingAnalysis::new(&handler, config);
     let mut decl_table = naming_analyzer.check(spec);
 
     if handler.contains_error() {

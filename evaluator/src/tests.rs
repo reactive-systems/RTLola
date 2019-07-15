@@ -5,7 +5,8 @@ use std::io::Write;
 use tempfile::NamedTempFile;
 
 fn run(spec: &str, data: &str) -> Result<Controller, Box<dyn std::error::Error>> {
-    let ir = streamlab_frontend::parse("stdin", spec).unwrap_or_else(|e| panic!("spec is invalid: {}", e));
+    let ir = streamlab_frontend::parse("stdin", spec, TypeConfig { use_64bit_only: true, type_aliases: false })
+        .unwrap_or_else(|e| panic!("spec is invalid: {}", e));
     let mut file = NamedTempFile::new().expect("failed to create temporary file");
     write!(file, "{}", data).expect("writing tempfile failed");
     let cfg = EvalConfig::new(
@@ -24,7 +25,7 @@ fn run(spec: &str, data: &str) -> Result<Controller, Box<dyn std::error::Error>>
 #[test]
 fn zero_wait_time_regression() {
     let spec = r#"
-input a: Int32
+input a: Int64
 
 output b @ 10Hz := a.hold().defaults(to:10)
 output c @ 5Hz := a.hold().defaults(to:10)
@@ -49,9 +50,9 @@ output c @ 5Hz := a.hold().defaults(to:10)
 fn test_parse_event() {
     let spec = r#"
 input bool: Bool
-input unsigned: UInt8
-input signed: Int8
-input float: Float32
+input unsigned: UInt64
+input signed: Int64
+input float: Float64
 input str: String
 
 trigger bool = true
@@ -80,8 +81,8 @@ trigger str = "foobar"
 #[test]
 fn add_two_i32_streams() {
     let spec = r#"
-input a: Int32
-input b: Int32
+input a: Int64
+input b: Int64
 
 output c := a + b
 
@@ -160,7 +161,7 @@ fn timed_dependencies() {
 #[test]
 fn event_based_parallel_past_lookup() {
     let spec = r#"
-input time : Float32
+input time : Float64
 output a @ time := b[-1].defaults(to: false)
 output b @ time := a[-1].defaults(to: true)
 trigger a "a"
@@ -235,7 +236,7 @@ trigger a∨b "a∨b"
 #[test]
 fn event_based_counter() {
     let spec = r#"
-input time : Float32
+input time : Float64
 output b @ time := b[-1].defaults(to: 0) + 1
 trigger b > 3
     "#;

@@ -9,11 +9,12 @@ use clap::{App, Arg, SubCommand};
 use pest::Parser;
 use simplelog::*;
 
-use super::super::analysis;
-use super::super::parse::{LolaParser, Rule};
+use crate::analysis;
 use crate::ir::lowering::Lowering;
 use crate::parse::SourceMapper;
+use crate::parse::{LolaParser, Rule};
 use crate::reporting::Handler;
+use crate::ty::TypeConfig;
 
 enum Analysis {
     Parse,
@@ -120,7 +121,8 @@ impl Config {
                     eprintln!("parse error:\n{}", e);
                     std::process::exit(1)
                 });
-                let report = analysis::analyze(&spec, &handler);
+                let report =
+                    analysis::analyze(&spec, &handler, TypeConfig { use_64bit_only: false, type_aliases: false });
                 //println!("{:?}", report);
                 use crate::analysis::graph_based_analysis::MemoryBound;
                 report.graph_analysis_result.map(|r| match r.memory_requirements {
@@ -138,7 +140,11 @@ impl Config {
                     std::process::exit(1)
                 });
 
-                let analysis_result = crate::analysis::analyze(&spec, &handler);
+                let analysis_result = crate::analysis::analyze(
+                    &spec,
+                    &handler,
+                    TypeConfig { use_64bit_only: false, type_aliases: false },
+                );
                 if !analysis_result.is_success() {
                     return Ok(()); // TODO throw a good `Error`
                 }
