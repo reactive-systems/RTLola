@@ -53,7 +53,7 @@ impl ColumnMapping {
             .iter()
             .map(|name| {
                 header.iter().position(|entry| &entry == name).unwrap_or_else(|| {
-                    eprintln!("error: CVS header does not contain an entry for stream {}.", name);
+                    eprintln!("error: CSV header does not contain an entry for stream `{}`.", name);
                     std::process::exit(1)
                 })
             })
