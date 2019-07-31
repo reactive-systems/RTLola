@@ -357,7 +357,7 @@ impl std::fmt::Display for ValueTy {
             ValueTy::Float(F32) => write!(f, "Float32"),
             ValueTy::Float(F64) => write!(f, "Float64"),
             ValueTy::String => write!(f, "String"),
-            ValueTy::Option(ty) => write!(f, "Option<{}>", ty),
+            ValueTy::Option(ty) => write!(f, "{}?", ty),
             ValueTy::Tuple(inner) => {
                 let joined: Vec<String> = inner.iter().map(|e| format!("{}", e)).collect();
                 write!(f, "({})", joined.join(", "))

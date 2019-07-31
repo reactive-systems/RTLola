@@ -105,8 +105,8 @@ impl<'a, 'b> NamingAnalysis<'a, 'b> {
 
     /// Checks if given type is bound
     fn check_type(&mut self, ty: &'a Type) {
-        match ty.kind {
-            TypeKind::Simple(ref name) => {
+        match &ty.kind {
+            TypeKind::Simple(name) => {
                 if let Some(decl) = self.type_declarations.get_decl_for(&name) {
                     assert!(decl.is_type());
                     self.result.insert(ty.id, decl);
@@ -118,9 +118,10 @@ impl<'a, 'b> NamingAnalysis<'a, 'b> {
                     );
                 }
             }
-            TypeKind::Tuple(ref elements) => elements.iter().for_each(|ty| {
+            TypeKind::Tuple(elements) => elements.iter().for_each(|ty| {
                 self.check_type(ty);
             }),
+            TypeKind::Optional(ty) => self.check_type(ty),
             TypeKind::Inferred => {}
         }
     }

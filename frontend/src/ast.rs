@@ -211,6 +211,10 @@ impl Type {
         Type { id: NodeId::DUMMY, kind: TypeKind::Tuple(tuple), span }
     }
 
+    pub fn new_optional(name: Type, span: Span) -> Type {
+        Type { id: NodeId::DUMMY, kind: TypeKind::Optional(name.into()), span }
+    }
+
     pub fn new_inferred() -> Type {
         Type { id: NodeId::DUMMY, kind: TypeKind::Inferred, span: Span::unknown() }
     }
@@ -218,10 +222,12 @@ impl Type {
 
 #[derive(Debug, Clone)]
 pub enum TypeKind {
-    /// A simple type, e.g., Int
+    /// A simple type, e.g., `Int`
     Simple(String),
-    /// A tuple type, e.g., (Int32, Float32)
+    /// A tuple type, e.g., `(Int32, Float32)`
     Tuple(Vec<Type>),
+    /// An optional type, e.g., `Int?`
+    Optional(Box<Type>),
     /// Should be inferred, i.e., is not annotated
     Inferred,
 }

@@ -189,7 +189,8 @@ impl Display for TypeKind {
         match &self {
             TypeKind::Simple(name) => write!(f, "{}", name),
             TypeKind::Tuple(types) => write_delim_list(f, types, "(", ")", ", "),
-            TypeKind::Inferred => write!(f, "?"),
+            TypeKind::Optional(ty) => write!(f, "{}?", ty),
+            TypeKind::Inferred => write!(f, "_"),
         }
     }
 }

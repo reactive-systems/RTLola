@@ -751,28 +751,37 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
         }
     }
 
-    fn infer_type(&mut self, ast_ty: &'a Type) -> Result<(), ()> {
+    fn infer_type(&mut self, ast_ty: &'a Type) -> Result<ValueVar, ()> {
         trace!("infer type for {}", ast_ty);
         let ty_var = self.new_value_var(ast_ty.id);
         match &ast_ty.kind {
-            TypeKind::Inferred => Ok(()),
+            TypeKind::Inferred => {}
             TypeKind::Simple(_) => {
                 match self.declarations[&ast_ty.id] {
                     Declaration::Type(ty) => {
                         // ?ty_var = `ty`
-                        self.unifier
-                            .unify_var_ty(ty_var, (*ty).clone())
-                            .map_err(|err| self.handle_error(err, ast_ty.span))
+                        self.unifier.unify_var_ty(ty_var, (*ty).clone()).expect("cannot fail as `ty_var` is fresh");
                     }
                     _ => unreachable!("ensured by naming analysis"),
                 }
             }
             TypeKind::Tuple(tuple) => {
-                let ty = self.get_tuple_type(tuple);
+                let inner: Vec<ValueTy> =
+                    tuple.iter().map(|ele| self.infer_type(ele).unwrap()).map(|var| ValueTy::Infer(var)).collect();
+                let ty = ValueTy::Tuple(inner);
                 // ?ty_var = `ty`
-                self.unifier.unify_var_ty(ty_var, ty).map_err(|err| self.handle_error(err, ast_ty.span))
+                self.unifier.unify_var_ty(ty_var, ty).expect("cannot fail as `ty_var` is fresh");
+            }
+            TypeKind::Optional(ty) => {
+                self.infer_type(ty)?;
+                let inner = self.value_vars[&ty.id];
+                // ?ty_var = `ty?`
+                self.unifier
+                    .unify_var_ty(ty_var, ValueTy::Option(ValueTy::Infer(inner).into()))
+                    .expect("cannot fail as `ty_var` is fresh");
             }
         }
+        Ok(ty_var)
     }
 
     fn infer_output_expression(&mut self, output: &'a Output) -> Result<(), ()> {
@@ -1269,27 +1278,6 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
         // store generic parameters for later lookup
         self.generic_function_vars.insert(node_id, generics);
         Ok(())
-    }
-
-    fn get_tuple_type(&mut self, tuple: &[Type]) -> ValueTy {
-        let mut inner = Vec::new();
-        for t in tuple {
-            match &t.kind {
-                TypeKind::Simple(_) => {
-                    let ty = self.declarations[&t.id];
-                    match ty {
-                        Declaration::Type(ty) => inner.push(ty.clone()),
-                        _ => unreachable!("ensured by naming analysis"),
-                    }
-                }
-                TypeKind::Tuple(types) => inner.push(self.get_tuple_type(&types)),
-                TypeKind::Inferred => {
-                    let fresh = self.unifier.new_var();
-                    inner.push(ValueTy::Infer(fresh));
-                }
-            }
-        }
-        ValueTy::Tuple(inner)
     }
 
     /// Assigns types as infered
@@ -1950,6 +1938,18 @@ mod tests {
     #[test]
     fn test_tuple_access_faulty_len() {
         let spec = "input in: (Int8, Bool)\noutput out: Bool := in[0].2";
+        assert_eq!(1, num_type_errors(spec));
+    }
+
+    #[test]
+    fn test_optional_type() {
+        let spec = "input in: Int8\noutput out: Int8? := in.offset(by: -1)";
+        assert_eq!(0, num_type_errors(spec));
+    }
+
+    #[test]
+    fn test_optional_type_faulty() {
+        let spec = "input in: Int8\noutput out: Int8? := in";
         assert_eq!(1, num_type_errors(spec));
     }
 

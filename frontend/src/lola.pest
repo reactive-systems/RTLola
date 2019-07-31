@@ -145,7 +145,8 @@ IntegerLiteral = @{ Digit+ }
 SignedIntegerLiteral = @{ ("+" | "-")?~IntegerLiteral }
 NumberPostfix = @{ LETTER+ }
 
-Type = {"("~ (Type ~(","~Type)*)?~ ")" | Ident | "_"}  // _ => infer type
+Type = {"("~ (Type ~(","~Type)*)?~ ")" | Optional | Ident | "_"}  // _ => infer type
+Optional = { Ident ~ "?" }  // Optional types are written `Int32?`
 
 //////////////////////////////////////////////////
 ///////////////////// Names //////////////////////

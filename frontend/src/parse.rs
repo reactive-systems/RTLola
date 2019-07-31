@@ -347,6 +347,13 @@ fn parse_type(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> Type {
                 return Type::new_simple(pair.as_str().to_string(), pair.as_span().into());
             }
             Rule::Type => tuple.push(parse_type(spec, pair)),
+            Rule::Optional => {
+                let span = pair.as_span();
+                let inner =
+                    pair.into_inner().next().expect("mismatch between grammar and AST: first argument is a type");
+                let inner_ty = Type::new_simple(inner.as_str().to_string(), inner.as_span().into());
+                return Type::new_optional(inner_ty, span.into());
+            }
             _ => unreachable!("{:?} is not a type, ensured by grammar", pair.as_rule()),
         }
     }
@@ -1064,6 +1071,15 @@ mod tests {
     #[test]
     fn build_parenthesized_expression() {
         let spec = "output s: Bool := (true ∨ true)\n";
+        let throw = |e| panic!("{}", e);
+        let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
+        let ast = parse(spec, &handler).unwrap_or_else(throw);
+        cmp_ast_spec(&ast, spec);
+    }
+
+    #[test]
+    fn build_optional_type() {
+        let spec = "output s: Bool? := (false ∨ true)\n";
         let throw = |e| panic!("{}", e);
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
         let ast = parse(spec, &handler).unwrap_or_else(throw);
