@@ -1,4 +1,4 @@
-use crate::basics::{EvalConfig, EventSource, OutputHandler};
+use crate::basics::{create_event_source, EvalConfig, EventSource, OutputHandler};
 use crate::coordination::{WorkItem, CAP_LOCAL_QUEUE};
 use crate::storage::Value;
 use crossbeam_channel::Sender;
@@ -32,7 +32,7 @@ impl AddAssign<u128> for EventDrivenCycleCount {
 pub struct EventDrivenManager {
     current_cycle: EventDrivenCycleCount,
     out_handler: Arc<OutputHandler>,
-    event_source: EventSource,
+    event_source: Box<dyn EventSource>,
 }
 
 impl EventDrivenManager {
@@ -43,7 +43,7 @@ impl EventDrivenManager {
         out_handler: Arc<OutputHandler>,
         start_time: Instant,
     ) -> EventDrivenManager {
-        let event_source = match EventSource::from(&config.source, &ir, start_time) {
+        let event_source = match create_event_source(config.source, &ir, start_time) {
             Ok(r) => r,
             Err(e) => {
                 eprintln!("Cannot create input reader: {}", e);

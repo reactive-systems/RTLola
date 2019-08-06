@@ -1,8 +1,8 @@
-use super::{InputSource, OutputChannel};
+use super::{CSVInputSource, EventSourceConfig, OutputChannel};
 
 #[derive(Clone, Debug)]
 pub struct EvalConfig {
-    pub source: InputSource,
+    pub source: EventSourceConfig,
     pub statistics: Statistics,
     pub verbosity: Verbosity,
     pub output_channel: OutputChannel,
@@ -63,7 +63,7 @@ pub enum TimeFormat {
 
 impl EvalConfig {
     pub fn new(
-        source: InputSource,
+        source: EventSourceConfig,
         statistics: Statistics,
         verbosity: Verbosity,
         output: OutputChannel,
@@ -89,7 +89,7 @@ impl EvalConfig {
         time_presentation: TimeRepresentation,
     ) -> Self {
         EvalConfig::new(
-            InputSource::file(path, None, None),
+            EventSourceConfig::CSV { src: CSVInputSource::file(path, None, None) },
             Statistics::None,
             Verbosity::Triggers,
             output,
@@ -103,7 +103,7 @@ impl EvalConfig {
 impl Default for EvalConfig {
     fn default() -> EvalConfig {
         EvalConfig {
-            source: InputSource::StdIn,
+            source: EventSourceConfig::CSV { src: CSVInputSource::StdIn },
             statistics: Statistics::None,
             verbosity: Verbosity::Triggers,
             output_channel: OutputChannel::StdOut,

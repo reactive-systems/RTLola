@@ -1,281 +1,58 @@
 #![allow(clippy::mutex_atomic)]
 
 use super::{EvalConfig, TimeFormat, TimeRepresentation, Verbosity};
+use crate::basics::{CSVEventSource, CSVInputSource};
 use crate::storage::Value;
 use crossterm::{cursor, terminal, ClearType};
-use csv::{Reader as CSVReader, Result as ReaderResult, StringRecord};
+use std::error::Error;
 use std::fs::File;
-use std::io::{stderr, stdin, stdout, Write};
+use std::io::{stderr, stdout, Write};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-use streamlab_frontend::ir::{LolaIR, Type};
-
+use streamlab_frontend::ir::LolaIR;
 pub type Time = Duration;
+
+//Input Handling
+
+#[derive(Debug, Clone)]
+pub enum EventSourceConfig {
+    CSV { src: CSVInputSource },
+}
+
+/// A trait that represents the functioniality needed for an event source.
+/// The order in which the functions are called is:
+/// has_event -> get_event -> read_time
+pub(crate) trait EventSource {
+    /// Returns true if another event can be obtained from the Event Source
+    fn has_event(&mut self) -> bool;
+
+    /// Returns an Event consisting of a vector of Values for the input streams and the time passed since the start of the evaluation
+    fn get_event(&mut self) -> (Vec<Value>, Time);
+
+    /// Returns the Unix timestamp of the current event
+    fn read_time(&self) -> Option<SystemTime>;
+}
+
+pub(crate) fn create_event_source(
+    config: EventSourceConfig,
+    ir: &LolaIR,
+    start_time: Instant,
+) -> Result<Box<dyn EventSource>, Box<dyn Error>> {
+    use EventSourceConfig::*;
+    match config {
+        CSV { src } => CSVEventSource::setup(&src, ir, start_time),
+    }
+}
+
+// Output Handling
 
 #[derive(Debug, Clone)]
 pub enum OutputChannel {
     StdOut,
     StdErr,
     File(String),
-}
-
-#[derive(Debug, Clone)]
-pub enum InputSource {
-    StdIn,
-    File { path: String, delay: Option<Duration>, time_col: Option<usize> },
-}
-
-impl InputSource {
-    pub fn file(path: String, delay: Option<Duration>, time_col: Option<usize>) -> InputSource {
-        InputSource::File { path, delay, time_col }
-    }
-
-    pub fn stdin() -> InputSource {
-        InputSource::StdIn
-    }
-}
-
-pub(crate) struct ColumnMapping {
-    /// Mapping from stream index/reference to input column index
-    str2col: Vec<usize>,
-    /// Mapping from column index to input stream index/reference
-    pub(crate) col2str: Vec<Option<usize>>,
-
-    /// Column index of time (if existent)
-    time_ix: Option<usize>,
-}
-
-impl ColumnMapping {
-    fn from_header(names: &[&str], header: &StringRecord, time_col: Option<usize>) -> ColumnMapping {
-        let str2col: Vec<usize> = names
-            .iter()
-            .map(|name| {
-                header.iter().position(|entry| &entry == name).unwrap_or_else(|| {
-                    eprintln!("error: CSV header does not contain an entry for stream `{}`.", name);
-                    std::process::exit(1)
-                })
-            })
-            .collect();
-
-        let mut col2str: Vec<Option<usize>> = vec![None; header.len()];
-        for (str_ix, header_ix) in str2col.iter().enumerate() {
-            col2str[*header_ix] = Some(str_ix);
-        }
-
-        let time_ix = time_col.map(|col| col - 1).or_else(|| {
-            header.iter().position(|name| {
-                let name = name.to_lowercase();
-                name == "time" || name == "ts" || name == "timestamp"
-            })
-        });
-        ColumnMapping { str2col, col2str, time_ix }
-    }
-
-    fn stream_ix_for_col_ix(&self, col_ix: usize) -> Option<usize> {
-        self.col2str[col_ix]
-    }
-
-    #[allow(dead_code)]
-    fn time_is_stream(&self) -> bool {
-        match self.time_ix {
-            None => false,
-            Some(col_ix) => self.col2str[col_ix].is_some(),
-        }
-    }
-
-    fn num_columns(&self) -> usize {
-        self.col2str.len()
-    }
-
-    #[allow(dead_code)]
-    fn num_streams(&self) -> usize {
-        self.str2col.len()
-    }
-}
-
-enum ReaderWrapper {
-    Std(CSVReader<std::io::Stdin>),
-    File(CSVReader<File>),
-}
-
-impl ReaderWrapper {
-    fn read_record(&mut self, rec: &mut StringRecord) -> ReaderResult<bool> {
-        match self {
-            ReaderWrapper::Std(r) => r.read_record(rec),
-            ReaderWrapper::File(r) => r.read_record(rec),
-        }
-    }
-
-    fn get_header(&mut self) -> ReaderResult<&StringRecord> {
-        match self {
-            ReaderWrapper::Std(r) => r.headers(),
-            ReaderWrapper::File(r) => r.headers(),
-        }
-    }
-}
-
-enum TimeHandling {
-    RealTime { start: Instant },
-    FromFile { start: Option<SystemTime> },
-    Delayed { delay: Duration, time: Time },
-}
-
-// TODO(marvin): this can be a trait
-pub(crate) struct EventSource {
-    reader: ReaderWrapper,
-    record: StringRecord,
-    mapping: ColumnMapping,
-    in_types: Vec<Type>,
-    timer: TimeHandling,
-}
-
-impl EventSource {
-    pub(crate) fn from(src: &InputSource, ir: &LolaIR, start_time: Instant) -> ReaderResult<EventSource> {
-        use InputSource::*;
-        let (mut wrapper, time_col) = match src {
-            StdIn => (ReaderWrapper::Std(CSVReader::from_reader(stdin())), None),
-            File { path, delay: _, time_col } => (ReaderWrapper::File(CSVReader::from_path(path)?), *time_col),
-        };
-
-        let stream_names: Vec<&str> = ir.inputs.iter().map(|i| i.name.as_str()).collect();
-        let mapping = ColumnMapping::from_header(stream_names.as_slice(), wrapper.get_header()?, time_col);
-        let in_types: Vec<Type> = ir.inputs.iter().map(|i| i.ty.clone()).collect();
-
-        use TimeHandling::*;
-        let timer = match src {
-            StdIn => RealTime { start: start_time },
-            File { path: _, delay, time_col: _ } => match delay {
-                Some(d) => Delayed { delay: *d, time: Duration::default() },
-                None => FromFile { start: None },
-            },
-        };
-
-        Ok(EventSource { reader: wrapper, record: StringRecord::new(), mapping, in_types, timer })
-    }
-
-    pub(crate) fn read_blocking(&mut self) -> ReaderResult<bool> {
-        if cfg!(debug_assertion) {
-            // Reset record.
-            self.record.clear();
-        }
-
-        if !self.reader.read_record(&mut self.record)? {
-            return Ok(false);
-        }
-        assert_eq!(self.record.len(), self.mapping.num_columns());
-
-        //TODO(marvin): this assertion seems wrong, empty strings could be valid values
-        if cfg!(debug_assertion) {
-            assert!(self
-                .record
-                .iter()
-                .enumerate()
-                .filter(|(ix, _)| self.mapping.stream_ix_for_col_ix(*ix).is_some())
-                .all(|(_, str)| !str.is_empty()));
-        }
-
-        Ok(true)
-    }
-
-    pub(crate) fn has_event(&mut self) -> bool {
-        self.read_blocking().unwrap_or_else(|e| {
-            eprintln!("error: failed to read data. {}", e);
-            std::process::exit(1)
-        })
-    }
-
-    pub(crate) fn get_event(&mut self) -> (Vec<Value>, Time) {
-        let event = self.read_event();
-        let time = self.get_time();
-        (event, time)
-    }
-
-    fn get_time(&mut self) -> Time {
-        use TimeHandling::*;
-        match self.timer {
-            RealTime { start } => Instant::now() - start,
-            FromFile { start } => {
-                let now = self.read_time().unwrap();
-                match start {
-                    None => {
-                        self.timer = FromFile { start: Some(now) };
-                        Time::default()
-                    }
-                    Some(start) => now.duration_since(start).expect("Time did not behave monotonically!"),
-                }
-            }
-            Delayed { delay, ref mut time } => {
-                *time += delay;
-                *time
-            }
-        }
-    }
-
-    fn read_event(&self) -> Vec<Value> {
-        let mut buffer = vec![Value::None; self.in_types.len()];
-        for (col_ix, s) in self.record.iter().enumerate() {
-            if let Some(str_ix) = self.mapping.col2str[col_ix] {
-                if s != "#" {
-                    let t = &self.in_types[str_ix];
-                    buffer[str_ix] = Value::try_from(s, t).unwrap_or_else(|| {
-                        eprintln!("error: problem with data source; failed to parse {} as value of type {:?}.", s, t);
-                        std::process::exit(1)
-                    })
-                }
-            }
-        }
-        buffer
-    }
-
-    pub fn read_time(&self) -> Option<SystemTime> {
-        let time_str = self.str_for_time();
-        if time_str.is_none() {
-            return None;
-        }
-        let time_str = time_str.unwrap();
-        let mut time_str_split = time_str.split('.');
-        let secs_str: &str = match time_str_split.next() {
-            Some(s) => s,
-            None => {
-                eprintln!("error: problem with data source; failed to parse time string {}.", time_str);
-                std::process::exit(1)
-            }
-        };
-        let secs = match secs_str.parse::<u64>() {
-            Ok(u) => u,
-            Err(e) => {
-                eprintln!("error: problem with data source; fFailed to parse time string {}: {}", time_str, e);
-                std::process::exit(1)
-            }
-        };
-        let d: Duration = if let Some(nanos_str) = time_str_split.next() {
-            let mut chars = nanos_str.chars();
-            let mut nanos: u32 = 0;
-            for _ in 1..=9 {
-                nanos *= 10;
-                if let Some(c) = chars.next() {
-                    if let Some(d) = c.to_digit(10) {
-                        nanos += d;
-                    }
-                }
-            }
-            assert!(time_str_split.next().is_none());
-            Duration::new(secs, nanos)
-        } else {
-            Duration::from_nanos(secs)
-        };
-        Some(UNIX_EPOCH + d)
-    }
-
-    pub(crate) fn str_for_time(&self) -> Option<&str> {
-        self.time_index().map(|ix| &self.record[ix])
-    }
-
-    fn time_index(&self) -> Option<usize> {
-        self.mapping.time_ix
-    }
 }
 
 pub(crate) struct OutputHandler {

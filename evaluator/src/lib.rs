@@ -11,8 +11,8 @@ mod tests;
 
 use crate::coordination::Controller;
 use basics::{
-    EvalConfig, EvaluatorChoice, ExecutionMode, InputSource, OutputChannel, Statistics, TimeFormat, TimeRepresentation,
-    Verbosity,
+    CSVInputSource, EvalConfig, EvaluatorChoice, EventSourceConfig, ExecutionMode, OutputChannel, Statistics,
+    TimeFormat, TimeRepresentation, Verbosity,
 };
 use clap::{App, AppSettings, Arg, ArgGroup, SubCommand};
 use std::fs;
@@ -193,9 +193,9 @@ impl Config {
         });
 
         let src = if let Some(file) = parse_matches.value_of("CSV_INPUT_FILE") {
-            InputSource::file(String::from(file), delay, csv_time_column)
+            EventSourceConfig::CSV { src: CSVInputSource::file(String::from(file), delay, csv_time_column) }
         } else {
-            InputSource::stdin()
+            EventSourceConfig::CSV { src: CSVInputSource::stdin() }
         };
 
         let out = if parse_matches.is_present("STDOUT") {
