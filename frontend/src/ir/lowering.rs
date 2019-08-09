@@ -210,7 +210,7 @@ impl<'a> Lowering<'a> {
         let output = ir::OutputStream {
             name: ast_output.name.name.clone(),
             ty: ir::Type::Bool,
-            expr: ir::Expression::LoadConstant(ir::Constant::Str(String::from("not yet initialized"))),
+            expr: ir::Expression::LoadConstant(ir::Constant::Str(String::from("not yet initialized")), ir::Type::Bool),
             outgoing_dependencies: Vec::new(),
             dependent_streams: trackings,
             dependent_windows: Vec::new(),
@@ -467,10 +467,13 @@ impl<'a> Lowering<'a> {
                         self.lower_node_type(output.id),
                         ir::Expression::SyncStreamLookup(self.get_ref_for_stream(output.id)),
                     ),
-                    Declaration::Const(constant) => (
-                        self.lower_node_type(constant.id),
-                        ir::Expression::LoadConstant(self.lower_literal(&constant.literal, constant.id)),
-                    ),
+                    Declaration::Const(constant) => {
+                        let node_type = self.lower_node_type(constant.id);
+                        (
+                            node_type.clone(),
+                            ir::Expression::LoadConstant(self.lower_literal(&constant.literal, constant.id), node_type),
+                        )
+                    }
                     _ => unreachable!(),
                 };
                 if src_ty != result_type {
