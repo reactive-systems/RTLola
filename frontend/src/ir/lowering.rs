@@ -798,6 +798,7 @@ impl<'a> Lowering<'a> {
             Declaration::Out(out) => self.get_ref_for_stream(out.id),
             Declaration::Param(_) | Declaration::Const(_) => unimplemented!(),
             Declaration::Type(_) | Declaration::Func(_) => unreachable!("Types and functions are not streams."),
+            Declaration::ParamOut(_) => unreachable!(),
         }
     }
 }

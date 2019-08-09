@@ -310,6 +310,7 @@ impl<'a> DependencyAnalyser<'a> {
                         StreamDependency::Access(location, Offset::Discrete(0), expr.span),
                     );
                 }
+                Declaration::ParamOut(_) => unimplemented!(),
             },
             ExpressionKind::Offset(expr, offset) => {
                 if let ExpressionKind::Ident(_) = &expr.kind {

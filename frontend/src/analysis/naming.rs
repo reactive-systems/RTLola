@@ -192,7 +192,11 @@ impl<'a, 'b> NamingAnalysis<'a, 'b> {
         }
 
         for output in &spec.outputs {
-            self.add_decl_for(output.into());
+            if output.params.is_empty() {
+                self.add_decl_for(Declaration::Out(output));
+            } else {
+                self.add_decl_for(Declaration::ParamOut(output))
+            }
             self.check_type(&output.ty);
         }
 
@@ -300,6 +304,9 @@ impl<'a, 'b> NamingAnalysis<'a, 'b> {
             assert!(decl.is_function());
 
             self.result.insert(expression.id, decl);
+        } else if let Some(Declaration::ParamOut(out)) = self.declarations.get_decl_for(&name.name.name) {
+            // parametric outputs are represented as functions
+            self.result.insert(expression.id, Declaration::ParamOut(out));
         } else {
             self.handler.error_with_span(
                 &format!("function name `{}` does not exist in current scope", str_repr),
@@ -409,7 +416,10 @@ impl<'a> ScopedDecl<'a> {
 pub enum Declaration<'a> {
     Const(&'a Constant),
     In(&'a Input),
+    /// A non-parametric output
     Out(&'a Output),
+    /// A paramertric output, internally represented as a function application
+    ParamOut(&'a Output),
     Type(&'a ValueTy),
     Param(&'a Parameter),
     Func(&'a FuncDecl),
@@ -421,6 +431,7 @@ impl<'a> Declaration<'a> {
             Declaration::Const(constant) => Some(constant.name.span),
             Declaration::In(input) => Some(input.name.span),
             Declaration::Out(output) => Some(output.name.span),
+            Declaration::ParamOut(output) => Some(output.name.span),
             Declaration::Param(p) => Some(p.name.span),
             Declaration::Type(_) | Declaration::Func(_) => None,
         }
@@ -431,6 +442,7 @@ impl<'a> Declaration<'a> {
             Declaration::Const(constant) => Some(&constant.name.name),
             Declaration::In(input) => Some(&input.name.name),
             Declaration::Out(output) => Some(&output.name.name),
+            Declaration::ParamOut(output) => Some(&output.name.name),
             Declaration::Param(p) => Some(&p.name.name),
             Declaration::Type(_) | Declaration::Func(_) => None,
         }
@@ -442,6 +454,7 @@ impl<'a> Declaration<'a> {
             Declaration::Const(_)
             | Declaration::In(_)
             | Declaration::Out(_)
+            | Declaration::ParamOut(_)
             | Declaration::Param(_)
             | Declaration::Func(_) => false,
         }
@@ -449,7 +462,7 @@ impl<'a> Declaration<'a> {
 
     fn is_function(&self) -> bool {
         match self {
-            Declaration::Func(_) => true,
+            Declaration::Func(_) | Declaration::ParamOut(_) => true,
             _ => false,
         }
     }
@@ -584,5 +597,11 @@ mod tests {
     fn missing_expression() {
         // should not produce an error as we want to be able to handle incomplete specs in analysis
         assert_eq!(0, number_of_naming_errors("input x: Bool\noutput y: Bool := \ntrigger (y || x)"))
+    }
+
+    #[test]
+    fn parametric_output() {
+        let spec = "output x <a: UInt8, b: Bool>: Int8 := 1 output y := x(1, false)";
+        assert_eq!(0, number_of_naming_errors(spec));
     }
 }

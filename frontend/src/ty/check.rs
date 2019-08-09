@@ -327,7 +327,7 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
                         inner.push(output.id)
                     }
                     Declaration::Param(_) => {}
-                    Declaration::Type(_) | Declaration::Func(_) => {
+                    Declaration::Type(_) | Declaration::Func(_) | Declaration::ParamOut(_) => {
                         unreachable!("ensured by naming analysis {:?}", decl)
                     }
                 }
@@ -494,7 +494,7 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
                         self.check_stream_types_are_compatible(stream_ty, out_ty, expr.span)?;
                     }
                     Declaration::Param(_) => {}
-                    Declaration::Type(_) | Declaration::Func(_) => {
+                    Declaration::Type(_) | Declaration::Func(_) | Declaration::ParamOut(_) => {
                         unreachable!("ensured by naming analysis {:?}", decl)
                     }
                 }
@@ -930,7 +930,7 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
                         let param_var = self.value_vars[&param.id];
                         self.unifier.unify_var_var(var, param_var).map_err(|err| self.handle_error(err, expr.span))?;
                     }
-                    Declaration::Type(_) | Declaration::Func(_) => {
+                    Declaration::Type(_) | Declaration::Func(_) | Declaration::ParamOut(_) => {
                         unreachable!("ensured by naming analysis {:?}", decl)
                     }
                 }
@@ -1590,6 +1590,13 @@ mod tests {
     #[ignore] // parametric streams need new design after syntax revision
     fn parametric_input() {
         let spec = "input i<a: Int8, b: Bool>: Int8\noutput o := i(1,false)[0].defaults(to: 42)";
+        assert_eq!(0, num_type_errors(spec));
+        assert_eq!(get_type(spec), ValueTy::Int(IntTy::I8));
+    }
+
+    #[test]
+    fn parametric_declaration() {
+        let spec = "output x <a: UInt8, b: Bool>: Int8 := 1 output y := x(1, false)";
         assert_eq!(0, num_type_errors(spec));
         assert_eq!(get_type(spec), ValueTy::Int(IntTy::I8));
     }
