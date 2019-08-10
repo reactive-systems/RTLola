@@ -10,8 +10,8 @@ use super::unifier::{InferError, UnifiableTy, Unifier, ValueUnifier, ValueVar};
 use super::{Activation, Freq, StreamTy, TypeConstraint, ValueTy};
 use crate::analysis::naming::{Declaration, DeclarationTable};
 use crate::ast::{
-    BinOp, Constant, Expression, ExpressionKind, Input, Literal, LolaSpec, Offset, Output,
-    StreamAccessKind, Trigger, Type, TypeKind, WindowOperation,
+    BinOp, Constant, Expression, ExpressionKind, FunctionName, Input, Literal, LolaSpec, Offset,
+    Output, StreamAccessKind, Trigger, Type, TypeKind, WindowOperation,
 };
 use crate::parse::{NodeId, Span};
 use crate::reporting::{Handler, LabeledSpan};
@@ -276,7 +276,6 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
             param_types.push(ValueTy::Infer(param_var));
         }
 
-        assert!(param_types.is_empty(), "Parametric outputs are currently not supported by type checker");
         Ok(())
     }
 
@@ -972,7 +971,21 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
             Function(_name, types, params) => {
                 let decl = self.declarations[&expr.id];
                 let fun_decl = match decl {
-                    Declaration::Func(fun_decl) => fun_decl,
+                    Declaration::Func(fun_decl) => fun_decl.clone(),
+                    Declaration::ParamOut(out) => {
+                        // create matching function declaration
+                        assert!(!out.params.is_empty());
+                        FuncDecl {
+                            name: FunctionName { name: out.name.clone(), arg_names: vec![None; out.params.len()] },
+                            generics: Vec::new(),
+                            parameters: out
+                                .params
+                                .iter()
+                                .map(|param| ValueTy::Infer(self.value_vars[&param.ty.id]))
+                                .collect(),
+                            return_type: ValueTy::Infer(self.value_vars[&out.id]),
+                        }
+                    }
                     _ => unreachable!("ensured by naming analysis"),
                 };
                 if params.len() != fun_decl.parameters.len() {
@@ -1002,7 +1015,7 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
                     expr.id,
                     var,
                     expr.span,
-                    fun_decl,
+                    &fun_decl,
                     types.as_slice(),
                     params.as_slice(),
                 )?;
@@ -1834,29 +1847,6 @@ mod tests {
 
     #[test]
     #[ignore] // paramertic streams need new design after syntax revision
-    fn test_invoke_type() {
-        let spec = "input in: Int8\n output a<p1: Int8>: Int8 { invoke in } := 3";
-        assert_eq!(0, num_type_errors(spec));
-        assert_eq!(get_type(spec), ValueTy::Int(IntTy::I8));
-    }
-
-    #[test]
-    #[ignore] // paramertic streams need new design after syntax revision
-    fn test_invoke_type_two_params() {
-        let spec = "input in: Int8\n output a<p1: Int8, p2: Int8>: Int8 { invoke (in, in) } := 3";
-        assert_eq!(0, num_type_errors(spec));
-        assert_eq!(get_type(spec), ValueTy::Int(IntTy::I8));
-    }
-
-    #[test]
-    #[ignore] // paramertic streams need new design after syntax revision
-    fn test_invoke_type_faulty() {
-        let spec = "input in: Bool\n output a<p1: Int8>: Int8 { invoke in } := 3";
-        assert_eq!(1, num_type_errors(spec));
-    }
-
-    #[test]
-    #[ignore] // paramertic streams need new design after syntax revision
     fn test_extend_type() {
         let spec = "input in: Bool\n output a: Int8 { extend in } := 3";
         assert_eq!(0, num_type_errors(spec));
@@ -1886,33 +1876,35 @@ mod tests {
     }
 
     #[test]
-    #[ignore] // parametric streams need new design after syntax revision
     fn test_param_spec() {
-        let spec =
-            "input in: Int8\n output a<p1: Int8>: Int8 { invoke in } := 3\n output b: Int8 := a(3)[-2].defaults(to: 1)";
+        let spec = "output a<p1: Int8>: Int8 := 3 output b: Int8 := a(3)";
         assert_eq!(0, num_type_errors(spec));
         assert_eq!(get_type(spec), ValueTy::Int(IntTy::I8));
     }
 
     #[test]
-    #[ignore] // parametric streams need new design after syntax revision
     fn test_param_spec_faulty() {
-        let spec = "input in: Int8\n output a<p1: Int8>: Int8 { invoke in } := 3\n output b: Int8 := a(true)[-2].defaults(to: 1)";
+        let spec = "output a<p1: Int8>: Int8:= 3 output b: Int8 := a(true)";
         assert_eq!(1, num_type_errors(spec));
     }
 
     #[test]
-    #[ignore] // parametric streams need new design after syntax revision
-    fn test_param_spec_wrong_parameters() {
-        let spec = "input in<a: Int8, b: Int8>: Int8\noutput x := in(1)[0]";
-        assert_eq!(1, num_type_errors(spec));
+    fn test_param_inferred() {
+        let spec = "input i: Int8 output x<param>: Int8 := 3 output y: Int8 := x(i)";
+        assert_eq!(0, num_type_errors(spec));
+        assert_eq!(get_type(spec), ValueTy::Int(IntTy::I8));
     }
 
     #[test]
-    #[ignore] // parametric streams need new design after syntax revision
+    fn test_param_inferred_conflicting() {
+        let spec = "input i: Int8, j: UInt8 output x<param>: Int8 := 3 output y: Int8 := x(i) output z: Int8 := x(j)";
+        assert_eq!(1, num_type_errors(spec));
+        assert_eq!(get_type(spec), ValueTy::Int(IntTy::I8));
+    }
+
+    #[test]
     fn test_lookup_incomp() {
-        let spec =
-            "input in: Int8\n output a<p1: Int8>: Int8 { invoke in } := 3\n output b: UInt8 := a(3)[2].defaults(to: 1)";
+        let spec = "output a<p1: Int8>: Int8 := 3\n output b: UInt8 := a(3)";
         assert_eq!(1, num_type_errors(spec));
     }
 

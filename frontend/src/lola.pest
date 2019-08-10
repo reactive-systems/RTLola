@@ -16,7 +16,7 @@ BOM = _{"\u{FEFF}"}
 //////////////////////////////////////////////////
 
 ParamList = { "<" ~(ParameterDecl ~("," ~ParameterDecl)*)? ~">"}
-ParameterDecl = { Ident ~ ":" ~ Type? }
+ParameterDecl = { Ident ~ (":" ~ Type)? }
 
 TemplateSpec = { 
       "{" ~

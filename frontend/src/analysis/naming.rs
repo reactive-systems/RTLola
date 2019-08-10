@@ -604,4 +604,10 @@ mod tests {
         let spec = "output x <a: UInt8, b: Bool>: Int8 := 1 output y := x(1, false)";
         assert_eq!(0, number_of_naming_errors(spec));
     }
+
+    #[test]
+    fn test_param_spec_wrong_parameters() {
+        let spec = "input in<a: Int8, b: Int8>: Int8\noutput x := in(1)";
+        assert_eq!(1, number_of_naming_errors(spec));
+    }
 }
