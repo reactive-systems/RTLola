@@ -379,11 +379,7 @@ impl<'a> Lowering<'a> {
         match req {
             TrackingRequirement::Unbounded => ir::Tracking::All(trackee),
             TrackingRequirement::Finite(num) => {
-                let rate = tracker.map_or(Duration::from_secs(0), |tds| {
-                    Duration::from_nanos(
-                        tds.period.get::<nanosecond>().to_integer().to_u64().expect("Period [ns] too large for u64!"),
-                    )
-                });
+                let rate = tracker.map_or(Duration::from_secs(0), |tds| tds.extend_rate);
                 ir::Tracking::Bounded { trackee, num: u128::from(num), rate }
             }
             TrackingRequirement::Future => unimplemented!(),
@@ -726,11 +722,17 @@ impl<'a> Lowering<'a> {
 
     fn check_time_driven(&mut self, stream_id: NodeId, reference: StreamReference) -> Option<TimeDrivenStream> {
         match &self.tt.get_stream_type(stream_id) {
-            StreamTy::RealTime(f) => Some(TimeDrivenStream {
-                reference,
-                frequency: f.freq,
-                period: UOM_Time::new::<second>(f.freq.get::<hertz>().inv()),
-            }),
+            StreamTy::RealTime(f) => {
+                let period = UOM_Time::new::<second>(f.freq.get::<hertz>().inv());
+                Some(TimeDrivenStream {
+                    reference,
+                    frequency: f.freq,
+                    extend_rate: Duration::from_nanos(
+                        period.get::<nanosecond>().to_integer().to_u64().expect("Period [ns] too large for u64!"),
+                    ),
+                    period,
+                })
+            }
             _ => None,
         }
     }

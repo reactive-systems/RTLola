@@ -115,6 +115,7 @@ pub struct OutputStream {
 pub struct TimeDrivenStream {
     pub reference: StreamReference,
     pub frequency: UOM_Frequency,
+    pub extend_rate: Duration,
     pub period: UOM_Time,
 }
 
