@@ -5,16 +5,33 @@ Here is a pretty good overview of steps recommended for Rust CLI tools https://d
 ## Building
 
 We provide binaries for Linux, macOS, and Windows (x86-64).
+See also [CLI Workgroup Tutorial on Packaging Rust](https://rust-lang-nursery.github.io/cli-wg/tutorial/packaging.html).
 
-* Linux: Static build with musl (TODO: Marvin)
-* Mac: `cargo build --release`
-* Windows: (TODO: Malte)
+### Linux
+
+```shell
+export TARGET=x86_64-unknown-linux-musl
+rustup target add $TARGET
+cargo build --release --target $TARGET --locked --features public
+```
+
+### macOS
+
+```shell
+export MACOSX_DEPLOYMENT_TARGET=10.7
+export TARGET=x86_64-apple-darwin
+cargo build --release --target $TARGET --locked --features public
+```
+
+### Windows
+
+TODO(@malte)
 
 ## Packaging
 
 We currently provide a single zip containing
 
-* binaries (`streamlab-linux`, `streamlab-mac`, and `streamlab-windows`)
+* binaries (`streamlab-linux`, `streamlab-mac`, and `streamlab-windows.exe`)
 * evaluator readme (`/evaluator/readme.md`)
 * syntax description (`/doc/syntax.md`)
 
