@@ -9,7 +9,7 @@ input velo: Float64
 input w_dir: Float64
 input w_spd: Float64
 // number of GPS satellites in range
-input gps: UInt8
+input gps: UInt64
 // timestamps for the offline analysis
 input time: Float64
 
