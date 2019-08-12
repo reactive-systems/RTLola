@@ -9,7 +9,7 @@ See also [CLI Workgroup Tutorial on Packaging Rust](https://rust-lang-nursery.gi
 
 ### Linux
 
-```shell
+```bash
 export TARGET=x86_64-unknown-linux-musl
 rustup target add $TARGET
 cargo build --release --target $TARGET --locked --features public
@@ -17,7 +17,7 @@ cargo build --release --target $TARGET --locked --features public
 
 ### macOS
 
-```shell
+```bash
 export MACOSX_DEPLOYMENT_TARGET=10.7
 export TARGET=x86_64-apple-darwin
 cargo build --release --target $TARGET --locked --features public
@@ -25,7 +25,9 @@ cargo build --release --target $TARGET --locked --features public
 
 ### Windows
 
-TODO(@malte)
+```
+cargo build --release --target x86_64-pc-windows-msvc --locked --features public -C target-feature=+crt-static
+```
 
 ## Packaging
 
