@@ -1,0 +1,59 @@
+{
+  "spec_file": "../tests/specs/count_1_4.lola",
+  "input_file": "../traces/tests/count_1_4.csv",
+  "rationale": "",
+  "triggers": {
+    "count is 0": {
+      "expected_count": 0,
+      "time_info": []
+    },
+    "count is 1": {
+      "expected_count": 1,
+      "time_info": [
+        "0.000000000"
+      ]
+    },
+    "count is 2": {
+      "expected_count": 0,
+      "time_info": []
+    },
+    "count is 3": {
+      "expected_count": 1,
+      "time_info": [
+        "1.000000000"
+      ]
+    },
+    "count is 4": {
+      "expected_count": 0,
+      "time_info": []
+    },
+    "count is 5": {
+      "expected_count": 1,
+      "time_info": [
+        "2.000000000"
+      ]
+    },
+    "count is 6": {
+      "expected_count": 0,
+      "time_info": []
+    },
+    "count is 7": {
+      "expected_count": 1,
+      "time_info": [
+        "3.000000000"
+      ]
+    },
+    "count is 8": {
+      "expected_count": 3,
+      "time_info": [
+        "4.000000000",
+        "5.000000000",
+        "6.000000000"
+      ]
+    },
+    "count is 9": {
+      "expected_count": 0,
+      "time_info": []
+    }
+  }
+}

@@ -1,0 +1,13 @@
+input a : Int64
+output count @1s := a.aggregate(over: 4s, using: count)
+
+trigger count = 0  "count is 0"
+trigger count = 1  "count is 1"
+trigger count = 2  "count is 2"
+trigger count = 3  "count is 3"
+trigger count = 4  "count is 4"
+trigger count = 5  "count is 5"
+trigger count = 6  "count is 6"
+trigger count = 7  "count is 7"
+trigger count = 8  "count is 8"
+trigger count = 9  "count is 9"
