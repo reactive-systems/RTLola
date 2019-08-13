@@ -188,9 +188,19 @@ fn parse_output(spec: &mut LolaSpec, pair: Pair<'_, Rule>, handler: &Handler) ->
         pair = pairs.next().expect("mismatch between grammar and AST");
     };
 
+    // Parse termination condition `close EXPRESSION`
+    let termination = if let Rule::TerminateDecl = pair.as_rule() {
+        let expr = pair.into_inner().next().expect("mismatch between grammar and AST");
+        let expr = build_expression_ast(spec, expr.into_inner(), handler);
+        pair = pairs.next().expect("mismatch between grammar and AST");
+        Some(expr)
+    } else {
+        None
+    };
+
     // Parse expression
     let expression = build_expression_ast(spec, pair.into_inner(), handler);
-    Output { id: NodeId::DUMMY, name, ty, extend, params, template_spec: tspec, expression, span }
+    Output { id: NodeId::DUMMY, name, ty, extend, params, template_spec: tspec, termination, expression, span }
 }
 
 fn parse_parameter_list(spec: &mut LolaSpec, param_list: Pairs<'_, Rule>) -> Vec<Parameter> {
@@ -1160,14 +1170,12 @@ mod tests {
     }
 
     #[test]
-    fn build_template_spec() {
-        let spec = "output s: Int { invoke inp unless 3 > 5 extend b terminate false } := 3\n";
+    fn build_termination_spec() {
+        let spec = "output s (a: Int): Int close s > 10 := 3\n";
         let throw = |e| panic!("{}", e);
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
         let ast = parse(spec, &handler).unwrap_or_else(throw);
-        // 0.5GHz correspond to 2ns.
-        let spec = spec.replace("0.5GHz", "2ns");
-        cmp_ast_spec(&ast, spec.as_str());
+        cmp_ast_spec(&ast, spec);
     }
 
     #[test]

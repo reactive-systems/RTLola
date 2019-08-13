@@ -302,6 +302,9 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
         } else {
             // stream type should be inferred
             let mut inner = Vec::new();
+            if let Some(termination) = output.termination.as_ref() {
+                self.infer_stream_ty_from_expression(termination, &mut inner);
+            }
             self.infer_stream_ty_from_expression(&output.expression, &mut inner);
             self.stream_ty.insert(output.id, StreamTy::Infer(inner));
         }
@@ -467,6 +470,10 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
 
         if let StreamTy::Infer(_) = self.stream_ty[&output.id] {
             unreachable!("stream types should be concrete at this point");
+        }
+
+        if let Some(termination) = output.termination.as_ref() {
+            self.check_output_clock_expression(&self.stream_ty[&output.id].clone(), termination)?;
         }
 
         self.check_output_clock_expression(&self.stream_ty[&output.id].clone(), &output.expression)
@@ -840,6 +847,11 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
                 )?;
             }
         }*/
+
+        if let Some(terminate) = output.termination.as_ref() {
+            // check that condition is boolean
+            self.infer_expression(&terminate, Some(ValueTy::Bool))?;
+        }
 
         // generate constraint for expression
         self.infer_expression(&output.expression, Some(ValueTy::Infer(out_var)))
@@ -1861,17 +1873,22 @@ mod tests {
     }
 
     #[test]
-    #[ignore] // paramertic streams need new design after syntax revision
     fn test_terminate_type() {
-        let spec = "input in: Bool\n output a: Int8 { terminate in } := 3";
+        let spec = "input in: Bool\n output a: Int8 close in := 3";
         assert_eq!(0, num_type_errors(spec));
         assert_eq!(get_type(spec), ValueTy::Int(IntTy::I8));
     }
 
     #[test]
-    #[ignore] // paramertic streams need new design after syntax revision
     fn test_terminate_type_faulty() {
-        let spec = "input in: Int8\n output a: Int8 { terminate in } := 3";
+        let spec = "input in: Int8\n output a: Int8 close in := 3";
+        assert_eq!(1, num_type_errors(spec));
+    }
+
+    #[test]
+    fn test_terminate_type_faulty_ac() {
+        // stream type is not compatible
+        let spec = "input in: Int8 input in2: Bool output a: Int8 @in close in2 := 3";
         assert_eq!(1, num_type_errors(spec));
     }
 

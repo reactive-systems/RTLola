@@ -93,6 +93,7 @@ pub struct Output {
     pub extend: ActivationCondition,
     pub params: Vec<Parameter>,
     pub template_spec: Option<TemplateSpec>,
+    pub termination: Option<Expression>,
     pub expression: Expression,
     pub(crate) id: NodeId,
     pub(crate) span: Span,

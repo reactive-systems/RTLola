@@ -45,6 +45,9 @@ pub(crate) fn assign_ids(spec: &mut LolaSpec) {
         if let Some(ref mut ts) = o.template_spec {
             assign_ids_template_spec(ts, &mut next_id);
         }
+        if let Some(ref mut ts) = o.termination {
+            assign_ids_expr(ts, &mut next_id);
+        }
         assign_ids_expr(&mut o.expression, &mut next_id);
     }
     for t in &mut spec.trigger {
@@ -247,6 +250,7 @@ mod tests {
             extend: ActivationCondition { expr: None, id: NodeId::DUMMY, span: span() },
             params: Vec::new(),
             template_spec: None,
+            termination: None,
             expression: expr,
             span: span(),
         }

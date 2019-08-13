@@ -73,6 +73,9 @@ impl Display for Output {
                 write!(f, " @ {}", expr)?;
             }
         }
+        if let Some(terminate) = &self.termination {
+            write!(f, " close {}", terminate)?;
+        }
         write!(f, "{} := {}", format_opt(&self.template_spec, " ", ""), self.expression)
     }
 }

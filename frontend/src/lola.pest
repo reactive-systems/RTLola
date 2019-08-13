@@ -33,7 +33,7 @@ ExtendDecl = { "extend" ~ Expr }
 
 ActivationCondition = { "@" ~ Expr }
 
-TerminateDecl = { "terminate" ~Expr }
+TerminateDecl = { "close" ~Expr }
 
 IncludeStatement = { "include"~ StringLiteral}
 
@@ -43,7 +43,7 @@ ConstantStream = { "constant " ~ Ident ~ ":" ~ Type ~":=" ~Literal}
 
 InputStream = { "input " ~ Ident ~ ParamList? ~ ":" ~ Type ~(","~ Ident~ ParamList? ~ ":" ~ Type)*}
 
-OutputStream = { "output " ~ Ident ~ ParamList?~ (":" ~ Type)? ~ ActivationCondition? ~ TemplateSpec? ~":="~ Expr}
+OutputStream = { "output " ~ Ident ~ ParamList?~ (":" ~ Type)? ~ ActivationCondition? ~ TemplateSpec? ~ TerminateDecl? ~":="~ Expr}
 
 Trigger = { "trigger " ~ Expr ~ StringLiteral?}
 
