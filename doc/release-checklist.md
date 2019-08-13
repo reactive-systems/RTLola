@@ -9,7 +9,10 @@ See also [CLI Workgroup Tutorial on Packaging Rust](https://rust-lang-nursery.gi
 
 ### Linux
 
+Docker image: `rust:latest`
+
 ```bash
+apt install musl-dev musl-tools clang
 export TARGET=x86_64-unknown-linux-musl
 rustup target add $TARGET
 cargo build --release --target $TARGET --locked --features public
