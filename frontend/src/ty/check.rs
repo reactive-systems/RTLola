@@ -1602,14 +1602,14 @@ mod tests {
     #[test]
     #[ignore] // parametric streams need new design after syntax revision
     fn parametric_input() {
-        let spec = "input i<a: Int8, b: Bool>: Int8\noutput o := i(1,false)[0].defaults(to: 42)";
+        let spec = "input i(a: Int8, b: Bool): Int8\noutput o := i(1,false)[0].defaults(to: 42)";
         assert_eq!(0, num_type_errors(spec));
         assert_eq!(get_type(spec), ValueTy::Int(IntTy::I8));
     }
 
     #[test]
     fn parametric_declaration() {
-        let spec = "output x <a: UInt8, b: Bool>: Int8 := 1 output y := x(1, false)";
+        let spec = "output x(a: UInt8, b: Bool): Int8 := 1 output y := x(1, false)";
         assert_eq!(0, num_type_errors(spec));
         assert_eq!(get_type(spec), ValueTy::Int(IntTy::I8));
     }
@@ -1877,34 +1877,34 @@ mod tests {
 
     #[test]
     fn test_param_spec() {
-        let spec = "output a<p1: Int8>: Int8 := 3 output b: Int8 := a(3)";
+        let spec = "output a(p1: Int8): Int8 := 3 output b: Int8 := a(3)";
         assert_eq!(0, num_type_errors(spec));
         assert_eq!(get_type(spec), ValueTy::Int(IntTy::I8));
     }
 
     #[test]
     fn test_param_spec_faulty() {
-        let spec = "output a<p1: Int8>: Int8:= 3 output b: Int8 := a(true)";
+        let spec = "output a(p1: Int8): Int8:= 3 output b: Int8 := a(true)";
         assert_eq!(1, num_type_errors(spec));
     }
 
     #[test]
     fn test_param_inferred() {
-        let spec = "input i: Int8 output x<param>: Int8 := 3 output y: Int8 := x(i)";
+        let spec = "input i: Int8 output x(param): Int8 := 3 output y: Int8 := x(i)";
         assert_eq!(0, num_type_errors(spec));
         assert_eq!(get_type(spec), ValueTy::Int(IntTy::I8));
     }
 
     #[test]
     fn test_param_inferred_conflicting() {
-        let spec = "input i: Int8, j: UInt8 output x<param>: Int8 := 3 output y: Int8 := x(i) output z: Int8 := x(j)";
+        let spec = "input i: Int8, j: UInt8 output x(param): Int8 := 3 output y: Int8 := x(i) output z: Int8 := x(j)";
         assert_eq!(1, num_type_errors(spec));
         assert_eq!(get_type(spec), ValueTy::Int(IntTy::I8));
     }
 
     #[test]
     fn test_lookup_incomp() {
-        let spec = "output a<p1: Int8>: Int8 := 3\n output b: UInt8 := a(3)";
+        let spec = "output a(p1: Int8): Int8 := 3\n output b: UInt8 := a(3)";
         assert_eq!(1, num_type_errors(spec));
     }
 

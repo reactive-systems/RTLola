@@ -516,7 +516,7 @@ mod tests {
 
     #[test]
     fn unknown_types_are_reported() {
-        assert_eq!(3, number_of_naming_errors("output test<ab: B, c: D>: E := 3"))
+        assert_eq!(3, number_of_naming_errors("output test(ab: B, c: D): E := 3"))
     }
 
     #[test]
@@ -538,12 +538,12 @@ mod tests {
 
     #[test]
     fn duplicate_parameters_are_not_allowed_for_outputs() {
-        assert_eq!(1, number_of_naming_errors("output test<ab: Int8, ab: Int8> := 3"))
+        assert_eq!(1, number_of_naming_errors("output test(ab: Int8, ab: Int8) := 3"))
     }
 
     #[test]
     fn duplicate_parameters_are_not_allowed_for_inputs() {
-        assert_eq!(1, number_of_naming_errors("input test<ab: Int8, ab: Int8> : Int8"))
+        assert_eq!(1, number_of_naming_errors("input test(ab: Int8, ab: Int8) : Int8"))
     }
 
     #[test]
@@ -601,13 +601,13 @@ mod tests {
 
     #[test]
     fn parametric_output() {
-        let spec = "output x <a: UInt8, b: Bool>: Int8 := 1 output y := x(1, false)";
+        let spec = "output x (a: UInt8, b: Bool): Int8 := 1 output y := x(1, false)";
         assert_eq!(0, number_of_naming_errors(spec));
     }
 
     #[test]
     fn test_param_spec_wrong_parameters() {
-        let spec = "input in<a: Int8, b: Int8>: Int8\noutput x := in(1)";
+        let spec = "input in(a: Int8, b: Int8): Int8\noutput x := in(1)";
         assert_eq!(1, number_of_naming_errors(spec));
     }
 }

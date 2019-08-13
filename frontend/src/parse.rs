@@ -946,7 +946,7 @@ mod tests {
 
     #[test]
     fn build_ast_parameterized_input() {
-        let spec = "input in <ab: Int8>: Int8\n";
+        let spec = "input in (ab: Int8): Int8\n";
         let throw = |e| panic!("{}", e);
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
         let ast = parse(spec, &handler).unwrap_or_else(throw);
@@ -1152,7 +1152,7 @@ mod tests {
 
     #[test]
     fn build_parameter_list() {
-        let spec = "output s <a: B, c: D>: E := 3\n";
+        let spec = "output s (a: B, c: D): E := 3\n";
         let throw = |e| panic!("{}", e);
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
         let ast = parse(spec, &handler).unwrap_or_else(throw);

@@ -49,7 +49,7 @@ impl Display for Input {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         write!(f, "input {}", self.name)?;
         if !self.params.is_empty() {
-            write_delim_list(f, &self.params, " <", ">", ", ")?;
+            write_delim_list(f, &self.params, " (", ")", ", ")?;
         }
         write!(f, ": {}", self.ty)
     }
@@ -59,7 +59,7 @@ impl Display for Output {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         write!(f, "output {}", self.name)?;
         if !self.params.is_empty() {
-            write_delim_list(f, &self.params, " <", ">", ", ")?;
+            write_delim_list(f, &self.params, " (", ")", ", ")?;
         }
         match self.ty.kind {
             TypeKind::Inferred => {}
