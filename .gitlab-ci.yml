@@ -44,6 +44,9 @@ check-ignored-tests:
 cargo:test:
   stage: test
   image: rust:latest
+  before_script:
+    - apt-get update -yqq
+    - apt-get install -yqq --no-install-recommends libpcap-dev
   script:
     - rustc --version && cargo --version      # Print version info for debugging
     - cargo test --all --verbose
@@ -64,6 +67,9 @@ cargo:test:windows:
 cargo:test-nightly:
   stage: tests
   image: rustlang/rust:nightly
+  before_script:
+    - apt-get update -yqq
+    - apt-get install -yqq --no-install-recommends libpcap-dev
   script:
     - rustc --version && cargo --version      # Print version info for debugging
     - cargo test --all --verbose
@@ -73,6 +79,9 @@ cargo:test-nightly:
 integration_tests:
   stage: tests
   image: rust:latest
+  before_script:
+    - apt-get update -yqq
+    - apt-get install -yqq --no-install-recommends libpcap-dev
   variables:
     BUILD_MODE: "release"
   script:
@@ -84,6 +93,9 @@ cargo:bench:
   tags:
     - benchmarking
   image: rustlang/rust:nightly
+  before_script:
+    - apt-get update -yqq
+    - apt-get install -yqq --no-install-recommends libpcap-dev
   script:
     - rustc --version && cargo --version      # Print version info for debugging
     - cargo bench --quiet | grep -e 'bench:' | tee bench_results.txt # TODO: actually compare the results
