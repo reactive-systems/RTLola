@@ -7,11 +7,11 @@ For example, in network monitoring, we often compute properties per source IP ad
 
 ## Desgin
 
-Readability and familarity is a major factor in the design of parameterization.
+Readability and familiarity is a major factor in the design of parameterization.
 
 ### Syntax
 
-Declaration of parametric outputs is given by the grammar
+Declaration of parametric outputs is given by the grammar:
 
 ```
 OUTPUT      := output NAME ( PARAMETERS ) FILTER TERMINATION : TYPE AC := EXPRESSION
@@ -19,6 +19,21 @@ PARAMETERS  := (NAME (: TYPE)?)+
 FILTER      := filter EXPRESSION
 TERMINATION := close EXPRESSION
 ```
+
+### Semantics
+
+### General
+
+If a parametric stream $x$ with parameters $t_1, ..., t_n$ is accessed with values $v_1, ..., v_n$ we decide between the following two cases:
+
+* If the stream has not yet been accessed with these values, a new instance of the stream is created and the parameters of the stream instance are bound to the values $v_1, ..., v_n$. The stream access to that instance can than be evaluated in the same way as for non parametrized streams.
+* Otherwise, the stream access to the existing instance for the values $v_1, ..., v_n$ can be evaluated in the same way as for non parameterized streams.
+
+### Filter
+The filter expression should evaluate to a value of type $Bool$. It poses an additional constraint to the activation condition of a stream, i.e. the stream is only evaluated if the activation condition is met and the filter expression evaluates to true.
+
+### Close
+The close expression should evaluate to a value of type $Bool$. It determines when an instance of a parametrized stream can be removed from the evaluation context, i.e. it is no longer needed.
 
 ### Examples
 
@@ -29,7 +44,7 @@ TERMINATION := close EXPRESSION
 
 #### Full Example:
 ```
-input Protocol: String, Source: String, Destination: String, Payload: String, Direction: String
+input Protocol: String, Destination: String, Payload: String, Direction: String
 input Src_Port: UInt16
 
 output ftp   := Protocol="TCP" & Src_Port=21 & Direction="Outgoing"
@@ -43,6 +58,10 @@ output FTPBruteforce(dst: String): UInt8
                                 
 trigger ftp & start & FTPBruteforce(Destination) > 5
 ```
+
+#### An evaluation snapshot:
+
+![alt text](parameterization_example.png "evaluation snapshot")
 
 
 
