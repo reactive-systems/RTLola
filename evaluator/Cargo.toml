@@ -18,6 +18,8 @@ streamlab-common = {path = "../common/"}
 streamlab-frontend = {path = "../frontend/"}
 ordered-float = "1.0.2"
 csv = "1.1.1"
+pcap = "0.7" # pcap file parsing
+etherparse = "0.8.2" # Network Packet parser
 clap = "2.33.0"  # command line parsing
 byteorder = "1.3.2"
 crossterm = "0.10.2"  # terminal output

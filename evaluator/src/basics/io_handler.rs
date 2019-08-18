@@ -1,7 +1,7 @@
 #![allow(clippy::mutex_atomic)]
 
 use super::{EvalConfig, TimeFormat, TimeRepresentation, Verbosity};
-use crate::basics::{CSVEventSource, CSVInputSource};
+use crate::basics::{CSVEventSource, CSVInputSource, PCAPEventSource, PCAPInputSource};
 use crate::storage::Value;
 use crossterm::{cursor, terminal, ClearType};
 use std::error::Error;
@@ -19,6 +19,7 @@ pub type Time = Duration;
 #[derive(Debug, Clone)]
 pub enum EventSourceConfig {
     CSV { src: CSVInputSource },
+    PCAP { src: PCAPInputSource },
 }
 
 /// A trait that represents the functioniality needed for an event source.
@@ -43,6 +44,7 @@ pub(crate) fn create_event_source(
     use EventSourceConfig::*;
     match config {
         CSV { src } => CSVEventSource::setup(&src, ir, start_time),
+        PCAP { src } => PCAPEventSource::setup(&src, ir, start_time),
     }
 }
 
