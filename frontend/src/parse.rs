@@ -1266,4 +1266,12 @@ mod tests {
             ]
         };
     }
+
+    #[test]
+    fn handle_bom() {
+        let spec = "\u{feff}input a: Bool\n";
+        let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
+        let ast = parse(spec, &handler).unwrap_or_else(|e| panic!("{}", e));
+        cmp_ast_spec(&ast, "input a: Bool\n");
+    }
 }

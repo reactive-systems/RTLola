@@ -5,12 +5,12 @@
 // TODO we can probably mark some rules as atomic or hidden
 
 IncompleteSpec = { SOI ~ LanguageSpec? ~ ImportStmts ~ Declaration* }
-Spec = { SOI ~ LanguageSpec? ~ ImportStmts ~ Declaration* ~ EOI }
+Spec = { SOI~ (BOM)? ~ LanguageSpec? ~ ImportStmts ~ Declaration* ~ EOI }
 LanguageSpec ={ "//!" ~("ClassicLola" | "Lola2.0" | "RTLola") }
 ImportStmts = _{ ImportStmt* }
 ImportStmt  = { "import " ~ Ident }
 Declaration = _{IncludeStatement | TypeDecl | ConstantStream | InputStream | OutputStream | Trigger}
-
+BOM = _{"\u{FEFF}"}
 //////////////////////////////////////////////////
 /////////////////// Statements ///////////////////
 //////////////////////////////////////////////////
