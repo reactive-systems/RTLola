@@ -5,7 +5,8 @@ use crate::parse::{Ident, NodeId, Span};
 use crate::reporting::{Handler, LabeledSpan};
 use crate::stdlib;
 use crate::stdlib::FuncDecl;
-use crate::ty::{TypeConfig, ValueTy};
+use crate::ty::ValueTy;
+use crate::FrontendConfig;
 use std::collections::HashMap;
 
 // These MUST all be lowercase
@@ -50,10 +51,10 @@ pub(crate) struct NamingAnalysis<'a, 'b> {
 }
 
 impl<'a, 'b> NamingAnalysis<'a, 'b> {
-    pub(crate) fn new(handler: &'b Handler, config: TypeConfig) -> Self {
+    pub(crate) fn new(handler: &'b Handler, config: FrontendConfig) -> Self {
         let mut scoped_decls = ScopedDecl::new();
 
-        for (name, ty) in ValueTy::primitive_types(config) {
+        for (name, ty) in ValueTy::primitive_types(config.ty) {
             scoped_decls.add_decl_for(name, Declaration::Type(ty));
         }
 
@@ -495,7 +496,7 @@ mod tests {
     fn number_of_naming_errors(content: &str) -> usize {
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), content));
         let ast = parse(content, &handler).unwrap_or_else(|e| panic!("{}", e));
-        let mut naming_analyzer = NamingAnalysis::new(&handler, TypeConfig::default());
+        let mut naming_analyzer = NamingAnalysis::new(&handler, FrontendConfig::default());
         naming_analyzer.check(&ast);
         handler.emitted_errors()
     }

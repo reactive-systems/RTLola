@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use crate::analysis;
 use crate::parse::SourceMapper;
 use crate::reporting::Handler;
-use crate::ty::TypeConfig;
+use crate::FrontendConfig;
 
 pub fn analyze(filename: &str) {
     let contents = fs::read_to_string(filename).unwrap_or_else(|e| {
@@ -17,7 +17,7 @@ pub fn analyze(filename: &str) {
         eprintln!("parse error:\n{}", e);
         std::process::exit(1)
     });
-    let _report = analysis::analyze(&spec, &handler, TypeConfig { use_64bit_only: false, type_aliases: false });
+    let _report = analysis::analyze(&spec, &handler, FrontendConfig::default());
     //println!("{:?}", report);
     //use crate::analysis::graph_based_analysis::MemoryBound;
     //report.graph_analysis_result.map(|r| match r.memory_requirements {

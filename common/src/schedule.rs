@@ -132,12 +132,12 @@ mod tests {
     #[allow(unused_imports)]
     use super::*;
     use streamlab_frontend::ir::LolaIR;
-    use streamlab_frontend::TypeConfig;
+    use streamlab_frontend::FrontendConfig;
 
     use num::ToPrimitive;
 
     fn to_ir(spec: &str) -> LolaIR {
-        streamlab_frontend::parse("stdin", spec, TypeConfig::default()).expect("spec was invalid")
+        streamlab_frontend::parse("stdin", spec, FrontendConfig::default()).expect("spec was invalid")
     }
 
     #[test]

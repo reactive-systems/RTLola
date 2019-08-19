@@ -831,14 +831,14 @@ mod tests {
     use crate::parse::SourceMapper;
     use crate::reporting::Handler;
     use crate::ty::check::TypeAnalysis;
-    use crate::ty::TypeConfig;
+    use crate::FrontendConfig;
     use std::path::PathBuf;
 
     /// Parses the content, runs naming analysis, and check expected number of errors and version
     fn check_graph(content: &str, num_errors: usize, num_warnings: usize) {
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), content));
         let ast = parse(content, &handler).unwrap_or_else(|e| panic!("{}", e));
-        let mut naming_analyzer = NamingAnalysis::new(&handler, TypeConfig::default());
+        let mut naming_analyzer = NamingAnalysis::new(&handler, FrontendConfig::default());
         let mut decl_table = naming_analyzer.check(&ast);
         let mut type_analysis = TypeAnalysis::new(&handler, &mut decl_table);
         let type_table = type_analysis.check(&ast);

@@ -648,10 +648,10 @@ mod tests {
     use crate::storage::Value::*;
     use std::time::{Duration, Instant};
     use streamlab_frontend::ir::LolaIR;
-    use streamlab_frontend::TypeConfig;
+    use streamlab_frontend::FrontendConfig;
 
     fn parse(spec: &str) -> Result<LolaIR, String> {
-        streamlab_frontend::parse("stdin", spec, TypeConfig::default())
+        streamlab_frontend::parse("stdin", spec, FrontendConfig::default())
     }
 
     fn setup(spec: &str) -> (LolaIR, EvaluatorData, Instant) {

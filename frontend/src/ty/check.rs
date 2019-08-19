@@ -1513,8 +1513,8 @@ mod tests {
     use crate::analysis::naming::*;
     use crate::parse::*;
     use crate::reporting::Handler;
-    use crate::ty::TypeConfig;
     use crate::ty::{FloatTy, IntTy, UIntTy};
+    use crate::FrontendConfig;
     use num::rational::Rational64 as Rational;
     use num::FromPrimitive;
     use std::path::PathBuf;
@@ -1526,7 +1526,7 @@ mod tests {
             Err(e) => panic!("Spec {} cannot be parsed: {}.", spec, e),
             Ok(s) => s,
         };
-        let mut na = NamingAnalysis::new(&handler, TypeConfig::default());
+        let mut na = NamingAnalysis::new(&handler, FrontendConfig::default());
         let mut decl_table = na.check(&spec);
         assert!(!handler.contains_error(), "Spec produces errors in naming analysis.");
         let mut type_analysis = TypeAnalysis::new(&handler, &mut decl_table);
@@ -1541,7 +1541,7 @@ mod tests {
             Err(e) => panic!("Spec {} cannot be parsed: {}.", spec, e),
             Ok(s) => s,
         };
-        let mut na = NamingAnalysis::new(&handler, TypeConfig::default());
+        let mut na = NamingAnalysis::new(&handler, FrontendConfig::default());
         let mut decl_table = na.check(&spec);
         assert!(!handler.contains_error(), "Spec produces errors in naming analysis.");
         let mut type_analysis = TypeAnalysis::new(&handler, &mut decl_table);
@@ -1557,7 +1557,7 @@ mod tests {
             Err(e) => panic!("Spec {} cannot be parsed: {}.", spec, e),
             Ok(s) => s,
         };
-        let mut na = NamingAnalysis::new(&handler, TypeConfig::default());
+        let mut na = NamingAnalysis::new(&handler, FrontendConfig::default());
         let mut decl_table = na.check(&spec);
         assert!(!handler.contains_error(), "Spec produces errors in naming analysis.");
         let mut type_analysis = TypeAnalysis::new(&handler, &mut decl_table);
@@ -1572,7 +1572,7 @@ mod tests {
             Err(e) => panic!("Spec {} cannot be parsed: {}.", spec, e),
             Ok(s) => s,
         };
-        let mut na = NamingAnalysis::new(&handler, TypeConfig::default());
+        let mut na = NamingAnalysis::new(&handler, FrontendConfig::default());
         let mut decl_table = na.check(&spec);
         assert!(!handler.contains_error(), "Spec produces errors in naming analysis.");
         let mut type_analysis = TypeAnalysis::new(&handler, &mut decl_table);

@@ -18,13 +18,15 @@ use clap::{App, AppSettings, Arg, ArgGroup, SubCommand};
 use std::fs;
 use streamlab_frontend;
 use streamlab_frontend::ir::LolaIR;
-use streamlab_frontend::TypeConfig;
+use streamlab_frontend::{FrontendConfig, TypeConfig};
 
 #[derive(Debug, Clone)]
 pub struct Config {
     cfg: EvalConfig,
     ir: LolaIR,
 }
+
+const CONFIG: FrontendConfig = FrontendConfig { ty: TypeConfig { use_64bit_only: true, type_aliases: false } };
 
 impl Config {
     pub fn new(args: &[String]) -> Self {
@@ -158,11 +160,7 @@ impl Config {
             std::process::exit(1)
         });
 
-        let ir = match streamlab_frontend::parse(
-            &filename,
-            contents.as_str(),
-            TypeConfig { use_64bit_only: true, type_aliases: false },
-        ) {
+        let ir = match streamlab_frontend::parse(&filename, contents.as_str(), CONFIG) {
             Ok(ir) => ir,
             Err(err) => {
                 eprintln!("{}", err);

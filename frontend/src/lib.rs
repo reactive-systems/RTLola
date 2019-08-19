@@ -24,13 +24,18 @@ use crate::ir::{FeatureFlag, LolaIR};
 // Re-export
 pub use ty::TypeConfig;
 
+#[derive(Debug, Clone, Copy, Default)]
+pub struct FrontendConfig {
+    pub ty: TypeConfig,
+}
+
 pub trait LolaBackend {
     /// Returns collection of feature flags supported by the `LolaBackend`.
     fn supported_feature_flags() -> Vec<FeatureFlag>;
 }
 
 // Replace by more elaborate interface.
-pub fn parse(filename: &str, spec_str: &str, config: ty::TypeConfig) -> Result<LolaIR, String> {
+pub fn parse(filename: &str, spec_str: &str, config: FrontendConfig) -> Result<LolaIR, String> {
     let mapper = crate::parse::SourceMapper::new(std::path::PathBuf::from(filename), spec_str);
     let handler = reporting::Handler::new(mapper);
 
