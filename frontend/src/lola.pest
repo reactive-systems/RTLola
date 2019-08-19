@@ -80,8 +80,8 @@ ParenthesizedExpression = {OpeningParenthesis ~ Expr ~ ClosingParenthesis | Open
 OpeningParenthesis = {"("}
 ClosingParenthesis = {")"}
 
-MissingClosingParenthesis = {WHITESPACE* ~ &("then" | "else" |"output" | "input" | "trigger" | "constant" | "Type" | "include" | EOI)}
-MissingExpression = {WHITESPACE* ~ &("then" | "else" |")"|"output" | "input" | "trigger" | "constant" | "Type" | "include" | EOI)}
+MissingClosingParenthesis = {WHITESPACE* ~ &("then " | "else " |"output " | "input " | "trigger " | "constant " | "Type " | "include " | EOI)}
+MissingExpression = {WHITESPACE* ~ &("then " | "else " |")"|"output " | "input " | "trigger " | "constant " | "Type " | "include " | EOI)}
 
 // Functions
 FunctionExpr = { FunctionSymbol ~ GenericParam? ~ FunctionArgs }
