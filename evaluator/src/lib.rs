@@ -26,7 +26,8 @@ pub struct Config {
     ir: LolaIR,
 }
 
-const CONFIG: FrontendConfig = FrontendConfig { ty: TypeConfig { use_64bit_only: true, type_aliases: false } };
+const CONFIG: FrontendConfig =
+    FrontendConfig { ty: TypeConfig { use_64bit_only: true, type_aliases: false }, allow_parameters: false };
 
 impl Config {
     pub fn new(args: &[String]) -> Self {
@@ -146,7 +147,7 @@ impl Config {
         // Now we have a reference to clone's matches
         if let Some(parse_matches) = parse_matches.subcommand_matches("analyze") {
             let filename = parse_matches.value_of("ANALYZE_SPEC").map(|s| s.to_string()).unwrap();
-            streamlab_frontend::export::analyze(filename.as_str());
+            streamlab_frontend::export::analyze(filename.as_str(), crate::CONFIG);
             std::process::exit(0);
         }
 

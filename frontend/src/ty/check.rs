@@ -1547,7 +1547,7 @@ mod tests {
     fn num_type_errors(spec: &str) -> usize {
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
 
-        let spec = match parse(spec, &handler) {
+        let spec = match parse(spec, &handler, FrontendConfig::default()) {
             Err(e) => panic!("Spec {} cannot be parsed: {}.", spec, e),
             Ok(s) => s,
         };
@@ -1562,7 +1562,7 @@ mod tests {
     fn num_type_warnings(spec: &str) -> usize {
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
 
-        let spec = match parse(spec, &handler) {
+        let spec = match parse(spec, &handler, FrontendConfig::default()) {
             Err(e) => panic!("Spec {} cannot be parsed: {}.", spec, e),
             Ok(s) => s,
         };
@@ -1578,7 +1578,7 @@ mod tests {
     fn get_type(spec: &str) -> ValueTy {
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
 
-        let spec = match parse(spec, &handler) {
+        let spec = match parse(spec, &handler, FrontendConfig::default()) {
             Err(e) => panic!("Spec {} cannot be parsed: {}.", spec, e),
             Ok(s) => s,
         };
@@ -1593,7 +1593,7 @@ mod tests {
     fn type_check(spec: &str) -> TypeTable {
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
 
-        let spec = match parse(spec, &handler) {
+        let spec = match parse(spec, &handler, FrontendConfig::default()) {
             Err(e) => panic!("Spec {} cannot be parsed: {}.", spec, e),
             Ok(s) => s,
         };
@@ -1874,21 +1874,21 @@ mod tests {
 
     #[test]
     fn test_terminate_type() {
-        let spec = "input in: Bool\n output a: Int8 close in := 3";
+        let spec = "input in: Bool\n output a(b: Bool): Int8 close in := 3";
         assert_eq!(0, num_type_errors(spec));
         assert_eq!(get_type(spec), ValueTy::Int(IntTy::I8));
     }
 
     #[test]
     fn test_terminate_type_faulty() {
-        let spec = "input in: Int8\n output a: Int8 close in := 3";
+        let spec = "input in: Int8\n output a(b: Bool): Int8 close in := 3";
         assert_eq!(1, num_type_errors(spec));
     }
 
     #[test]
     fn test_terminate_type_faulty_ac() {
         // stream type is not compatible
-        let spec = "input in: Int8 input in2: Bool output a: Int8 @in close in2 := 3";
+        let spec = "input in: Int8 input in2: Bool output a(b: Bool): Int8 @in close in2 := 3";
         assert_eq!(1, num_type_errors(spec));
     }
 

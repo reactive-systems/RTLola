@@ -24,9 +24,16 @@ use crate::ir::{FeatureFlag, LolaIR};
 // Re-export
 pub use ty::TypeConfig;
 
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy)]
 pub struct FrontendConfig {
     pub ty: TypeConfig,
+    pub allow_parameters: bool,
+}
+
+impl Default for FrontendConfig {
+    fn default() -> Self {
+        Self { ty: TypeConfig::default(), allow_parameters: true }
+    }
 }
 
 pub trait LolaBackend {
@@ -39,7 +46,7 @@ pub fn parse(filename: &str, spec_str: &str, config: FrontendConfig) -> Result<L
     let mapper = crate::parse::SourceMapper::new(std::path::PathBuf::from(filename), spec_str);
     let handler = reporting::Handler::new(mapper);
 
-    let spec = match crate::parse::parse(&spec_str, &handler) {
+    let spec = match crate::parse::parse(&spec_str, &handler, config) {
         Result::Ok(spec) => spec,
         Result::Err(e) => {
             return Err(format!("error: invalid syntax:\n{}", e));

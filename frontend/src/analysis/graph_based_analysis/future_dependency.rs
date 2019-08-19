@@ -95,7 +95,7 @@ mod tests {
         expected_future_dependent: Vec<usize>,
     ) {
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), content));
-        let spec = parse(content, &handler).unwrap_or_else(|e| panic!("{}", e));
+        let spec = parse(content, &handler, FrontendConfig::default()).unwrap_or_else(|e| panic!("{}", e));
         let mut naming_analyzer = NamingAnalysis::new(&handler, FrontendConfig::default());
         let mut decl_table = naming_analyzer.check(&spec);
         let mut type_analysis = TypeAnalysis::new(&handler, &mut decl_table);

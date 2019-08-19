@@ -11,10 +11,13 @@ use simplelog::*;
 
 use crate::analysis;
 use crate::ir::lowering::Lowering;
-use crate::parse::SourceMapper;
-use crate::parse::{LolaParser, Rule};
+use crate::parse::{LolaParser, Rule, SourceMapper};
 use crate::reporting::Handler;
+use crate::ty::TypeConfig;
 use crate::FrontendConfig;
+
+const CONFIG: FrontendConfig =
+    FrontendConfig { ty: TypeConfig { use_64bit_only: true, type_aliases: true }, allow_parameters: true };
 
 enum Analysis {
     Parse,
@@ -101,7 +104,7 @@ impl Config {
                 Ok(())
             }
             Analysis::AST => {
-                let spec = crate::parse::parse(&contents, &handler).unwrap_or_else(|e| {
+                let spec = crate::parse::parse(&contents, &handler, self::CONFIG).unwrap_or_else(|e| {
                     eprintln!("parse error:\n{}", e);
                     std::process::exit(1)
                 });
@@ -109,7 +112,7 @@ impl Config {
                 Ok(())
             }
             Analysis::Prettyprint => {
-                let spec = crate::parse::parse(&contents, &handler).unwrap_or_else(|e| {
+                let spec = crate::parse::parse(&contents, &handler, self::CONFIG).unwrap_or_else(|e| {
                     eprintln!("parse error:\n{}", e);
                     std::process::exit(1)
                 });
@@ -117,11 +120,11 @@ impl Config {
                 Ok(())
             }
             Analysis::Analyze => {
-                let spec = crate::parse::parse(&contents, &handler).unwrap_or_else(|e| {
+                let spec = crate::parse::parse(&contents, &handler, self::CONFIG).unwrap_or_else(|e| {
                     eprintln!("parse error:\n{}", e);
                     std::process::exit(1)
                 });
-                let report = analysis::analyze(&spec, &handler, FrontendConfig::default());
+                let report = analysis::analyze(&spec, &handler, self::CONFIG);
                 //println!("{:?}", report);
                 use crate::analysis::graph_based_analysis::MemoryBound;
                 report.graph_analysis_result.map(|r| match r.memory_requirements {
@@ -134,12 +137,12 @@ impl Config {
                 Ok(())
             }
             Analysis::IR => {
-                let spec = crate::parse::parse(&contents, &handler).unwrap_or_else(|e| {
+                let spec = crate::parse::parse(&contents, &handler, self::CONFIG).unwrap_or_else(|e| {
                     eprintln!("parse error:\n{}", e);
                     std::process::exit(1)
                 });
 
-                let analysis_result = crate::analysis::analyze(&spec, &handler, FrontendConfig::default());
+                let analysis_result = crate::analysis::analyze(&spec, &handler, self::CONFIG);
                 if !analysis_result.is_success() {
                     return Ok(()); // TODO throw a good `Error`
                 }

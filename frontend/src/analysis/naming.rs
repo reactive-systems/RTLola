@@ -511,7 +511,7 @@ mod tests {
     /// Parses the content, runs naming analysis, and returns number of errors
     fn number_of_naming_errors(content: &str) -> usize {
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), content));
-        let ast = parse(content, &handler).unwrap_or_else(|e| panic!("{}", e));
+        let ast = parse(content, &handler, FrontendConfig::default()).unwrap_or_else(|e| panic!("{}", e));
         let mut naming_analyzer = NamingAnalysis::new(&handler, FrontendConfig::default());
         naming_analyzer.check(&ast);
         handler.emitted_errors()

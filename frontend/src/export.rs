@@ -6,14 +6,14 @@ use crate::parse::SourceMapper;
 use crate::reporting::Handler;
 use crate::FrontendConfig;
 
-pub fn analyze(filename: &str) {
+pub fn analyze(filename: &str, config: FrontendConfig) {
     let contents = fs::read_to_string(filename).unwrap_or_else(|e| {
         eprintln!("Could not read file `{}`: {}", filename, e);
         std::process::exit(1)
     });
     let mapper = SourceMapper::new(PathBuf::from(filename), &contents);
     let handler = Handler::new(mapper);
-    let spec = crate::parse::parse(&contents, &handler).unwrap_or_else(|e| {
+    let spec = crate::parse::parse(&contents, &handler, config).unwrap_or_else(|e| {
         eprintln!("parse error:\n{}", e);
         std::process::exit(1)
     });

@@ -140,12 +140,13 @@ mod tests {
     use crate::parse::parse;
     use crate::parse::SourceMapper;
     use crate::reporting::Handler;
+    use crate::FrontendConfig;
     use std::path::PathBuf;
 
     /// Parses the content, runs AST verifier, and returns number of warnings
     fn number_of_warnings(content: &str) -> usize {
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), content));
-        let ast = parse(content, &handler).unwrap_or_else(|e| panic!("{}", e));
+        let ast = parse(content, &handler, FrontendConfig::default()).unwrap_or_else(|e| panic!("{}", e));
         super::Verifier::new(&ast, &handler).check();
         handler.emitted_warnings()
     }
@@ -153,7 +154,7 @@ mod tests {
     /// Parses the content, runs AST verifier, and returns number of errors
     fn number_of_errors(content: &str) -> usize {
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), content));
-        let ast = parse(content, &handler).unwrap_or_else(|e| panic!("{}", e));
+        let ast = parse(content, &handler, FrontendConfig::default()).unwrap_or_else(|e| panic!("{}", e));
         super::Verifier::new(&ast, &handler).check();
         handler.emitted_errors()
     }

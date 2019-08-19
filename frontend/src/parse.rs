@@ -2,6 +2,7 @@
 
 use super::ast::*;
 use crate::reporting::{Handler, LabeledSpan};
+use crate::FrontendConfig;
 use lazy_static::lazy_static;
 use pest;
 use pest::iterators::{Pair, Pairs};
@@ -13,6 +14,14 @@ use std::path::PathBuf;
 #[derive(Parser)]
 #[grammar = "lola.pest"]
 pub(crate) struct LolaParser;
+
+#[derive(Debug)]
+pub(crate) struct StreamlabParser<'a, 'b> {
+    content: &'a str,
+    spec: LolaSpec,
+    handler: &'b Handler,
+    config: FrontendConfig,
+}
 
 lazy_static! {
     // precedence taken from C/C++: https://en.wikipedia.org/wiki/Operators_in_C_and_C++
@@ -35,175 +44,218 @@ lazy_static! {
     };
 }
 
-/**
- * Transforms a textual representation of a Lola specification into
- * an AST representation.
- */
-pub(crate) fn parse<'a, 'b>(content: &'a str, handler: &'b Handler) -> Result<LolaSpec, pest::error::Error<Rule>> {
-    let mut pairs = LolaParser::parse(Rule::Spec, content)?;
-    let mut spec = LolaSpec::new();
-    assert!(pairs.clone().count() == 1, "Spec must not be empty.");
-    let spec_pair = pairs.next().unwrap();
-    assert!(spec_pair.as_rule() == Rule::Spec);
-    for pair in spec_pair.into_inner() {
-        match pair.as_rule() {
-            Rule::LanguageSpec => {
-                spec.language = Some(LanguageSpec::from(pair.as_str()));
-            }
-            Rule::ImportStmt => {
-                let import = parse_import(&mut spec, pair);
-                spec.imports.push(import);
-            }
-            Rule::ConstantStream => {
-                let constant = parse_constant(&mut spec, pair);
-                spec.constants.push(constant);
-            }
-            Rule::InputStream => {
-                let input = parse_inputs(&mut spec, pair);
-                spec.inputs.extend(input);
-            }
-            Rule::OutputStream => {
-                let output = parse_output(&mut spec, pair, handler);
-                spec.outputs.push(output);
-            }
-            Rule::Trigger => {
-                let trigger = parse_trigger(&mut spec, pair, handler);
-                spec.trigger.push(trigger);
-            }
-            Rule::TypeDecl => {
-                let type_decl = parse_type_declaration(&mut spec, pair);
-                spec.type_declarations.push(type_decl);
-            }
-            Rule::EOI => {}
-            _ => unreachable!(),
-        }
+impl<'a, 'b> StreamlabParser<'a, 'b> {
+    pub(crate) fn new(content: &'a str, handler: &'b Handler, config: FrontendConfig) -> Self {
+        Self { content, spec: LolaSpec::new(), handler, config }
     }
-    crate::analysis::id_assignment::assign_ids(&mut spec);
-    Ok(spec)
-}
 
-fn parse_import(_spec: &mut LolaSpec, pair: Pair<Rule>) -> Import {
-    assert_eq!(pair.as_rule(), Rule::ImportStmt);
-    let span = pair.as_span().into();
-    let mut pairs = pair.into_inner();
-    let name = parse_ident(&pairs.next().expect("mismatch between grammar and AST"));
-    Import { name, id: NodeId::DUMMY, span }
-}
+    pub(crate) fn parse(mut self) -> Result<LolaSpec, pest::error::Error<Rule>> {
+        let mut pairs = LolaParser::parse(Rule::Spec, self.content)?;
+        assert!(pairs.clone().count() == 1, "Spec must not be empty.");
+        let spec_pair = pairs.next().unwrap();
+        assert!(spec_pair.as_rule() == Rule::Spec);
+        for pair in spec_pair.into_inner() {
+            match pair.as_rule() {
+                Rule::LanguageSpec => {
+                    self.spec.language = Some(LanguageSpec::from(pair.as_str()));
+                }
+                Rule::ImportStmt => {
+                    let import = self.parse_import(pair);
+                    self.spec.imports.push(import);
+                }
+                Rule::ConstantStream => {
+                    let constant = self.parse_constant(pair);
+                    self.spec.constants.push(constant);
+                }
+                Rule::InputStream => {
+                    let inputs = self.parse_inputs(pair);
+                    self.spec.inputs.extend(inputs);
+                }
+                Rule::OutputStream => {
+                    let output = self.parse_output(pair);
+                    self.spec.outputs.push(output);
+                }
+                Rule::Trigger => {
+                    let trigger = parse_trigger(&mut self.spec, pair, self.handler);
+                    self.spec.trigger.push(trigger);
+                }
+                Rule::TypeDecl => {
+                    let type_decl = parse_type_declaration(pair);
+                    self.spec.type_declarations.push(type_decl);
+                }
+                Rule::EOI => {}
+                _ => unreachable!(),
+            }
+        }
+        crate::analysis::id_assignment::assign_ids(&mut self.spec);
+        Ok(self.spec)
+    }
 
-/**
- * Transforms a `Rule::ConstantStream` into `Constant` AST node.
- * Panics if input is not `Rule::ConstantStream`.
- * The constant rule consists of the following tokens:
- * - `Rule::Ident`
- * - `Rule::Type`
- * - `Rule::Literal`
- */
-fn parse_constant(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> Constant {
-    assert_eq!(pair.as_rule(), Rule::ConstantStream);
-    let span = pair.as_span().into();
-    let mut pairs = pair.into_inner();
-    let name = parse_ident(&pairs.next().expect("mismatch between grammar and AST"));
-    let ty = parse_type(spec, pairs.next().expect("mismatch between grammar and AST"));
-    let literal = parse_literal(pairs.next().expect("mismatch between grammar and AST"));
-    Constant { id: NodeId::DUMMY, name, ty: Some(ty), literal, span }
-}
+    fn parse_import(&mut self, pair: Pair<Rule>) -> Import {
+        assert_eq!(pair.as_rule(), Rule::ImportStmt);
+        let span = pair.as_span().into();
+        let mut pairs = pair.into_inner();
+        let name = parse_ident(&pairs.next().expect("mismatch between grammar and AST"));
+        Import { name, id: NodeId::DUMMY, span }
+    }
 
-/**
- * Transforms a `Rule::InputStream` into `Input` AST node.
- * Panics if input is not `Rule::InputStream`.
- * The input rule consists of non-empty sequences of following tokens:
- * - `Rule::Ident`
- * - (`Rule::ParamList`)?
- * - `Rule::Type`
- */
-fn parse_inputs(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> Vec<Input> {
-    assert_eq!(pair.as_rule(), Rule::InputStream);
-    let mut inputs = Vec::new();
-    let mut pairs = pair.into_inner();
-    while let Some(pair) = pairs.next() {
-        let start = pair.as_span().start();
-        let name = parse_ident(&pair);
+    /**
+     * Transforms a `Rule::ConstantStream` into `Constant` AST node.
+     * Panics if input is not `Rule::ConstantStream`.
+     * The constant rule consists of the following tokens:
+     * - `Rule::Ident`
+     * - `Rule::Type`
+     * - `Rule::Literal`
+     */
+    fn parse_constant(&mut self, pair: Pair<'_, Rule>) -> Constant {
+        assert_eq!(pair.as_rule(), Rule::ConstantStream);
+        let span = pair.as_span().into();
+        let mut pairs = pair.into_inner();
+        let name = parse_ident(&pairs.next().expect("mismatch between grammar and AST"));
+        let ty = parse_type(pairs.next().expect("mismatch between grammar and AST"));
+        let literal = parse_literal(pairs.next().expect("mismatch between grammar and AST"));
+        Constant { id: NodeId::DUMMY, name, ty: Some(ty), literal, span }
+    }
+
+    /**
+     * Transforms a `Rule::InputStream` into `Input` AST node.
+     * Panics if input is not `Rule::InputStream`.
+     * The input rule consists of non-empty sequences of following tokens:
+     * - `Rule::Ident`
+     * - (`Rule::ParamList`)?
+     * - `Rule::Type`
+     */
+    fn parse_inputs(&mut self, pair: Pair<'_, Rule>) -> Vec<Input> {
+        assert_eq!(pair.as_rule(), Rule::InputStream);
+        let mut inputs = Vec::new();
+        let mut pairs = pair.into_inner();
+        while let Some(pair) = pairs.next() {
+            let start = pair.as_span().start();
+            let name = parse_ident(&pair);
+
+            let mut pair = pairs.next().expect("mismatch between grammar and AST");
+            let params = if let Rule::ParamList = pair.as_rule() {
+                let res = parse_parameter_list(pair.into_inner());
+                pair = pairs.next().expect("mismatch between grammar and AST");
+
+                if !self.config.allow_parameters {
+                    self.handler.error_with_span(
+                        "Parameterization is disabled",
+                        LabeledSpan::new(res[0].span, "found parameter", true),
+                    )
+                }
+
+                res
+            } else {
+                Vec::new()
+            };
+            let end = pair.as_span().end();
+            let ty = parse_type(pair);
+            inputs.push(Input { id: NodeId::DUMMY, name, params, ty, span: Span { start, end } })
+        }
+
+        assert!(!inputs.is_empty());
+        inputs
+    }
+
+    /**
+     * Transforms a `Rule::OutputStream` into `Output` AST node.
+     * Panics if input is not `Rule::OutputStream`.
+     * The output rule consists of the following tokens:
+     * - `Rule::Ident`
+     * - `Rule::Type`
+     * - `Rule::Expr`
+     */
+    fn parse_output(&mut self, pair: Pair<'_, Rule>) -> Output {
+        assert_eq!(pair.as_rule(), Rule::OutputStream);
+        let span = pair.as_span().into();
+        let mut pairs = pair.into_inner();
+        let name = parse_ident(&pairs.next().expect("mismatch between grammar and AST"));
 
         let mut pair = pairs.next().expect("mismatch between grammar and AST");
         let params = if let Rule::ParamList = pair.as_rule() {
-            let res = parse_parameter_list(spec, pair.into_inner());
+            let res = parse_parameter_list(pair.into_inner());
             pair = pairs.next().expect("mismatch between grammar and AST");
+
+            if !self.config.allow_parameters {
+                self.handler.error_with_span(
+                    "Parameterization is disabled",
+                    LabeledSpan::new(res[0].span, "found parameter", true),
+                )
+            }
+
             res
         } else {
             Vec::new()
         };
-        let end = pair.as_span().end();
-        let ty = parse_type(spec, pair);
-        inputs.push(Input { id: NodeId::DUMMY, name, params, ty, span: Span { start, end } })
-    }
 
-    assert!(!inputs.is_empty());
-    inputs
+        let ty = if let Rule::Type = pair.as_rule() {
+            let ty = parse_type(pair);
+            pair = pairs.next().expect("mismatch between grammar and AST");
+            ty
+        } else {
+            Type::new_inferred()
+        };
+
+        // Parse the `@ [Expr]` part of output declaration
+        let extend = if let Rule::ActivationCondition = pair.as_rule() {
+            let span: Span = pair.as_span().into();
+            let expr = build_expression_ast(&mut self.spec, pair.into_inner(), self.handler);
+            pair = pairs.next().expect("mismatch between grammar and AST");
+            ActivationCondition { expr: Some(expr), id: NodeId::DUMMY, span }
+        } else {
+            ActivationCondition { expr: None, id: NodeId::DUMMY, span: Span::unknown() }
+        };
+
+        let mut tspec = None;
+        if let Rule::TemplateSpec = pair.as_rule() {
+            tspec = Some(parse_template_spec(&mut self.spec, pair, self.handler));
+            pair = pairs.next().expect("mismatch between grammar and AST");
+        };
+
+        // Parse termination condition `close EXPRESSION`
+        let termination = if let Rule::TerminateDecl = pair.as_rule() {
+            let expr = pair.into_inner().next().expect("mismatch between grammar and AST");
+            let expr = build_expression_ast(&mut self.spec, expr.into_inner(), self.handler);
+            pair = pairs.next().expect("mismatch between grammar and AST");
+
+            if !self.config.allow_parameters {
+                self.handler.error_with_span(
+                    "Parameterization is disabled",
+                    LabeledSpan::new(expr.span, "found termination condition", true),
+                )
+            }
+            if params.is_empty() {
+                self.handler.error_with_span(
+                    "Termination condition is only allowed for parameterized streams",
+                    LabeledSpan::new(expr.span, "found termination condition", true),
+                )
+            }
+
+            Some(expr)
+        } else {
+            None
+        };
+
+        // Parse expression
+        let expression = build_expression_ast(&mut self.spec, pair.into_inner(), self.handler);
+        Output { id: NodeId::DUMMY, name, ty, extend, params, template_spec: tspec, termination, expression, span }
+    }
 }
 
 /**
- * Transforms a `Rule::OutputStream` into `Output` AST node.
- * Panics if input is not `Rule::OutputStream`.
- * The output rule consists of the following tokens:
- * - `Rule::Ident`
- * - `Rule::Type`
- * - `Rule::Expr`
+ * Transforms a textual representation of a Lola specification into
+ * an AST representation.
  */
-fn parse_output(spec: &mut LolaSpec, pair: Pair<'_, Rule>, handler: &Handler) -> Output {
-    assert_eq!(pair.as_rule(), Rule::OutputStream);
-    let span = pair.as_span().into();
-    let mut pairs = pair.into_inner();
-    let name = parse_ident(&pairs.next().expect("mismatch between grammar and AST"));
-
-    let mut pair = pairs.next().expect("mismatch between grammar and AST");
-    let params = if let Rule::ParamList = pair.as_rule() {
-        let res = parse_parameter_list(spec, pair.into_inner());
-        pair = pairs.next().expect("mismatch between grammar and AST");
-        res
-    } else {
-        Vec::new()
-    };
-
-    let ty = if let Rule::Type = pair.as_rule() {
-        let ty = parse_type(spec, pair);
-        pair = pairs.next().expect("mismatch between grammar and AST");
-        ty
-    } else {
-        Type::new_inferred()
-    };
-
-    // Parse the `@ [Expr]` part of output declaration
-    let extend = if let Rule::ActivationCondition = pair.as_rule() {
-        let span: Span = pair.as_span().into();
-        let expr = build_expression_ast(spec, pair.into_inner(), handler);
-        pair = pairs.next().expect("mismatch between grammar and AST");
-        ActivationCondition { expr: Some(expr), id: NodeId::DUMMY, span }
-    } else {
-        ActivationCondition { expr: None, id: NodeId::DUMMY, span: Span::unknown() }
-    };
-
-    let mut tspec = None;
-    if let Rule::TemplateSpec = pair.as_rule() {
-        tspec = Some(parse_template_spec(spec, pair, handler));
-        pair = pairs.next().expect("mismatch between grammar and AST");
-    };
-
-    // Parse termination condition `close EXPRESSION`
-    let termination = if let Rule::TerminateDecl = pair.as_rule() {
-        let expr = pair.into_inner().next().expect("mismatch between grammar and AST");
-        let expr = build_expression_ast(spec, expr.into_inner(), handler);
-        pair = pairs.next().expect("mismatch between grammar and AST");
-        Some(expr)
-    } else {
-        None
-    };
-
-    // Parse expression
-    let expression = build_expression_ast(spec, pair.into_inner(), handler);
-    Output { id: NodeId::DUMMY, name, ty, extend, params, template_spec: tspec, termination, expression, span }
+pub(crate) fn parse<'a, 'b>(
+    content: &'a str,
+    handler: &'b Handler,
+    config: FrontendConfig,
+) -> Result<LolaSpec, pest::error::Error<Rule>> {
+    StreamlabParser::new(content, handler, config).parse()
 }
 
-fn parse_parameter_list(spec: &mut LolaSpec, param_list: Pairs<'_, Rule>) -> Vec<Parameter> {
+fn parse_parameter_list(param_list: Pairs<'_, Rule>) -> Vec<Parameter> {
     let mut params = Vec::new();
     for param_decl in param_list {
         assert_eq!(Rule::ParameterDecl, param_decl.as_rule());
@@ -212,7 +264,7 @@ fn parse_parameter_list(spec: &mut LolaSpec, param_list: Pairs<'_, Rule>) -> Vec
         let name = parse_ident(&decl.next().expect("mismatch between grammar and AST"));
         let ty = if let Some(type_pair) = decl.next() {
             assert_eq!(Rule::Type, type_pair.as_rule());
-            parse_type(spec, type_pair)
+            parse_type(type_pair)
         } else {
             Type::new_inferred()
         };
@@ -328,7 +380,7 @@ fn parse_ident(pair: &Pair<'_, Rule>) -> Ident {
  * Transforms a `Rule::TypeDecl` into `TypeDeclaration` AST node.
  * Panics if input is not `Rule::TypeDecl`.
  */
-fn parse_type_declaration(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> TypeDeclaration {
+fn parse_type_declaration(pair: Pair<'_, Rule>) -> TypeDeclaration {
     assert_eq!(pair.as_rule(), Rule::TypeDecl);
     let span = pair.as_span().into();
     let mut pairs = pair.into_inner();
@@ -336,7 +388,7 @@ fn parse_type_declaration(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> TypeDecl
     let mut fields = Vec::new();
     while let Some(pair) = pairs.next() {
         let field_name = pair.as_str().to_string();
-        let ty = parse_type(spec, pairs.next().expect("mismatch between grammar and AST"));
+        let ty = parse_type(pairs.next().expect("mismatch between grammar and AST"));
         fields.push(Box::new(TypeDeclField { name: field_name, ty, id: NodeId::DUMMY, span: pair.as_span().into() }));
     }
 
@@ -347,7 +399,7 @@ fn parse_type_declaration(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> TypeDecl
  * Transforms a `Rule::Type` into `Type` AST node.
  * Panics if input is not `Rule::Type`.
  */
-fn parse_type(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> Type {
+fn parse_type(pair: Pair<'_, Rule>) -> Type {
     assert_eq!(pair.as_rule(), Rule::Type);
     let span = pair.as_span();
     let mut tuple = Vec::new();
@@ -356,7 +408,7 @@ fn parse_type(spec: &mut LolaSpec, pair: Pair<'_, Rule>) -> Type {
             Rule::Ident => {
                 return Type::new_simple(pair.as_str().to_string(), pair.as_span().into());
             }
-            Rule::Type => tuple.push(parse_type(spec, pair)),
+            Rule::Type => tuple.push(parse_type(pair)),
             Rule::Optional => {
                 let span = pair.as_span();
                 let inner =
@@ -410,8 +462,8 @@ fn parse_vec_of_expressions(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>, handler
     pairs.map(|expr| build_expression_ast(spec, expr.into_inner(), handler)).map(Box::new).collect()
 }
 
-fn parse_vec_of_types(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>) -> Vec<Type> {
-    pairs.map(|expr| parse_type(spec, expr)).collect()
+fn parse_vec_of_types(pairs: Pairs<'_, Rule>) -> Vec<Type> {
+    pairs.map(|expr| parse_type(expr)).collect()
 }
 
 fn build_function_expression(spec: &mut LolaSpec, pair: Pair<'_, Rule>, span: Span, handler: &Handler) -> Expression {
@@ -420,7 +472,7 @@ fn build_function_expression(spec: &mut LolaSpec, pair: Pair<'_, Rule>, span: Sp
     let mut next = children.next().expect("Mismatch between AST and parser");
     let type_params = match next.as_rule() {
         Rule::GenericParam => {
-            let params = parse_vec_of_types(spec, next.into_inner());
+            let params = parse_vec_of_types(next.into_inner());
             next = children.next().expect("Mismatch between AST and parser");
             params
         }
@@ -903,23 +955,21 @@ mod tests {
 
     #[test]
     fn parse_constant_ast() {
-        let pair = LolaParser::parse(Rule::ConstantStream, "constant five : Int := 5")
-            .unwrap_or_else(|e| panic!("{}", e))
-            .next()
-            .unwrap();
-        let mut spec = LolaSpec::new();
-        let ast = super::parse_constant(&mut spec, pair);
+        let spec = "constant five : Int := 5";
+        let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
+        let mut parser = StreamlabParser::new(spec, &handler, FrontendConfig::default());
+        let pair = LolaParser::parse(Rule::ConstantStream, spec).unwrap_or_else(|e| panic!("{}", e)).next().unwrap();
+        let ast = parser.parse_constant(pair);
         assert_eq!(format!("{}", ast), "constant five: Int := 5")
     }
 
     #[test]
     fn parse_constant_double() {
-        let pair = LolaParser::parse(Rule::ConstantStream, "constant fiveoh: Double := 5.0")
-            .unwrap_or_else(|e| panic!("{}", e))
-            .next()
-            .unwrap();
-        let mut spec = LolaSpec::new();
-        let ast = super::parse_constant(&mut spec, pair);
+        let spec = "constant fiveoh: Double := 5.0";
+        let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
+        let mut parser = StreamlabParser::new(spec, &handler, FrontendConfig::default());
+        let pair = LolaParser::parse(Rule::ConstantStream, spec).unwrap_or_else(|e| panic!("{}", e)).next().unwrap();
+        let ast = parser.parse_constant(pair);
         assert_eq!(format!("{}", ast), "constant fiveoh: Double := 5.0")
     }
 
@@ -942,12 +992,11 @@ mod tests {
 
     #[test]
     fn parse_input_ast() {
-        let pair = LolaParser::parse(Rule::InputStream, "input a: Int, b: Int, c: Bool")
-            .unwrap_or_else(|e| panic!("{}", e))
-            .next()
-            .unwrap();
-        let mut spec = LolaSpec::new();
-        let inputs = super::parse_inputs(&mut spec, pair);
+        let spec = "input a: Int, b: Int, c: Bool";
+        let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
+        let mut parser = StreamlabParser::new(spec, &handler, FrontendConfig::default());
+        let pair = LolaParser::parse(Rule::InputStream, spec).unwrap_or_else(|e| panic!("{}", e)).next().unwrap();
+        let inputs = parser.parse_inputs(pair);
         assert_eq!(inputs.len(), 3);
         assert_eq!(format!("{}", inputs[0]), "input a: Int");
         assert_eq!(format!("{}", inputs[1]), "input b: Int");
@@ -959,7 +1008,7 @@ mod tests {
         let spec = "input in (ab: Int8): Int8\n";
         let throw = |e| panic!("{}", e);
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
-        let ast = parse(spec, &handler).unwrap_or_else(throw);
+        let ast = parse(spec, &handler, FrontendConfig::default()).unwrap_or_else(throw);
         cmp_ast_spec(&ast, spec);
     }
 
@@ -993,10 +1042,10 @@ mod tests {
     #[test]
     fn parse_output_ast() {
         let spec = "output out: Int := in + 1";
-        let pair = LolaParser::parse(Rule::OutputStream, spec).unwrap_or_else(|e| panic!("{}", e)).next().unwrap();
-        let mut lola = LolaSpec::new();
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
-        let ast = super::parse_output(&mut lola, pair, &handler);
+        let mut parser = StreamlabParser::new(spec, &handler, FrontendConfig::default());
+        let pair = LolaParser::parse(Rule::OutputStream, spec).unwrap_or_else(|e| panic!("{}", e)).next().unwrap();
+        let ast = parser.parse_output(pair);
         assert_eq!(format!("{}", ast), spec)
     }
 
@@ -1065,7 +1114,7 @@ mod tests {
         let spec = "input in: Int\noutput out: Int := in\ntrigger in ≠ out\n";
         let throw = |e| panic!("{}", e);
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
-        let ast = parse(spec, &handler).unwrap_or_else(throw);
+        let ast = parse(spec, &handler, FrontendConfig::default()).unwrap_or_else(throw);
         cmp_ast_spec(&ast, spec);
     }
 
@@ -1074,7 +1123,7 @@ mod tests {
         let spec = "input in: Int\ninput in2: Int\ninput in3: (Int, Bool)\ninput in4: Bool\n";
         let throw = |e| panic!("{}", e);
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
-        let ast = parse(spec, &handler).unwrap_or_else(throw);
+        let ast = parse(spec, &handler, FrontendConfig::default()).unwrap_or_else(throw);
         cmp_ast_spec(&ast, spec);
     }
 
@@ -1083,7 +1132,7 @@ mod tests {
         let spec = "output s: Bool := (true ∨ true)\n";
         let throw = |e| panic!("{}", e);
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
-        let ast = parse(spec, &handler).unwrap_or_else(throw);
+        let ast = parse(spec, &handler, FrontendConfig::default()).unwrap_or_else(throw);
         cmp_ast_spec(&ast, spec);
     }
 
@@ -1092,7 +1141,7 @@ mod tests {
         let spec = "output s: Bool? := (false ∨ true)\n";
         let throw = |e| panic!("{}", e);
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
-        let ast = parse(spec, &handler).unwrap_or_else(throw);
+        let ast = parse(spec, &handler, FrontendConfig::default()).unwrap_or_else(throw);
         cmp_ast_spec(&ast, spec);
     }
 
@@ -1101,7 +1150,7 @@ mod tests {
         let spec = "output s: Int := s.offset(by: -1).defaults(to: (3 * 4))\n";
         let throw = |e| panic!("{}", e);
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
-        let ast = parse(spec, &handler).unwrap_or_else(throw);
+        let ast = parse(spec, &handler, FrontendConfig::default()).unwrap_or_else(throw);
         cmp_ast_spec(&ast, spec);
     }
 
@@ -1110,7 +1159,7 @@ mod tests {
         let spec = "output s: Int := s.offset(by: -1).hold().defaults(to: 3 * 4)\n";
         let throw = |e| panic!("{}", e);
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
-        let ast = parse(spec, &handler).unwrap_or_else(throw);
+        let ast = parse(spec, &handler, FrontendConfig::default()).unwrap_or_else(throw);
         cmp_ast_spec(&ast, spec);
     }
 
@@ -1119,7 +1168,7 @@ mod tests {
         let spec = "input in: Int\noutput s: Int := if in = 3 then 4 else in + 2\n";
         let throw = |e| panic!("{}", e);
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
-        let ast = parse(spec, &handler).unwrap_or_else(throw);
+        let ast = parse(spec, &handler, FrontendConfig::default()).unwrap_or_else(throw);
         cmp_ast_spec(&ast, spec);
     }
 
@@ -1128,7 +1177,7 @@ mod tests {
         let spec = "input in: (Int, Bool)\noutput s: Int := nroot(1, sin(1, in))\n";
         let throw = |e| panic!("{}", e);
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
-        let ast = parse(spec, &handler).unwrap_or_else(throw);
+        let ast = parse(spec, &handler, FrontendConfig::default()).unwrap_or_else(throw);
         cmp_ast_spec(&ast, spec);
     }
 
@@ -1137,7 +1186,7 @@ mod tests {
         let spec = "input in: Int\ntrigger in > 5\n";
         let throw = |e| panic!("{}", e);
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
-        let ast = parse(spec, &handler).unwrap_or_else(throw);
+        let ast = parse(spec, &handler, FrontendConfig::default()).unwrap_or_else(throw);
         cmp_ast_spec(&ast, spec);
     }
 
@@ -1147,7 +1196,7 @@ mod tests {
             "output s: Double := if !((s.offset(by: -1).defaults(to: (3 * 4)) + -4) = 12) ∨ true = false then 2.0 else 4.1\n";
         let throw = |e| panic!("{}", e);
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
-        let ast = parse(spec, &handler).unwrap_or_else(throw);
+        let ast = parse(spec, &handler, FrontendConfig::default()).unwrap_or_else(throw);
         cmp_ast_spec(&ast, spec);
     }
 
@@ -1156,7 +1205,7 @@ mod tests {
         let spec = "type VerifiedUser { name: String }\n";
         let throw = |e| panic!("{}", e);
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
-        let ast = parse(spec, &handler).unwrap_or_else(throw);
+        let ast = parse(spec, &handler, FrontendConfig::default()).unwrap_or_else(throw);
         cmp_ast_spec(&ast, spec);
     }
 
@@ -1165,7 +1214,7 @@ mod tests {
         let spec = "output s (a: B, c: D): E := 3\n";
         let throw = |e| panic!("{}", e);
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
-        let ast = parse(spec, &handler).unwrap_or_else(throw);
+        let ast = parse(spec, &handler, FrontendConfig::default()).unwrap_or_else(throw);
         cmp_ast_spec(&ast, spec);
     }
 
@@ -1174,7 +1223,7 @@ mod tests {
         let spec = "output s (a: Int): Int close s > 10 := 3\n";
         let throw = |e| panic!("{}", e);
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
-        let ast = parse(spec, &handler).unwrap_or_else(throw);
+        let ast = parse(spec, &handler, FrontendConfig::default()).unwrap_or_else(throw);
         cmp_ast_spec(&ast, spec);
     }
 
@@ -1183,7 +1232,7 @@ mod tests {
         let spec = "input in: (Int, Bool)\noutput s: Int := (1, in.0).1\n";
         let throw = |e| panic!("{}", e);
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
-        let ast = parse(spec, &handler).unwrap_or_else(throw);
+        let ast = parse(spec, &handler, FrontendConfig::default()).unwrap_or_else(throw);
         cmp_ast_spec(&ast, spec);
     }
 
@@ -1192,7 +1241,7 @@ mod tests {
         let spec = r#"constant s: String := "a string with \n newline"
 "#;
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
-        let ast = parse(spec, &handler).unwrap_or_else(|e| panic!("{}", e));
+        let ast = parse(spec, &handler, FrontendConfig::default()).unwrap_or_else(|e| panic!("{}", e));
         cmp_ast_spec(&ast, spec);
     }
 
@@ -1201,7 +1250,7 @@ mod tests {
         let spec = r##"constant s: String := r#"a raw \ string that " needs padding"#
 "##;
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
-        let ast = parse(spec, &handler).unwrap_or_else(|e| panic!("{}", e));
+        let ast = parse(spec, &handler, FrontendConfig::default()).unwrap_or_else(|e| panic!("{}", e));
         cmp_ast_spec(&ast, spec);
     }
 
@@ -1209,7 +1258,7 @@ mod tests {
     fn parse_import() {
         let spec = "import math\ninput in: UInt8\n";
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
-        let ast = parse(spec, &handler).unwrap_or_else(|e| panic!("{}", e));
+        let ast = parse(spec, &handler, FrontendConfig::default()).unwrap_or_else(|e| panic!("{}", e));
         cmp_ast_spec(&ast, spec);
     }
 
@@ -1217,7 +1266,7 @@ mod tests {
     fn parse_method_call() {
         let spec = "output count := count.offset(-1).default(0) + 1\n";
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
-        let ast = parse(spec, &handler).unwrap_or_else(|e| panic!("{}", e));
+        let ast = parse(spec, &handler, FrontendConfig::default()).unwrap_or_else(|e| panic!("{}", e));
         cmp_ast_spec(&ast, spec);
     }
 
@@ -1225,7 +1274,7 @@ mod tests {
     fn parse_method_call_with_param() {
         let spec = "output count := count.offset<Int8>(-1).default(0) + 1\n";
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
-        let ast = parse(spec, &handler).unwrap_or_else(|e| panic!("{}", e));
+        let ast = parse(spec, &handler, FrontendConfig::default()).unwrap_or_else(|e| panic!("{}", e));
         cmp_ast_spec(&ast, spec);
     }
 
@@ -1233,7 +1282,7 @@ mod tests {
     fn parse_realtime_offset() {
         let spec = "output a := b.offset(by: -1s)\n";
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
-        let ast = parse(spec, &handler).unwrap_or_else(|e| panic!("{}", e));
+        let ast = parse(spec, &handler, FrontendConfig::default()).unwrap_or_else(|e| panic!("{}", e));
         cmp_ast_spec(&ast, spec);
     }
 
@@ -1241,7 +1290,7 @@ mod tests {
     fn parse_function_argument_name() {
         let spec = "output a := b.hold().defaults(to: 0)\n";
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
-        let ast = parse(spec, &handler).unwrap_or_else(|e| panic!("{}", e));
+        let ast = parse(spec, &handler, FrontendConfig::default()).unwrap_or_else(|e| panic!("{}", e));
         cmp_ast_spec(&ast, spec);
     }
 
