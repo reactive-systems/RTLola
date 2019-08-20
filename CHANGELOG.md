@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 ### Added
 - Language: type annotation `T?` to denote optional of type `T`, e.g., `Int64?`
+- Frontend: Fix parsing problem `output outputxzy`
+- Frontend: Ignore [BOM](https://de.wikipedia.org/wiki/Byte_Order_Mark) at the start of a Lola specification
 
 
 ## [0.1.0] - 2019-08-12
