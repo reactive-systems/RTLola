@@ -196,12 +196,9 @@ impl<IV: WindowIV> WindowInstance<IV> {
         let curr = self.get_current_bucket(ts);
         let last = self.last_bucket_ix;
 
-        if curr.period > 0 {
-            // no invalidating or updating in the first cycle.
-            let diff = curr.buckets_since(last, self.buckets.len());
-            self.invalidate_n(diff, ts);
-            self.last_bucket_ix = curr;
-        }
+        let diff = curr.buckets_since(last, self.buckets.len());
+        self.invalidate_n(diff, ts);
+        self.last_bucket_ix = curr;
     }
 
     fn invalidate_n(&mut self, n: usize, ts: Time) {
