@@ -187,7 +187,7 @@ impl Controller {
     fn schedule_timed<'a>(
         &'a self,
         evaluator: &mut Evaluator,
-        deadline_iter: &mut Iterator<Item = &'a Deadline>,
+        mut deadline_iter: impl Iterator<Item = &'a Deadline>,
         due_streams: &Vec<OutputReference>,
         next_deadline: &mut Time,
     ) -> &'a Vec<OutputReference> {

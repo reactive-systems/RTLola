@@ -3,7 +3,9 @@ use super::Value;
 use crate::basics::Time;
 use crate::storage::SlidingWindow;
 use std::collections::VecDeque;
-use streamlab_frontend::ir::{InputReference, LolaIR, MemorizationBound, OutputReference, OutputStream, Type};
+use streamlab_frontend::ir::{
+    InputReference, LolaIR, MemorizationBound, OutputReference, OutputStream, Type, WindowReference,
+};
 
 pub(crate) struct GlobalStore {
     /// Access by stream reference.
@@ -21,7 +23,6 @@ pub(crate) struct GlobalStore {
 
 pub(crate) type InInstance = InputReference;
 pub(crate) type OutInstance = OutputReference;
-pub(crate) type Window = usize;
 
 impl GlobalStore {
     pub(crate) fn new(ir: &LolaIR, ts: Time) -> GlobalStore {
@@ -69,13 +70,13 @@ impl GlobalStore {
         Some(&mut self.np_outputs[self.index_map[ix]])
     }
 
-    pub(crate) fn get_window(&self, window: Window) -> &SlidingWindow {
-        let ix = window;
+    pub(crate) fn get_window(&self, window: WindowReference) -> &SlidingWindow {
+        let ix = window.idx();
         &self.np_windows[ix]
     }
 
-    pub(crate) fn get_window_mut(&mut self, window: Window) -> &mut SlidingWindow {
-        let ix = window;
+    pub(crate) fn get_window_mut(&mut self, window: WindowReference) -> &mut SlidingWindow {
+        let ix = window.idx();
         &mut self.np_windows[ix]
     }
 }

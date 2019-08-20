@@ -192,7 +192,6 @@ pub enum Constant {
     Float(f64),
 }
 
-///TODO
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Dependency {
     pub stream: StreamReference,
@@ -298,8 +297,12 @@ pub enum FeatureFlag {
 
 /// Allows for referencing a window instance.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct WindowReference {
-    pub ix: usize,
+pub struct WindowReference(usize);
+
+impl WindowReference {
+    pub fn idx(&self) -> usize {
+        self.0
+    }
 }
 
 /// Allows for referencing a stream within the specification.
@@ -399,11 +402,11 @@ impl Stream for InputStream {
 
 impl LolaIR {
     pub fn input_refs(&self) -> Vec<InputReference> {
-        self.inputs.iter().map(|s| (s as &Stream).as_stream_ref().in_ix()).collect()
+        (0..self.inputs.len()).collect()
     }
 
     pub fn output_refs(&self) -> Vec<OutputReference> {
-        self.outputs.iter().map(|s| (s as &Stream).as_stream_ref().out_ix()).collect()
+        (0..self.outputs.len()).collect()
     }
 
     pub(crate) fn get_in_mut(&mut self, reference: StreamReference) -> &mut InputStream {
@@ -455,7 +458,7 @@ impl LolaIR {
     }
 
     pub fn get_window(&self, window: WindowReference) -> &SlidingWindow {
-        &self.sliding_windows[window.ix]
+        &self.sliding_windows[window.0]
     }
 
     pub fn get_event_driven_layers(&self) -> Vec<Vec<OutputReference>> {

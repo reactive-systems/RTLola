@@ -101,7 +101,7 @@ impl Display for Type {
 
 impl Display for WindowReference {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        write!(f, "Win({})", self.ix)
+        write!(f, "Win({})", self.0)
     }
 }
 

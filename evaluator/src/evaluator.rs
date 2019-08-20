@@ -167,8 +167,8 @@ impl<'e, 'c> Evaluator<'e, 'c> {
         self.fresh_inputs.insert(input);
         self.handler.debug(|| format!("InputStream[{}] := {:?}.", input, v.clone()));
         let extended = &self.ir.inputs[input];
-        for win in &extended.dependent_windows {
-            self.global_store.get_window_mut(win.ix).accept_value(v.clone(), ts)
+        for &win in &extended.dependent_windows {
+            self.global_store.get_window_mut(win).accept_value(v.clone(), ts)
         }
     }
 
@@ -213,8 +213,7 @@ impl<'e, 'c> Evaluator<'e, 'c> {
         // We need to copy the references first because updating needs exclusive access to `self`.
         let windows = &self.ir.sliding_windows;
         for win in windows {
-            let ix = win.reference.ix;
-            self.global_store.get_window_mut(ix).update(ts);
+            self.global_store.get_window_mut(win.reference).update(ts);
         }
     }
 
@@ -253,8 +252,8 @@ impl<'e, 'c> Evaluator<'e, 'c> {
 
         // Check linked streams and inform them.
         let extended = &self.ir.outputs[ix];
-        for win in &extended.dependent_windows {
-            self.global_store.get_window_mut(win.ix).accept_value(res.clone(), ts)
+        for &win in &extended.dependent_windows {
+            self.global_store.get_window_mut(win).accept_value(res.clone(), ts)
         }
         // TODO: Dependent streams?
     }
@@ -550,7 +549,7 @@ impl<'a> ExpressionEvaluator<'a> {
     }
 
     fn lookup_window(&self, window_ref: WindowReference, ts: Time) -> Value {
-        self.global_store.get_window(window_ref.ix).get_value(ts)
+        self.global_store.get_window(window_ref).get_value(ts)
     }
 }
 
@@ -592,7 +591,7 @@ impl<'e> EvaluationContext<'e> {
     }
 
     pub(crate) fn lookup_window(&self, window_ref: WindowReference) -> Value {
-        self.global_store.get_window(window_ref.ix).get_value(self.ts)
+        self.global_store.get_window(window_ref).get_value(self.ts)
     }
 }
 
