@@ -2,6 +2,7 @@ pub(crate) mod lowering;
 mod print;
 
 pub use crate::ast::StreamAccessKind; // Re-export needed for IR
+pub use crate::ast::WindowOperation; // Re-export needed for IR
 use crate::ty::ValueTy;
 pub use crate::ty::{Activation, FloatTy, IntTy, UIntTy}; // Re-export needed for IR
 use std::time::Duration;
@@ -209,17 +210,6 @@ pub enum Offset {
     FutureRealTimeOffset(Duration),
     /// A non-negative real-time offset, e.g., `0`, `4min`, `2.3h`
     PastRealTimeOffset(Duration),
-}
-
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub enum WindowOperation {
-    Count,
-    Min,
-    Max,
-    Sum,
-    Product,
-    Average,
-    Integral,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

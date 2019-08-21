@@ -392,7 +392,7 @@ impl<'a> Lowering<'a> {
             if let ExpressionKind::Ident(_) = &expr.kind {
                 let target = self.get_ref_for_ident(expr.id);
                 let duration = self.lower_duration(duration.as_ref());
-                let op = self.lower_window_op(*aggregation);
+                let op = *aggregation;
                 let reference = WindowReference(self.ir.sliding_windows.len());
                 let ty = self.lower_node_type(win_expr.id);
                 let window = ir::SlidingWindow { target, duration, wait: *wait, op, reference, ty };
@@ -411,18 +411,6 @@ impl<'a> Lowering<'a> {
         Duration::from_nanos(
             exact_duration.get::<nanosecond>().to_integer().to_u64().expect("Period [ns] too large for u64!"),
         )
-    }
-
-    fn lower_window_op(&self, op: ast::WindowOperation) -> ir::WindowOperation {
-        match op {
-            ast::WindowOperation::Count => ir::WindowOperation::Count,
-            ast::WindowOperation::Min => ir::WindowOperation::Min,
-            ast::WindowOperation::Max => ir::WindowOperation::Max,
-            ast::WindowOperation::Sum => ir::WindowOperation::Sum,
-            ast::WindowOperation::Product => ir::WindowOperation::Product,
-            ast::WindowOperation::Average => ir::WindowOperation::Average,
-            ast::WindowOperation::Integral => ir::WindowOperation::Integral,
-        }
     }
 
     fn lower_storage_req(&self, req: StorageRequirement) -> MemorizationBound {

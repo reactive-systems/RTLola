@@ -596,6 +596,8 @@ fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>, handler: &H
                                             //"Π" | "prod" | "product" => WindowOperation::Product,
                                             "∫" | "integral" => WindowOperation::Integral,
                                             "avg" | "average" => WindowOperation::Average,
+                                            "min" => WindowOperation::Min,
+                                            "max" => WindowOperation::Max,
                                             fun => {
                                                 handler.error_with_span(
                                                     &format!("unknown aggregation function {}", fun),
