@@ -285,3 +285,27 @@ trigger b > 3
     // trig  |   0 |    - |   0 |    - |   0 |    - |   1 |    - |   1 |    - |   1 |    - |   1 |    - |   1 |    -
     assert_eq!(ctrl.output_handler.statistics.as_ref().unwrap().get_num_trigger(0), 5);
 }
+
+#[test]
+fn min_max_window() {
+    let spec = r#"
+input a: Int64
+
+output min @ 1Hz := a.aggregate(over: 1s, using: min).defaults(to: 0)
+output max @ 1Hz := a.aggregate(over: 1s, using: max).defaults(to: 0)
+
+trigger min == 1
+trigger max == 2
+    "#;
+
+    let data = r#"a,time
+0,0
+1,0.1
+2,0.5
+3,1.1
+"#;
+
+    let ctrl = run(spec, data).unwrap_or_else(|e| panic!("E2E test failed: {}", e));
+    assert_eq!(ctrl.output_handler.statistics.as_ref().unwrap().get_num_trigger(0), 1);
+    assert_eq!(ctrl.output_handler.statistics.as_ref().unwrap().get_num_trigger(1), 1);
+}
