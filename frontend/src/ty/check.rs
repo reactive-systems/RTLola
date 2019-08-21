@@ -1270,11 +1270,11 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
             .iter()
             .map(|gen| {
                 let var = self.unifier.new_var();
-                match &gen.constraint {
+                match &gen {
                     ValueTy::Constr(_) => {}
                     _ => unreachable!("function declarations are not user-definable and currently, only constraints are allowed for generic types"),
                 }
-                self.unifier.unify_var_ty(var, gen.constraint.clone()).expect("cannot fail as var is freshly created");
+                self.unifier.unify_var_ty(var, gen.clone()).expect("cannot fail as var is freshly created");
                 var
             })
             .collect();
