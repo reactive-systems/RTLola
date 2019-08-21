@@ -6,8 +6,11 @@ use etherparse::{
     Ethernet2Header, InternetSlice, Ipv4Header, Ipv6Header, LinkSlice, SlicedPacket, TcpHeader, TransportSlice,
     UdpHeader,
 };
-use pcap::{Activated, Capture, Device, Packet as PCAPPacket, Precision};
+use ip_network::IpNetwork;
+use pcap::{Activated, Capture, Device, Error as PCAPError};
 use std::error::Error;
+use std::net::IpAddr;
+use std::str::FromStr;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use streamlab_frontend::ir::LolaIR;
 
@@ -414,8 +417,8 @@ fn get_packet_protocol(packet: &SlicedPacket) -> Value {
 // ################################
 #[derive(Debug, Clone)]
 pub enum PCAPInputSource {
-    Device { name: String },
-    File { path: String, delay: Option<Duration> },
+    Device { name: String, local_network: String },
+    File { path: String, delay: Option<Duration>, local_network: String },
 }
 
 enum TimeHandling {
@@ -425,9 +428,9 @@ enum TimeHandling {
 }
 
 pub struct PCAPEventSource {
-    capture_handle: Capture<Activated>,
+    capture_handle: Capture<dyn Activated>,
     timer: TimeHandling,
-    mapping: Vec<fn(&SlicedPacket) -> Value>,
+    mapping: Vec<Box<dyn Fn(&SlicedPacket) -> Value>>,
 
     event: Option<(Vec<Value>, Time)>,
     last_timestamp: Option<SystemTime>,
@@ -440,20 +443,43 @@ impl PCAPEventSource {
         start_time: Instant,
     ) -> Result<Box<dyn EventSource>, Box<dyn Error>> {
         let capture_handle = match src {
-            PCAPInputSource::Device { name } => {
+            PCAPInputSource::Device { name, .. } => {
                 let all_devices = Device::list()?;
                 let dev: Device = all_devices.into_iter().filter(|d| d.name == *name).nth(0).unwrap_or_else(|| {
                     eprintln!("Could not find network interface with name: {}", *name);
                     std::process::exit(1);
                 });
 
-                let capture_handle =
-                    Capture::from_device(dev)?.promisc(true).snaplen(65535).precision(Precision::Nano).open()?;
+                let capture_handle = Capture::from_device(dev)?.promisc(true).snaplen(65535).open()?;
                 capture_handle.into()
             }
             PCAPInputSource::File { path, .. } => {
                 let capture_handle = Capture::from_file(path)?;
                 capture_handle.into()
+            }
+        };
+
+        let local_network_range = match src {
+            PCAPInputSource::Device { local_network, .. } => local_network,
+            PCAPInputSource::File { local_network, .. } => local_network,
+        };
+        let local_network = IpNetwork::from_str(local_network_range.as_ref()).unwrap_or_else(|e| {
+            eprintln!("Could not parse local network range: {}. Error: {}", *local_network_range, e);
+            std::process::exit(1);
+        });
+
+        let get_packet_direction = move |packet: &SlicedPacket| -> Value {
+            let addr: IpAddr = match &packet.ip {
+                Some(ip) => match ip {
+                    InternetSlice::Ipv4(header) => IpAddr::V4(header.destination_addr()),
+                    InternetSlice::Ipv6(header, _) => IpAddr::V6(header.destination_addr()),
+                },
+                None => return Value::None,
+            };
+            if local_network.contains(addr) {
+                Value::Str("Incoming".into())
+            } else {
+                Value::Str("Outgoing".into())
             }
         };
 
@@ -468,89 +494,170 @@ impl PCAPEventSource {
         let input_names: Vec<String> = ir.inputs.iter().map(|i| i.name.clone()).collect();
 
         // Generate Mapping that given a parsed packet returns the value for the corresponding input stream
-        let mut mapping: Vec<fn(&SlicedPacket) -> Value> = Vec::with_capacity(input_names.len());
-        for (ix, name) in input_names.iter().enumerate() {
+        let mut mapping: Vec<Box<dyn Fn(&SlicedPacket) -> Value>> = Vec::with_capacity(input_names.len());
+        for name in input_names.iter() {
             let layers: Vec<&str> = name.split("::").collect();
-
-            if layers.len() < 2 || layers.len() > 3 {
+            if layers.len() > 3 || layers.is_empty() {
                 eprintln!("Malformed input name: {}", name);
                 std::process::exit(1);
             }
 
-            let val: fn(&SlicedPacket) -> Value = match layers[0] {
-                "Ethernet" => match layers[1] {
-                    "source" => ethernet_source,
-                    "destination" => ethernet_destination,
-                    "type" => ethernet_type,
-                    _ => {
-                        eprintln!("Unknown input name: {}", name);
+            let val: Box<dyn Fn(&SlicedPacket) -> Value> = match layers[0] {
+                "Ethernet" => {
+                    if layers.len() != 2 {
+                        eprintln!("Malformed input name: {}", name);
                         std::process::exit(1);
-                    }
-                },
-                "IPv4" => match layers[1] {
-                    "source" => ipv4_source,
-                    "destination" => ipv4_destination,
-                    "ihl" => ipv4_ihl,
-                    "dscp" => ipv4_dscp,
-                    "ecn" => ipv4_ecn,
-                    "length" => ipv4_length,
-                    "identification" => ipv4_id,
-                    "fragment_offset" => ipv4_fragment_offset,
-                    "ttl" => ipv4_ttl,
-                    "protocol" => ipv4_protocol,
-                    "checksum" => ipv4_checksum,
-                    "flags" => {
-                        if layers.len() != 3 {
-                            eprintln!("Malformed input name: {}", name);
+                    };
+                    match layers[1] {
+                        "source" => Box::new(ethernet_source),
+                        "destination" => Box::new(ethernet_destination),
+                        "type" => Box::new(ethernet_type),
+                        _ => {
+                            eprintln!("Unknown input name: {}", name);
                             std::process::exit(1);
                         }
-                        match layers[2] {
-                            "df" => ipv4_flags_df,
-                            "mf" => ipv4_flags_mf,
-                            _ => {
-                                eprintln!("Unknown input name: {}", name);
+                    }
+                }
+                "IPv4" => {
+                    if layers.len() < 2 {
+                        eprintln!("Malformed input name: {}", name);
+                        std::process::exit(1);
+                    };
+                    match layers[1] {
+                        "source" => Box::new(ipv4_source),
+                        "destination" => Box::new(ipv4_destination),
+                        "ihl" => Box::new(ipv4_ihl),
+                        "dscp" => Box::new(ipv4_dscp),
+                        "ecn" => Box::new(ipv4_ecn),
+                        "length" => Box::new(ipv4_length),
+                        "identification" => Box::new(ipv4_id),
+                        "fragment_offset" => Box::new(ipv4_fragment_offset),
+                        "ttl" => Box::new(ipv4_ttl),
+                        "protocol" => Box::new(ipv4_protocol),
+                        "checksum" => Box::new(ipv4_checksum),
+                        "flags" => {
+                            if layers.len() < 3 {
+                                eprintln!("Malformed input name: {}", name);
                                 std::process::exit(1);
                             }
+                            match layers[2] {
+                                "df" => Box::new(ipv4_flags_df),
+                                "mf" => Box::new(ipv4_flags_mf),
+                                _ => {
+                                    eprintln!("Unknown input name: {}", name);
+                                    std::process::exit(1);
+                                }
+                            }
+                        }
+                        _ => {
+                            eprintln!("Unknown input name: {}", name);
+                            std::process::exit(1);
                         }
                     }
-                    _ => {
-                        eprintln!("Unknown input name: {}", name);
+                }
+                "IPv6" => {
+                    if layers.len() < 2 {
+                        eprintln!("Malformed input name: {}", name);
                         std::process::exit(1);
+                    };
+                    match layers[1] {
+                        "source" => Box::new(ipv6_source),
+                        "destination" => Box::new(ipv6_destination),
+                        "traffic_class" => Box::new(ipv6_traffic_class),
+                        "flow_label" => Box::new(ipv6_flow_label),
+                        "length" => Box::new(ipv6_length),
+                        "hop_limit" => Box::new(ipv6_hop_limit),
+                        _ => {
+                            eprintln!("Unknown input name: {}", name);
+                            std::process::exit(1);
+                        }
                     }
-                },
-                "IPv6" => match layers[1] {
-                    "source" => ipv6_source,
-                    "destination" => ipv6_destination,
-                    "traffic_class" => ipv6_traffic_class,
-                    "flow_label" => ipv6_flow_label,
-                    "length" => ipv6_length,
-                    "hop_limit" => ipv6_hop_limit,
-                    _ => {
-                        eprintln!("Unknown input name: {}", name);
-                        std::process::exit(1);
-                    }
-                },
+                }
                 //"ICMP" => {},
-                //"TCP" => {},
-                //"UDP" => {},
+                "TCP" => {
+                    if layers.len() < 2 {
+                        eprintln!("Malformed input name: {}", name);
+                        std::process::exit(1);
+                    };
+                    match layers[1] {
+                        "source" => Box::new(tcp_source_port),
+                        "destination" => Box::new(tcp_destination_port),
+                        "seq_number" => Box::new(tcp_seq_number),
+                        "ack_number" => Box::new(tcp_ack_number),
+                        "data_offset" => Box::new(tcp_data_offset),
+                        "window_size" => Box::new(tcp_window_size),
+                        "checksum" => Box::new(tcp_checksum),
+                        "urgent_pointer" => Box::new(tcp_urgent_pointer),
+                        "flags" => {
+                            if layers.len() < 3 {
+                                eprintln!("Malformed input name: {}", name);
+                                std::process::exit(1);
+                            };
+                            match layers[2] {
+                                "ns" => Box::new(tcp_flags_ns),
+                                "fin" => Box::new(tcp_flags_fin),
+                                "syn" => Box::new(tcp_flags_syn),
+                                "rst" => Box::new(tcp_flags_rst),
+                                "psh" => Box::new(tcp_flags_psh),
+                                "ack" => Box::new(tcp_flags_ack),
+                                "urg" => Box::new(tcp_flags_urg),
+                                "ece" => Box::new(tcp_flags_ece),
+                                "cwr" => Box::new(tcp_flags_cwr),
+                                _ => {
+                                    eprintln!("Unknown input name: {}", name);
+                                    std::process::exit(1);
+                                }
+                            }
+                        }
+                        _ => {
+                            eprintln!("Unknown input name: {}", name);
+                            std::process::exit(1);
+                        }
+                    }
+                }
+                "UDP" => {
+                    if layers.len() < 2 {
+                        eprintln!("Malformed input name: {}", name);
+                        std::process::exit(1);
+                    };
+                    match layers[1] {
+                        "source" => Box::new(udp_source_port),
+                        "destination" => Box::new(udp_destination_port),
+                        "length" => Box::new(udp_length),
+                        "checksum" => Box::new(udp_checksum),
+                        _ => {
+                            eprintln!("Unknown input name: {}", name);
+                            std::process::exit(1);
+                        }
+                    }
+                }
+                "payload" => Box::new(get_packet_payload),
+                "direction" => Box::new(get_packet_direction),
+                "protocol" => Box::new(get_packet_protocol),
                 _ => {
                     eprintln!("Unknown input name: {}", name);
                     std::process::exit(1);
                 }
             };
-            mapping[ix] = val;
+            mapping.push(val);
         }
 
         Ok(Box::new(PCAPEventSource { capture_handle, timer, mapping, event: None, last_timestamp: None }))
     }
 
     fn process_packet(&mut self) -> Result<bool, Box<dyn Error>> {
-        let raw_packet: PCAPPacket = self.capture_handle.next()?;
+        let raw_packet = match self.capture_handle.next() {
+            Ok(pkt) => pkt,
+            Err(e) => match e {
+                PCAPError::NoMorePackets => return Ok(false),
+                _ => return Err(e.into()),
+            },
+        };
 
         use std::convert::TryInto;
         let d = Duration::new(
             raw_packet.header.ts.tv_sec.try_into().unwrap(),
-            raw_packet.header.ts.tv_usec.try_into().unwrap(),
+            (raw_packet.header.ts.tv_usec * 1000).try_into().unwrap(),
         );
         self.last_timestamp = Some(UNIX_EPOCH + d);
 
@@ -562,8 +669,8 @@ impl PCAPEventSource {
         let packet = p.unwrap();
 
         let mut event: Vec<Value> = Vec::with_capacity(self.mapping.len());
-        for (ix, parse_function) in self.mapping.iter().enumerate() {
-            event[ix] = parse_function(&packet);
+        for parse_function in self.mapping.iter() {
+            event.push(parse_function(&packet));
         }
 
         //compute duration since start
