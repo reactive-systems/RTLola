@@ -1328,7 +1328,7 @@ mod tests {
     fn handle_bom() {
         let spec = "\u{feff}input a: Bool\n";
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
-        let ast = parse(spec, &handler).unwrap_or_else(|e| panic!("{}", e));
+        let ast = parse(spec, &handler, FrontendConfig::default()).unwrap_or_else(|e| panic!("{}", e));
         cmp_ast_spec(&ast, "input a: Bool\n");
     }
 
@@ -1336,7 +1336,7 @@ mod tests {
     fn regression71() {
         let spec = "output outputstream := 42 output c := outputstream";
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
-        let ast = parse(spec, &handler).unwrap_or_else(|e| panic!("{}", e));
+        let ast = parse(spec, &handler, FrontendConfig::default()).unwrap_or_else(|e| panic!("{}", e));
         cmp_ast_spec(&ast, "output outputstream := 42\noutput c := outputstream\n");
     }
 }
