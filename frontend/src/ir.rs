@@ -132,12 +132,17 @@ pub struct Trigger {
     pub trigger_idx: usize,
 }
 
+#[derive(Debug, PartialEq, Clone)]
+pub struct Expression {
+    pub kind: ExpressionKind,
+    pub ty: Type,
+}
+
 /// The expressions of the IR.
 #[derive(Debug, PartialEq, Clone)]
-pub enum Expression {
+pub enum ExpressionKind {
     /// Loading a constant
-    /// 1st argument -> Constant
-    LoadConstant(Constant, Type),
+    LoadConstant(Constant),
     /// Applying arithmetic or logic operation and its monomorphic type
     /// Arguments never need to be coerced, @see `Expression::Convert`.
     /// Unary: 1st argument -> operand
@@ -150,10 +155,8 @@ pub enum Expression {
         target: StreamReference,
         offset: Offset,
     },
-    /// Accessing another stream under sample and hold semantics
+    /// Accessing another stream
     StreamAccess(StreamReference, StreamAccessKind),
-    /// Accessing another stream synchronously
-    SyncStreamLookup(StreamReference),
     /// A window expression over a duration
     WindowLookup(WindowReference),
     /// An if-then-else expression
@@ -161,7 +164,6 @@ pub enum Expression {
         condition: Box<Expression>,
         consequence: Box<Expression>,
         alternative: Box<Expression>,
-        ty: Type,
     },
     /// A tuple expression
     Tuple(Vec<Expression>),
@@ -179,7 +181,6 @@ pub enum Expression {
     Default {
         expr: Box<Expression>,
         default: Box<Expression>,
-        ty: Type,
     },
 }
 
@@ -387,6 +388,12 @@ impl Stream for InputStream {
     }
     fn as_stream_ref(&self) -> StreamReference {
         self.reference
+    }
+}
+
+impl Expression {
+    fn new(kind: ExpressionKind, ty: Type) -> Self {
+        Self { kind, ty }
     }
 }
 

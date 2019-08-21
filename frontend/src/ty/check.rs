@@ -533,6 +533,7 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
                 };
 
                 let function = match access_type {
+                    StreamAccessKind::Sync => unreachable!("only used in IR after lowering"),
                     StreamAccessKind::Hold => "hold()",
                     StreamAccessKind::Optional => "get()",
                 };

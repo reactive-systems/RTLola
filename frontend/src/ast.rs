@@ -303,6 +303,8 @@ pub enum WindowOperation {
 /// Describes the operation used to access a stream
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum StreamAccessKind {
+    /// Synchronous access
+    Sync,
     /// Hold access for *incompatible* stream types, returns previous known value
     Hold,
     /// Optional access, returns value if it exists

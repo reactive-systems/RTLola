@@ -217,6 +217,7 @@ impl Display for Expression {
             ExpressionKind::Lit(l) => write!(f, "{}", l),
             ExpressionKind::Ident(ident) => write!(f, "{}", ident),
             ExpressionKind::StreamAccess(expr, access) => match access {
+                StreamAccessKind::Sync => write!(f, "{}", expr),
                 StreamAccessKind::Hold => write!(f, "{}.hold()", expr),
                 StreamAccessKind::Optional => write!(f, "{}.get()", expr),
             },

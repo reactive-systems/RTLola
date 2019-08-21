@@ -6,7 +6,7 @@ use crate::evaluator::EvaluationContext;
 use crate::storage::Value;
 use regex::Regex;
 use std::ops::{Add, Div, Mul, Neg, Not, Rem, Sub};
-use streamlab_frontend::ir::{Constant, Expression, Offset, StreamAccessKind, StreamReference, Type};
+use streamlab_frontend::ir::{Constant, Expression, ExpressionKind, Offset, StreamAccessKind, StreamReference, Type};
 
 pub(crate) trait Expr<'s> {
     fn compile(self) -> CompiledExpr<'s>;
@@ -30,9 +30,9 @@ impl<'s> CompiledExpr<'s> {
 
 impl<'s> Expr<'s> for Expression {
     fn compile(self) -> CompiledExpr<'s> {
-        use Expression::*;
-        match self {
-            LoadConstant(c, _) => {
+        use ExpressionKind::*;
+        match self.kind {
+            LoadConstant(c) => {
                 let v = match c {
                     Constant::Bool(b) => Value::Bool(b),
                     Constant::UInt(u) => Value::Unsigned(u),
@@ -120,6 +120,7 @@ impl<'s> Expr<'s> for Expression {
             StreamAccess(str_ref, kind) => {
                 use StreamAccessKind::*;
                 match kind {
+                    Sync => CompiledExpr::new(move |ctx| ctx.lookup_latest_check(str_ref)),
                     Hold => CompiledExpr::new(move |ctx| ctx.lookup_latest(str_ref)),
                     Optional => {
                         use StreamReference::*;
@@ -142,8 +143,6 @@ impl<'s> Expr<'s> for Expression {
                     }
                 }
             }
-
-            SyncStreamLookup(str_ref) => CompiledExpr::new(move |ctx| ctx.lookup_latest_check(str_ref)),
 
             WindowLookup(win_ref) => CompiledExpr::new(move |ctx| ctx.lookup_window(win_ref)),
 
@@ -199,8 +198,8 @@ impl<'s> Expr<'s> for Expression {
                     }),
                     "matches" => {
                         assert!(args.len() >= 2);
-                        let re_str = match &args[1] {
-                            Expression::LoadConstant(Constant::Str(s), _) => s,
+                        let re_str = match &args[1].kind {
+                            ExpressionKind::LoadConstant(Constant::Str(s)) => s,
                             _ => unreachable!("regex should be a string literal"),
                         };
                         let re = Regex::new(&re_str).expect("Given regular expression was invalid");

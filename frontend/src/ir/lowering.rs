@@ -5,7 +5,9 @@ use crate::analysis::naming::Declaration;
 use crate::ast;
 use crate::ast::{ExpressionKind, LolaSpec};
 use crate::ir;
-use crate::ir::{EventDrivenStream, LolaIR, MemorizationBound, StreamReference, TimeDrivenStream, WindowReference};
+use crate::ir::{
+    EventDrivenStream, LolaIR, MemorizationBound, StreamAccessKind, StreamReference, TimeDrivenStream, WindowReference,
+};
 use crate::parse::NodeId;
 use crate::ty::StreamTy;
 use std::collections::HashMap;
@@ -210,7 +212,10 @@ impl<'a> Lowering<'a> {
         let output = ir::OutputStream {
             name: ast_output.name.name.clone(),
             ty: ir::Type::Bool,
-            expr: ir::Expression::LoadConstant(ir::Constant::Str(String::from("not yet initialized")), ir::Type::Bool),
+            expr: ir::Expression::new(
+                ir::ExpressionKind::LoadConstant(ir::Constant::Str(String::from("not yet initialized"))),
+                ir::Type::Bool,
+            ),
             outgoing_dependencies: Vec::new(),
             dependent_streams: trackings,
             dependent_windows: Vec::new(),
@@ -430,7 +435,10 @@ impl<'a> Lowering<'a> {
         let (result, ty) = self.lower_expression(expression);
         // TODO: Consider linearizing the tree to better exploit locality than when using Boxes.
         if &ty != expected_type {
-            ir::Expression::Convert { from: ty, to: expected_type.clone(), expr: Box::new(result) }
+            ir::Expression::new(
+                ir::ExpressionKind::Convert { from: ty, to: expected_type.clone(), expr: Box::new(result) },
+                expected_type.clone(),
+            )
         } else {
             result
         }
@@ -440,28 +448,46 @@ impl<'a> Lowering<'a> {
         let result_type = self.lower_node_type(expr.id);
 
         let expr = match &expr.kind {
-            ExpressionKind::Lit(l) => ir::Expression::LoadConstant(self.lower_literal(l, expr.id), result_type.clone()),
+            ExpressionKind::Lit(l) => ir::Expression::new(
+                ir::ExpressionKind::LoadConstant(self.lower_literal(l, expr.id)),
+                result_type.clone(),
+            ),
             ExpressionKind::Ident(_) => {
                 let (src_ty, expr) = match self.get_decl(expr.id) {
                     Declaration::In(input) => (
                         self.lower_node_type(input.id),
-                        ir::Expression::SyncStreamLookup(self.get_ref_for_stream(input.id)),
+                        ir::Expression::new(
+                            ir::ExpressionKind::StreamAccess(self.get_ref_for_stream(input.id), StreamAccessKind::Sync),
+                            self.lower_node_type(input.id),
+                        ),
                     ),
                     Declaration::Out(output) => (
                         self.lower_node_type(output.id),
-                        ir::Expression::SyncStreamLookup(self.get_ref_for_stream(output.id)),
+                        ir::Expression::new(
+                            ir::ExpressionKind::StreamAccess(
+                                self.get_ref_for_stream(output.id),
+                                StreamAccessKind::Sync,
+                            ),
+                            self.lower_node_type(output.id),
+                        ),
                     ),
                     Declaration::Const(constant) => {
                         let node_type = self.lower_node_type(constant.id);
                         (
                             node_type.clone(),
-                            ir::Expression::LoadConstant(self.lower_literal(&constant.literal, constant.id), node_type),
+                            ir::Expression::new(
+                                ir::ExpressionKind::LoadConstant(self.lower_literal(&constant.literal, constant.id)),
+                                node_type,
+                            ),
                         )
                     }
                     _ => unreachable!(),
                 };
                 if src_ty != result_type {
-                    ir::Expression::Convert { from: src_ty, to: result_type.clone(), expr: expr.into() }
+                    ir::Expression::new(
+                        ir::ExpressionKind::Convert { from: src_ty, to: result_type.clone(), expr: expr.into() },
+                        result_type.clone(),
+                    )
                 } else {
                     expr
                 }
@@ -472,21 +498,23 @@ impl<'a> Lowering<'a> {
                     _ => unreachable!("checked by AST verifier"),
                 };
                 let target = self.get_ref_for_ident(target_id);
-                ir::Expression::StreamAccess(target, *kind)
+                ir::Expression::new(ir::ExpressionKind::StreamAccess(target, *kind), self.lower_node_type(expr.id))
             }
-            ExpressionKind::Default(e, dft) => ir::Expression::Default {
-                expr: Box::new(self.lower_expression(e).0),
-                default: Box::new(self.lower_expression(dft).0),
-                ty: result_type.clone(),
-            },
+            ExpressionKind::Default(e, dft) => ir::Expression::new(
+                ir::ExpressionKind::Default {
+                    expr: Box::new(self.lower_expression(e).0),
+                    default: Box::new(self.lower_expression(dft).0),
+                },
+                result_type.clone(),
+            ),
             ExpressionKind::Offset(stream, offset) => {
                 let target = self.get_ref_for_ident(stream.id);
                 let offset = self.lower_offset(target, offset);
-                ir::Expression::OffsetLookup { target, offset }
+                ir::Expression::new(ir::ExpressionKind::OffsetLookup { target, offset }, result_type.clone())
             }
             ExpressionKind::SlidingWindowAggregation { .. } => {
                 let win_ref = self.lower_window(expr);
-                ir::Expression::WindowLookup(win_ref)
+                ir::Expression::new(ir::ExpressionKind::WindowLookup(win_ref), result_type.clone())
             }
             ExpressionKind::Binary(ast_op, lhs, rhs) => {
                 let ir_op = Lowering::lower_bin_op(*ast_op);
@@ -520,18 +548,20 @@ impl<'a> Lowering<'a> {
                 let (cond_expr, _) = self.lower_expression(cond);
                 let mut args = self.handle_func_args(&[result_type.clone(), result_type.clone()], &[cons, alt]);
                 // We remove the elements to avoid having to clone them when moving into the expression.
-                ir::Expression::Ite {
-                    condition: Box::new(cond_expr),
-                    consequence: Box::new(args.remove(0)),
-                    alternative: Box::new(args.remove(0)),
-                    ty: result_type.clone(),
-                }
+                ir::Expression::new(
+                    ir::ExpressionKind::Ite {
+                        condition: Box::new(cond_expr),
+                        consequence: Box::new(args.remove(0)),
+                        alternative: Box::new(args.remove(0)),
+                    },
+                    result_type.clone(),
+                )
             }
             ExpressionKind::ParenthesizedExpression(_, e, _) => self.lower_expression(e).0,
             ExpressionKind::MissingExpression => unreachable!(),
             ExpressionKind::Tuple(exprs) => {
                 let exprs = exprs.iter().map(|e| self.lower_expression(e).0).collect();
-                ir::Expression::Tuple(exprs)
+                ir::Expression::new(ir::ExpressionKind::Tuple(exprs), result_type.clone())
             }
             ExpressionKind::Function(name, _, args) => {
                 let args: Vec<&ast::Expression> = args.iter().map(Box::as_ref).collect();
@@ -553,10 +583,19 @@ impl<'a> Lowering<'a> {
                 } else {
                     let ret_type: ir::Type = (&ret_type).into();
                     let fun_ty = ir::Type::Function(arg_types, Box::new(ret_type.clone()));
-                    (ir::Expression::Function(name.name.name.clone(), args, fun_ty), ret_type)
+                    (
+                        ir::Expression::new(
+                            ir::ExpressionKind::Function(name.name.name.clone(), args, fun_ty),
+                            ret_type.clone(),
+                        ),
+                        ret_type,
+                    )
                 };
                 if ret_type != result_type {
-                    ir::Expression::Convert { from: ret_type, to: result_type.clone(), expr: func_expr.into() }
+                    ir::Expression::new(
+                        ir::ExpressionKind::Convert { from: ret_type, to: result_type.clone(), expr: func_expr.into() },
+                        result_type.clone(),
+                    )
                 } else {
                     func_expr
                 }
@@ -576,16 +615,25 @@ impl<'a> Lowering<'a> {
                 let args = self.handle_func_args(&arg_types, &args[..]);
                 let fun_ty = ir::Type::Function(arg_types, Box::new(ret_type.clone()));
 
-                let func_expr = ir::Expression::Function(name.name.name.clone(), args, fun_ty);
+                let func_expr = ir::Expression::new(
+                    ir::ExpressionKind::Function(name.name.name.clone(), args, fun_ty),
+                    ret_type.clone(),
+                );
                 if ret_type != result_type {
-                    ir::Expression::Convert { from: ret_type, to: result_type.clone(), expr: func_expr.into() }
+                    ir::Expression::new(
+                        ir::ExpressionKind::Convert { from: ret_type, to: result_type.clone(), expr: func_expr.into() },
+                        result_type.clone(),
+                    )
                 } else {
                     func_expr
                 }
             }
             ExpressionKind::Field(expr, ident) => {
                 let num: usize = ident.name.parse::<usize>().expect("checked in AST verifier");
-                ir::Expression::TupleAccess(self.lower_expression(expr).0.into(), num)
+                ir::Expression::new(
+                    ir::ExpressionKind::TupleAccess(self.lower_expression(expr).0.into(), num),
+                    result_type.clone(),
+                )
             }
         };
         (expr, result_type)
@@ -613,8 +661,8 @@ impl<'a> Lowering<'a> {
         let resolved_poly_types = self.tt.get_func_arg_types(nid).iter().map(|t| t.into()).collect();
         let arg_types = f(resolved_poly_types);
         let args = self.handle_func_args(&arg_types, args);
-        let fun_ty = ir::Type::Function(arg_types, Box::new(result_type));
-        ir::Expression::ArithLog(op, args, fun_ty)
+        let fun_ty = ir::Type::Function(arg_types, Box::new(result_type.clone()));
+        ir::Expression::new(ir::ExpressionKind::ArithLog(op, args, fun_ty), result_type)
     }
 
     fn handle_func_args(&mut self, types: &[ir::Type], args: &[&ast::Expression]) -> Vec<ir::Expression> {
@@ -625,7 +673,10 @@ impl<'a> Lowering<'a> {
             .map(|(req_ty, a)| {
                 let (arg, actual_ty) = self.lower_expression(a);
                 if req_ty != &actual_ty {
-                    ir::Expression::Convert { from: actual_ty, to: req_ty.clone(), expr: Box::new(arg) }
+                    ir::Expression::new(
+                        ir::ExpressionKind::Convert { from: actual_ty, to: req_ty.clone(), expr: Box::new(arg) },
+                        req_ty.clone(),
+                    )
                 } else {
                     arg
                 }

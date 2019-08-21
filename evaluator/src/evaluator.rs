@@ -7,8 +7,8 @@ use regex::Regex;
 use std::sync::Arc;
 use std::time::Instant;
 use streamlab_frontend::ir::{
-    Activation, Constant, Expression, InputReference, LolaIR, Offset, OutputReference, StreamAccessKind,
-    StreamReference, Trigger, Type, WindowReference,
+    Activation, Constant, Expression, ExpressionKind, InputReference, LolaIR, Offset, OutputReference,
+    StreamAccessKind, StreamReference, Trigger, Type, WindowReference,
 };
 
 pub(crate) enum ActivationCondition {
@@ -310,9 +310,9 @@ impl<'e, 'c> Evaluator<'e, 'c> {
 
 impl<'a> ExpressionEvaluator<'a> {
     fn eval_expr(&self, expr: &Expression, ts: Time) -> Value {
-        use streamlab_frontend::ir::Expression::*;
-        match expr {
-            LoadConstant(c, _) => match c {
+        use streamlab_frontend::ir::ExpressionKind::*;
+        match &expr.kind {
+            LoadConstant(c) => match c {
                 Constant::Bool(b) => Value::Bool(*b),
                 Constant::UInt(u) => Value::Unsigned(*u),
                 Constant::Int(i) => Value::Signed(*i),
@@ -389,8 +389,6 @@ impl<'a> ExpressionEvaluator<'a> {
                 }
             }
 
-            SyncStreamLookup(str_ref) => self.lookup_latest_check(*str_ref),
-
             OffsetLookup { target: str_ref, offset } => match offset {
                 Offset::FutureDiscreteOffset(_) | Offset::FutureRealTimeOffset(_) => unimplemented!(),
                 Offset::PastDiscreteOffset(u) => self.lookup_with_offset(*str_ref, -(*u as i16)),
@@ -400,6 +398,7 @@ impl<'a> ExpressionEvaluator<'a> {
             StreamAccess(str_ref, kind) => {
                 use StreamAccessKind::*;
                 match kind {
+                    Sync => self.lookup_latest_check(*str_ref),
                     Hold => self.lookup_latest(*str_ref),
                     Optional => {
                         use StreamReference::*;
@@ -450,8 +449,8 @@ impl<'a> ExpressionEvaluator<'a> {
                     }
                     Value::Str(s) => match name.as_ref() {
                         "matches" => {
-                            let re_str = match &args[1] {
-                                Expression::LoadConstant(Constant::Str(s), _) => s,
+                            let re_str = match &args[1].kind {
+                                ExpressionKind::LoadConstant(Constant::Str(s)) => s,
                                 _ => unreachable!("regex should be a string literal"),
                             };
                             // compiling regex every time it is used is a performance problem
