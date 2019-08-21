@@ -1,0 +1,56 @@
+input Ethernet::source: (UInt64, UInt64, UInt64, UInt64, UInt64, UInt64)
+input Ethernet::destination: (UInt64, UInt64, UInt64, UInt64, UInt64, UInt64)
+input Ethernet::type: UInt64
+
+input IPv4::source: (UInt64, UInt64, UInt64, UInt64)
+input IPv4::destination: (UInt64, UInt64, UInt64, UInt64)
+input IPv4::ihl: UInt64
+input IPv4::dscp: UInt64
+input IPv4::ecn: UInt64
+input IPv4::length: UInt64
+input IPv4::identification: UInt64
+input IPv4::fragment_offset: UInt64
+input IPv4::ttl: UInt64
+input IPv4::protocol: UInt64
+input IPv4::checksum: UInt64
+input IPv4::flags::df: Bool
+input IPv4::flags::mf: Bool
+
+input IPv6::source: (UInt64, UInt64, UInt64, UInt64, UInt64, UInt64, UInt64, UInt64, UInt64, UInt64, UInt64, UInt64, UInt64, UInt64, UInt64, UInt64)
+input IPv6::destination: (UInt64, UInt64, UInt64, UInt64, UInt64, UInt64, UInt64, UInt64, UInt64, UInt64, UInt64, UInt64, UInt64, UInt64, UInt64, UInt64)
+input IPv6::traffic_class: UInt64
+input IPv6::flow_label: UInt64
+input IPv6::length: UInt64
+input IPv6::hop_limit: UInt64
+
+input TCP::source: UInt64
+input TCP::destination: UInt64
+input TCP::seq_number: UInt64
+input TCP::ack_number: UInt64
+input TCP::data_offset: UInt64
+input TCP::window_size: UInt64
+input TCP::checksum: UInt64
+input TCP::urgent_pointer: UInt64
+input TCP::flags::ns: Bool
+input TCP::flags::fin: Bool
+input TCP::flags::syn: Bool
+input TCP::flags::rst: Bool
+input TCP::flags::psh: Bool
+input TCP::flags::ack: Bool
+input TCP::flags::urg: Bool
+input TCP::flags::ece: Bool
+input TCP::flags::cwr: Bool
+
+input UDP::source: UInt64
+input UDP::destination: UInt64
+input UDP::length: UInt64
+input UDP::checksum: UInt64
+
+input payload: String
+input direction: String
+input protocol: String
+
+output count:UInt64 @(IPv4::source) := count.offset(by: -1).defaults(to: 0) + 1
+
+trigger count == 360 "counted all packets"
+trigger count > 360 "counted too many packets"
