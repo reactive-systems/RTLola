@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 ### Added
 - Language: type annotation `T?` to denote optional of type `T`, e.g., `Int64?`
+- Language: support min/max aggregations for sliding windows
 
 ### Fixed
 - Frontend: Fix parsing problem, e.g., `output outputxyz` can now be parsed
