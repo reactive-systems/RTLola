@@ -11,8 +11,8 @@ mod tests;
 
 use crate::coordination::Controller;
 use basics::{
-    CSVInputSource, EvalConfig, EvaluatorChoice, EventSourceConfig, ExecutionMode, OutputChannel, Statistics,
-    TimeFormat, TimeRepresentation, Verbosity,
+    CSVInputSource, EvalConfig, EvaluatorChoice, EventSourceConfig, ExecutionMode, OutputChannel, PCAPInputSource,
+    Statistics, TimeFormat, TimeRepresentation, Verbosity,
 };
 use clap::{App, AppSettings, Arg, ArgGroup, SubCommand};
 use std::fs;
@@ -40,7 +40,7 @@ impl Config {
             SubCommand::with_name("monitor")
             .about("Start monitoring for the given specification")
             .arg(
-                Arg::with_name("MONITOR_SPEC")
+                Arg::with_name("SPEC")
                     .help("Sets the specification file to use")
                     .required(true)
                     .index(1),
@@ -136,26 +136,115 @@ impl Config {
             SubCommand::with_name("analyze")
             .about("Parses the input file and runs semantic analysis")
             .arg(
-                Arg::with_name("ANALYZE_SPEC")
+                Arg::with_name("SPEC")
                     .help("Sets the specification file to use")
                     .required(true)
                     .index(1),
             )
         )
+        .subcommand(
+            SubCommand::with_name("ids")
+            .about("Use the streamlab monitor as a network intrusion detection system")
+            .arg(
+                Arg::with_name("SPEC")
+                    .help("Sets the specification file to use")
+                    .required(true)
+                    .index(1)
+            )
+            .arg(
+                Arg::with_name("LOCAL_NETWORK")
+                    .help("The local ip range given in CIDR notation")
+                    .required(true)
+                    .index(2)
+            )
+            .arg(
+                Arg::with_name("NETWORK_INTERFACE")
+                    .help("Read the packets from a network interface")
+                    .long("net-iface")
+                    .takes_value(true)
+                    .number_of_values(1)
+            )
+            .arg(
+                Arg::with_name("PCAP_INPUT_FILE")
+                    .help("Read pcap input from file.")
+                    .long("pcap-in")
+                    .takes_value(true)
+                    .number_of_values(1)
+            )
+            .group(
+                ArgGroup::with_name("INPUT_MODE")
+                .args(&["NETWORK_INTERFACE", "PCAP_INPUT_FILE"])
+                .required(true)
+            )
+            .arg(
+                Arg::with_name("STDOUT")
+                    .help("Output to stdout")
+                    .long("stdout")
+            )
+            .arg(
+                Arg::with_name("STDERR")
+                    .help("Output to stderr")
+                    .long("stderr")
+                    .conflicts_with("STDOUT")
+            )
+            .arg(
+                Arg::with_name("DELAY")
+                    .help("Delay [ms] between reading in two lines from the input\nOnly used for file input.")
+                    .long("delay")
+                    .requires("PCAP_INPUT_FILE")
+                    .takes_value(true)
+                    .number_of_values(1)
+            )
+            .arg(
+                Arg::with_name("VERBOSITY")
+                    .help("Sets the verbosity\n")
+                    .long("verbosity")
+                    .possible_values(&["debug", "outputs", "triggers", "warnings", "progress", "silent", "quiet"])
+                    .default_value("triggers")
+            )
+            .arg(
+                Arg::with_name("TIMEREPRESENTATION")
+                    .help("Sets the trigger time info representation\n")
+                    .long("time-info-rep")
+                    .possible_values(&[
+                        "hide",
+                        "relative",
+                        "relative_nanos", "relative_uint_nanos",
+                        "relative_secs", "relative_float_secs",
+                        "relative_human", "relative_human_time",
+                        "absolute",
+                        "absolute_nanos", "absolute_uint_nanos",
+                        "absolute_secs", "absolute_float_secs",
+                        "absolute_human", "absolute_human_time",
+                    ])
+                    .default_value("hide")
+            )
+            .arg(
+                Arg::with_name("INTERPRETED")
+                    .long("interpreted")
+                    .help("Interpret expressions instead of compilation")
+                    .hidden(cfg!(feature = "public"))
+            )
+        )
         .get_matches_from(args);
 
-        // Now we have a reference to clone's matches
         if let Some(parse_matches) = parse_matches.subcommand_matches("analyze") {
-            let filename = parse_matches.value_of("ANALYZE_SPEC").map(|s| s.to_string()).unwrap();
+            let filename = parse_matches.value_of("SPEC").map(|s| s.to_string()).unwrap();
             streamlab_frontend::export::analyze(filename.as_str(), crate::CONFIG);
             std::process::exit(0);
         }
+        let mut ids_mode = false;
+        let parse_matches = if let Some(matches) = parse_matches.subcommand_matches("monitor") {
+            matches
+        } else if let Some(matches) = parse_matches.subcommand_matches("ids") {
+            ids_mode = true;
+            matches
+        } else {
+            eprintln!("Unkown subcommand. See help for more information.");
+            std::process::exit(1)
+        };
 
-        let parse_matches =
-            parse_matches.subcommand_matches("monitor").expect("`analyze` or `monitor` are the only options");
-
-        let filename = parse_matches.value_of("MONITOR_SPEC").map(|s| s.to_string()).unwrap();
-
+        let filename = parse_matches.value_of("SPEC").map(|s| s.to_string()).unwrap();
         let contents = fs::read_to_string(&filename).unwrap_or_else(|e| {
             eprintln!("Could not read file `{}`: {}", filename, e);
             std::process::exit(1)
@@ -180,19 +269,34 @@ impl Config {
             }
         };
 
-        let csv_time_column = parse_matches.value_of("CSV_TIME_COLUMN").map(|col| {
-            let col = col.parse::<usize>().unwrap_or_else(|_| {
-                eprintln!("time column needs to be a positive integer");
-                std::process::exit(1)
-            });
-            if col == 0 {
-                eprintln!("time column needs to be a positive integer (first column = 1)");
-                std::process::exit(1);
-            }
-            col
-        });
+        let csv_time_column = if ids_mode {
+            None
+        } else {
+            parse_matches.value_of("CSV_TIME_COLUMN").map(|col| {
+                let col = col.parse::<usize>().unwrap_or_else(|_| {
+                    eprintln!("time column needs to be a positive integer");
+                    std::process::exit(1)
+                });
+                if col == 0 {
+                    eprintln!("time column needs to be a positive integer (first column = 1)");
+                    std::process::exit(1);
+                }
+                col
+            })
+        };
 
-        let src = if let Some(file) = parse_matches.value_of("CSV_INPUT_FILE") {
+        let src = if ids_mode {
+            let local_network = String::from(parse_matches.value_of("LOCAL_NETWORK").unwrap());
+            if let Some(file) = parse_matches.value_of("PCAP_INPUT_FILE") {
+                EventSourceConfig::PCAP {
+                    src: PCAPInputSource::File { path: String::from(file), delay, local_network },
+                }
+            } else if let Some(iface) = parse_matches.value_of("NETWORK_INTERFACE") {
+                EventSourceConfig::PCAP { src: PCAPInputSource::Device { name: String::from(iface), local_network } }
+            } else {
+                unreachable!(); //Excluded by CLAP
+            }
+        } else if let Some(file) = parse_matches.value_of("CSV_INPUT_FILE") {
             EventSourceConfig::CSV { src: CSVInputSource::file(String::from(file), delay, csv_time_column) }
         } else {
             EventSourceConfig::CSV { src: CSVInputSource::stdin() }
@@ -225,7 +329,11 @@ impl Config {
 
         use ExecutionMode::*;
         let mut mode = Offline;
-        if parse_matches.is_present("ONLINE") {
+        if !ids_mode {
+            if parse_matches.is_present("ONLINE") {
+                mode = Online;
+            }
+        } else if parse_matches.is_present("NETWORK_INTERFACE") {
             mode = Online;
         }
 
