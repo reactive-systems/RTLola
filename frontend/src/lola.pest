@@ -152,7 +152,7 @@ Optional = { Ident ~ "?" }  // Optional types are written `Int32?`
 ///////////////////// Names //////////////////////
 //////////////////////////////////////////////////
 
-Ident = @{  (Letter | "_") ~ (Letter | Digit | "_")* | WindowOp}
+Ident = @{  (Letter | "_") ~ (Letter | Digit | "_" | "::")* | WindowOp}
 
 Parameter = { Ident } // Semantic Category
 

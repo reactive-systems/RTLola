@@ -469,7 +469,77 @@ impl PCAPEventSource {
 
         // Generate Mapping that given a parsed packet returns the value for the corresponding input stream
         let mut mapping: Vec<fn(&SlicedPacket) -> Value> = Vec::with_capacity(input_names.len());
-        // TODO: provide mapping
+        for (ix, name) in input_names.iter().enumerate() {
+            let layers: Vec<&str> = name.split("::").collect();
+
+            if layers.len() < 2 || layers.len() > 3 {
+                eprintln!("Malformed input name: {}", name);
+                std::process::exit(1);
+            }
+
+            let val: fn(&SlicedPacket) -> Value = match layers[0] {
+                "Ethernet" => match layers[1] {
+                    "source" => ethernet_source,
+                    "destination" => ethernet_destination,
+                    "type" => ethernet_type,
+                    _ => {
+                        eprintln!("Unknown input name: {}", name);
+                        std::process::exit(1);
+                    }
+                },
+                "IPv4" => match layers[1] {
+                    "source" => ipv4_source,
+                    "destination" => ipv4_destination,
+                    "ihl" => ipv4_ihl,
+                    "dscp" => ipv4_dscp,
+                    "ecn" => ipv4_ecn,
+                    "length" => ipv4_length,
+                    "identification" => ipv4_id,
+                    "fragment_offset" => ipv4_fragment_offset,
+                    "ttl" => ipv4_ttl,
+                    "protocol" => ipv4_protocol,
+                    "checksum" => ipv4_checksum,
+                    "flags" => {
+                        if layers.len() != 3 {
+                            eprintln!("Malformed input name: {}", name);
+                            std::process::exit(1);
+                        }
+                        match layers[2] {
+                            "df" => ipv4_flags_df,
+                            "mf" => ipv4_flags_mf,
+                            _ => {
+                                eprintln!("Unknown input name: {}", name);
+                                std::process::exit(1);
+                            }
+                        }
+                    }
+                    _ => {
+                        eprintln!("Unknown input name: {}", name);
+                        std::process::exit(1);
+                    }
+                },
+                "IPv6" => match layers[1] {
+                    "source" => ipv6_source,
+                    "destination" => ipv6_destination,
+                    "traffic_class" => ipv6_traffic_class,
+                    "flow_label" => ipv6_flow_label,
+                    "length" => ipv6_length,
+                    "hop_limit" => ipv6_hop_limit,
+                    _ => {
+                        eprintln!("Unknown input name: {}", name);
+                        std::process::exit(1);
+                    }
+                },
+                //"ICMP" => {},
+                //"TCP" => {},
+                //"UDP" => {},
+                _ => {
+                    eprintln!("Unknown input name: {}", name);
+                    std::process::exit(1);
+                }
+            };
+            mapping[ix] = val;
+        }
 
         Ok(Box::new(PCAPEventSource { capture_handle, timer, mapping, event: None, last_timestamp: None }))
     }
