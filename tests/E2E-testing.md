@@ -15,6 +15,15 @@ Each test case is represented as a file with the `streamlab_test` suffix in this
 TODO
 JSON format (needs extension for specifying the timestamps)
 
+## Testing using PCAP files
+
+The json format accepts a `input_mode` field which may either be `PCAP` or `CSV`.
+If it is set to `PCAP` a pcap file can be supplied and the tool is run in ids mode.
+
+A suitable tool for trace generation: [Colasoft Packet Builder](https://www.colasoft.com/packet_builder/)
+
+*Note:* The windows version of the winpcap library only supports the pcap format. (Not pcap nanoseconds)
+
 ## Things to test
 
 - activation condition

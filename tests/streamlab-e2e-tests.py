@@ -110,10 +110,16 @@ for (mode, config) in [('interpreted', ["--interpreted"]), ('closure', []), ('ti
             test_json = json.load(fd)
             spec_file = build_path(repo_base_dir, test_json["spec_file"].split('/')[1:])
             input_file = build_path(repo_base_dir, test_json["input_file"].split('/')[1:])
+            input_mode = "CSV"
+            if "input_mode" in test_json:
+                input_mode = test_json["input_mode"]
             something_wrong = False
             run_result = None
             try:
-                run_result = subprocess.run([streamlab_executable_path_string, "monitor", "--offline", "--stdout", "--verbosity", "outputs", str(spec_file), "--csv-in", str(input_file)] + config, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=str(repo_base_dir), universal_newlines=True, timeout=10)
+                if input_mode == "PCAP":
+                    run_result = subprocess.run([streamlab_executable_path_string, "ids", "--stdout", "--verbosity", "outputs", str(spec_file), "192.168.178.0/24", "--pcap-in", str(input_file)] + config, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=str(repo_base_dir), universal_newlines=True, timeout=10)
+                else:
+                    run_result = subprocess.run([streamlab_executable_path_string, "monitor", "--offline", "--stdout", "--verbosity", "outputs", str(spec_file), "--csv-in", str(input_file)] + config, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=str(repo_base_dir), universal_newlines=True, timeout=10)
             except subprocess.TimeoutExpired:
                 tests_crashed.append(test_name)
                 print_fail("Test timed out")
