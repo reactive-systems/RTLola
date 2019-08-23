@@ -66,7 +66,9 @@ impl Config {
         eprintln!("Input file `{}`", filename);
 
         let mut logger: Vec<Box<dyn SharedLogger>> = Vec::new();
-        if let Some(term_logger) = TermLogger::new(verbosity, simplelog::Config::default()) {
+        if let Some(term_logger) =
+            TermLogger::new(verbosity, simplelog::Config::default(), simplelog::TerminalMode::default())
+        {
             logger.push(term_logger);
         } else {
             logger.push(SimpleLogger::new(verbosity, simplelog::Config::default()))

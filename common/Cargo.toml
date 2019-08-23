@@ -1,10 +1,10 @@
 [package]
 name = "streamlab-common"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Maximilian Schwenger <schwenger@react.uni-saarland.de>"]
 edition = "2018"
 
 [dependencies]
 streamlab-frontend = {path = "../frontend/"}
 num = "0.2.0"
-uom = { version = "0.24.0", default-features = false, features = [ "autoconvert", "rational64", "si", "std", "use_serde"]}
+uom = { version = "0.25.0", default-features = false, features = [ "autoconvert", "rational64", "si", "std", "use_serde"]}

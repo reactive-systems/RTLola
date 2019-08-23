@@ -1,6 +1,6 @@
 [package]
 name = "afl-fuzz-frontend"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Leander Tentrup <tentrup@react.uni-saarland.de>"]
 edition = "2018"
 
