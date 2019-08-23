@@ -545,7 +545,50 @@ impl PCAPEventSource {
     }
 
     fn process_packet(&mut self) -> Result<bool, Box<dyn Error>> {
-        unimplemented!();
+        let raw_packet: PCAPPacket = self.capture_handle.next()?;
+
+        use std::convert::TryInto;
+        let d = Duration::new(
+            raw_packet.header.ts.tv_sec.try_into().unwrap(),
+            raw_packet.header.ts.tv_usec.try_into().unwrap(),
+        );
+        self.last_timestamp = Some(UNIX_EPOCH + d);
+
+        let p = SlicedPacket::from_ethernet(raw_packet.data);
+        //Todo (Florian): Track underlying error
+        if p.is_err() {
+            return Ok(false);
+        }
+        let packet = p.unwrap();
+
+        let mut event: Vec<Value> = Vec::with_capacity(self.mapping.len());
+        for (ix, parse_function) in self.mapping.iter().enumerate() {
+            event[ix] = parse_function(&packet);
+        }
+
+        //compute duration since start
+        use TimeHandling::*;
+        let dur: Time = match self.timer {
+            RealTime { start } => Instant::now() - start,
+            FromFile { start } => {
+                let now = self.last_timestamp.unwrap();
+                match start {
+                    None => {
+                        self.timer = FromFile { start: Some(now) };
+                        Time::default()
+                    }
+                    Some(start) => now.duration_since(start).expect("Time did not behave monotonically!"),
+                }
+            }
+            Delayed { delay, ref mut time } => {
+                *time += delay;
+                *time
+            }
+        };
+
+        self.event = Some((event, dur));
+
+        Ok(true)
     }
 }
 
