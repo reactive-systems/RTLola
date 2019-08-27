@@ -2,7 +2,7 @@
 
 use crate::basics::io_handler::{EventSource, Time};
 use crate::storage::Value;
-use csv::{Reader as CSVReader, Result as ReaderResult, StringRecord};
+use csv::{ByteRecord, Reader as CSVReader, Result as ReaderResult, StringRecord};
 use std::error::Error;
 use std::fs::File;
 use std::io::stdin;
@@ -80,10 +80,10 @@ enum ReaderWrapper {
 }
 
 impl ReaderWrapper {
-    fn read_record(&mut self, rec: &mut StringRecord) -> ReaderResult<bool> {
+    fn read_record(&mut self, rec: &mut ByteRecord) -> ReaderResult<bool> {
         match self {
-            ReaderWrapper::Std(r) => r.read_record(rec),
-            ReaderWrapper::File(r) => r.read_record(rec),
+            ReaderWrapper::Std(r) => r.read_byte_record(rec),
+            ReaderWrapper::File(r) => r.read_byte_record(rec),
         }
     }
 
@@ -97,7 +97,7 @@ impl ReaderWrapper {
 
 pub struct CSVEventSource {
     reader: ReaderWrapper,
-    record: StringRecord,
+    record: ByteRecord,
     mapping: CSVColumnMapping,
     in_types: Vec<Type>,
     timer: TimeHandling,
@@ -128,7 +128,7 @@ impl CSVEventSource {
             },
         };
 
-        Ok(Box::new(CSVEventSource { reader: wrapper, record: StringRecord::new(), mapping, in_types, timer }))
+        Ok(Box::new(CSVEventSource { reader: wrapper, record: ByteRecord::new(), mapping, in_types, timer }))
     }
 
     fn read_blocking(&mut self) -> Result<bool, Box<dyn Error>> {
@@ -161,7 +161,7 @@ impl CSVEventSource {
     }
 
     pub(crate) fn str_for_time(&self) -> Option<&str> {
-        self.time_index().map(|ix| &self.record[ix])
+        self.time_index().map(|ix| &self.record[ix]).and_then(|bytes| std::str::from_utf8(bytes).ok())
     }
 
     fn time_index(&self) -> Option<usize> {
@@ -193,10 +193,21 @@ impl CSVEventSource {
         let mut buffer = vec![Value::None; self.in_types.len()];
         for (col_ix, s) in self.record.iter().enumerate() {
             if let Some(str_ix) = self.mapping.col2str[col_ix] {
-                if s != "#" {
+                // utf8-encoding (as [u8]) of string "#"
+                if s != &[35] {
                     let t = &self.in_types[str_ix];
                     buffer[str_ix] = Value::try_from(s, t).unwrap_or_else(|| {
-                        eprintln!("error: problem with data source; failed to parse {} as value of type {:?}.", s, t);
+                        if let Ok(s) = std::str::from_utf8(s) {
+                            eprintln!(
+                                "error: problem with data source; failed to parse {} as value of type {:?}.",
+                                s, t
+                            );
+                        } else {
+                            eprintln!(
+                                "error: problem with data source; failed to parse non-utf8 {:?} as value of type {:?}.",
+                                s, t
+                            );
+                        }
                         std::process::exit(1)
                     })
                 }

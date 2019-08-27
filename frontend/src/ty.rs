@@ -49,6 +49,7 @@ pub enum ValueTy {
     // an abstract data type, e.g., structs, enums, etc.
     //Adt(AdtDef),
     String,
+    Bytes,
     Tuple(Vec<ValueTy>),
     /// an optional value type, e.g., resulting from accessing a stream with offset -1
     Option(Box<ValueTy>),
@@ -238,6 +239,7 @@ lazy_static! {
         ("Float32", &ValueTy::Float(F32)),
         ("Float64", &ValueTy::Float(F64)),
         ("String", &ValueTy::String),
+        ("Bytes", &ValueTy::Bytes),
     ];
     static ref REDUCED_PRIMITIVE_TYPES: Vec<(&'static str, &'static ValueTy)> = vec![
         ("Bool", &ValueTy::Bool),
@@ -245,6 +247,7 @@ lazy_static! {
         ("UInt64", &ValueTy::UInt(U64)),
         ("Float64", &ValueTy::Float(F64)),
         ("String", &ValueTy::String),
+        ("Bytes", &ValueTy::Bytes),
     ];
     static ref PRIMITIVE_TYPES_ALIASES: Vec<(&'static str, &'static ValueTy)> =
         vec![("Int", &ValueTy::Int(I64)), ("UInt", &ValueTy::UInt(U64)), ("Float", &ValueTy::Float(F64)),];
@@ -301,7 +304,7 @@ impl ValueTy {
     pub(crate) fn is_primitive(&self) -> bool {
         use self::ValueTy::*;
         match self {
-            Bool | Int(_) | UInt(_) | Float(_) | String => true,
+            Bool | Int(_) | UInt(_) | Float(_) | String | Bytes => true,
             _ => false,
         }
     }
@@ -360,6 +363,7 @@ impl std::fmt::Display for ValueTy {
             ValueTy::Float(F32) => write!(f, "Float32"),
             ValueTy::Float(F64) => write!(f, "Float64"),
             ValueTy::String => write!(f, "String"),
+            ValueTy::Bytes => write!(f, "Bytes"),
             ValueTy::Option(ty) => write!(f, "{}?", ty),
             ValueTy::Tuple(inner) => {
                 let joined: Vec<String> = inner.iter().map(|e| format!("{}", e)).collect();

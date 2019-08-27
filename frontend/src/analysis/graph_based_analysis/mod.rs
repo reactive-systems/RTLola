@@ -193,7 +193,7 @@ fn get_byte_size(value_ty: &ValueTy) -> MemoryBound {
         }),
         // an abstract data type, e.g., structs, enums, etc.
         //ValueTy::Adt(AdtDef),
-        ValueTy::String => MemoryBound::Unbounded,
+        ValueTy::String | ValueTy::Bytes => MemoryBound::Unbounded,
         ValueTy::Tuple(elements) => {
             let mut accu = 0_u128;
             for element in elements.iter().map(get_byte_size) {

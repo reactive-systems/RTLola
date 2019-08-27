@@ -100,6 +100,7 @@ impl Display for Type {
             Type::Function(args, res) => write_delim_list(f, args, "(", &format!(") -> {}", res), ","),
             Type::Tuple(elems) => write_delim_list(f, elems, "(", ")", ","),
             Type::String => write!(f, "String"),
+            Type::Bytes => write!(f, "Bytes"),
             Type::Option(inner) => write!(f, "Option<{}>", inner),
             Type::Bool => write!(f, "Bool"),
         }

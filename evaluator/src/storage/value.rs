@@ -14,26 +14,34 @@ pub(crate) enum Value {
     Float(NotNan<f64>),
     Tuple(Box<[Value]>),
     Str(Box<str>),
+    Bytes(Box<[u8]>),
 }
 
 impl Value {
     // TODO: -> Result<Option, ConversionError>
-    pub(crate) fn try_from(source: &str, ty: &Type) -> Option<Value> {
-        match ty {
-            Type::Option(_) | Type::Function(_, _) => unreachable!(),
-            Type::String => Some(Value::Str(source.into())),
-            Type::Tuple(_) => unimplemented!(),
-            Type::Float(_) => source.parse::<f64>().ok().map(|f| Float(NotNan::new(f).unwrap())),
-            Type::UInt(_) => {
-                // TODO: This is just a quickfix!! Think of something more general.
-                if source == "0.0" {
-                    Some(Unsigned(0))
-                } else {
-                    source.parse::<u64>().map(Unsigned).ok()
+    pub(crate) fn try_from(source: &[u8], ty: &Type) -> Option<Value> {
+        if let Type::Bytes = ty {
+            return Some(Value::Bytes(source.into()));
+        }
+        if let Ok(source) = std::str::from_utf8(source) {
+            match ty {
+                Type::Bool => source.parse::<bool>().map(Bool).ok(),
+                Type::Int(_) => source.parse::<i64>().map(Signed).ok(),
+                Type::UInt(_) => {
+                    // TODO: This is just a quickfix!! Think of something more general.
+                    if source == "0.0" {
+                        Some(Unsigned(0))
+                    } else {
+                        source.parse::<u64>().map(Unsigned).ok()
+                    }
                 }
+                Type::Float(_) => source.parse::<f64>().ok().map(|f| Float(NotNan::new(f).unwrap())),
+                Type::String => Some(Value::Str(source.into())),
+                Type::Tuple(_) => unimplemented!(),
+                Type::Option(_) | Type::Function(_, _) | Type::Bytes => unreachable!(),
             }
-            Type::Int(_) => source.parse::<i64>().map(Signed).ok(),
-            Type::Bool => source.parse::<bool>().map(Bool).ok(),
+        } else {
+            Option::None // TODO: error message about non-utf8 encoded string?
         }
     }
 

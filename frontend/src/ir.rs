@@ -35,6 +35,7 @@ pub enum Type {
     UInt(UIntTy),
     Float(FloatTy),
     String,
+    Bytes,
     Tuple(Vec<Type>),
     /// an optional value type, e.g., resulting from accessing a stream with offset -1
     Option(Box<Type>),
@@ -50,6 +51,7 @@ impl From<&ValueTy> for Type {
             ValueTy::UInt(u) => Type::UInt(*u),
             ValueTy::Float(f) => Type::Float(*f),
             ValueTy::String => Type::String,
+            ValueTy::Bytes => Type::Bytes,
             ValueTy::Tuple(t) => Type::Tuple(t.iter().map(|e| e.into()).collect()),
             ValueTy::Option(o) => Type::Option(Box::new(o.as_ref().into())),
             _ => unreachable!("cannot lower `ValueTy` {}", ty),
@@ -538,7 +540,7 @@ impl Type {
                 let size = t.iter().map(|t| Type::size(t).unwrap().0).sum();
                 Some(ValSize(size))
             }
-            Type::String => unimplemented!("Size of Strings not determined, yet."),
+            Type::String | Type::Bytes => unimplemented!("Size of Strings not determined, yet."),
             Type::Function(_, _) => None,
         }
     }
