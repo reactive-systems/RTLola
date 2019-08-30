@@ -130,21 +130,58 @@ impl Value {
     }
 }
 
-impl ops::BitOr for Value {
-    type Output = Value;
-    fn bitor(self, other: Value) -> Value {
-        match (self, other) {
-            (Bool(v1), Bool(v2)) => Bool(v1 || v2),
-            (a, b) => panic!("Incompatible types: ({:?},{:?})", a, b),
-        }
-    }
-}
-
 impl ops::BitAnd for Value {
     type Output = Value;
     fn bitand(self, other: Value) -> Value {
         match (self, other) {
             (Bool(v1), Bool(v2)) => Bool(v1 && v2),
+            (Unsigned(u1), Unsigned(u2)) => Unsigned(u1 & u2),
+            (Signed(s1), Signed(s2)) => Signed(s1 & s2),
+            (a, b) => panic!("Incompatible types: ({:?},{:?})", a, b),
+        }
+    }
+}
+
+impl ops::BitOr for Value {
+    type Output = Value;
+    fn bitor(self, other: Value) -> Value {
+        match (self, other) {
+            (Bool(v1), Bool(v2)) => Bool(v1 || v2),
+            (Unsigned(u1), Unsigned(u2)) => Unsigned(u1 | u2),
+            (Signed(s1), Signed(s2)) => Signed(s1 | s2),
+            (a, b) => panic!("Incompatible types: ({:?},{:?})", a, b),
+        }
+    }
+}
+
+impl ops::BitXor for Value {
+    type Output = Value;
+    fn bitxor(self, other: Value) -> Value {
+        match (self, other) {
+            (Unsigned(u1), Unsigned(u2)) => Unsigned(u1 ^ u2),
+            (Signed(s1), Signed(s2)) => Signed(s1 ^ s2),
+            (a, b) => panic!("Incompatible types: ({:?},{:?})", a, b),
+        }
+    }
+}
+
+impl ops::Shl for Value {
+    type Output = Value;
+    fn shl(self, other: Value) -> Value {
+        match (self, other) {
+            (Unsigned(u1), Unsigned(u2)) => Unsigned(u1 << u2),
+            (Signed(s1), Unsigned(u)) => Signed(s1 << u),
+            (a, b) => panic!("Incompatible types: ({:?},{:?})", a, b),
+        }
+    }
+}
+
+impl ops::Shr for Value {
+    type Output = Value;
+    fn shr(self, other: Value) -> Value {
+        match (self, other) {
+            (Unsigned(u1), Unsigned(u2)) => Unsigned(u1 >> u2),
+            (Signed(s1), Unsigned(u)) => Signed(s1 >> u),
             (a, b) => panic!("Incompatible types: ({:?},{:?})", a, b),
         }
     }
@@ -155,6 +192,8 @@ impl ops::Not for Value {
     fn not(self) -> Value {
         match self {
             Bool(v) => Bool(!v),
+            Unsigned(u) => Unsigned(!u),
+            Signed(s) => Signed(!s),
             a => panic!("Incompatible type: {:?}", a),
         }
     }

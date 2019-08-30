@@ -31,7 +31,7 @@ output hovering: Bool @ 1Hz := (velo.aggregate(over_exactly: 5s, using: integral
 trigger hovering "Little movement in the last 5 seconds. Path planning hung up?"
 
 output fast: Bool := velo > 7.0
-output slowing_down := !fast & fast.offset(by: -1).defaults(to: false)
+output slowing_down := !fast && fast.offset(by: -1).defaults(to: false)
 
 trigger gps = 3 "Few GPS satellites in range. 3 dimensional location unavailable"
 trigger gps < 2 "Few GPS satellites in range. No GPS location available."

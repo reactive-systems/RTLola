@@ -235,18 +235,18 @@ pub enum ArithLogOp {
     And,
     /// The `||` operator (logical or)
     Or,
-    /*
     /// The `^` operator (bitwise xor)
     BitXor,
     /// The `&` operator (bitwise and)
     BitAnd,
     /// The `|` operator (bitwise or)
     BitOr,
+    /// The `~` operator for one's complement
+    BitNot,
     /// The `<<` operator (shift left)
     Shl,
     /// The `>>` operator (shift right)
     Shr,
-    */
     /// The `==` operator (equality)
     Eq,
     /// The `<` operator (less than)

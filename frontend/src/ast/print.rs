@@ -340,6 +340,7 @@ impl Display for UnOp {
             match self {
                 UnOp::Not => "!",
                 UnOp::Neg => "-",
+                UnOp::BitNot => "~",
             }
         )
     }
@@ -371,21 +372,31 @@ impl Display for Ident {
 
 impl Display for BinOp {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        use BinOp::*;
         match &self {
-            BinOp::Add => write!(f, "+"),
-            BinOp::Sub => write!(f, "-"),
-            BinOp::Mul => write!(f, "*"),
-            BinOp::Div => write!(f, "/"),
-            BinOp::Rem => write!(f, "%"),
-            BinOp::Pow => write!(f, "**"),
-            BinOp::And => write!(f, "∧"),
-            BinOp::Or => write!(f, "∨"),
-            BinOp::Eq => write!(f, "="),
-            BinOp::Lt => write!(f, "<"),
-            BinOp::Le => write!(f, "≤"),
-            BinOp::Ne => write!(f, "≠"),
-            BinOp::Gt => write!(f, ">"),
-            BinOp::Ge => write!(f, "≥"),
+            // Arithmetic
+            Add => write!(f, "+"),
+            Sub => write!(f, "-"),
+            Mul => write!(f, "*"),
+            Div => write!(f, "/"),
+            Rem => write!(f, "%"),
+            Pow => write!(f, "**"),
+            And => write!(f, "∧"),
+            // Logical
+            Or => write!(f, "∨"),
+            Eq => write!(f, "="),
+            // Comparison
+            Lt => write!(f, "<"),
+            Le => write!(f, "≤"),
+            Ne => write!(f, "≠"),
+            Gt => write!(f, ">"),
+            Ge => write!(f, "≥"),
+            // Bitwise
+            BitAnd => write!(f, "&"),
+            BitOr => write!(f, "|"),
+            BitXor => write!(f, "^"),
+            Shl => write!(f, "<<"),
+            Shr => write!(f, ">>"),
         }
     }
 }

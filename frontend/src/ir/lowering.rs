@@ -521,14 +521,20 @@ impl<'a> Lowering<'a> {
 
                 self.lower_arith_log(expr.id, ir_op, &[lhs, rhs], result_type.clone(), |resolved_poly_types| {
                     use crate::ast::BinOp::*;
-                    let arg_ty = match ast_op {
-                        Add | Sub | Mul | Div | Rem | Pow | Eq | Lt | Le | Ne | Ge | Gt => {
+                    match ast_op {
+                        Add | Sub | Mul | Div | Rem | Pow | Eq | Lt | Le | Ne | Ge | Gt | BitAnd | BitOr | BitXor => {
                             assert_eq!(resolved_poly_types.len(), 1);
-                            resolved_poly_types[0].clone()
+                            let arg_ty = resolved_poly_types[0].clone();
+                            vec![arg_ty.clone(), arg_ty]
                         }
-                        And | Or => ir::Type::Bool,
-                    };
-                    vec![arg_ty.clone(), arg_ty]
+                        And | Or => vec![ir::Type::Bool, ir::Type::Bool],
+                        Shl | Shr => {
+                            assert_eq!(resolved_poly_types.len(), 2);
+                            let lhs_ty = resolved_poly_types[0].clone();
+                            let rhs_ty = resolved_poly_types[1].clone();
+                            vec![lhs_ty, rhs_ty]
+                        }
+                    }
                 })
             }
             ExpressionKind::Unary(ast_op, operand) => {
@@ -536,7 +542,7 @@ impl<'a> Lowering<'a> {
 
                 self.lower_arith_log(expr.id, ir_op, &[operand], result_type.clone(), |resolved_poly_types| {
                     vec![match ast_op {
-                        ast::UnOp::Neg => {
+                        ast::UnOp::Neg | ast::UnOp::BitNot => {
                             assert_eq!(resolved_poly_types.len(), 1);
                             resolved_poly_types[0].clone()
                         }
@@ -736,6 +742,7 @@ impl<'a> Lowering<'a> {
         match ast_op {
             ast::UnOp::Neg => ir::ArithLogOp::Neg,
             ast::UnOp::Not => ir::ArithLogOp::Not,
+            ast::UnOp::BitNot => ir::ArithLogOp::BitNot,
         }
     }
 
@@ -756,6 +763,11 @@ impl<'a> Lowering<'a> {
             Ne => ir::ArithLogOp::Ne,
             Ge => ir::ArithLogOp::Ge,
             Gt => ir::ArithLogOp::Gt,
+            BitAnd => ir::ArithLogOp::BitAnd,
+            BitOr => ir::ArithLogOp::BitOr,
+            BitXor => ir::ArithLogOp::BitXor,
+            Shl => ir::ArithLogOp::Shl,
+            Shr => ir::ArithLogOp::Shr,
         }
     }
 

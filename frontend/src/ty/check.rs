@@ -2199,7 +2199,7 @@ mod tests {
 
     #[test]
     fn test_activation_condition() {
-        let spec = "input a: Int32\ninput b: Int32\noutput x @(a | b) := 1";
+        let spec = "input a: Int32\ninput b: Int32\noutput x @(a || b) := 1";
         let type_table = type_check(spec);
         // input `a` has NodeId = 0
         // input `b` has NodeId = 2
@@ -2230,7 +2230,7 @@ mod tests {
 
     #[test]
     fn test_get() {
-        let spec = "input a: Int32\ninput b: Int32\noutput x @(a | b) := a.get().defaults(to: 0)";
+        let spec = "input a: Int32\ninput b: Int32\noutput x @(a || b) := a.get().defaults(to: 0)";
         let type_table = type_check(spec);
         // input `a` has NodeId = 0
         // input `b` has NodeId = 2
@@ -2247,7 +2247,7 @@ mod tests {
 
     #[test]
     fn test_no_direct_access_possible() {
-        let spec = "input a: Int32\ninput b: Int32\noutput x @(a | b) := a";
+        let spec = "input a: Int32\ninput b: Int32\noutput x @(a || b) := a";
         assert_eq!(1, num_type_errors(spec));
     }
 

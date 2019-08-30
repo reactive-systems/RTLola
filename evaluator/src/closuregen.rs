@@ -5,7 +5,7 @@
 use crate::evaluator::EvaluationContext;
 use crate::storage::Value;
 use regex::Regex;
-use std::ops::{Add, Div, Mul, Neg, Not, Rem, Sub};
+use std::ops::{Add, BitAnd, BitOr, BitXor, Div, Mul, Neg, Not, Rem, Shl, Shr, Sub};
 use streamlab_frontend::ir::{Constant, Expression, ExpressionKind, Offset, StreamAccessKind, StreamReference, Type};
 
 pub(crate) trait Expr<'s> {
@@ -90,6 +90,7 @@ impl<'s> Expr<'s> for Expression {
                 use streamlab_frontend::ir::ArithLogOp::*;
                 match op {
                     Not => create_unop!(not),
+                    BitNot => create_unop!(not),
                     Neg => create_unop!(neg),
                     Add => create_binop!(add),
                     Sub => create_binop!(sub),
@@ -105,6 +106,11 @@ impl<'s> Expr<'s> for Expression {
                     Gt => create_cmp!(gt),
                     And => create_lazyop!(false),
                     Or => create_lazyop!(true),
+                    BitAnd => create_binop!(bitand),
+                    BitOr => create_binop!(bitor),
+                    BitXor => create_binop!(bitxor),
+                    Shl => create_binop!(shl),
+                    Shr => create_binop!(shr),
                 }
             }
 

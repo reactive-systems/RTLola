@@ -128,8 +128,8 @@ impl StreamTy {
             }
             (StreamTy::Event(target), StreamTy::Event(other)) => {
                 // coercion is only valid if the implication `target -> other` is valid,
-                // for example, `target = a & b` and `other = b` is valid while
-                //              `target = a | b` and `other = b` is invalid.
+                // for example, `target = a && b` and `other = b` is valid while
+                //              `target = a || b` and `other = b` is invalid.
                 Ok(target.implies_valid(other))
             }
             _ => Ok(false),
@@ -387,7 +387,7 @@ impl std::fmt::Display for Activation<NodeId> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         use crate::ast::print::write_delim_list;
         match self {
-            Activation::Conjunction(con) => write_delim_list(f, &con, "(", ")", " & "),
+            Activation::Conjunction(con) => write_delim_list(f, &con, "(", ")", " && "),
             Activation::Disjunction(dis) => write_delim_list(f, &dis, "(", ")", " | "),
             Activation::Stream(v) => write!(f, "{}", v),
             Activation::True => write!(f, "true"),

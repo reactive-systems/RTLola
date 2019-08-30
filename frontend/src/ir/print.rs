@@ -63,23 +63,30 @@ impl Display for Offset {
 
 impl Display for ArithLogOp {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        use ArithLogOp::*;
         match self {
-            ArithLogOp::Not => write!(f, "!"),
-            ArithLogOp::Neg => write!(f, "~"),
-            ArithLogOp::Add => write!(f, "+"),
-            ArithLogOp::Sub => write!(f, "-"),
-            ArithLogOp::Mul => write!(f, "*"),
-            ArithLogOp::Div => write!(f, "/"),
-            ArithLogOp::Rem => write!(f, "%"),
-            ArithLogOp::Pow => write!(f, "^"),
-            ArithLogOp::And => write!(f, "∧"),
-            ArithLogOp::Or => write!(f, "∨"),
-            ArithLogOp::Eq => write!(f, "="),
-            ArithLogOp::Lt => write!(f, "<"),
-            ArithLogOp::Le => write!(f, "≤"),
-            ArithLogOp::Ne => write!(f, "≠"),
-            ArithLogOp::Ge => write!(f, "≥"),
-            ArithLogOp::Gt => write!(f, ">"),
+            Not => write!(f, "!"),
+            Neg => write!(f, "~"),
+            Add => write!(f, "+"),
+            Sub => write!(f, "-"),
+            Mul => write!(f, "*"),
+            Div => write!(f, "/"),
+            Rem => write!(f, "%"),
+            Pow => write!(f, "^"),
+            And => write!(f, "∧"),
+            Or => write!(f, "∨"),
+            Eq => write!(f, "="),
+            Lt => write!(f, "<"),
+            Le => write!(f, "≤"),
+            Ne => write!(f, "≠"),
+            Ge => write!(f, "≥"),
+            Gt => write!(f, ">"),
+            BitNot => write!(f, "~"),
+            BitAnd => write!(f, "&"),
+            BitOr => write!(f, "|"),
+            BitXor => write!(f, "^"),
+            Shl => write!(f, "<<"),
+            Shr => write!(f, ">>"),
         }
     }
 }

@@ -31,10 +31,14 @@ lazy_static! {
         use self::Rule::*;
 
         PrecClimber::new(vec![
-            Operator::new(Or, Right),
-            Operator::new(And, Right),
+            Operator::new(Or, Left),
+            Operator::new(And, Left),
+            Operator::new(BitOr, Left),
+            Operator::new(BitXor, Left),
+            Operator::new(BitAnd, Left),
             Operator::new(Equal, Left) | Operator::new(NotEqual, Left),
             Operator::new(LessThan, Left) | Operator::new(LessThanOrEqual, Left) | Operator::new(MoreThan, Left) | Operator::new(MoreThanOrEqual, Left),
+            Operator::new(ShiftLeft, Left) | Operator::new(ShiftRight, Left),
             Operator::new(Add, Left) | Operator::new(Subtract, Left),
             Operator::new(Multiply, Left) | Operator::new(Divide, Left) | Operator::new(Mod, Left),
             Operator::new(Power, Right),
@@ -510,20 +514,29 @@ fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>, handler: &H
             // Reduce function combining `Expression`s to `Expression`s with the correct precs
             let span = Span { start: lhs.span.start, end: rhs.span.end };
             let op = match op.as_rule() {
+                // Arithmetic
                 Rule::Add => BinOp::Add,
                 Rule::Subtract => BinOp::Sub,
                 Rule::Multiply => BinOp::Mul,
                 Rule::Divide => BinOp::Div,
                 Rule::Mod => BinOp::Rem,
                 Rule::Power => BinOp::Pow,
+                // Logical
                 Rule::And => BinOp::And,
                 Rule::Or => BinOp::Or,
+                // Comparison
                 Rule::LessThan => BinOp::Lt,
                 Rule::LessThanOrEqual => BinOp::Le,
                 Rule::MoreThan => BinOp::Gt,
                 Rule::MoreThanOrEqual => BinOp::Ge,
                 Rule::Equal => BinOp::Eq,
                 Rule::NotEqual => BinOp::Ne,
+                // Bitwise
+                Rule::BitAnd => BinOp::BitAnd,
+                Rule::BitOr => BinOp::BitOr,
+                Rule::BitXor => BinOp::BitXor,
+                Rule::ShiftLeft => BinOp::Shl,
+                Rule::ShiftRight => BinOp::Shr,
                 // bubble up the unary operator on the lhs (if it exists) to fix precedence
                 Rule::Dot => {
                     let (unop, binop_span, inner) = match lhs.kind {
@@ -723,6 +736,7 @@ fn build_term_ast(spec: &mut LolaSpec, pair: Pair<'_, Rule>, handler: &Handler) 
                 Rule::Add => return operand, // Discard unary plus because it is semantically null.
                 Rule::Subtract => UnOp::Neg,
                 Rule::Neg => UnOp::Not,
+                Rule::BitNot => UnOp::BitNot,
                 _ => unreachable!(),
             };
             Expression::new(ExpressionKind::Unary(operator, Box::new(operand)), span.into())
@@ -1309,26 +1323,26 @@ mod tests {
     fn parse_precedence_not_regression() {
         parses_to! {
             parser: LolaParser,
-            input:  "!(fast | false) & fast",
+            input:  "!(fast || false) && fast",
             rule:   Rule::Expr,
             tokens: [
-                Expr(0, 22, [
-                    UnaryExpr(0, 15, [
+                Expr(0, 24, [
+                    UnaryExpr(0, 16, [
                         Neg(0, 1, []),
-                        ParenthesizedExpression(1, 15, [
+                        ParenthesizedExpression(1, 16, [
                             OpeningParenthesis(1, 2, []),
-                            Expr(2, 14, [
+                            Expr(2, 15, [
                                 Ident(2, 6, []),
                                 Or(7, 9, []),
-                                Literal(9, 14, [
-                                    False(9, 14, [])
+                                Literal(10, 15, [
+                                    False(10, 15, [])
                                 ])
                             ]),
-                            ClosingParenthesis(14, 15, [])
+                            ClosingParenthesis(15, 16, [])
                         ])
                     ]),
-                    And(16, 18, []),
-                    Ident(18, 22, [])
+                    And(17, 19, []),
+                    Ident(20, 24, [])
                 ]),
             ]
         };
@@ -1348,5 +1362,14 @@ mod tests {
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
         let ast = parse(spec, &handler, FrontendConfig::default()).unwrap_or_else(|e| panic!("{}", e));
         cmp_ast_spec(&ast, "output outputstream := 42\noutput c := outputstream\n");
+    }
+
+    #[test]
+    fn parse_bitwise() {
+        let spec = "output x := 1 ^ 0 & 23123 | 111\n";
+        let throw = |e| panic!("{}", e);
+        let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
+        let ast = parse(spec, &handler, FrontendConfig::default()).unwrap_or_else(throw);
+        cmp_ast_spec(&ast, spec);
     }
 }

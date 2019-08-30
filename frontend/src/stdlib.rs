@@ -52,6 +52,21 @@ impl BinOp {
                 parameters: vec![ValueTy::Param(0, "T".to_string()), ValueTy::Param(0, "T".to_string())],
                 return_type: ValueTy::Bool,
             },
+            BitAnd | BitOr | BitXor => FuncDecl {
+                name: FunctionName::new(format!("{}", self), &[None, None]),
+                generics: vec![ValueTy::Constr(TypeConstraint::Integer)],
+                parameters: vec![ValueTy::Param(0, "T".to_string()), ValueTy::Param(0, "T".to_string())],
+                return_type: ValueTy::Param(0, "T".to_string()),
+            },
+            Shl | Shr => FuncDecl {
+                name: FunctionName::new(format!("{}", self), &[None, None]),
+                generics: vec![
+                    ValueTy::Constr(TypeConstraint::Integer),
+                    ValueTy::Constr(TypeConstraint::UnsignedInteger),
+                ],
+                parameters: vec![ValueTy::Param(0, "T".to_string()), ValueTy::Param(0, "U".to_string())],
+                return_type: ValueTy::Param(0, "T".to_string()),
+            },
         }
     }
 }
@@ -69,6 +84,12 @@ impl UnOp {
             Neg => FuncDecl {
                 name: FunctionName::new(format!("{}", self), &[None]),
                 generics: vec![ValueTy::Constr(TypeConstraint::Numeric)],
+                parameters: vec![ValueTy::Param(0, "T".to_string())],
+                return_type: ValueTy::Param(0, "T".to_string()),
+            },
+            BitNot => FuncDecl {
+                name: FunctionName::new(format!("{}", self), &[None]),
+                generics: vec![ValueTy::Constr(TypeConstraint::Integer)],
                 parameters: vec![ValueTy::Param(0, "T".to_string())],
                 return_type: ValueTy::Param(0, "T".to_string()),
             },

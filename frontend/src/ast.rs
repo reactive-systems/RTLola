@@ -388,7 +388,6 @@ pub enum BinOp {
     And,
     /// The `||` operator (logical or)
     Or,
-    /*
     /// The `^` operator (bitwise xor)
     BitXor,
     /// The `&` operator (bitwise and)
@@ -399,7 +398,6 @@ pub enum BinOp {
     Shl,
     /// The `>>` operator (shift right)
     Shr,
-    */
     /// The `==` operator (equality)
     Eq,
     /// The `<` operator (less than)
@@ -420,6 +418,8 @@ pub enum UnOp {
     Not,
     /// The `-` operator for negation
     Neg,
+    /// The `~` operator for one's complement
+    BitNot,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

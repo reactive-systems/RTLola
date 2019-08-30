@@ -58,19 +58,25 @@ Trigger = { "trigger " ~ Expr ~ StringLiteral?}
 //      < CompExpr < AddExpr < MultiExpr < ExpoExpr < UnaryExpr < DefaultExpr 
 //      < FunctionExpr
 
-Operation = _{ Add | Subtract | Power | Multiply | Divide | Mod | And | Or | CompOp }
+Operation = _{ Add | Subtract | Power | Multiply | Divide | Mod | And | Or | BitAnd | BitOr | BitXor | ShiftLeft | ShiftRight | CompOp }
     Add      = { "+"  }
     Subtract = { "-"  }
     Multiply = { "*"  }
     Divide   = { "/"  }
     Mod      = { "%"  }
     Power    = { "**" }
-    And      = { "∧" | "&"{1,2} | "and" }
-    Or       = { "∨" | "|"{1,2} | "or"  }
+    And      = { "∧" | "&&" | "and" }
+    Or       = { "∨" | "||" | "or"  }
     Dot      = { "." }
+    BitAnd   = { "&" }
+    BitOr    = { "|" }
+    BitXor   = { "^" }
+    ShiftLeft = { "<<" }
+    ShiftRight = { ">>" }
 
-UnaryOperation = _{ Add | Subtract | Neg }
+UnaryOperation = _{ Add | Subtract | Neg | BitNot }
     Neg      = { "!" | "¬" }
+    BitNot   = { "~" }
 
 Expr = { (Term ~ ( (Operation ~ Term) | (Dot ~ (IntegerLiteral | FunctionExpr | Ident)) | (OpeningBracket ~ Literal ~ ClosingBracket) )*) }
 // TODO Do we need Term to exist for the precedence climber?

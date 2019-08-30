@@ -325,8 +325,9 @@ impl<'a> ExpressionEvaluator<'a> {
                 // The explicit match here enables a compiler warning when a case was missed.
                 // Useful when the list in the parser is extended.
                 let arity = match op {
-                    Neg | Not => 1,
-                    Add | Sub | Mul | Div | Rem | Pow | And | Or | Eq | Lt | Le | Ne | Ge | Gt => 2,
+                    Neg | Not | BitNot => 1,
+                    Add | Sub | Mul | Div | Rem | Pow | And | Or | Eq | Lt | Le | Ne | Ge | Gt | BitAnd | BitOr
+                    | BitXor | Shl | Shr => 2,
                 };
                 match arity {
                     1 => {
@@ -334,6 +335,7 @@ impl<'a> ExpressionEvaluator<'a> {
                         match *op {
                             Not => !operand,
                             Neg => -operand,
+                            BitNot => !operand,
                             _ => unreachable!(),
                         }
                     }
@@ -374,7 +376,12 @@ impl<'a> ExpressionEvaluator<'a> {
                             Ne => Value::Bool(lhs != rhs),
                             Ge => Value::Bool(lhs >= rhs),
                             Gt => Value::Bool(lhs > rhs),
-                            Not | Neg | And | Or => unreachable!(),
+                            BitAnd => lhs & rhs,
+                            BitOr => lhs | rhs,
+                            BitXor => lhs ^ rhs,
+                            Shl => lhs << rhs,
+                            Shr => lhs >> rhs,
+                            Not | BitNot | Neg | And | Or => unreachable!(),
                         }
                     }
                     _ => unreachable!(),

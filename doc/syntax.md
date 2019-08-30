@@ -20,14 +20,14 @@ input b: String
 
 ```
 output x: Bool @10Hz := false
-output y: Int32 @(a | b) := ...
+output y: Int32 @(a || b) := ...
 ```
 
 ### Activation Conditions
 
 * periodic: `@ FREQUENCY`, e.g., `@1Hz`
 	
-* variable: `@ BOOLEAN_EXPRESSION` over stream names, e.g., `@ (a & b)`, `@ (a | b)`, ...
+* variable: `@ BOOLEAN_EXPRESSION` over stream names, e.g., `@ (a && b)`, `@ (a || b)`, ...
 
 
 ## Types
@@ -49,7 +49,8 @@ Negation `-`, Logical inversion `!`
 
 * Artithmetic, e.g., `+`, `-`, `*`
 * Boolean, e.g., `&&`, `||`
-* Comparision `<`, `=`, `>=` 
+* Comparision `<`, `=`, `>=`
+* Bitwise, e.g., `^`, `|`, `&`, `<<`
 
 ### Stream Access
 

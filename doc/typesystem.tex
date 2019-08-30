@@ -87,7 +87,7 @@ For example, \texttt{a || b} returns $\sigma \sqsubseteq a \land b$. and \texttt
 $\sigma \sqsubseteq \sigma'$ holds if $\sigma \rightarrow \sigma'$ is valid.
 Disjunctive constraints can be produce by annotating the output declaration, e.g.,
 \begin{lstlisting}
-output z @(x | y) := x!false xor y!false;
+output z @(x || y) := x!false xor y!false;
 \end{lstlisting}
 produces an output stream $z$ that is evaluates if either $x$ or $y$ are evaluated.
 As $(x \lor y) \rightarrow x$ is not valid, we have to use the sample and hold operator $!$ as it is not guaranteed that $x$ and $y$ have values whenever $z$ is evaluated.

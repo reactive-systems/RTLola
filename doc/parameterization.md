@@ -47,16 +47,16 @@ The close expression should evaluate to a value of type $` Bool `$. It determine
 input Protocol: String, Destination: String, Payload: String, Direction: String
 input Src_Port: UInt16
 
-output ftp   := Protocol="TCP" & Src_Port=21 & Direction="Outgoing"
+output ftp   := Protocol="TCP" && Src_Port=21 && Direction="Outgoing"
 output start := Payload.matches("/530\s+(Login|User|Failed|Not)/smi")
 output end   := Payload.matches("/230 \s+(Logged|User|Successful)/smi")
 
 output FTPBruteforce(dst: String): UInt8
-                              filter (Destination=dst & ftp & start)
-                              close  (Destination=dst & ftp & end)
+                              filter (Destination=dst && ftp && start)
+                              close  (Destination=dst && ftp && end)
                             := FTPBruteforce(dst).offset(by: -1).default(to: 0) + 1
                                 
-trigger ftp & start & FTPBruteforce(Destination) > 5
+trigger ftp && start && FTPBruteforce(Destination) > 5
 ```
 
 #### An evaluation snapshot:

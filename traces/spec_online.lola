@@ -27,7 +27,7 @@ output hovering: Bool @ 1Hz := (velo[5s, integral] ? 5.0) < 0.5 ∧ ¬head_wind
 trigger hovering "Little movement in the last 5 seconds. Path planning hung up?"
 
 output fast: Bool := velo > 7.0
-output slowing_down := (fast[-1] ? false) & !fast
+output slowing_down := (fast[-1] ? false) && !fast
 
 trigger gps = 3 "Few GPS satellites in range. 3 dimensional location unavailable"
 trigger gps < 2 "Few GPS satellites in range. No GPS location available."
