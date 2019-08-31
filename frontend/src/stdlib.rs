@@ -171,10 +171,22 @@ lazy_static! {
         parameters: vec![ValueTy::Param(0, "T".to_string())],
         return_type: ValueTy::Param(1, "U".to_string()),
     };
+
+    /// access index of byte array
+    static ref BYTES_AT: FuncDecl = FuncDecl {
+        name: FunctionName::new("at".to_string(), &[None, Some("index".to_string())]),
+        generics: vec![],
+        parameters: vec![ValueTy::Bytes, ValueTy::UInt(UIntTy::U64)],
+        return_type: ValueTy::Option( ValueTy::UInt(UIntTy::U8).into() ),
+    };
 }
 
 pub(crate) fn import_implicit_module<'a>(fun_scope: &mut ScopedDecl<'a>) {
     fun_scope.add_fun_decl(&CAST);
+}
+
+pub(crate) fn import_implicit_method(lookup: &mut MethodLookup) {
+    lookup.add(ValueTy::Bytes, &BYTES_AT);
 }
 
 pub(crate) fn import_math_module<'a>(fun_scope: &mut ScopedDecl<'a>) {

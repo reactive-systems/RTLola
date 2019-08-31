@@ -238,6 +238,24 @@ impl<'s> Expr<'s> for Expression {
                             }
                         })
                     }
+                    "at" => {
+                        assert_eq!(args.len(), 2);
+                        let index_arg = args[1].clone().compile();
+                        CompiledExpr::new(move |ctx| {
+                            let val = f_arg.execute(ctx);
+                            let index = index_arg.execute(ctx);
+                            match (val, index) {
+                                (Value::Bytes(b), Value::Unsigned(idx)) => {
+                                    if let Some(&byte) = b.get(idx as usize) {
+                                        Value::Unsigned(byte.into())
+                                    } else {
+                                        Value::None
+                                    }
+                                }
+                                (val, _) => unreachable!("expected `Bytes`, found {:?}", val),
+                            }
+                        })
+                    }
                     f => unreachable!("Unknown function: {}, args: {:?}", f, args),
                 }
             }

@@ -120,6 +120,7 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
     }
 
     fn imports(&mut self, spec: &'a LolaSpec) {
+        stdlib::import_implicit_method(&mut self.method_lookup);
         for import in &spec.imports {
             match import.name.name.as_str() {
                 "math" => stdlib::import_math_method(&mut self.method_lookup),

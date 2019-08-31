@@ -7,7 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 ### Added
 - Evaluator: Add pcap interface (see `ids` subcommand) (requires libpcap dependency)
+- Frontend: Add pcap interface (see `ids` subcommand) (requires libpcap dependency)
 - Language: Add bitwise operators and `&`, or `|`, xor `^`, left shift `<<`, and right shift `>>`
+- Language: Add `Bytes` data type
+- Language: Add method `Bytes.at(index:)`, e.g., `bytes.at(index: 0)`
 
 ## [0.2.0] - 2019-08-23
 ### Added
