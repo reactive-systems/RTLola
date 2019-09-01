@@ -4,6 +4,7 @@
 
 use crate::evaluator::EvaluationContext;
 use crate::storage::Value;
+use regex::bytes::Regex as BytesRegex;
 use regex::Regex;
 use std::ops::{Add, BitAnd, BitOr, BitXor, Div, Mul, Neg, Not, Rem, Shl, Shr, Sub};
 use streamlab_frontend::ir::{Constant, Expression, ExpressionKind, Offset, StreamAccessKind, StreamReference, Type};
@@ -172,7 +173,7 @@ impl<'s> Expr<'s> for Expression {
                 CompiledExpr::new(move |ctx| Value::Tuple(f_entries.iter().map(|f| f.execute(ctx)).collect()))
             }
 
-            Function(name, args, _ty) => {
+            Function(name, args, ty) => {
                 //TODO(marvin): handle type
                 assert!(!args.is_empty());
                 let f_arg = args[0].clone().compile();
@@ -224,19 +225,36 @@ impl<'s> Expr<'s> for Expression {
                     "max" => create_binary_arith!(max),
                     "matches" => {
                         assert!(args.len() >= 2);
+                        let operand_ty = match &ty {
+                            Type::Function(args, _ret) => &args[0],
+                            _ => unreachable!(),
+                        };
+                        let is_bytes = operand_ty == &Type::Bytes;
                         let re_str = match &args[1].kind {
                             ExpressionKind::LoadConstant(Constant::Str(s)) => s,
                             _ => unreachable!("regex should be a string literal"),
                         };
-                        let re = Regex::new(&re_str).expect("Given regular expression was invalid");
-                        CompiledExpr::new(move |ctx| {
-                            let val = f_arg.execute(ctx);
-                            if let Value::Str(s) = &val {
-                                Value::Bool(re.is_match(s))
-                            } else {
-                                unreachable!("expected `String`, found {:?}", val);
-                            }
-                        })
+                        if !is_bytes {
+                            let re = Regex::new(&re_str).expect("Given regular expression was invalid");
+                            CompiledExpr::new(move |ctx| {
+                                let val = f_arg.execute(ctx);
+                                if let Value::Str(s) = &val {
+                                    Value::Bool(re.is_match(s))
+                                } else {
+                                    unreachable!("expected `String`, found {:?}", val);
+                                }
+                            })
+                        } else {
+                            let re = BytesRegex::new(&re_str).expect("Given regular expression was invalid");
+                            CompiledExpr::new(move |ctx| {
+                                let val = f_arg.execute(ctx);
+                                if let Value::Bytes(b) = &val {
+                                    Value::Bool(re.is_match(b))
+                                } else {
+                                    unreachable!("expected `Bytes`, found {:?}", val);
+                                }
+                            })
+                        }
                     }
                     "at" => {
                         assert_eq!(args.len(), 2);

@@ -127,6 +127,25 @@ subsub,25.0"#;
 }
 
 #[test]
+fn regex_bytes() {
+    let spec = r#"
+import regex
+
+input a: Bytes
+
+trigger a.matches(regex: "^sub") "^sub"
+        "#;
+
+    let data = r#"a,time
+xub,24.8
+sajhasdsub,24.9
+subsub,25.0"#;
+
+    let ctrl = run(spec, data).unwrap_or_else(|e| panic!("E2E test failed: {}", e));
+    assert_eq!(ctrl.output_handler.statistics.as_ref().unwrap().get_num_trigger(0), 1);
+}
+
+#[test]
 fn timed_dependencies() {
     let spec = r#"
         output a @ 1Hz := b
@@ -304,6 +323,28 @@ trigger max == 2
 2,0.5
 3,1.1
 "#;
+
+    let ctrl = run(spec, data).unwrap_or_else(|e| panic!("E2E test failed: {}", e));
+    assert_eq!(ctrl.output_handler.statistics.as_ref().unwrap().get_num_trigger(0), 1);
+    assert_eq!(ctrl.output_handler.statistics.as_ref().unwrap().get_num_trigger(1), 1);
+}
+
+#[test]
+fn bytes_at() {
+    let spec = r#"
+input a: Bytes
+
+output x := a.at(index: 0).defaults(to: 0)
+
+trigger x == 49 // utf-8 character value of "1"
+trigger x == 50 // utf-8 character value of "2"
+        "#;
+
+    let data = r#"a,time
+0,0
+1,0.1
+2,0.5
+3,1.1"#;
 
     let ctrl = run(spec, data).unwrap_or_else(|e| panic!("E2E test failed: {}", e));
     assert_eq!(ctrl.output_handler.statistics.as_ref().unwrap().get_num_trigger(0), 1);

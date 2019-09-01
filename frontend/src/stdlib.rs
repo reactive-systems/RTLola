@@ -154,10 +154,18 @@ lazy_static! {
     };
 
     // fn matches(String, regex: String) -> Bool
-    static ref MATCHES_REGEX: FuncDecl = FuncDecl {
+    static ref MATCHES_STRING_REGEX: FuncDecl = FuncDecl {
         name: FunctionName::new("matches".to_string(), &[None, Some("regex".to_string())]),
         generics: vec![],
         parameters: vec![ValueTy::String, ValueTy::String],
+        return_type: ValueTy::Bool,
+    };
+
+    // fn matches(Bytes, regex: String) -> Bool
+    static ref MATCHES_BYTES_REGEX: FuncDecl = FuncDecl {
+        name: FunctionName::new("matches".to_string(), &[None, Some("regex".to_string())]),
+        generics: vec![],
+        parameters: vec![ValueTy::Bytes, ValueTy::String],
         return_type: ValueTy::Bool,
     };
 
@@ -200,7 +208,7 @@ pub(crate) fn import_math_module<'a>(fun_scope: &mut ScopedDecl<'a>) {
 }
 
 pub(crate) fn import_regex_module<'a>(fun_scope: &mut ScopedDecl<'a>) {
-    fun_scope.add_fun_decl(&MATCHES_REGEX);
+    fun_scope.add_fun_decl(&MATCHES_STRING_REGEX);
 }
 
 pub(crate) fn import_math_method(lookup: &mut MethodLookup) {
@@ -246,7 +254,8 @@ pub(crate) fn import_math_method(lookup: &mut MethodLookup) {
 }
 
 pub(crate) fn import_regex_method(lookup: &mut MethodLookup) {
-    lookup.add(ValueTy::String, &MATCHES_REGEX);
+    lookup.add(ValueTy::String, &MATCHES_STRING_REGEX);
+    lookup.add(ValueTy::Bytes, &MATCHES_BYTES_REGEX);
 }
 
 pub(crate) struct MethodLookup<'a> {
