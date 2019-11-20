@@ -80,6 +80,7 @@ use self::UIntTy::*;
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
 pub enum FloatTy {
+    F16,
     F32,
     F64,
 }
@@ -233,6 +234,7 @@ lazy_static! {
         ("UInt16", &ValueTy::UInt(U16)),
         ("UInt32", &ValueTy::UInt(U32)),
         ("UInt64", &ValueTy::UInt(U64)),
+        ("Float16", &ValueTy::Float(F16)),
         ("Float32", &ValueTy::Float(F32)),
         ("Float64", &ValueTy::Float(F64)),
         ("String", &ValueTy::String),
@@ -354,6 +356,7 @@ impl std::fmt::Display for ValueTy {
             ValueTy::UInt(U16) => write!(f, "UInt16"),
             ValueTy::UInt(U32) => write!(f, "UInt32"),
             ValueTy::UInt(U64) => write!(f, "UInt64"),
+            ValueTy::Float(F16) => write!(f, "Float16"),
             ValueTy::Float(F32) => write!(f, "Float32"),
             ValueTy::Float(F64) => write!(f, "Float64"),
             ValueTy::String => write!(f, "String"),

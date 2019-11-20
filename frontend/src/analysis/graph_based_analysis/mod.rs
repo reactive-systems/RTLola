@@ -187,6 +187,7 @@ fn get_byte_size(value_ty: &ValueTy) -> MemoryBound {
             UIntTy::U64 => 8,
         }),
         ValueTy::Float(float_ty) => MemoryBound::Bounded(match float_ty {
+            FloatTy::F16 => 2,
             FloatTy::F32 => 4,
             FloatTy::F64 => 8,
         }),

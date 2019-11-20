@@ -1634,6 +1634,12 @@ mod tests {
     }
 
     #[test]
+    fn simple_const_float16() {
+        let spec = "constant c: Float16 := 2.1";
+        assert_eq!(0, num_type_errors(spec));
+    }
+
+    #[test]
     fn simple_const_int() {
         let spec = "constant c: Int8 := 3";
         assert_eq!(0, num_type_errors(spec));

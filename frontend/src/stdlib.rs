@@ -171,6 +171,12 @@ pub(crate) fn import_regex_module<'a>(fun_scope: &mut ScopedDecl<'a>) {
 }
 
 pub(crate) fn import_math_method(lookup: &mut MethodLookup) {
+    lookup.add(ValueTy::Float(FloatTy::F16), &SQRT);
+    lookup.add(ValueTy::Float(FloatTy::F16), &COS);
+    lookup.add(ValueTy::Float(FloatTy::F16), &SIN);
+    lookup.add(ValueTy::Float(FloatTy::F16), &ABS);
+    lookup.add(ValueTy::Float(FloatTy::F16), &ARCTAN);
+
     lookup.add(ValueTy::Float(FloatTy::F32), &SQRT);
     lookup.add(ValueTy::Float(FloatTy::F32), &COS);
     lookup.add(ValueTy::Float(FloatTy::F32), &SIN);

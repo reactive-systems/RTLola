@@ -530,6 +530,7 @@ impl Type {
             Type::UInt(UIntTy::U16) => Some(ValSize(2)),
             Type::UInt(UIntTy::U32) => Some(ValSize(4)),
             Type::UInt(UIntTy::U64) => Some(ValSize(8)),
+            Type::Float(FloatTy::F16) => Some(ValSize(2)),
             Type::Float(FloatTy::F32) => Some(ValSize(4)),
             Type::Float(FloatTy::F64) => Some(ValSize(8)),
             Type::Option(_) => unimplemented!("Size of option not determined, yet."),

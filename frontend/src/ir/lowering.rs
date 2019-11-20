@@ -894,6 +894,12 @@ mod tests {
     }
 
     #[test]
+    fn lower_one_output_event_float16() {
+        let ir = spec_to_ir("output a: Float16 := 34.");
+        check_stream_number(&ir, 0, 1, 0, 1, 0, 0);
+    }
+
+    #[test]
     fn lower_one_output_time() {
         let ir = spec_to_ir("output a: Int32 @1Hz := 34");
         check_stream_number(&ir, 0, 1, 1, 0, 0, 0);
