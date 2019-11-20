@@ -1147,16 +1147,17 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
         // check if offset is discrete or time-based
         match offset {
             Offset::Discrete(offset) => {
-                let negative_offset = offset.is_negative();
+                // TODO: Discuss how to handle positive offsets in terms of timing constraints.
+                let sync_access = *offset == 0;
 
                 // result type is an optional value if offset is negative
                 let target_var = self.unifier.new_var();
-                if negative_offset {
+                if sync_access {
+                    self.unifier.unify_var_var(var, target_var).map_err(|err| self.handle_error(err, span))?;
+                } else {
                     self.unifier
                         .unify_var_ty(var, ValueTy::Option(ValueTy::Infer(target_var).into()))
                         .map_err(|err| self.handle_error(err, span))?;
-                } else {
-                    self.unifier.unify_var_var(var, target_var).map_err(|err| self.handle_error(err, span))?;
                 }
 
                 // As the recursion checks that the stream types match, any integer offset will match as well.
@@ -1999,7 +2000,7 @@ mod tests {
 
     #[test]
     fn test_input_offset() {
-        let spec = "input a: UInt8\n output b: UInt8 := a[3]";
+        let spec = "input a: UInt8\n output b: UInt8 := a[3].defaults(to: 10)";
         assert_eq!(0, num_type_errors(spec));
         assert_eq!(get_type(spec), ValueTy::UInt(UIntTy::U8));
     }

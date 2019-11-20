@@ -241,7 +241,7 @@ pub(crate) fn determine_worst_case_memory_consumption<'a>(
             if let Some(storage_requirement) = buffer_requirements.get(&output.id) {
                 let buffer_size_per_instance = match storage_requirement {
                     StorageRequirement::Finite(size) => u128::from(*size),
-                    StorageRequirement::FutureRef(_) => unimplemented!(),
+                    StorageRequirement::FutureRef(_) => 0u128,
                     StorageRequirement::Unbounded => unimplemented!(),
                 };
                 let value_type = type_table.get_value_type(output.id);

@@ -32,7 +32,7 @@ impl<'a, 'b> Verifier<'a, 'b> {
         expr.iter().for_each(|inner| Self::check_missing_expression(self.handler, inner));
         expr.iter().for_each(|inner| Self::check_direct_access(self.handler, inner));
         expr.iter().for_each(|inner| Self::check_field_access(self.handler, inner));
-        expr.iter().for_each(|inner| Self::check_non_positive_offset(self.handler, inner));
+        expr.iter().for_each(|inner| Self::check_valid_offset(self.handler, inner));
         expr.iter().for_each(|inner| Self::check_sliding_window_duration(self.handler, inner));
     }
 
@@ -83,13 +83,13 @@ impl<'a, 'b> Verifier<'a, 'b> {
     }
 
     /// Currently, offsets can only be negative
-    fn check_non_positive_offset(handler: &Handler, expr: &Expression) {
+    fn check_valid_offset(handler: &Handler, expr: &Expression) {
         use ExpressionKind::*;
         if let Offset(_, offset) = &expr.kind {
             if let super::Offset::Discrete(val) = offset {
-                if *val >= 0 {
+                if *val == 0 {
                     handler
-                        .error_with_span("only negative offsets are supported", LabeledSpan::new(expr.span, "", true));
+                        .error_with_span("only non-zero offsets are permitted", LabeledSpan::new(expr.span, "", true));
                 }
             } else if let super::Offset::RealTime(val, _) = offset {
                 if !val.is_negative() {
@@ -183,7 +183,7 @@ mod tests {
     fn test_offsets_direct_access() {
         assert_eq!(0, number_of_errors("output a := x.offset(by: -1)"));
         assert_eq!(1, number_of_errors("output a := x.offset(by: 0)"));
-        assert_eq!(1, number_of_errors("output a := x.offset(by: 1)"));
+        assert_eq!(0, number_of_errors("output a := x.offset(by: 1)"));
         assert_eq!(0, number_of_errors("output a := x.offset(by: -1s)"));
         assert_eq!(1, number_of_errors("output a := x.offset(by: 0s)"));
         assert_eq!(1, number_of_errors("output a := x.offset(by: 1s)"));

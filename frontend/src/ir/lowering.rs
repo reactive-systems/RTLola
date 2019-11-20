@@ -692,10 +692,16 @@ impl<'a> Lowering<'a> {
 
     fn lower_offset(&self, target: ir::StreamReference, offset: &ast::Offset) -> ir::Offset {
         match offset {
-            &ast::Offset::Discrete(val) => {
+            &ast::Offset::Discrete(val) if val < 0 => {
                 assert!(val < 0); // Should be checked by type checker, though.
                 ir::Offset::PastDiscreteOffset(
                     val.abs().try_into().expect("conversion from i16.abs() => u32 cannot fail"),
+                )
+            }
+            &ast::Offset::Discrete(val) => {
+                // val >= 0
+                ir::Offset::FutureDiscreteOffset(
+                    val.try_into().expect("conversion from i16 to u32 guarded by `if !(val < 0)`"),
                 )
             }
             ast::Offset::RealTime(_, _) => {

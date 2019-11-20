@@ -61,15 +61,15 @@ fn fuzzed_memory_analysis_unimplemented() {
         "input a: Int32\n\noutput b := a.offset(by:
 100).defaults(to:300)\n\ntrigger b == 100 \"b is 100\"\ntrigger b == 99 \"b is 99\"\ntrigger b == 300 \"default used\""
     )
-    .is_err());
+    .is_ok());
     assert!(parse(
         "input a: Int32\n\noutput b := a.offset(by:5100).defaults(to:300)\n\ntrigger b == 100 \"b is 100\"\ntrigger b == 99 \"b is 99\"\ntrigger b == 300 \"default used\""
     )
-    .is_err());
+    .is_ok());
     assert!(parse(
         "input a: Int32\n\noutput b := a.offset(by:+100).defaults(to:300)\n\ntrigger b == 100 \"b is 100\"\ntrigger b == 99 \"b is 99\"\ntrigger b == 300 \"default used\""
     )
-    .is_err());
+    .is_ok());
 }
 
 #[test]
@@ -187,4 +187,9 @@ fn min_incompatible() {
 #[test]
 fn test_float16() {
     assert!(parse("input in: Float16\noutput count := in + 3.5").is_ok());
+}
+
+#[test]
+fn future_offset() {
+    assert!(parse("input a: Int8\noutput b := a.offset(by: 1).defaults(to: 3)").is_ok());
 }

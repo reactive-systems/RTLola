@@ -1321,6 +1321,14 @@ mod tests {
     }
 
     #[test]
+    fn parse_future_offset() {
+        let spec = "output a := b.offset(by: 1)\n";
+        let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
+        let ast = parse(spec, &handler, FrontendConfig::default()).unwrap_or_else(|e| panic!("{}", e));
+        cmp_ast_spec(&ast, spec);
+    }
+
+    #[test]
     fn parse_function_argument_name() {
         let spec = "output a := b.hold().defaults(to: 0)\n";
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
