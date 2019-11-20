@@ -183,6 +183,24 @@ impl<'s> Expr<'s> for Expression {
                     };
                 }
 
+                macro_rules! create_binary_arith {
+                    ($fn:ident) => {{
+                        if args.len() != 2 {
+                            unreachable!("wrong number of arguments for function $fn")
+                        }
+                        CompiledExpr::new(move |ctx| {
+                            let fst = f_arg.execute(ctx);
+                            let snd = args[0].clone().compile().execute(ctx);
+                            match (fst, snd) {
+                                (Value::Float(f1), Value::Float(f2)) => Value::Float(f1.$fn(f2)),
+                                (Value::Signed(s1), Value::Signed(s2)) => Value::Signed(s1.$fn(s2)),
+                                (Value::Unsigned(u1), Value::Unsigned(u2)) => Value::Unsigned(u1.$fn(u2)),
+                                (v1, v2) => unreachable!("wrong Value types of {:?}, {:?} for function $fn", v1, v2),
+                            }
+                        })
+                    }};
+                }
+
                 match name.as_ref() {
                     "sqrt" => create_floatfn!(sqrt),
                     "sin" => create_floatfn!(sin),
@@ -196,6 +214,8 @@ impl<'s> Expr<'s> for Expression {
                             v => unreachable!("wrong Value type of {:?}, for function abs", v),
                         }
                     }),
+                    "min" => create_binary_arith!(min),
+                    "max" => create_binary_arith!(max),
                     "matches" => {
                         assert!(args.len() >= 2);
                         let re_str = match &args[1].kind {

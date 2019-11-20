@@ -1265,6 +1265,14 @@ mod tests {
     }
 
     #[test]
+    fn parse_max() {
+        let spec = "import math\ninput a: Int32\ninput b: Int32\noutput maxres: Int32 := max<Int32>(a, b)\n";
+        let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
+        let ast = parse(spec, &handler, FrontendConfig::default()).unwrap_or_else(|e| panic!("{}", e));
+        cmp_ast_spec(&ast, spec);
+    }
+
+    #[test]
     fn parse_method_call() {
         let spec = "output count := count.offset(-1).default(0) + 1\n";
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));

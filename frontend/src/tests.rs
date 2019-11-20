@@ -172,3 +172,14 @@ fn fuzzed_activation_condition_greedy_lookup() {
 fn fuzzed_tuple_access_on_steriods() {
     assert!(parse("output count := count.8>(-1).defaulM(0) . 1").is_err());
 }
+
+#[test]
+fn min_max() {
+    assert!(parse("import math\n input a: Int32\n input b: Int32\n output min_max := min<Int32>(max<Int32>(a,b), b)")
+        .is_ok());
+}
+
+#[test]
+fn min_incompatible() {
+    assert!(parse("import math\n input a: Int32\n input b: Float64\n output minres := min(a, b)").is_err());
+}

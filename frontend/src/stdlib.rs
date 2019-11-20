@@ -2,7 +2,7 @@
 
 use crate::analysis::naming::ScopedDecl;
 use crate::ast::{BinOp, FunctionName, UnOp};
-use crate::ty::{FloatTy, TypeConstraint, ValueTy};
+use crate::ty::{FloatTy, IntTy, TypeConstraint, UIntTy, ValueTy};
 use lazy_static::lazy_static;
 use std::collections::HashMap;
 
@@ -85,6 +85,20 @@ lazy_static! {
         parameters: vec![ValueTy::Param(0, "T".to_string())],
         return_type: ValueTy::Param(0, "T".to_string()),
     };
+    // fn min<T: Numeric>(T, T) -> T
+    static ref MIN: FuncDecl = FuncDecl {
+        name: FunctionName::new("min".to_string(), &[None, None]),
+        generics: vec![ValueTy::Constr(TypeConstraint::Numeric)],
+        parameters: vec![ValueTy::Param(0, "T".to_string()), ValueTy::Param(0, "T".to_string())],
+        return_type: ValueTy::Param(0, "T".to_string()),
+    };
+    // fn max<T: Numeric>(T, T) -> T
+    static ref MAX: FuncDecl = FuncDecl {
+        name: FunctionName::new("max".to_string(), &[None, None]),
+        generics: vec![ValueTy::Constr(TypeConstraint::Numeric)],
+        parameters: vec![ValueTy::Param(0, "T".to_string()), ValueTy::Param(0, "T".to_string())],
+        return_type: ValueTy::Param(0, "T".to_string()),
+    };
     // fn cos<T: FloatingPoint>(T) -> T
     static ref COS: FuncDecl = FuncDecl {
         name: FunctionName::new("cos".to_string(), &[None]),
@@ -148,6 +162,8 @@ pub(crate) fn import_math_module<'a>(fun_scope: &mut ScopedDecl<'a>) {
     fun_scope.add_fun_decl(&SIN);
     fun_scope.add_fun_decl(&ABS);
     fun_scope.add_fun_decl(&ARCTAN);
+    fun_scope.add_fun_decl(&MIN);
+    fun_scope.add_fun_decl(&MAX);
 }
 
 pub(crate) fn import_regex_module<'a>(fun_scope: &mut ScopedDecl<'a>) {
@@ -160,12 +176,34 @@ pub(crate) fn import_math_method(lookup: &mut MethodLookup) {
     lookup.add(ValueTy::Float(FloatTy::F32), &SIN);
     lookup.add(ValueTy::Float(FloatTy::F32), &ABS);
     lookup.add(ValueTy::Float(FloatTy::F32), &ARCTAN);
+    lookup.add(ValueTy::Float(FloatTy::F32), &MIN);
+    lookup.add(ValueTy::Float(FloatTy::F32), &MAX);
 
     lookup.add(ValueTy::Float(FloatTy::F64), &SQRT);
     lookup.add(ValueTy::Float(FloatTy::F64), &COS);
     lookup.add(ValueTy::Float(FloatTy::F64), &SIN);
     lookup.add(ValueTy::Float(FloatTy::F64), &ABS);
     lookup.add(ValueTy::Float(FloatTy::F64), &ARCTAN);
+    lookup.add(ValueTy::Float(FloatTy::F64), &MIN);
+    lookup.add(ValueTy::Float(FloatTy::F64), &MAX);
+
+    lookup.add(ValueTy::Int(IntTy::I8), &MIN);
+    lookup.add(ValueTy::Int(IntTy::I8), &MAX);
+    lookup.add(ValueTy::Int(IntTy::I16), &MIN);
+    lookup.add(ValueTy::Int(IntTy::I16), &MAX);
+    lookup.add(ValueTy::Int(IntTy::I32), &MIN);
+    lookup.add(ValueTy::Int(IntTy::I32), &MAX);
+    lookup.add(ValueTy::Int(IntTy::I64), &MIN);
+    lookup.add(ValueTy::Int(IntTy::I64), &MAX);
+
+    lookup.add(ValueTy::UInt(UIntTy::U8), &MIN);
+    lookup.add(ValueTy::UInt(UIntTy::U8), &MAX);
+    lookup.add(ValueTy::UInt(UIntTy::U16), &MIN);
+    lookup.add(ValueTy::UInt(UIntTy::U16), &MAX);
+    lookup.add(ValueTy::UInt(UIntTy::U32), &MIN);
+    lookup.add(ValueTy::UInt(UIntTy::U32), &MAX);
+    lookup.add(ValueTy::UInt(UIntTy::U64), &MIN);
+    lookup.add(ValueTy::UInt(UIntTy::U64), &MAX);
 }
 
 pub(crate) fn import_regex_method(lookup: &mut MethodLookup) {
