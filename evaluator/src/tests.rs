@@ -4,7 +4,7 @@ use super::*;
 use std::io::Write;
 use tempfile::NamedTempFile;
 
-fn run(spec: &str, data: &str) -> Result<Controller, Box<dyn std::error::Error>> {
+fn run(spec: &str, data: &str) -> Result<Arc<OutputHandler>, Box<dyn std::error::Error>> {
     let ir =
         streamlab_frontend::parse("stdin", spec, crate::CONFIG).unwrap_or_else(|e| panic!("spec is invalid: {}", e));
     let mut file = NamedTempFile::new().expect("failed to create temporary file");
@@ -65,10 +65,10 @@ trigger str = "foobar"
     let data = r#"float,bool,time,signed,str,unsigned
 -123.456,true,1547627523.600536,-5,"foobar",3"#;
 
-    let ctrl = run(spec, data).unwrap_or_else(|e| panic!("E2E test failed: {}", e));
+    let output_handler = run(spec, data).unwrap_or_else(|e| panic!("E2E test failed: {}", e));
     macro_rules! assert_eq_num_trigger {
         ($ix:expr, $num:expr) => {
-            assert_eq!(ctrl.output_handler.statistics.as_ref().unwrap().get_num_trigger($ix), $num);
+            assert_eq!(output_handler.statistics.as_ref().unwrap().get_num_trigger($ix), $num);
         };
     }
     assert_eq_num_trigger!(0, 1);
@@ -98,8 +98,8 @@ trigger c > 2 "c is too large"
 3,#,1547627523.500536
 2,2,1547627523.600536"#;
 
-    let ctrl = run(spec, data).unwrap_or_else(|e| panic!("E2E test failed: {}", e));
-    assert_eq!(ctrl.output_handler.statistics.as_ref().unwrap().get_num_trigger(0), 1);
+    let output_handler = run(spec, data).unwrap_or_else(|e| panic!("E2E test failed: {}", e));
+    assert_eq!(output_handler.statistics.as_ref().unwrap().get_num_trigger(0), 1);
 }
 
 #[test]
@@ -121,9 +121,9 @@ xub,24.8
 sajhasdsub,24.9
 subsub,25.0"#;
 
-    let ctrl = run(spec, data).unwrap_or_else(|e| panic!("E2E test failed: {}", e));
-    assert_eq!(ctrl.output_handler.statistics.as_ref().unwrap().get_num_trigger(0), 2);
-    assert_eq!(ctrl.output_handler.statistics.as_ref().unwrap().get_num_trigger(1), 1);
+    let output_handler = run(spec, data).unwrap_or_else(|e| panic!("E2E test failed: {}", e));
+    assert_eq!(output_handler.statistics.as_ref().unwrap().get_num_trigger(0), 2);
+    assert_eq!(output_handler.statistics.as_ref().unwrap().get_num_trigger(1), 1);
 }
 
 #[test]
@@ -162,7 +162,7 @@ fn timed_dependencies() {
 0.0
 1.0"#;
 
-    let ctrl = run(spec, data).unwrap_or_else(|e| panic!("E2E test failed: {}", e));
+    let output_handler = run(spec, data).unwrap_or_else(|e| panic!("E2E test failed: {}", e));
     // The test case is 1secs.
     // The execution should look as follows:
     //
@@ -171,10 +171,10 @@ fn timed_dependencies() {
     // b        | 1 | 1 |
     // c        | 0 | 1 |
     // d        | 1 | 0 |
-    assert_eq!(ctrl.output_handler.statistics.as_ref().unwrap().get_num_trigger(0), 2);
-    assert_eq!(ctrl.output_handler.statistics.as_ref().unwrap().get_num_trigger(1), 2);
-    assert_eq!(ctrl.output_handler.statistics.as_ref().unwrap().get_num_trigger(2), 1);
-    assert_eq!(ctrl.output_handler.statistics.as_ref().unwrap().get_num_trigger(3), 1);
+    assert_eq!(output_handler.statistics.as_ref().unwrap().get_num_trigger(0), 2);
+    assert_eq!(output_handler.statistics.as_ref().unwrap().get_num_trigger(1), 2);
+    assert_eq!(output_handler.statistics.as_ref().unwrap().get_num_trigger(2), 1);
+    assert_eq!(output_handler.statistics.as_ref().unwrap().get_num_trigger(3), 1);
 }
 
 #[test]
@@ -198,7 +198,7 @@ trigger a∨b "a∨b"
 5.0
 6.0"#;
 
-    let ctrl = run(spec, data).unwrap_or_else(|e| panic!("E2E test failed: {}", e));
+    let output_handler = run(spec, data).unwrap_or_else(|e| panic!("E2E test failed: {}", e));
     // The test case is 6secs, there should be 3 triggers.
     // The execution should look as follows:
     //
@@ -209,10 +209,10 @@ trigger a∨b "a∨b"
     // trig b   | 1 | 0 | 1 | 0 | 1 | 0 | 1 |
     // trig a∧b | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
     // trig a∨b | 1 | 1 | 1 | 1 | 1 | 1 | 1 |
-    assert_eq!(ctrl.output_handler.statistics.as_ref().unwrap().get_num_trigger(0), 3);
-    assert_eq!(ctrl.output_handler.statistics.as_ref().unwrap().get_num_trigger(1), 4);
-    assert_eq!(ctrl.output_handler.statistics.as_ref().unwrap().get_num_trigger(2), 0);
-    assert_eq!(ctrl.output_handler.statistics.as_ref().unwrap().get_num_trigger(3), 7);
+    assert_eq!(output_handler.statistics.as_ref().unwrap().get_num_trigger(0), 3);
+    assert_eq!(output_handler.statistics.as_ref().unwrap().get_num_trigger(1), 4);
+    assert_eq!(output_handler.statistics.as_ref().unwrap().get_num_trigger(2), 0);
+    assert_eq!(output_handler.statistics.as_ref().unwrap().get_num_trigger(3), 7);
 }
 
 #[test]
@@ -235,7 +235,7 @@ trigger a∨b "a∨b"
 5.0
 6.0"#;
 
-    let ctrl = run(spec, data).unwrap_or_else(|e| panic!("E2E test failed: {}", e));
+    let output_handler = run(spec, data).unwrap_or_else(|e| panic!("E2E test failed: {}", e));
     // The test case is 6secs, there should be 3 triggers.
     // The execution should look as follows:
     //
@@ -246,10 +246,10 @@ trigger a∨b "a∨b"
     // trig b   | 1 | 0 | 1 | 0 | 1 | 0 | 1 |
     // trig a∧b | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
     // trig a∨b | 1 | 1 | 1 | 1 | 1 | 1 | 1 |
-    assert_eq!(ctrl.output_handler.statistics.as_ref().unwrap().get_num_trigger(0), 3);
-    assert_eq!(ctrl.output_handler.statistics.as_ref().unwrap().get_num_trigger(1), 4);
-    assert_eq!(ctrl.output_handler.statistics.as_ref().unwrap().get_num_trigger(2), 0);
-    assert_eq!(ctrl.output_handler.statistics.as_ref().unwrap().get_num_trigger(3), 7);
+    assert_eq!(output_handler.statistics.as_ref().unwrap().get_num_trigger(0), 3);
+    assert_eq!(output_handler.statistics.as_ref().unwrap().get_num_trigger(1), 4);
+    assert_eq!(output_handler.statistics.as_ref().unwrap().get_num_trigger(2), 0);
+    assert_eq!(output_handler.statistics.as_ref().unwrap().get_num_trigger(3), 7);
 }
 
 #[test]
@@ -269,9 +269,9 @@ trigger b > 3
 5.0
 6.0"#;
 
-    let ctrl = run(spec, data).unwrap_or_else(|e| panic!("E2E test failed: {}", e));
+    let output_handler = run(spec, data).unwrap_or_else(|e| panic!("E2E test failed: {}", e));
     // the test case is 6secs, the counter starts with 1 at 0.0 and increases every second, thus, there should be 4 trigger (4 times counter > 3)
-    assert_eq!(ctrl.output_handler.statistics.as_ref().unwrap().get_num_trigger(0), 4);
+    assert_eq!(output_handler.statistics.as_ref().unwrap().get_num_trigger(0), 4);
 }
 
 #[test]
@@ -293,7 +293,7 @@ trigger b > 3
 1,0.71
 "#;
 
-    let ctrl = run(spec, data).unwrap_or_else(|e| panic!("E2E test failed: {}", e));
+    let output_handler = run(spec, data).unwrap_or_else(|e| panic!("E2E test failed: {}", e));
     // the test case is 710ms, the counter starts with 1 at 0.0 and increases every 100ms, thus, there should be 5 trigger
     //
     // The execution should look as follows:
@@ -302,7 +302,7 @@ trigger b > 3
     // in a  |   1 |    2 |   - |    1 |   - |    2 |   - |    1 |   - |    2 |   - |    1 |   - |    2 |   - |    1
     // out b |   1 |    - |   2 |    - |   3 |    - |   4 |    - |   5 |    - |   6 |    - |   7 |    - |   8 |    -
     // trig  |   0 |    - |   0 |    - |   0 |    - |   1 |    - |   1 |    - |   1 |    - |   1 |    - |   1 |    -
-    assert_eq!(ctrl.output_handler.statistics.as_ref().unwrap().get_num_trigger(0), 5);
+    assert_eq!(output_handler.statistics.as_ref().unwrap().get_num_trigger(0), 5);
 }
 
 #[test]
@@ -324,9 +324,9 @@ trigger max == 2
 3,1.1
 "#;
 
-    let ctrl = run(spec, data).unwrap_or_else(|e| panic!("E2E test failed: {}", e));
-    assert_eq!(ctrl.output_handler.statistics.as_ref().unwrap().get_num_trigger(0), 1);
-    assert_eq!(ctrl.output_handler.statistics.as_ref().unwrap().get_num_trigger(1), 1);
+    let output_handler = run(spec, data).unwrap_or_else(|e| panic!("E2E test failed: {}", e));
+    assert_eq!(output_handler.statistics.as_ref().unwrap().get_num_trigger(0), 1);
+    assert_eq!(output_handler.statistics.as_ref().unwrap().get_num_trigger(1), 1);
 }
 
 #[test]

@@ -39,6 +39,7 @@ pub enum Verbosity {
 pub enum ExecutionMode {
     Offline,
     Online,
+    API,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]

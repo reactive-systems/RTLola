@@ -2,9 +2,11 @@ use super::event_driven_manager::EventDrivenManager;
 use super::time_driven_manager::TimeDrivenManager;
 use super::{WorkItem, CAP_WORK_QUEUE};
 use crate::basics::{EvalConfig, ExecutionMode::*, OutputHandler, Time};
+use crate::coordination::monitor::Monitor;
 use crate::coordination::{EventEvaluation, TimeEvaluation};
 use crate::evaluator::{Evaluator, EvaluatorData};
 use crossbeam_channel::{bounded, unbounded};
+use either::Either;
 use std::error::Error;
 use std::sync::Arc;
 use std::thread;
@@ -33,11 +35,17 @@ impl Controller {
         Self { ir, config, output_handler }
     }
 
-    pub(crate) fn start(&self) -> Result<(), Box<dyn Error>> {
+    pub(crate) fn start(self) -> Result<Either<Monitor, Arc<OutputHandler>>, Box<dyn Error>> {
+        // TODO: Returning the Arc here makes no sense, fix asap.
         match self.config.mode {
-            Offline => self.evaluate_offline(),
-            Online => self.evaluate_online(),
+            Offline => self.evaluate_offline().map(|_| Either::Right(self.output_handler)),
+            Online => self.evaluate_online().map(|_| Either::Right(self.output_handler)),
+            API => Ok(Either::Left(self.setup_api())),
         }
+    }
+
+    fn setup_api(self) -> Monitor {
+        Monitor::setup(self.ir, self.output_handler, self.config)
     }
 
     /// Starts the online evaluation process, i.e. periodically computes outputs for time-driven streams
@@ -70,9 +78,9 @@ impl Controller {
         });
 
         let copy_output_handler = self.output_handler.clone();
-        let mut evaluatordata = EvaluatorData::new(self.ir.clone(), self.config.clone(), copy_output_handler, now);
+        let evaluatordata = EvaluatorData::new(self.ir.clone(), self.config.clone(), copy_output_handler, now);
 
-        let mut evaluator = evaluatordata.as_Evaluator();
+        let mut evaluator = evaluatordata.into_evaluator();
 
         loop {
             let item = match work_rx.recv() {
@@ -136,10 +144,10 @@ impl Controller {
         let mut deadline_cycle = time_manager.get_deadline_cycle();
 
         let output_copy_handler = self.output_handler.clone();
-        let mut evaluatordata =
+        let evaluatordata =
             EvaluatorData::new(self.ir.clone(), self.config.clone(), output_copy_handler, Instant::now());
 
-        let mut evaluator = evaluatordata.as_Evaluator();
+        let mut evaluator = evaluatordata.into_evaluator();
 
         let mut current_time = Time::default();
         'outer: loop {

@@ -57,7 +57,7 @@ pub enum OutputChannel {
     File(String),
 }
 
-pub(crate) struct OutputHandler {
+pub struct OutputHandler {
     pub(crate) verbosity: Verbosity,
     channel: OutputChannel,
     file: Option<File>,

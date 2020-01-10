@@ -1,5 +1,6 @@
 mod controller;
 mod event_driven_manager;
+mod monitor;
 mod time_driven_manager;
 
 use crate::basics::Time;
@@ -7,6 +8,7 @@ use crate::basics::Time;
 // Re-exports
 pub(crate) use self::controller::Controller;
 pub(crate) use self::event_driven_manager::EventEvaluation;
+pub use self::monitor::Monitor;
 pub(crate) use self::time_driven_manager::TimeEvaluation;
 
 #[derive(Debug, Clone)]

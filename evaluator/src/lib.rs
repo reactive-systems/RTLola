@@ -9,13 +9,16 @@ mod storage;
 #[cfg(test)]
 mod tests;
 
+use crate::basics::OutputHandler;
 use crate::coordination::Controller;
+pub use crate::coordination::Monitor;
 use basics::{
     CSVInputSource, EvalConfig, EvaluatorChoice, EventSourceConfig, ExecutionMode, OutputChannel, PCAPInputSource,
     Statistics, TimeFormat, TimeRepresentation, Verbosity,
 };
 use clap::{App, AppSettings, Arg, ArgGroup, SubCommand};
 use std::fs;
+use std::sync::Arc;
 use streamlab_frontend;
 use streamlab_frontend::ir::LolaIR;
 use streamlab_frontend::{FrontendConfig, TypeConfig};
@@ -352,9 +355,15 @@ impl Config {
         Config { cfg, ir }
     }
 
-    pub fn run(self) -> Result<Controller, Box<dyn std::error::Error>> {
-        let controller = Controller::new(self.ir, self.cfg);
-        controller.start()?;
-        Ok(controller)
+    pub fn into_monitor(self) -> Result<Monitor, Box<dyn std::error::Error>> {
+        assert_eq!(self.cfg.mode, ExecutionMode::API);
+        Controller::new(self.ir, self.cfg).start().map(|res| res.left().unwrap())
+    }
+
+    pub fn run(self) -> Result<Arc<OutputHandler>, Box<dyn std::error::Error>> {
+        // TODO: Rather than returning OutputHandler publicly --- let alone an Arc ---, transform into more suitable format or make OutputHandler more accessible.
+        Controller::new(self.ir, self.cfg)
+            .start()
+            .map(|r| r.right().expect("Running the config should never return a Monitor."))
     }
 }
