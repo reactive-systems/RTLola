@@ -152,6 +152,16 @@ impl<'e, 'c> Evaluator<'e, 'c> {
         self.eval_all_event_driven_outputs(ts);
     }
 
+    pub(crate) fn peek_fresh(&self) -> Vec<(OutputReference, Value)> {
+        let mut res = vec![];
+        for ix in 0..self.fresh_outputs.len() {
+            if self.fresh_outputs.contains(ix) {
+                res.push((ix, self.peek_value(StreamReference::OutRef(ix), &vec![], 0).expect("Marked as fresh.")));
+            }
+        }
+        res
+    }
+
     fn accept_inputs(&mut self, event: &[Value], ts: Time) {
         for (ix, v) in event.iter().enumerate() {
             match v {
@@ -266,8 +276,7 @@ impl<'e, 'c> Evaluator<'e, 'c> {
         self.triggers[ix].as_ref()
     }
 
-    #[cfg(test)]
-    fn __peek_value(&self, sr: StreamReference, args: &[Value], offset: i16) -> Option<Value> {
+    fn peek_value(&self, sr: StreamReference, args: &[Value], offset: i16) -> Option<Value> {
         match sr {
             StreamReference::InRef(ix) => {
                 assert!(args.is_empty());
@@ -714,7 +723,7 @@ mod tests {
     macro_rules! peek_assert_eq {
         ($eval:expr, $start:expr, $ix:expr, $value:expr) => {
             eval_stream!($eval, $start, $ix);
-            assert_eq!($eval.__peek_value(StreamReference::OutRef($ix), &Vec::new(), 0).unwrap(), $value);
+            assert_eq!($eval.peek_value(StreamReference::OutRef($ix), &Vec::new(), 0).unwrap(), $value);
         };
     }
 
@@ -822,7 +831,7 @@ mod tests {
         let sr = StreamReference::InRef(0);
         let v = Value::Unsigned(3);
         accept_input!(eval, start, sr, v.clone());
-        assert_eq!(eval.__peek_value(sr, &Vec::new(), 0).unwrap(), v)
+        assert_eq!(eval.peek_value(sr, &Vec::new(), 0).unwrap(), v)
     }
 
     #[test]
@@ -834,7 +843,7 @@ mod tests {
         let v = Value::Unsigned(9);
         accept_input!(eval, start, in_ref, v.clone());
         eval_stream!(eval, start, 0);
-        assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), v)
+        assert_eq!(eval.peek_value(out_ref, &Vec::new(), 0).unwrap(), v)
     }
 
     #[test]
@@ -848,7 +857,7 @@ mod tests {
         accept_input!(eval, start, in_ref, v1);
         eval_stream!(eval, start, 0);
         eval_stream!(eval, start, 1);
-        assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), Value::Unsigned(3));
+        assert_eq!(eval.peek_value(out_ref, &Vec::new(), 0).unwrap(), Value::Unsigned(3));
     }
 
     #[test]
@@ -868,7 +877,7 @@ mod tests {
         eval_stream!(eval, start, 0);
         eval_stream!(eval, start, 1);
         eval_stream!(eval, start, 2);
-        assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), v1);
+        assert_eq!(eval.peek_value(out_ref, &Vec::new(), 0).unwrap(), v1);
     }
 
     #[test]
@@ -880,7 +889,7 @@ mod tests {
         let v1 = Value::Unsigned(1);
         accept_input!(eval, start, in_ref, v1.clone());
         eval_stream!(eval, start, 0);
-        assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), v1);
+        assert_eq!(eval.peek_value(out_ref, &Vec::new(), 0).unwrap(), v1);
     }
 
     #[test]
@@ -894,7 +903,7 @@ mod tests {
         let v1 = Value::Unsigned(7);
         accept_input!(eval, start, in_ref, v1);
         eval_stream!(eval, start, 0);
-        assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), expected);
+        assert_eq!(eval.peek_value(out_ref, &Vec::new(), 0).unwrap(), expected);
     }
 
     #[test]
@@ -910,7 +919,7 @@ mod tests {
         accept_input!(eval, start, a, v1.clone());
         accept_input!(eval, start, b, v2.clone());
         eval_stream!(eval, start, 0);
-        assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), expected);
+        assert_eq!(eval.peek_value(out_ref, &Vec::new(), 0).unwrap(), expected);
     }
 
     #[test]
@@ -926,7 +935,7 @@ mod tests {
         accept_input!(eval, start, a, v1.clone());
         accept_input!(eval, start, b, v2.clone());
         eval_stream!(eval, start, 0);
-        assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), expected);
+        assert_eq!(eval.peek_value(out_ref, &Vec::new(), 0).unwrap(), expected);
     }
 
     #[test]
@@ -947,9 +956,9 @@ mod tests {
         eval_stream!(eval, start, 0);
         eval_stream!(eval, start, 1);
         eval_stream!(eval, start, 2);
-        assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), expected);
-        assert_eq!(eval.__peek_value(out_ref0, &Vec::new(), 0).unwrap(), v1);
-        assert_eq!(eval.__peek_value(out_ref1, &Vec::new(), 0).unwrap(), v2);
+        assert_eq!(eval.peek_value(out_ref, &Vec::new(), 0).unwrap(), expected);
+        assert_eq!(eval.peek_value(out_ref0, &Vec::new(), 0).unwrap(), v1);
+        assert_eq!(eval.peek_value(out_ref1, &Vec::new(), 0).unwrap(), v2);
     }
 
     #[test]
@@ -967,7 +976,7 @@ mod tests {
         accept_input!(eval, start, in_ref, v3);
         eval_stream!(eval, start, 0);
         eval_stream!(eval, start, 1);
-        assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), v2)
+        assert_eq!(eval.peek_value(out_ref, &Vec::new(), 0).unwrap(), v2)
     }
 
     #[ignore] // triggers no longer store values
@@ -983,20 +992,20 @@ mod tests {
         eval_stream!(eval, start, 0);
         eval_stream!(eval, start, 1);
         eval_stream!(eval, start, 2);
-        assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), Value::Unsigned(3));
-        assert_eq!(eval.__peek_value(trig_ref, &Vec::new(), 0).unwrap(), Value::Bool(false));
+        assert_eq!(eval.peek_value(out_ref, &Vec::new(), 0).unwrap(), Value::Unsigned(3));
+        assert_eq!(eval.peek_value(trig_ref, &Vec::new(), 0).unwrap(), Value::Bool(false));
         accept_input!(eval, start, in_ref, v1.clone());
         eval_stream!(eval, start, 0);
         eval_stream!(eval, start, 1);
         eval_stream!(eval, start, 2);
-        assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), Value::Unsigned(3));
-        assert_eq!(eval.__peek_value(trig_ref, &Vec::new(), 0).unwrap(), Value::Bool(false));
+        assert_eq!(eval.peek_value(out_ref, &Vec::new(), 0).unwrap(), Value::Unsigned(3));
+        assert_eq!(eval.peek_value(trig_ref, &Vec::new(), 0).unwrap(), Value::Bool(false));
         accept_input!(eval, start, in_ref, Value::Unsigned(17));
         eval_stream!(eval, start, 0);
         eval_stream!(eval, start, 1);
         eval_stream!(eval, start, 2);
-        assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), v1);
-        assert_eq!(eval.__peek_value(trig_ref, &Vec::new(), 0).unwrap(), Value::Bool(true));
+        assert_eq!(eval.peek_value(out_ref, &Vec::new(), 0).unwrap(), v1);
+        assert_eq!(eval.peek_value(trig_ref, &Vec::new(), 0).unwrap(), Value::Bool(true));
     }
 
     #[test]
@@ -1016,7 +1025,7 @@ mod tests {
         // 71 secs have passed. All values should be within the window.
         eval_stream_timed!(eval, 0, time);
         let expected = Value::Signed((n * n + n) / 2);
-        assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), expected);
+        assert_eq!(eval.peek_value(out_ref, &Vec::new(), 0).unwrap(), expected);
     }
 
     #[test]
@@ -1036,7 +1045,7 @@ mod tests {
         // 71 secs have passed. All values should be within the window.
         eval_stream_timed!(eval, 0, time);
         let expected = Value::Unsigned(n);
-        assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), expected);
+        assert_eq!(eval.peek_value(out_ref, &Vec::new(), 0).unwrap(), expected);
     }
 
     #[test]
@@ -1052,7 +1061,7 @@ mod tests {
         // No time has passed. No values should be within the window. We should se the default value.
         eval_stream_timed!(eval, 0, time);
         let expected = Value::new_float(-3.0);
-        assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), expected);
+        assert_eq!(eval.peek_value(out_ref, &Vec::new(), 0).unwrap(), expected);
 
         let n = 25;
         for v in 1..=n {
@@ -1065,7 +1074,7 @@ mod tests {
         eval_stream_timed!(eval, 0, time);
         let n = n as f64;
         let expected = Value::new_float(((n * n + n) / 2.0) / 25.0);
-        assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), expected);
+        assert_eq!(eval.peek_value(out_ref, &Vec::new(), 0).unwrap(), expected);
     }
 
     #[test]
@@ -1100,7 +1109,7 @@ mod tests {
         eval_stream_timed!(eval, 0, time);
 
         let expected = Value::Float(NotNan::new(-106.5).unwrap());
-        assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), expected);
+        assert_eq!(eval.peek_value(out_ref, &Vec::new(), 0).unwrap(), expected);
     }
 
     #[test]
@@ -1111,6 +1120,6 @@ mod tests {
         let _a = StreamReference::InRef(0);
         let expected = Value::Unsigned(0);
         eval_stream!(eval, start, 0);
-        assert_eq!(eval.__peek_value(out_ref, &Vec::new(), 0).unwrap(), expected);
+        assert_eq!(eval.peek_value(out_ref, &Vec::new(), 0).unwrap(), expected);
     }
 }

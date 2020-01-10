@@ -1,7 +1,7 @@
 #![allow(clippy::mutex_atomic)]
 
 use super::{EvalConfig, TimeFormat, TimeRepresentation, Verbosity};
-use crate::basics::{CSVEventSource, CSVInputSource, PCAPEventSource, PCAPInputSource};
+use crate::basics::{CSVEventSource, CSVInputSource, PCAPEventSource, PCAPInputSource, Time};
 use crate::storage::Value;
 use crossterm::{cursor, terminal, ClearType};
 use std::error::Error;
@@ -12,7 +12,6 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use streamlab_frontend::ir::LolaIR;
-pub type Time = Duration;
 
 //Input Handling
 

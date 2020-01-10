@@ -6,7 +6,7 @@ use streamlab_frontend::ir::Type;
 use self::Value::*;
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
-pub(crate) enum Value {
+pub enum Value {
     None,
     Bool(bool),
     Unsigned(u64),
