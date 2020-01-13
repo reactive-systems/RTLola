@@ -1,18 +1,17 @@
 use crate::basics::{EvalConfig, OutputHandler, Time};
-use crate::evaluator::{Evaluator, EvaluatorData};
-use std::sync::Arc;
-use std::time::{Instant, Duration};
-use streamlab_frontend::ir::{LolaIR, OutputReference, InputReference};
-use crate::storage::Value;
 use crate::coordination::Event;
+use crate::evaluator::{Evaluator, EvaluatorData};
+use crate::storage::Value;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 use streamlab_common::schedule::{Deadline, Schedule};
+use streamlab_frontend::ir::{InputReference, LolaIR, OutputReference};
 
 pub type StateSlice = Vec<(OutputReference, Value)>;
 
-
 pub struct Update {
-    timed: Vec<(Time, StateSlice)>,
-    event: StateSlice,
+    pub timed: Vec<(Time, StateSlice)>,
+    pub event: StateSlice,
 }
 
 pub struct Monitor {
@@ -65,10 +64,7 @@ impl Monitor {
 
         self.current_time = ts;
 
-        Update {
-            timed,
-            event: event_change,
-        }
+        Update { timed, event: event_change }
     }
 
     pub fn accept_time(&mut self, ts: Time) -> Vec<(Time, StateSlice)> {

@@ -1,6 +1,7 @@
 #![allow(clippy::mutex_atomic)]
 
 use crate::basics::io_handler::EventSource;
+use crate::basics::Time;
 use crate::storage::Value;
 use csv::{ByteRecord, Reader as CSVReader, Result as ReaderResult, StringRecord};
 use std::error::Error;
@@ -8,7 +9,6 @@ use std::fs::File;
 use std::io::stdin;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use streamlab_frontend::ir::{LolaIR, Type};
-use crate::basics::Time;
 
 enum TimeHandling {
     RealTime { start: Instant },

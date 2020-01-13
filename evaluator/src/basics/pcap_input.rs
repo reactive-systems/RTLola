@@ -1,6 +1,7 @@
 #![allow(clippy::mutex_atomic)]
 
 use crate::basics::io_handler::EventSource;
+use crate::basics::Time;
 use crate::storage::Value;
 use etherparse::{
     Ethernet2Header, InternetSlice, Ipv4Header, Ipv6Header, LinkSlice, SlicedPacket, TcpHeader, TransportSlice,
@@ -13,7 +14,6 @@ use std::net::IpAddr;
 use std::str::FromStr;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use streamlab_frontend::ir::LolaIR;
-use crate::basics::Time;
 
 // ################################
 // Packet parsing functions

@@ -156,7 +156,7 @@ impl<'e, 'c> Evaluator<'e, 'c> {
         let mut res = vec![];
         for ix in 0..self.fresh_outputs.len() {
             if self.fresh_outputs.contains(ix) {
-                res.push((ix, self.peek_value(StreamReference::OutRef(ix), &vec![], 0).expect("Marked as fresh.")));
+                res.push((ix, self.peek_value(StreamReference::OutRef(ix), &[], 0).expect("Marked as fresh.")));
             }
         }
         res

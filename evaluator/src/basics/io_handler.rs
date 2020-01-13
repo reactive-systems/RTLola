@@ -45,6 +45,7 @@ pub(crate) fn create_event_source(
     match config {
         CSV { src } => CSVEventSource::setup(&src, ir, start_time),
         PCAP { src } => PCAPEventSource::setup(&src, ir, start_time),
+        API => unimplemented!("Currently, there is no need to create an event source for the API."),
     }
 }
 
@@ -178,6 +179,7 @@ impl OutputHandler {
             OutputChannel::StdOut => stdout().write((msg + "\n").as_bytes()),
             OutputChannel::StdErr => stderr().write((msg + "\n").as_bytes()),
             OutputChannel::File(_) => self.file.as_ref().unwrap().write(msg.as_bytes()),
+            OutputChannel::None => Ok(0),
         }; // TODO: Decide how to handle the result.
     }
 
