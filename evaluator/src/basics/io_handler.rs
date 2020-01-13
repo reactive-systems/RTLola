@@ -19,6 +19,7 @@ use streamlab_frontend::ir::LolaIR;
 pub enum EventSourceConfig {
     CSV { src: CSVInputSource },
     PCAP { src: PCAPInputSource },
+    API,
 }
 
 /// A trait that represents the functioniality needed for an event source.
@@ -54,6 +55,7 @@ pub enum OutputChannel {
     StdOut,
     StdErr,
     File(String),
+    None,
 }
 
 pub struct OutputHandler {

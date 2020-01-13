@@ -99,6 +99,18 @@ impl EvalConfig {
             time_presentation,
         )
     }
+
+    pub fn api(time_representation: TimeRepresentation) -> Self {
+        EvalConfig::new(
+            EventSourceConfig::API,
+            Statistics::None,
+            Verbosity::Triggers,
+            OutputChannel::None,
+            EvaluatorChoice::ClosureBased,
+            ExecutionMode::API,
+            time_representation,
+        )
+    }
 }
 
 impl Default for EvalConfig {
