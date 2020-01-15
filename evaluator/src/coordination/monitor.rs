@@ -68,9 +68,13 @@ impl Monitor {
     }
 
     pub fn accept_time(&mut self, ts: Time) -> Vec<(Time, StateSlice)> {
-        let mut due_ix = self.deadlines.as_ref().map(|v| v.len() - 1).unwrap(); // pick last
         let mut next_deadline = Duration::default();
         let mut timed_changes: Vec<(Time, StateSlice)> = vec![];
+
+        if !self.has_time_driven(){
+            return timed_changes;
+        }
+        let mut due_ix = self.deadlines.as_ref().map(|v| v.len() - 1).unwrap(); // pick last
 
         while self.has_time_driven() && ts > next_deadline {
             // Go back in time and evaluate,...
