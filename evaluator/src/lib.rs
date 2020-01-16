@@ -9,10 +9,10 @@ mod storage;
 #[cfg(test)]
 mod tests;
 
-pub use crate::storage::Value;
 use crate::basics::OutputHandler;
 use crate::coordination::Controller;
 pub use crate::coordination::Monitor;
+pub use crate::storage::Value;
 use basics::{
     CSVInputSource, EvalConfig, EvaluatorChoice, EventSourceConfig, ExecutionMode, OutputChannel, PCAPInputSource,
     Statistics, TimeFormat, TimeRepresentation, Verbosity,
