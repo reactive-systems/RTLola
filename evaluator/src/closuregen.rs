@@ -1,6 +1,6 @@
 //! An attempt to implement dynamic dispatch codegen
 //!
-//! See [Building fast intepreters in Rust](https://blog.cloudflare.com/building-fast-interpreters-in-rust/)
+//! See [Building fast interpreters in Rust](https://blog.cloudflare.com/building-fast-interpreters-in-rust/)
 
 use crate::evaluator::EvaluationContext;
 use crate::storage::Value;
@@ -9,28 +9,28 @@ use regex::Regex;
 use std::ops::{Add, BitAnd, BitOr, BitXor, Div, Mul, Neg, Not, Rem, Shl, Shr, Sub};
 use streamlab_frontend::ir::{Constant, Expression, ExpressionKind, Offset, StreamAccessKind, StreamReference, Type};
 
-pub(crate) trait Expr<'s> {
-    fn compile(self) -> CompiledExpr<'s>;
+pub(crate) trait Expr {
+    fn compile(self) -> CompiledExpr;
 }
 
-pub(crate) struct CompiledExpr<'s>(Box<dyn 's + Fn(&EvaluationContext<'_>) -> Value>);
+pub(crate) struct CompiledExpr(Box<dyn Fn(&EvaluationContext<'_>) -> Value>);
 // alternative: using Higher-Rank Trait Bounds (HRTBs)
 // pub(crate) struct CompiledExpr<'s>(Box<dyn 's + for<'a> Fn(&EvaluationContext<'a>) -> Value>);
 
-impl<'s> CompiledExpr<'s> {
+impl CompiledExpr {
     /// Creates a compiled expression IR from a generic closure.
-    pub(crate) fn new(closure: impl 's + Fn(&EvaluationContext<'_>) -> Value) -> Self {
+    pub(crate) fn new(closure: impl 'static + Fn(&EvaluationContext<'_>) -> Value) -> Self {
         CompiledExpr(Box::new(closure))
     }
 
     /// Executes a filter against a provided context with values.
-    pub fn execute(&self, ctx: &EvaluationContext<'s>) -> Value {
+    pub fn execute(&self, ctx: &EvaluationContext) -> Value {
         self.0(ctx)
     }
 }
 
-impl<'s> Expr<'s> for Expression {
-    fn compile(self) -> CompiledExpr<'s> {
+impl Expr for Expression {
+    fn compile(self) -> CompiledExpr {
         use ExpressionKind::*;
         match self.kind {
             LoadConstant(c) => {

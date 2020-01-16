@@ -16,7 +16,7 @@ pub struct Update {
 
 pub struct Monitor {
     ir: LolaIR, // probably not necessary to store here.
-    eval: Evaluator<'static, 'static>,
+    eval: Evaluator<'static>,
     pub output_handler: Arc<OutputHandler>,
     deadlines: Option<Vec<Deadline>>,
     current_time: Duration,

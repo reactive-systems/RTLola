@@ -35,7 +35,7 @@ pub(crate) struct EvaluatorData {
     config: EvalConfig,
 }
 
-pub(crate) struct Evaluator<'e, 'c> {
+pub(crate) struct Evaluator<'e> {
     // Evaluation order of output streams
     layers: &'e Vec<Vec<OutputReference>>,
     // Indexed by stream reference.
@@ -43,7 +43,7 @@ pub(crate) struct Evaluator<'e, 'c> {
     // Indexed by stream reference.
     exprs: &'e Vec<Expression>,
     // Indexed by stream reference.
-    compiled_exprs: Vec<CompiledExpr<'c>>,
+    compiled_exprs: Vec<CompiledExpr>,
     global_store: &'e mut GlobalStore,
     start_time: &'e Instant,               // only valid in online mode
     time_last_event: &'e mut Option<Time>, // only valid in offline mode
@@ -136,7 +136,7 @@ impl EvaluatorData {
     }
 }
 
-impl<'e, 'c> Evaluator<'e, 'c> {
+impl<'e> Evaluator<'e> {
     pub(crate) fn eval_event(&mut self, event: &[Value], mut ts: Time) {
         if self.config.mode == ExecutionMode::Offline || self.config.mode == ExecutionMode::API {
             assert!(
@@ -303,7 +303,7 @@ impl<'e, 'c> Evaluator<'e, 'c> {
     }
 
     #[allow(non_snake_case)]
-    fn as_EvaluationContext<'n>(&'n self, ts: Time) -> (EvaluationContext<'n>, &'n Vec<CompiledExpr<'c>>) {
+    fn as_EvaluationContext(&self, ts: Time) -> (EvaluationContext, &Vec<CompiledExpr>) {
         (
             EvaluationContext {
                 ts,
