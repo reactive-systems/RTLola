@@ -53,6 +53,7 @@ pub(crate) struct Evaluator<'e> {
     ir: &'e LolaIR,
     handler: &'e OutputHandler,
     config: &'e EvalConfig,
+    raw_data: *mut EvaluatorData,
 }
 
 struct ExpressionEvaluator<'e> {
@@ -108,31 +109,41 @@ impl EvaluatorData {
         }
     }
 
-    #[allow(unsafe_code)]
-    pub(crate) fn into_evaluator(self) -> Evaluator<'static, 'static> {
-        // TODO: This *does* leak memory.  Return pointer, cast, delete properly.
-        let a: &'static mut EvaluatorData = Box::leak(Box::new(self));
-        let compiled_exprs: Vec<CompiledExpr<'static>> = if a.config.evaluator == ClosureBased {
-            a.ir.outputs.iter().map(|o| o.expr.clone().compile()).collect()
+    pub(crate) fn into_evaluator(self) -> Evaluator<'static> {
+        let mut on_heap = Box::new(self);
+        // Store pointer to data so we can delete it in implementation of Drop trait.
+        // This is necessary since we leak the evaluator data.
+        let heap_ptr: *mut EvaluatorData = &mut *on_heap;
+        let leaked_data: &'static mut EvaluatorData = Box::leak(on_heap);
+        let compiled_exprs: Vec<CompiledExpr> = if leaked_data.config.evaluator == ClosureBased {
+            leaked_data.ir.outputs.iter().map(|o| o.expr.clone().compile()).collect()
         } else {
             vec![]
         };
 
         Evaluator {
-            layers: &a.layers,
-            activation_conditions: &a.activation_conditions,
-            exprs: &a.exprs,
+            layers: &leaked_data.layers,
+            activation_conditions: &leaked_data.activation_conditions,
+            exprs: &leaked_data.exprs,
             compiled_exprs,
-            global_store: &mut a.global_store,
-            start_time: &a.start_time,
-            time_last_event: &mut a.time_last_event,
-            fresh_inputs: &mut a.fresh_inputs,
-            fresh_outputs: &mut a.fresh_outputs,
-            triggers: &a.triggers,
-            ir: &a.ir,
-            handler: &a.handler,
-            config: &a.config,
+            global_store: &mut leaked_data.global_store,
+            start_time: &leaked_data.start_time,
+            time_last_event: &mut leaked_data.time_last_event,
+            fresh_inputs: &mut leaked_data.fresh_inputs,
+            fresh_outputs: &mut leaked_data.fresh_outputs,
+            triggers: &leaked_data.triggers,
+            ir: &leaked_data.ir,
+            handler: &leaked_data.handler,
+            config: &leaked_data.config,
+            raw_data: heap_ptr,
         }
+    }
+}
+
+impl<'e> Drop for Evaluator<'e> {
+    #[allow(unsafe_code)]
+    fn drop(&mut self) {
+        drop(unsafe { Box::from_raw(self.raw_data) });
     }
 }
 
