@@ -35,24 +35,24 @@ pub(crate) struct EvaluatorData {
     config: EvalConfig,
 }
 
-pub(crate) struct Evaluator<'e> {
+pub(crate) struct Evaluator {
     // Evaluation order of output streams
-    layers: &'e Vec<Vec<OutputReference>>,
+    layers: &'static Vec<Vec<OutputReference>>,
     // Indexed by stream reference.
-    activation_conditions: &'e Vec<ActivationCondition>,
+    activation_conditions: &'static Vec<ActivationCondition>,
     // Indexed by stream reference.
-    exprs: &'e Vec<Expression>,
+    exprs: &'static Vec<Expression>,
     // Indexed by stream reference.
     compiled_exprs: Vec<CompiledExpr>,
-    global_store: &'e mut GlobalStore,
-    start_time: &'e Instant,               // only valid in online mode
-    time_last_event: &'e mut Option<Time>, // only valid in offline mode
-    fresh_inputs: &'e mut BitSet,
-    fresh_outputs: &'e mut BitSet,
-    triggers: &'e Vec<Option<Trigger>>,
-    ir: &'e LolaIR,
-    handler: &'e OutputHandler,
-    config: &'e EvalConfig,
+    global_store: &'static mut GlobalStore,
+    start_time: &'static Instant,               // only valid in online mode
+    time_last_event: &'static mut Option<Time>, // only valid in offline mode
+    fresh_inputs: &'static mut BitSet,
+    fresh_outputs: &'static mut BitSet,
+    triggers: &'static Vec<Option<Trigger>>,
+    ir: &'static LolaIR,
+    handler: &'static OutputHandler,
+    config: &'static EvalConfig,
     raw_data: *mut EvaluatorData,
 }
 
@@ -109,7 +109,7 @@ impl EvaluatorData {
         }
     }
 
-    pub(crate) fn into_evaluator(self) -> Evaluator<'static> {
+    pub(crate) fn into_evaluator(self) -> Evaluator {
         let mut on_heap = Box::new(self);
         // Store pointer to data so we can delete it in implementation of Drop trait.
         // This is necessary since we leak the evaluator data.
@@ -140,14 +140,14 @@ impl EvaluatorData {
     }
 }
 
-impl<'e> Drop for Evaluator<'e> {
+impl Drop for Evaluator {
     #[allow(unsafe_code)]
     fn drop(&mut self) {
         drop(unsafe { Box::from_raw(self.raw_data) });
     }
 }
 
-impl<'e> Evaluator<'e> {
+impl Evaluator {
     pub(crate) fn eval_event(&mut self, event: &[Value], mut ts: Time) {
         if self.config.mode == ExecutionMode::Offline || self.config.mode == ExecutionMode::API {
             assert!(
@@ -302,7 +302,7 @@ impl<'e> Evaluator<'e> {
     }
 
     #[allow(non_snake_case)]
-    fn as_ExpressionEvaluator<'n>(&'n self) -> (ExpressionEvaluator<'n>, &'e Vec<Expression>) {
+    fn as_ExpressionEvaluator<'n>(&'n self) -> (ExpressionEvaluator<'n>, &Vec<Expression>) {
         (
             ExpressionEvaluator {
                 global_store: &self.global_store,
