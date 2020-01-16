@@ -9,6 +9,7 @@ mod storage;
 #[cfg(test)]
 mod tests;
 
+pub use crate::storage::Value;
 use crate::basics::OutputHandler;
 use crate::coordination::Controller;
 pub use crate::coordination::Monitor;
@@ -33,6 +34,11 @@ const CONFIG: FrontendConfig =
     FrontendConfig { ty: TypeConfig { use_64bit_only: true, type_aliases: false }, allow_parameters: false };
 
 impl Config {
+    // find appropriate name
+    pub fn new_api(cfg: EvalConfig, ir: LolaIR) -> Config {
+        Config { cfg, ir }
+    }
+
     pub fn new(args: &[String]) -> Self {
         let parse_matches = App::new("StreamLAB")
         .version(env!("CARGO_PKG_VERSION"))
