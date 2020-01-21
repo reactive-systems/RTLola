@@ -18,7 +18,7 @@ pub struct Monitor {
     ir: LolaIR, // probably not necessary to store here.
     eval: Evaluator,
     pub output_handler: Arc<OutputHandler>,
-    deadlines: Option<Vec<Deadline>>,
+    deadlines: Vec<Deadline>,
     current_time: Duration,
 }
 
@@ -28,24 +28,13 @@ impl Monitor {
         // Note: start_time only accessed in online mode.
         let eval_data = EvaluatorData::new(ir.clone(), config.clone(), output_handler.clone(), Instant::now());
 
-        let deadlines: Option<Vec<Deadline>> = if ir.time_driven.is_empty() {
-            None
+        let deadlines: Vec<Deadline> = if ir.time_driven.is_empty() {
+            vec![]
         } else {
-            Some(Schedule::from(&ir).expect("Creation of schedule failed.").deadlines)
+            Schedule::from(&ir).expect("Creation of schedule failed.").deadlines
         };
 
         Monitor { ir, eval: eval_data.into_evaluator(), output_handler, deadlines, current_time: Time::default() }
-    }
-}
-
-impl Monitor {
-    #[inline]
-    fn has_time_driven(&self) -> bool {
-        !self.ir.time_driven.is_empty()
-    }
-    #[inline]
-    fn get_dl(&self, ix: usize) -> Option<Deadline> {
-        self.deadlines.as_ref().map(|v| v[ix].clone()) // This clone can be avoided.
     }
 }
 
@@ -71,24 +60,24 @@ impl Monitor {
         let mut next_deadline = Duration::default();
         let mut timed_changes: Vec<(Time, StateSlice)> = vec![];
 
-        if !self.has_time_driven() {
+        if !self.deadlines.is_empty() {
             return timed_changes;
         }
-        let mut due_ix = self.deadlines.as_ref().map(|v| v.len() - 1).unwrap(); // pick last
+        assert!(self.deadlines.len() > 0);
+        let mut due_ix = self.deadlines.len() - 1;
 
-        while self.has_time_driven() && ts > next_deadline {
+        while ts > next_deadline {
             // Go back in time and evaluate,...
-            let dl = self.get_dl(due_ix).expect("Loop cond guards existence.");
+            let dl = &self.deadlines[due_ix];
             self.output_handler.debug(|| format!("Schedule Timed-Event {:?}.", (&dl.due, next_deadline)));
             self.output_handler.new_event();
             self.eval.eval_time_driven_outputs(&dl.due, ts);
-            due_ix += 1;
-            let dl = self.get_dl(due_ix).expect("Loop cond guards existence.");
+            due_ix = (due_ix + 1) % self.deadlines.len();
+            let dl = &self.deadlines[due_ix];
             timed_changes.push((next_deadline, self.eval.peek_fresh()));
             assert!(dl.pause > Duration::from_secs(0));
             next_deadline += dl.pause;
         }
-
         timed_changes
     }
 
