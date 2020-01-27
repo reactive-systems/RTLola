@@ -266,7 +266,7 @@ impl Evaluator {
                 }
             }
         }
-        
+
         // Check linked streams and inform them.
         let extended = &self.ir.outputs[ix];
         for &win in &extended.dependent_windows {
