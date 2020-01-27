@@ -20,7 +20,7 @@ pub(crate) use self::future_dependency::FutureDependentStreams;
 pub(crate) use self::input_dependencies::RequiredInputs;
 pub(crate) use self::space_requirements::SpaceRequirements;
 use self::space_requirements::TrackingRequirements;
-use crate::ty::{FloatTy, IntTy, UIntTy, ValueTy};
+use crate::ty::{FloatTy, IntTy, StreamTy, UIntTy, ValueTy};
 
 #[derive(Debug, Copy, Clone)]
 pub(crate) enum MemoryBound {
@@ -47,7 +47,7 @@ pub(crate) fn analyze<'a>(
     handler: &Handler,
 ) -> Result<GraphAnalysisResult, String> {
     let dependency_analysis =
-        dependency_graph::analyse_dependencies(spec, version_analysis, declaration_table, &handler);
+        dependency_graph::analyse_dependencies(spec, version_analysis, declaration_table, &handler, type_table);
 
     if handler.contains_error() {
         handler.error("aborting due to previous error");
@@ -84,15 +84,15 @@ pub(crate) fn analyze<'a>(
     })
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub(crate) enum StreamNode {
     ClassicInput(NodeId),
     ClassicOutput(NodeId),
     ParameterizedInput(NodeId),
     ParameterizedOutput(NodeId),
-    RTOutput(NodeId),
+    RTOutput(NodeId, StreamTy),
     Trigger(NodeId),
-    RTTrigger(NodeId),
+    RTTrigger(NodeId, StreamTy),
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -159,15 +159,15 @@ pub(crate) type NIx = petgraph::prelude::NodeIndex;
 type EIx = petgraph::prelude::EdgeIndex;
 //type EId = petgraph::prelude::EdgeIndex;
 
-fn get_ast_id(dependent_node: StreamNode) -> NodeId {
+fn get_ast_id(dependent_node: &StreamNode) -> NodeId {
     match dependent_node {
         StreamNode::ClassicOutput(id)
         | StreamNode::ParameterizedOutput(id)
-        | StreamNode::RTOutput(id)
+        | StreamNode::RTOutput(id, _)
         | StreamNode::ClassicInput(id)
         | StreamNode::ParameterizedInput(id)
         | StreamNode::Trigger(id)
-        | StreamNode::RTTrigger(id) => id,
+        | StreamNode::RTTrigger(id, _) => *id,
     }
 }
 

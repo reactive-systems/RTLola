@@ -10,7 +10,7 @@ pub(crate) fn determine_required_inputs(dependency_graph: &DependencyGraph) -> R
     let mut input_dependencies: RequiredInputs = HashMap::new();
     for node in dependency_graph.node_identifiers() {
         let node_info = dependency_graph.node_weight(node).expect("we iterate over the NIx");
-        input_dependencies.insert(get_ast_id(*node_info), Vec::new());
+        input_dependencies.insert(get_ast_id(node_info), Vec::new());
     }
 
     for node in dependency_graph.node_identifiers() {
@@ -39,7 +39,7 @@ fn bfs_color_reachable(
         let top = stack.pop().expect("We checked for empty stack");
         for dependent_stream in dependency_graph.neighbors_directed(top, Direction::Incoming) {
             if visited.insert(dependent_stream) {
-                let id = get_ast_id(*dependency_graph.node_weight(dependent_stream).expect("We just got this NIx"));
+                let id = get_ast_id(dependency_graph.node_weight(dependent_stream).expect("We just got this NIx"));
                 input_dependencies.get_mut(&id).unwrap().push(node_id);
                 stack.push(dependent_stream)
             }

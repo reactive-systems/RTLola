@@ -19,9 +19,7 @@ pub(crate) fn future_dependent_stream(dependency_graph: &DependencyGraph) -> Fut
     for node_index in dependency_graph.node_indices() {
         // check if this node is already in the future_dependent_set
         if future_dependent_streams.contains(&get_ast_id(
-            *(dependency_graph
-                .node_weight(node_index)
-                .expect("The closure is only called for each node")),
+            dependency_graph.node_weight(node_index).expect("We iterate over the node indices"),
         )) {
             continue;
         }
@@ -61,11 +59,11 @@ fn propagate_future_dependence(
     node_index: NIx,
 ) {
     future_dependent_streams
-        .insert(get_ast_id(*(dependency_graph.node_weight(node_index).expect("We expect the node index to be valid"))));
+        .insert(get_ast_id(dependency_graph.node_weight(node_index).expect("We expect the node index to be valid")));
 
     for neighbor in dependency_graph.neighbors_directed(node_index, Direction::Incoming) {
         if !future_dependent_streams
-            .contains(&get_ast_id(*(dependency_graph.node_weight(neighbor).expect("We iterate over all neighbors"))))
+            .contains(&get_ast_id(dependency_graph.node_weight(neighbor).expect("We iterate over all neighbors")))
         {
             propagate_future_dependence(future_dependent_streams, dependency_graph, neighbor);
         }
@@ -100,13 +98,13 @@ mod tests {
         let mut decl_table = naming_analyzer.check(&spec);
         let mut type_analysis = TypeAnalysis::new(&handler, &mut decl_table);
         let type_table = type_analysis.check(&spec);
-        let mut version_analyzer = LolaVersionAnalysis::new(
-            &handler,
-            type_table.as_ref().expect("We expect in the tests, that the version analysis returned without an error"),
-        );
+        let type_table = type_table.as_ref().expect("We expect in these tests that the type analysis checks out.");
+
+        let mut version_analyzer = LolaVersionAnalysis::new(&handler, &type_table);
         let _version = version_analyzer.analyse(&spec);
 
-        let dependency_analysis = analyse_dependencies(&spec, &version_analyzer.result, &decl_table, &handler);
+        let dependency_analysis =
+            analyse_dependencies(&spec, &version_analyzer.result, &decl_table, &handler, &type_table);
 
         let (_, pruned_graph) = determine_evaluation_order(dependency_analysis.dependency_graph);
 

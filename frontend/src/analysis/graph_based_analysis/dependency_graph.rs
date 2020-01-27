@@ -5,6 +5,7 @@ use crate::ast;
 use crate::ast::{ExpressionKind, LanguageSpec, LolaSpec, Output, TemplateSpec};
 use crate::parse::{NodeId, Span};
 use crate::reporting::{DiagnosticBuilder, Handler, LabeledSpan, Level};
+use crate::ty::check::TypeTable;
 use num::traits::sign::Signed;
 use petgraph::algo::tarjan_scc;
 use petgraph::graph::{edge_index, NodeIndex};
@@ -43,6 +44,7 @@ struct DependencyAnalyser<'a> {
     version_table: &'a LolaVersionTable,
     naming_table: &'a DeclarationTable<'a>,
     handler: &'a Handler,
+    type_table: &'a TypeTable,
     stream_names: HashMap<NodeId, String>,
 }
 
@@ -180,8 +182,9 @@ impl<'a> DependencyAnalyser<'a> {
             let id = trigger.id;
             match self.version_table[&id] {
                 LanguageSpec::RTLola => {
-                    let normal_time_index =
-                        self.dependency_graph.add_node(StreamNode::RTTrigger(id));
+                    let normal_time_index = self
+                        .dependency_graph
+                        .add_node(StreamNode::RTTrigger(id, self.type_table.get_stream_type(id).clone()));
                     mapping.insert(id, StreamMappingInfo { normal_time_index });
                 }
                 LanguageSpec::Classic | LanguageSpec::Lola2 => {
@@ -211,8 +214,9 @@ impl<'a> DependencyAnalyser<'a> {
                     mapping.insert(id, StreamMappingInfo { normal_time_index });
                 }
                 LanguageSpec::RTLola => {
-                    let normal_time_index =
-                        self.dependency_graph.add_node(StreamNode::RTOutput(id));
+                    let normal_time_index = self
+                        .dependency_graph
+                        .add_node(StreamNode::RTOutput(id, self.type_table.get_stream_type(id).clone()));
                     mapping.insert(id, StreamMappingInfo { normal_time_index });
                 }
             }
@@ -613,11 +617,11 @@ impl<'a> DependencyAnalyser<'a> {
         let stream_id = match node {
             StreamNode::ClassicOutput(id)
             | StreamNode::ParameterizedOutput(id)
-            | StreamNode::RTOutput(id) => id,
+            | StreamNode::RTOutput(id, _) => id,
             StreamNode::ClassicInput(_)
             | StreamNode::ParameterizedInput(_)
             | StreamNode::Trigger(_)
-            | StreamNode::RTTrigger(_) => {
+            | StreamNode::RTTrigger(_,_) => {
                 unreachable!("Inputs and triggers must never appear in a cycle.")
             }
         };
@@ -795,11 +799,11 @@ impl<'a> DependencyAnalyser<'a> {
         match start_node_info {
             StreamNode::ClassicOutput(id)
             | StreamNode::ParameterizedOutput(id)
-            | StreamNode::RTOutput(id) => id,
+            | StreamNode::RTOutput(id, _) => id,
             StreamNode::ClassicInput(_)
             | StreamNode::ParameterizedInput(_)
             | StreamNode::Trigger(_)
-            | StreamNode::RTTrigger(_) => {
+            | StreamNode::RTTrigger(_,_) => {
                 unreachable!("Inputs and triggers must never appear in a cycle.")
             }
         }
@@ -811,6 +815,7 @@ pub(crate) fn analyse_dependencies<'a>(
     version_table: &'a LolaVersionTable,
     naming_table: &'a DeclarationTable,
     handler: &'a Handler,
+    type_table: &TypeTable,
 ) -> DependencyAnalysis {
     let analyser = DependencyAnalyser {
         dependency_graph: DependencyGraph::default(),
@@ -818,6 +823,7 @@ pub(crate) fn analyse_dependencies<'a>(
         version_table,
         naming_table,
         handler,
+        type_table,
         stream_names: HashMap::new(),
     };
     analyser.analyse_dependencies()
@@ -843,13 +849,12 @@ mod tests {
         let mut decl_table = naming_analyzer.check(&ast);
         let mut type_analysis = TypeAnalysis::new(&handler, &mut decl_table);
         let type_table = type_analysis.check(&ast);
-        let mut version_analyzer = LolaVersionAnalysis::new(
-            &handler,
-            type_table.as_ref().expect("We expect in these tests that the type analysis checks out."),
-        );
+        let type_table = type_table.as_ref().expect("We expect in these tests that the type analysis checks out.");
+        let mut version_analyzer = LolaVersionAnalysis::new(&handler, &type_table);
         let version = version_analyzer.analyse(&ast);
         assert!(!version.is_none(), "We only analyze dependencies for specifications that so far seem to be ok.");
-        let _dependency_analysis = analyse_dependencies(&ast, &version_analyzer.result, &decl_table, &handler);
+        let _dependency_analysis =
+            analyse_dependencies(&ast, &version_analyzer.result, &decl_table, &handler, &type_table);
         assert_eq!(num_errors, handler.emitted_errors());
         assert_eq!(num_warnings, handler.emitted_warnings());
     }

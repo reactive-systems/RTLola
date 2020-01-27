@@ -26,7 +26,7 @@ pub(crate) fn determine_buffer_size(
     let mut store_all_inputs = false;
     let mut storage_requirements: HashMap<NodeId, StorageRequirement> = HashMap::new();
     for node_index in dependency_graph.node_indices() {
-        let id = get_ast_id(*dependency_graph.node_weight(node_index).expect("We iterate over all node indices"));
+        let id = get_ast_id(dependency_graph.node_weight(node_index).expect("We iterate over all node indices"));
         let this_stream_is_future_dependent = future_dependent_streams.contains(&id);
 
         // normal event based stream
@@ -85,7 +85,7 @@ pub(crate) fn determine_tracking_size(
 ) -> Result<TrackingRequirements, String> {
     let mut tracking: HashMap<NodeId, Vec<(NodeId, TrackingRequirement)>> = HashMap::new();
     for node_index in dependency_graph.node_indices() {
-        let id = get_ast_id(*dependency_graph.node_weight(node_index).expect("We iterate over all node indices"));
+        let id = get_ast_id(dependency_graph.node_weight(node_index).expect("We iterate over all node indices"));
         let mut tracking_requirements: Vec<(NodeId, TrackingRequirement)> = Vec::new();
 
         let this_is_time_based = is_it_time_based(dependency_graph, node_index, type_table);
@@ -93,7 +93,7 @@ pub(crate) fn determine_tracking_size(
         for edge in dependency_graph.edges_directed(node_index, Direction::Outgoing) {
             // TODO What about the invoke expression (if we allow one)?
             if let Access(Location::Expression, Time(offset), _) = edge.weight() {
-                let src_node = *dependency_graph
+                let src_node = dependency_graph
                     .node_weight(edge.target())
                     .expect("We iterate over edges so their target should exist");
                 let src_id = get_ast_id(src_node);
@@ -145,7 +145,7 @@ pub(crate) fn determine_tracking_size(
 
 fn is_it_time_based(dependency_graph: &DependencyGraph, node_index: NIx, type_table: &TypeTable) -> bool {
     let id = get_ast_id(
-        *dependency_graph
+        dependency_graph
             .node_weight(node_index)
             .expect("We assume that the type-table has information about every stream and trigger"),
     );
@@ -193,13 +193,12 @@ mod tests {
         let mut decl_table = naming_analyzer.check(&spec);
         let mut type_analysis = TypeAnalysis::new(&handler, &mut decl_table);
         let type_table = type_analysis.check(&spec);
-        let mut version_analyzer = LolaVersionAnalysis::new(
-            &handler,
-            type_table.as_ref().expect("We expect that the version analysis found no error"),
-        );
+        let type_table = type_table.as_ref().expect("We expect that the version analysis found no error");
+        let mut version_analyzer = LolaVersionAnalysis::new(&handler, &type_table);
         let _version = version_analyzer.analyse(&spec);
 
-        let dependency_analysis = analyse_dependencies(&spec, &version_analyzer.result, &decl_table, &handler);
+        let dependency_analysis =
+            analyse_dependencies(&spec, &version_analyzer.result, &decl_table, &handler, &type_table);
 
         let (_, pruned_graph) = determine_evaluation_order(dependency_analysis.dependency_graph);
 
@@ -238,15 +237,14 @@ mod tests {
         let mut decl_table = naming_analyzer.check(&spec);
         let mut type_analysis = TypeAnalysis::new(&handler, &mut decl_table);
         let type_table = type_analysis.check(&spec);
-        let mut version_analyzer = LolaVersionAnalysis::new(
-            &handler,
-            type_table.as_ref().expect("We expect that the version analysis found no erro"),
-        );
+        let type_table = type_table.as_ref().expect("We expect in these tests that the type analysis checks out.");
+
+        let mut version_analyzer = LolaVersionAnalysis::new(&handler, &type_table);
         let _version = version_analyzer.analyse(&spec);
 
-        let dependency_analysis = analyse_dependencies(&spec, &version_analyzer.result, &decl_table, &handler);
+        let dependency_analysis =
+            analyse_dependencies(&spec, &version_analyzer.result, &decl_table, &handler, &type_table);
         let mut type_analysis = TypeAnalysis::new(&handler, &mut decl_table);
-        let type_table = type_analysis.check(&spec).expect("We expect that the spec is well typed");
         let (_, pruned_graph) = determine_evaluation_order(dependency_analysis.dependency_graph);
 
         let future_dependent_stream = future_dependent_stream(&pruned_graph);

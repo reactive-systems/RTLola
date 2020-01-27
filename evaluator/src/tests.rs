@@ -141,8 +141,8 @@ xub,24.8
 sajhasdsub,24.9
 subsub,25.0"#;
 
-    let ctrl = run(spec, data).unwrap_or_else(|e| panic!("E2E test failed: {}", e));
-    assert_eq!(ctrl.output_handler.statistics.as_ref().unwrap().get_num_trigger(0), 1);
+    let handler = run(spec, data).unwrap_or_else(|e| panic!("E2E test failed: {}", e));
+    assert_eq!(handler.statistics.as_ref().unwrap().get_num_trigger(0), 1);
 }
 
 #[test]
@@ -346,7 +346,24 @@ trigger x == 50 // utf-8 character value of "2"
 2,0.5
 3,1.1"#;
 
-    let ctrl = run(spec, data).unwrap_or_else(|e| panic!("E2E test failed: {}", e));
-    assert_eq!(ctrl.output_handler.statistics.as_ref().unwrap().get_num_trigger(0), 1);
-    assert_eq!(ctrl.output_handler.statistics.as_ref().unwrap().get_num_trigger(1), 1);
+    let handler = run(spec, data).unwrap_or_else(|e| panic!("E2E test failed: {}", e));
+    assert_eq!(handler.statistics.as_ref().unwrap().get_num_trigger(0), 1);
+    assert_eq!(handler.statistics.as_ref().unwrap().get_num_trigger(1), 1);
+}
+
+#[test]
+fn rtlola_stream_but_eventbased() {
+    let spec = r#"
+    input acc_x: Float64
+    input timing: Float64
+    output vel_x@10Hz:= vel_x.offset(by:-1).defaults(to:0.0) + acc_x.aggregate(over:1s, using:integral)
+    output test := vel_x.hold().defaults(to:0.0) + timing > -1.0
+    trigger test
+    "#;
+    let data = r#"acc_x,timing,time
+1.0,0.0,1
+"#;
+    let output_handler = run(spec, data).unwrap_or_else(|e| panic!("E2E test failed: {}", e));
+    assert_eq!(output_handler.statistics.as_ref().unwrap().get_num_trigger(0), 1);
+    //    assert_eq!(output_handler.statistics.as_ref().unwrap().get_num_trigger(1), 1);
 }

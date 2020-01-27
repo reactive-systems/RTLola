@@ -15,6 +15,7 @@ use crate::analysis::graph_based_analysis::StreamNode::RTTrigger;
 use crate::analysis::graph_based_analysis::StreamNode::Trigger;
 use crate::analysis::graph_based_analysis::TimeOffset;
 use crate::parse::NodeId;
+use crate::ty::StreamTy;
 use std::collections::HashMap;
 
 pub(crate) type EvalOrder = Vec<Vec<ComputeStep>>;
@@ -30,10 +31,11 @@ pub(crate) fn determine_evaluation_order(
 ) -> (EvaluationOrderResult, DependencyGraph) {
     prune_graph(&mut dependency_graph);
     let pruned_dependency_graph = dependency_graph.clone();
+    //    println!("{:?}", petgraph::dot::Dot::new(&pruned_dependency_graph));
 
     let (compute_graph_event_based, compute_graph_periodic) =
         build_compute_graphs(dependency_graph);
-
+    //    println!("{:?}", petgraph::dot::Dot::new(&compute_graph_event_based));
     let event_based_streams_order = get_compute_order(compute_graph_event_based);
     let periodic_streams_order = get_compute_order(compute_graph_periodic);
 
@@ -52,22 +54,36 @@ fn prune_graph(dependency_graph: &mut DependencyGraph) {
 
 fn build_compute_graphs(dependency_graph: DependencyGraph) -> (ComputationGraph, ComputationGraph) {
     let mut normal_time_graph = dependency_graph.clone();
-    normal_time_graph.retain_nodes(|g, node_index| match g.node_weight(node_index).unwrap() {
-        RTTrigger(_) | RTOutput(_) => false,
-        ClassicInput(_)
-        | ClassicOutput(_)
-        | ParameterizedInput(_)
-        | ParameterizedOutput(_)
-        | Trigger(_) => true,
+    normal_time_graph.retain_nodes(|g, node_index| {
+        match g.node_weight(node_index).expect("Existence guaranteed by the library") {
+            RTTrigger(_, StreamTy::RealTime(_))
+            | RTOutput(_, StreamTy::RealTime(_)) => false,
+            ClassicInput(_)
+            | ClassicOutput(_)
+            | ParameterizedInput(_)
+            | ParameterizedOutput(_)
+            | Trigger(_)
+            | RTTrigger(_, StreamTy::Event(_))
+            | RTOutput(_, StreamTy::Event(_))
+            | RTTrigger(_, StreamTy::Infer(_))
+            | RTOutput(_, StreamTy::Infer(_)) => true,
+        }
     });
     let mut real_time_graph = dependency_graph.clone();
-    real_time_graph.retain_nodes(|g, node_index| match g.node_weight(node_index).unwrap() {
-        RTTrigger(_) | RTOutput(_) => true,
-        ClassicInput(_)
-        | ClassicOutput(_)
-        | ParameterizedInput(_)
-        | ParameterizedOutput(_)
-        | Trigger(_) => false,
+    real_time_graph.retain_nodes(|g, node_index| {
+        match g.node_weight(node_index).expect("Existence guaranteed by the library") {
+            RTTrigger(_, StreamTy::RealTime(_))
+            | RTOutput(_, StreamTy::RealTime(_))
+            | RTTrigger(_, StreamTy::Infer(_))
+            | RTOutput(_, StreamTy::Infer(_)) => true,
+            ClassicInput(_)
+            | ClassicOutput(_)
+            | ParameterizedInput(_)
+            | ParameterizedOutput(_)
+            | Trigger(_)
+            | RTTrigger(_, StreamTy::Event(_))
+            | RTOutput(_, StreamTy::Event(_)) => false,
+        }
     });
 
     (
@@ -89,7 +105,7 @@ fn build_compute_graph(mut dependency_graph: DependencyGraph) -> ComputationGrap
     let mut computation_graph = ComputationGraph::with_capacity(expected_capacity, expected_capacity);
     for node in dependency_graph.node_weights_mut() {
         // TODO ignore real time streams
-        let id = get_ast_id(*node);
+        let id = get_ast_id(node);
         let invoke: NIx = computation_graph.add_node(ComputeStep::Invoke(id));
         let extend: NIx = computation_graph.add_node(ComputeStep::Extend(id));
         let evaluate: NIx = computation_graph.add_node(ComputeStep::Evaluate(id));
@@ -105,9 +121,9 @@ fn build_compute_graph(mut dependency_graph: DependencyGraph) -> ComputationGrap
         let (source, target) =
             dependency_graph.edge_endpoints(edge_idx).expect("We iterate over all existing EdgeIndices");
         let source_id =
-            get_ast_id(*dependency_graph.node_weight(source).expect("We just git this NodeIndex from the graph"));
+            get_ast_id(dependency_graph.node_weight(source).expect("We just git this NodeIndex from the graph"));
         let target_id =
-            get_ast_id(*dependency_graph.node_weight(target).expect("We just git this NodeIndex from the graph"));
+            get_ast_id(dependency_graph.node_weight(target).expect("We just git this NodeIndex from the graph"));
 
         match edge_weight {
             StreamDependency::InvokeByName(_) => {

@@ -37,6 +37,7 @@ pub(crate) struct TypeAnalysis<'a, 'b, 'c> {
     stream_ty: HashMap<NodeId, StreamTy>,
 }
 
+#[derive(Debug)]
 pub(crate) struct TypeTable {
     value_tt: HashMap<NodeId, ValueTy>,
     stream_tt: HashMap<NodeId, StreamTy>,
