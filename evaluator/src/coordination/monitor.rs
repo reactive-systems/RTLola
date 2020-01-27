@@ -60,7 +60,7 @@ impl Monitor {
         let mut next_deadline = Duration::default();
         let mut timed_changes: Vec<(Time, StateSlice)> = vec![];
 
-        if !self.deadlines.is_empty() {
+        if self.deadlines.is_empty() {
             return timed_changes;
         }
         assert!(self.deadlines.len() > 0);
