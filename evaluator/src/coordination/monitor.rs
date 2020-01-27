@@ -9,6 +9,7 @@ use streamlab_frontend::ir::{InputReference, LolaIR, OutputReference};
 
 pub type StateSlice = Vec<(OutputReference, Value)>;
 
+#[derive(Debug)]
 pub struct Update {
     pub timed: Vec<(Time, StateSlice)>,
     pub event: StateSlice,

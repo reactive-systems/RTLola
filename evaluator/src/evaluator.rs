@@ -164,13 +164,10 @@ impl Evaluator {
     }
 
     pub(crate) fn peek_fresh(&self) -> Vec<(OutputReference, Value)> {
-        let mut res = vec![];
-        for ix in 0..self.fresh_outputs.len() {
-            if self.fresh_outputs.contains(ix) {
-                res.push((ix, self.peek_value(StreamReference::OutRef(ix), &[], 0).expect("Marked as fresh.")));
-            }
-        }
-        res
+        self.fresh_outputs
+            .iter()
+            .map(|elem| (elem, self.peek_value(StreamReference::OutRef(elem), &[], 0).expect("Marked as fresh.")))
+            .collect()
     }
 
     fn accept_inputs(&mut self, event: &[Value], ts: Time) {
@@ -269,7 +266,7 @@ impl Evaluator {
                 }
             }
         }
-
+        
         // Check linked streams and inform them.
         let extended = &self.ir.outputs[ix];
         for &win in &extended.dependent_windows {
