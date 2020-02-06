@@ -1212,7 +1212,14 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
             }
             Sum | Product => {
                 // The value type of the inner stream has to be numeric
-                self.infer_expression(expr, Some(ValueTy::Constr(TypeConstraint::Numeric)))?;
+                let ss = self.unifier.snapshot();
+                match self.infer_expression(expr, Some(ValueTy::Constr(TypeConstraint::Numeric))) {
+                    Ok(()) => self.unifier.commit(ss),
+                    Err(()) => {
+                        self.unifier.rollback_to(ss);
+                        self.infer_expression(expr, Some(ValueTy::Bool))?
+                    }
+                }
                 // resulting type depends on the inner type, optional if wait
                 let inner_var = self.value_vars[&expr.id];
                 if wait {
@@ -1233,6 +1240,19 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
                 self.unifier
                     .unify_var_ty(var, ValueTy::Option(ValueTy::Infer(inner_var).into()))
                     .map_err(|err| self.handle_error(err, span))
+            }
+            Disjunction | Conjunction => {
+                // The value type of the inner stream has to be boolean
+                self.infer_expression(expr, Some(ValueTy::Bool))?;
+                // resulting type is boolean as well.
+                let inner_ty = ValueTy::Bool;
+                match wait {
+                    false => self.unifier.unify_var_ty(var, inner_ty).map_err(|err| self.handle_error(err, span)),
+                    true => self
+                        .unifier
+                        .unify_var_ty(var, ValueTy::Option(inner_ty.into()))
+                        .map_err(|err| self.handle_error(err, span)),
+                }
             }
             Integral => {
                 // The value type of the inner stream has to be numeric

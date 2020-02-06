@@ -21,6 +21,8 @@ fn is_efficient_operator(op: WindowOperation) -> bool {
         | WindowOperation::Sum
         | WindowOperation::Product
         | WindowOperation::Average
+        | WindowOperation::Disjunction
+        | WindowOperation::Conjunction
         | WindowOperation::Integral => true,
     }
 }
@@ -31,6 +33,7 @@ fn determine_needed_window_memory(type_size: u128, number_of_element: u128, op: 
         WindowOperation::Min | WindowOperation::Max => number_of_element * type_size,
         WindowOperation::Sum | WindowOperation::Product => number_of_element * type_size,
         WindowOperation::Average => number_of_element * (8 + type_size),
+        WindowOperation::Conjunction | WindowOperation::Disjunction => number_of_element * type_size,
         WindowOperation::Integral => number_of_element * (4 * 8 + 1 + 8),
     }
 }

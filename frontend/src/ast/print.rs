@@ -327,6 +327,8 @@ impl Display for WindowOperation {
                 WindowOperation::Integral => "∫",
                 WindowOperation::Min => "min",
                 WindowOperation::Max => "max",
+                WindowOperation::Disjunction => "∃",
+                WindowOperation::Conjunction => "∀",
             }
         )
     }

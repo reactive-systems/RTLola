@@ -298,6 +298,8 @@ pub enum WindowOperation {
     Product,
     Average,
     Integral,
+    Conjunction,
+    Disjunction,
 }
 
 /// Describes the operation used to access a stream

@@ -22,10 +22,13 @@ pub(crate) enum SlidingWindow {
     SumUnsigned(WindowInstance<SumIV<WindowUnsigned>>),
     SumSigned(WindowInstance<SumIV<WindowSigned>>),
     SumFloat(WindowInstance<SumIV<WindowFloat>>),
+    SumBool(WindowInstance<SumIV<WindowBool>>),
     AvgUnsigned(WindowInstance<AvgIV<WindowUnsigned>>),
     AvgSigned(WindowInstance<AvgIV<WindowSigned>>),
     AvgFloat(WindowInstance<AvgIV<WindowFloat>>),
     Integral(WindowInstance<IntegralIV>),
+    Conjunction(WindowInstance<ConjIV>),
+    Disjunction(WindowInstance<DisjIV>),
 }
 
 impl SlidingWindow {
@@ -41,10 +44,13 @@ impl SlidingWindow {
             (WinOp::Sum, Type::UInt(_)) => SlidingWindow::SumUnsigned(WindowInstance::new(dur, wait, ts)),
             (WinOp::Sum, Type::Int(_)) => SlidingWindow::SumSigned(WindowInstance::new(dur, wait, ts)),
             (WinOp::Sum, Type::Float(_)) => SlidingWindow::SumFloat(WindowInstance::new(dur, wait, ts)),
+            (WinOp::Sum, Type::Bool) => SlidingWindow::SumBool(WindowInstance::new(dur, wait, ts)),
             (WinOp::Average, Type::UInt(_)) => SlidingWindow::AvgUnsigned(WindowInstance::new(dur, wait, ts)),
             (WinOp::Average, Type::Int(_)) => SlidingWindow::AvgSigned(WindowInstance::new(dur, wait, ts)),
             (WinOp::Average, Type::Float(_)) => SlidingWindow::AvgFloat(WindowInstance::new(dur, wait, ts)),
             (WinOp::Integral, _) => SlidingWindow::Integral(WindowInstance::new(dur, wait, ts)),
+            (WinOp::Conjunction, Type::Bool) => SlidingWindow::Conjunction(WindowInstance::new(dur, wait, ts)),
+            (WinOp::Disjunction, Type::Bool) => SlidingWindow::Disjunction(WindowInstance::new(dur, wait, ts)),
             (_, Type::Option(t)) => SlidingWindow::new(dur, wait, op, ts, t),
             _ => unimplemented!(),
         }
@@ -62,6 +68,9 @@ impl SlidingWindow {
             SlidingWindow::SumUnsigned(wi) => wi.update_buckets(ts),
             SlidingWindow::SumSigned(wi) => wi.update_buckets(ts),
             SlidingWindow::SumFloat(wi) => wi.update_buckets(ts),
+            SlidingWindow::SumBool(wi) => wi.update_buckets(ts),
+            SlidingWindow::Conjunction(wi) => wi.update_buckets(ts),
+            SlidingWindow::Disjunction(wi) => wi.update_buckets(ts),
             SlidingWindow::AvgUnsigned(wi) => wi.update_buckets(ts),
             SlidingWindow::AvgSigned(wi) => wi.update_buckets(ts),
             SlidingWindow::AvgFloat(wi) => wi.update_buckets(ts),
@@ -82,6 +91,9 @@ impl SlidingWindow {
             SlidingWindow::SumUnsigned(wi) => wi.get_value(ts),
             SlidingWindow::SumSigned(wi) => wi.get_value(ts),
             SlidingWindow::SumFloat(wi) => wi.get_value(ts),
+            SlidingWindow::SumBool(wi) => wi.get_value(ts),
+            SlidingWindow::Conjunction(wi) => wi.get_value(ts),
+            SlidingWindow::Disjunction(wi) => wi.get_value(ts),
             SlidingWindow::AvgUnsigned(wi) => wi.get_value(ts),
             SlidingWindow::AvgSigned(wi) => wi.get_value(ts),
             SlidingWindow::AvgFloat(wi) => wi.get_value(ts),
@@ -101,6 +113,9 @@ impl SlidingWindow {
             SlidingWindow::SumUnsigned(wi) => wi.accept_value(v, ts),
             SlidingWindow::SumSigned(wi) => wi.accept_value(v, ts),
             SlidingWindow::SumFloat(wi) => wi.accept_value(v, ts),
+            SlidingWindow::SumBool(wi) => wi.accept_value(v, ts),
+            SlidingWindow::Conjunction(wi) => wi.accept_value(v, ts),
+            SlidingWindow::Disjunction(wi) => wi.accept_value(v, ts),
             SlidingWindow::AvgUnsigned(wi) => wi.accept_value(v, ts),
             SlidingWindow::AvgSigned(wi) => wi.accept_value(v, ts),
             SlidingWindow::AvgFloat(wi) => wi.accept_value(v, ts),
@@ -240,6 +255,18 @@ impl WindowGeneric for WindowSigned {
         match v {
             Value::Signed(_) => v,
             Value::Unsigned(u) => Value::Signed(u as i64),
+            _ => unreachable!("Type error."),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct WindowBool {}
+impl WindowGeneric for WindowBool {
+    fn from_value(v: Value) -> Value {
+        match v {
+            Value::Bool(b) if b => Value::Unsigned(1),
+            Value::Bool(_) => Value::Unsigned(0),
             _ => unreachable!("Type error."),
         }
     }

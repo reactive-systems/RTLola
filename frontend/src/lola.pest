@@ -124,7 +124,9 @@ Count = {"#" | "count"}
 Integral = {"∫"  | "integral"}
 Average = { "avg"| "average" }
 
-WindowOp = _{ Sum | /*Product |*/ Average | Count | Integral}
+WindowOp = _{ Sum | /*Product |*/ Average | Count | Integral | WindowForall | WindowExists }
+WindowForall = {"forall" | "∀" | "∧" | "conjunction" }
+WindowExists = {"exists" | "∃" | "∨" | "disjunction" }
 
 
 //////////////////////////////////////////////////

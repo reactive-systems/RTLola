@@ -38,6 +38,84 @@ impl<G: WindowGeneric> From<(Value, Time)> for SumIV<G> {
     }
 }
 
+#[derive(Clone, Debug)]
+pub(crate) struct ConjIV {
+    res: bool,
+}
+
+impl WindowIV for ConjIV {
+    fn default(_ts: Time) -> Self {
+        true.into()
+    }
+}
+
+impl Into<Value> for ConjIV {
+    fn into(self) -> Value {
+        Value::Bool(self.res)
+    }
+}
+
+impl Add for ConjIV {
+    type Output = ConjIV;
+    fn add(self, other: ConjIV) -> ConjIV {
+        (self.res && other.res).into()
+    }
+}
+
+impl From<(Value, Time)> for ConjIV {
+    fn from(v: (Value, Time)) -> ConjIV {
+        match v.0 {
+            Value::Bool(b) => b.into(),
+            _ => unreachable!("Type error."),
+        }
+    }
+}
+
+impl From<bool> for ConjIV {
+    fn from(v: bool) -> ConjIV {
+        ConjIV { res: v }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct DisjIV {
+    res: bool,
+}
+
+impl WindowIV for DisjIV {
+    fn default(_ts: Time) -> Self {
+        false.into()
+    }
+}
+
+impl Into<Value> for DisjIV {
+    fn into(self) -> Value {
+        Value::Bool(self.res)
+    }
+}
+
+impl Add for DisjIV {
+    type Output = DisjIV;
+    fn add(self, other: DisjIV) -> DisjIV {
+        (self.res || other.res).into()
+    }
+}
+
+impl From<(Value, Time)> for DisjIV {
+    fn from(v: (Value, Time)) -> DisjIV {
+        match v.0 {
+            Value::Bool(b) => b.into(),
+            _ => unreachable!("Type error."),
+        }
+    }
+}
+
+impl From<bool> for DisjIV {
+    fn from(v: bool) -> DisjIV {
+        DisjIV { res: v }
+    }
+}
+
 // TODO: Generic for floats...
 #[derive(Clone, Debug)]
 pub(crate) struct AvgIV<G: WindowGeneric> {
