@@ -1246,12 +1246,12 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
                 self.infer_expression(expr, Some(ValueTy::Bool))?;
                 // resulting type is boolean as well.
                 let inner_ty = ValueTy::Bool;
-                match wait {
-                    false => self.unifier.unify_var_ty(var, inner_ty).map_err(|err| self.handle_error(err, span)),
-                    true => self
-                        .unifier
+                if wait {
+                    self.unifier
                         .unify_var_ty(var, ValueTy::Option(inner_ty.into()))
-                        .map_err(|err| self.handle_error(err, span)),
+                        .map_err(|err| self.handle_error(err, span))
+                } else {
+                    self.unifier.unify_var_ty(var, inner_ty).map_err(|err| self.handle_error(err, span))
                 }
             }
             Integral => {

@@ -55,6 +55,7 @@ impl Into<Value> for ConjIV {
     }
 }
 
+#[allow(clippy::suspicious_arithmetic_impl)]
 impl Add for ConjIV {
     type Output = ConjIV;
     fn add(self, other: ConjIV) -> ConjIV {
@@ -94,6 +95,7 @@ impl Into<Value> for DisjIV {
     }
 }
 
+#[allow(clippy::suspicious_arithmetic_impl)]
 impl Add for DisjIV {
     type Output = DisjIV;
     fn add(self, other: DisjIV) -> DisjIV {
