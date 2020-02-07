@@ -21,7 +21,7 @@ impl<G: WindowGeneric> WindowIV for SumIV<G> {
 
 impl<G: WindowGeneric> Into<Value> for SumIV<G> {
     fn into(self) -> Value {
-        self.v.clone()
+        self.v
     }
 }
 

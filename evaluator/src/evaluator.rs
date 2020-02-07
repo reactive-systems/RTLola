@@ -344,21 +344,11 @@ impl<'a> ExpressionEvaluator<'a> {
 
                         if *op == And {
                             // evaluate lazy
-                            if lhs.get_bool() == false {
-                                return Value::Bool(false);
-                            } else {
-                                let rhs = self.eval_expr(&operands[1], ts);
-                                return rhs;
-                            }
+                            return if lhs.get_bool() { self.eval_expr(&operands[1], ts) } else { Value::Bool(false) };
                         }
                         if *op == Or {
                             // evaluate lazy
-                            if lhs.get_bool() == true {
-                                return Value::Bool(true);
-                            } else {
-                                let rhs = self.eval_expr(&operands[1], ts);
-                                return rhs;
-                            }
+                            return if lhs.get_bool() { Value::Bool(true) } else { self.eval_expr(&operands[1], ts) };
                         }
 
                         let rhs = self.eval_expr(&operands[1], ts);

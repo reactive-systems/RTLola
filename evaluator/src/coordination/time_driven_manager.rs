@@ -36,7 +36,7 @@ impl TimeDrivenManager {
     }
 
     pub(crate) fn get_deadline_cycle(&self) -> impl Iterator<Item = &Deadline> {
-        return self.deadlines.iter().cycle();
+        self.deadlines.iter().cycle()
     }
 
     pub fn start_online(self, start_time: Instant, work_chan: Sender<WorkItem>) -> ! {

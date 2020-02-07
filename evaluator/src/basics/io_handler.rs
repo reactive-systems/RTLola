@@ -136,7 +136,7 @@ impl OutputHandler {
             if let Some(ti) = self.time_info(time) {
                 format!("{}: {}", ti, msg().into())
             } else {
-                format!("{}", msg().into())
+                msg().into()
             }
         };
         self.emit(Verbosity::Triggers, msg);

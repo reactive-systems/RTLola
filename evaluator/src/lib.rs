@@ -322,10 +322,7 @@ impl Config {
         };
 
         use EvaluatorChoice::*;
-        let mut evaluator = ClosureBased;
-        if parse_matches.is_present("INTERPRETED") {
-            evaluator = Interpreted;
-        }
+        let evaluator = if parse_matches.is_present("INTERPRETED") { Interpreted } else { ClosureBased };
 
         use ExecutionMode::*;
         let mut mode = Offline;

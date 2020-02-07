@@ -170,7 +170,7 @@ impl<'a> Lowering<'a> {
         };
         self.ir.outputs.push(output);
         let trig = ir::Trigger {
-            message: trigger.message.clone().unwrap_or(format!("{}", trigger.expression)),
+            message: trigger.message.clone().unwrap_or_else(|| format!("{}", trigger.expression)),
             reference,
             trigger_idx: self.ir.triggers.len(),
         };

@@ -89,7 +89,7 @@ impl Schedule {
         assert!(num_steps.is_integer());
         let num_steps = num_steps.to_integer() as usize;
         if num_steps >= 10_000_000 {
-            return Err(format!("stream frequencies are too incompatible to generate schedule"));
+            return Err("stream frequencies are too incompatible to generate schedule".to_string());
         }
         let mut extend_steps = vec![Vec::new(); num_steps];
         for s in ir.time_driven.iter() {

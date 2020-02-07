@@ -194,7 +194,7 @@ impl CSVEventSource {
         for (col_ix, s) in self.record.iter().enumerate() {
             if let Some(str_ix) = self.mapping.col2str[col_ix] {
                 // utf8-encoding (as [u8]) of string "#"
-                if s != &[35] {
+                if s != [35] {
                     let t = &self.in_types[str_ix];
                     buffer[str_ix] = Value::try_from(s, t).unwrap_or_else(|| {
                         if let Ok(s) = std::str::from_utf8(s) {
@@ -232,11 +232,7 @@ impl EventSource for CSVEventSource {
     }
 
     fn read_time(&self) -> Option<SystemTime> {
-        let time_str = self.str_for_time();
-        if time_str.is_none() {
-            return None;
-        }
-        let time_str = time_str.unwrap();
+        let time_str = self.str_for_time()?;
         let mut time_str_split = time_str.split('.');
         let secs_str: &str = match time_str_split.next() {
             Some(s) => s,

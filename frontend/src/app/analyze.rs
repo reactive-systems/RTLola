@@ -129,7 +129,7 @@ impl Config {
                 });
                 let report = analysis::analyze(&spec, &handler, self::CONFIG);
                 //println!("{:?}", report);
-
+                use crate::analysis::graph_based_analysis::MemoryBound;
                 if let Some(r) = report.graph_analysis_result {
                     match r.memory_requirements {
                         MemoryBound::Unbounded => println!("The specification has no bound on the memory consumption."),
@@ -138,7 +138,7 @@ impl Config {
                             println!("Incomplete specification: we cannot determine the memory consumption.")
                         }
                     }
-                }
+                };
                 Ok(())
             }
             Analysis::IR => {

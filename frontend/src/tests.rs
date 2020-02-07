@@ -184,6 +184,7 @@ fn min_incompatible() {
     assert!(parse("import math\n input a: Int32\n input b: Float64\n output minres := min(a, b)").is_err());
 }
 
+#[test]
 fn test_float16() {
     assert!(parse("input in: Float16\noutput count := in + 3.5").is_ok());
 }
