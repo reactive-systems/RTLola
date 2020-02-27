@@ -64,7 +64,7 @@ impl Expression {
                 };
                 Ok(UOM_Time::new::<second>(duration))
             }
-            u => return Err(format!("expected duration unit, found `{}`", u)),
+            u => Err(format!("expected duration unit, found `{}`", u)),
         }
     }
 
@@ -107,7 +107,7 @@ impl Expression {
                 };
                 Ok(UOM_Frequency::new::<hertz>(freq))
             }
-            u => return Err(format!("expected frequency unit, found `{}`", u)),
+            u => Err(format!("expected frequency unit, found `{}`", u)),
         }
     }
 
@@ -214,7 +214,7 @@ impl Offset {
         match self {
             Offset::Discrete(_) => None,
             Offset::RealTime(val, unit) => {
-                let seconds = val * &unit.to_uom_time().get::<second>();
+                let seconds = val * unit.to_uom_time().get::<second>();
                 Some(UOM_Time::new::<second>(seconds))
             }
         }
@@ -240,7 +240,7 @@ impl FromStr for TimeUnit {
 }
 
 impl TimeUnit {
-    fn to_uom_time(&self) -> UOM_Time {
+    fn to_uom_time(self) -> UOM_Time {
         let f = match self {
             TimeUnit::Nanosecond => {
                 Rational::new(RationalType::from_u64(1).unwrap(), RationalType::from_u64(10_u64.pow(9)).unwrap())
@@ -347,7 +347,7 @@ mod tests {
         assert_eq!(time_spec_int("12354", "ns"), Duration::from_nanos(12354));
         assert_eq!(time_spec_int("90351", "us"), Duration::from_nanos(90351 * 1_000));
         assert_eq!(time_spec_int("248", "ms"), Duration::from_nanos(248 * 1_000_000));
-        assert_eq!(time_spec_int("29489232", "ms"), Duration::from_nanos(29489232 * 1_000_000));
+        assert_eq!(time_spec_int("29489232", "ms"), Duration::from_nanos(29_489_232 * 1_000_000));
     }
 
     #[test]

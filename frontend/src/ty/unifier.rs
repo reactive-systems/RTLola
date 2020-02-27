@@ -60,9 +60,7 @@ impl<T: UnifiableTy> Unifier for ValueUnifier<T> {
             (ValueVarVal::Known(ty_l), ValueVarVal::Known(ty_r)) => {
                 // check if left type can be concretized
                 if let Some(ty) = ty_l.can_be_concretized(self, &ty_r, &right) {
-                    self.table
-                        .unify_var_value(left, ValueVarVal::Concretize(ty.clone()))
-                        .expect("overwrite cannot fail");
+                    self.table.unify_var_value(left, ValueVarVal::Concretize(ty)).expect("overwrite cannot fail");
                     return Ok(());
                 }
                 // if both variables have values, we try to unify them recursively
@@ -112,7 +110,7 @@ impl<T: UnifiableTy> Unifier for ValueUnifier<T> {
             if let Some(ty) = val.equal_to(self, &ty) {
                 self.table.unify_var_value(var, ValueVarVal::Concretize(ty))
             } else if val.coerces_with(self, &ty) {
-                return Ok(());
+                Ok(())
             } else {
                 Err(val.conflicts_with(ty))
             }

@@ -293,7 +293,7 @@ pub enum FeatureFlag {
 pub struct WindowReference(usize);
 
 impl WindowReference {
-    pub fn idx(&self) -> usize {
+    pub fn idx(self) -> usize {
         self.0
     }
 }

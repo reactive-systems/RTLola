@@ -377,7 +377,7 @@ impl<'a> DependencyAnalyser<'a> {
                 .expect("We do not modify the graph so every EdgeIndex should still be valid.")
             {
                 StreamDependency::Access(_, offset, span) => match offset {
-                    Offset::Time(_, ..) | Offset::SlidingWindow => {
+                    Offset::Time(_) | Offset::SlidingWindow => {
                         self.handler.error_with_span("cycle with periodic stream", LabeledSpan::new(*span, "", true));
                         true
                     }
@@ -402,7 +402,7 @@ impl<'a> DependencyAnalyser<'a> {
             match edge_info {
                 StreamDependency::InvokeByName(_) => {}
                 StreamDependency::Access(_, offset, _) => match offset {
-                    Offset::Time(_, ..) => unreachable!("This is a cycle without realtime"),
+                    Offset::Time(_) => unreachable!("This is a cycle without realtime"),
                     Offset::Discrete(offset) => total_weight += offset,
                     Offset::SlidingWindow => unreachable!("Sliding windows do not count for cycles"),
                 },

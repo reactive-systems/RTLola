@@ -467,7 +467,7 @@ fn parse_vec_of_expressions(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>, handler
 }
 
 fn parse_vec_of_types(pairs: Pairs<'_, Rule>) -> Vec<Type> {
-    pairs.map(|expr| parse_type(expr)).collect()
+    pairs.map(parse_type).collect()
 }
 
 fn build_function_expression(spec: &mut LolaSpec, pair: Pair<'_, Rule>, span: Span, handler: &Handler) -> Expression {
@@ -551,7 +551,7 @@ fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>, handler: &H
                             let ident = match l.kind {
                                 LitKind::Numeric(val, unit) => {
                                     assert!(unit.is_none());
-                                    Ident::new(val.clone(), l.span)
+                                    Ident::new(val, l.span)
                                 }
                                 _ => {
                                     handler.error_with_span(
@@ -585,7 +585,7 @@ fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>, handler: &H
                                         Err(reason) => {
                                             handler.error_with_span(
                                                 "failed to parse offset",
-                                                LabeledSpan::new(rhs.span, &format!("{}", reason), true),
+                                                LabeledSpan::new(rhs.span, &reason, true),
                                             );
                                             std::process::exit(1);
                                         }
@@ -667,7 +667,7 @@ fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>, handler: &H
                         Err(reason) => {
                             handler.error_with_span(
                                 "failed to parse offset expression",
-                                LabeledSpan::new(rhs.span, &format!("{}", reason), true),
+                                LabeledSpan::new(rhs.span, &reason, true),
                             );
                             std::process::exit(1);
                         }

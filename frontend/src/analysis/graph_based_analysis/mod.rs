@@ -51,7 +51,7 @@ pub(crate) fn analyze<'a>(
 
     if handler.contains_error() {
         handler.error("aborting due to previous error");
-        return Err(format!("Error during dependency analysis."));
+        return Err("Error during dependency analysis.".to_string());
     }
 
     let (evaluation_order_result, pruned_graph) =

@@ -219,7 +219,20 @@ impl StderrEmitter {
                 assert_eq!(path, snippet.path, "assume snippets to be in same source file, use `SubDiagnostic` if not");
 
                 // source code snippet
-                if prev_line_number.is_none() {
+                if let Some(prev_line_number) = prev_line_number {
+                    //                    assert!(prev_line_number.unwrap() <= snippet.line_number);
+                    if diagnostic.sort_spans && prev_line_number + 1 < snippet.line_number {
+                        // print ...
+                        let mut rendered_line = ColoredLine::new();
+                        rendered_line.push("...", ColorSpec::new().set_fg(Some(Color::Blue)).clone());
+                        lines.push(rendered_line);
+                    }
+
+                    if prev_line_number != snippet.line_number {
+                        // do not print line twice
+                        lines.push(render_source_line(&snippet));
+                    }
+                } else {
                     // print leading space
                     let mut rendered_line = ColoredLine::new();
                     rendered_line.push(
@@ -229,19 +242,6 @@ impl StderrEmitter {
                     lines.push(rendered_line);
 
                     lines.push(render_source_line(&snippet));
-                } else {
-                    //                    assert!(prev_line_number.unwrap() <= snippet.line_number);
-                    if diagnostic.sort_spans && prev_line_number.unwrap() + 1 < snippet.line_number {
-                        // print ...
-                        let mut rendered_line = ColoredLine::new();
-                        rendered_line.push("...", ColorSpec::new().set_fg(Some(Color::Blue)).clone());
-                        lines.push(rendered_line);
-                    }
-
-                    if prev_line_number.unwrap() != snippet.line_number {
-                        // do not print line twice
-                        lines.push(render_source_line(&snippet));
-                    }
                 }
                 prev_line_number = Some(snippet.line_number);
 

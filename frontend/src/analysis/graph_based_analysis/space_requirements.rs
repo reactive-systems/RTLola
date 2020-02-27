@@ -106,10 +106,10 @@ pub(crate) fn determine_tracking_size(
                     if this_is_time_based {
                         let out_timing = &type_table.get_stream_type(id);
                         if let StreamTy::RealTime(freq) = out_timing {
-                            let result: Rational = uom_time.get::<second>() / &freq.freq.get::<hertz>();
+                            let result: Rational = uom_time.get::<second>() / freq.freq.get::<hertz>();
                             let needed_space = match result.ceil().to_integer().to_u16() {
                                 Some(u) => u,
-                                _ => return Err(format!("buffer size does not fit in u16")),
+                                _ => return Err("buffer size does not fit in u16".to_string()),
                             };
                             tracking_requirements.push((src_id, TrackingRequirement::Finite(needed_space)));
                         // TODO We might be able to use the max(src_duration, out_duration)
@@ -122,10 +122,10 @@ pub(crate) fn determine_tracking_size(
                                 tracking_requirements.push((src_id, TrackingRequirement::Unbounded));
                             }
                             StreamTy::RealTime(freq) => {
-                                let result: Rational = uom_time.get::<second>() / &freq.freq.get::<hertz>();
+                                let result: Rational = uom_time.get::<second>() / freq.freq.get::<hertz>();
                                 let needed_space = match result.ceil().to_integer().to_u16() {
                                     Some(u) => u,
-                                    _ => return Err(format!("buffer size does not fit in u16")),
+                                    _ => return Err("buffer size does not fit in u16".to_string()),
                                 };
                                 tracking_requirements.push((src_id, TrackingRequirement::Finite(needed_space)));
                             }

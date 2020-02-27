@@ -155,7 +155,7 @@ fn add_sliding_windows<'a>(
                 (StreamTy::RealTime(freq), false) => {
                     let window_size = duration.parse_duration().expect("durations have been checked before");
                     let number_of_full_periods_in_window: Rational =
-                        window_size.get::<second>() / &freq.freq.get::<hertz>();
+                        window_size.get::<second>() / freq.freq.get::<hertz>();
                     required_memory += number_of_full_periods_in_window
                         .to_integer()
                         .to_u128()
@@ -170,7 +170,7 @@ fn add_sliding_windows<'a>(
                     let number_of_panes = 64;
                     let window_size = duration.parse_duration().expect("durations have been checked before");
                     let number_of_full_periods_in_window: Rational =
-                        window_size.get::<second>() / &freq.freq.get::<hertz>();
+                        window_size.get::<second>() / freq.freq.get::<hertz>();
                     let number_of_elements = min(
                         number_of_full_periods_in_window
                             .to_integer()
@@ -259,9 +259,8 @@ pub(crate) fn determine_worst_case_memory_consumption<'a>(
                 let tracking_requirement = tracking_requirements.get(&output.id).expect(
                     "We should have determined the tracking requirements for all streams that did not get pruned!",
                 );
-                let mut it = tracking_requirement.iter();
                 let mut tracking_per_instance: u128 = 0_u128;
-                while let Some((node_id, tracking)) = it.next() {
+                for (node_id, tracking) in tracking_requirement {
                     let value_type = type_table.get_value_type(*node_id);
                     let value_type_size = if let MemoryBound::Bounded(i) = get_byte_size(value_type) {
                         i
@@ -306,9 +305,8 @@ pub(crate) fn determine_worst_case_memory_consumption<'a>(
         //----------------------
         // tracking
         if let Some(tracking_requirement) = tracking_requirements.get(&trigger.id) {
-            let mut it = tracking_requirement.iter();
             let mut tracking_per_instance: u128 = 0_u128;
-            while let Some((node_id, tracking)) = it.next() {
+            for (node_id, tracking) in tracking_requirement {
                 let value_type = type_table.get_value_type(*node_id);
                 let value_type_size = match get_byte_size(value_type) {
                     MemoryBound::Bounded(i) => i,

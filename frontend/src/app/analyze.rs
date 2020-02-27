@@ -10,6 +10,7 @@ use pest::Parser;
 use simplelog::*;
 
 use crate::analysis;
+use crate::analysis::graph_based_analysis::MemoryBound;
 use crate::ir::lowering::Lowering;
 use crate::parse::{LolaParser, Rule, SourceMapper};
 use crate::reporting::Handler;
@@ -128,14 +129,16 @@ impl Config {
                 });
                 let report = analysis::analyze(&spec, &handler, self::CONFIG);
                 //println!("{:?}", report);
-                use crate::analysis::graph_based_analysis::MemoryBound;
-                report.graph_analysis_result.map(|r| match r.memory_requirements {
-                    MemoryBound::Unbounded => println!("The specification has no bound on the memory consumption."),
-                    MemoryBound::Bounded(bytes) => println!("The specification uses at most {} bytes.", bytes),
-                    MemoryBound::Unknown => {
-                        println!("Incomplete specification: we cannot determine the memory consumption.")
+
+                if let Some(r) = report.graph_analysis_result {
+                    match r.memory_requirements {
+                        MemoryBound::Unbounded => println!("The specification has no bound on the memory consumption."),
+                        MemoryBound::Bounded(bytes) => println!("The specification uses at most {} bytes.", bytes),
+                        MemoryBound::Unknown => {
+                            println!("Incomplete specification: we cannot determine the memory consumption.")
+                        }
                     }
-                });
+                }
                 Ok(())
             }
             Analysis::IR => {

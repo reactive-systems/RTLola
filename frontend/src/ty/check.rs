@@ -733,8 +733,8 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
                     self.parse_activation_condition(out_id, right),
                 ) {
                     (Ok(left), Ok(right)) => (left, right),
-                    (Err(l), _) => return Err(l),
-                    (_, Err(r)) => return Err(r),
+                    (Err(_), _) => return Err(()),
+                    (_, Err(_)) => return Err(()),
                 };
                 match op {
                     BinOp::And => Ok(Activation::Conjunction(vec![left, right])),
@@ -775,7 +775,7 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
             }
             TypeKind::Tuple(tuple) => {
                 let inner: Vec<ValueTy> =
-                    tuple.iter().map(|ele| self.infer_type(ele).unwrap()).map(|var| ValueTy::Infer(var)).collect();
+                    tuple.iter().map(|ele| self.infer_type(ele).unwrap()).map(ValueTy::Infer).collect();
                 let ty = ValueTy::Tuple(inner);
                 // ?ty_var = `ty`
                 self.unifier.unify_var_ty(ty_var, ty).expect("cannot fail as `ty_var` is fresh");
@@ -1202,12 +1202,12 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
                 self.infer_expression(expr, None)?;
                 // resulting type is an unsigned integer value, optional if wait
                 let inner_ty = ValueTy::Constr(TypeConstraint::UnsignedInteger);
-                match wait {
-                    false => self.unifier.unify_var_ty(var, inner_ty).map_err(|err| self.handle_error(err, span)),
-                    true => self
-                        .unifier
+                if wait {
+                    self.unifier
                         .unify_var_ty(var, ValueTy::Option(inner_ty.into()))
-                        .map_err(|err| self.handle_error(err, span)),
+                        .map_err(|err| self.handle_error(err, span))
+                } else {
+                    self.unifier.unify_var_ty(var, inner_ty).map_err(|err| self.handle_error(err, span))
                 }
             }
             Sum | Product => {
@@ -1215,15 +1215,14 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
                 self.infer_expression(expr, Some(ValueTy::Constr(TypeConstraint::Numeric)))?;
                 // resulting type depends on the inner type, optional if wait
                 let inner_var = self.value_vars[&expr.id];
-                match wait {
-                    false => self
-                        .unifier
-                        .unify_var_ty(var, ValueTy::Infer(inner_var))
-                        .map_err(|err| self.handle_error(err, span)),
-                    true => self
-                        .unifier
+                if wait {
+                    self.unifier
                         .unify_var_ty(var, ValueTy::Option(ValueTy::Infer(inner_var).into()))
-                        .map_err(|err| self.handle_error(err, span)),
+                        .map_err(|err| self.handle_error(err, span))
+                } else {
+                    self.unifier
+                        .unify_var_ty(var, ValueTy::Infer(inner_var))
+                        .map_err(|err| self.handle_error(err, span))
                 }
             }
             Min | Max | Average => {
@@ -1240,12 +1239,12 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
                 self.infer_expression(expr, Some(ValueTy::Constr(TypeConstraint::Numeric)))?;
                 // resulting type is floating point, optional if wait
                 let inner_ty = ValueTy::Constr(TypeConstraint::FloatingPoint);
-                match wait {
-                    false => self.unifier.unify_var_ty(var, inner_ty).map_err(|err| self.handle_error(err, span)),
-                    true => self
-                        .unifier
+                if wait {
+                    self.unifier
                         .unify_var_ty(var, ValueTy::Option(inner_ty.into()))
-                        .map_err(|err| self.handle_error(err, span)),
+                        .map_err(|err| self.handle_error(err, span))
+                } else {
+                    self.unifier.unify_var_ty(var, inner_ty).map_err(|err| self.handle_error(err, span))
                 }
             }
         }
