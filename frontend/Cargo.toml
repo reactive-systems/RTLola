@@ -1,11 +1,12 @@
 [package]
 name = "streamlab-frontend"
-version = "0.2.0"
+version = "0.3.0"
 authors = [
     "Malte Schledjewski <schledjewski@react.uni-saarland.de>",
     "Maximilian Schwenger <schwenger@react.uni-saarland.de>",
     "Marvin Stenger <stenger@react.uni-saarland.de>",
-    "Leander Tentrup <tentrup@react.uni-saarland.de>"
+    "Leander Tentrup <tentrup@react.uni-saarland.de>",
+    "Florian Kohn <s8flkohn@stud.uni-saarland.de>"
 ]
 edition = "2018"
 
@@ -17,8 +18,8 @@ pest_derive = "2.1"
 lazy_static = "1.3.0" # lazy_static! macro
 clap = "2.33.0"  # command line parsing
 termcolor = "1"  # color output to terminal
-petgraph = "0.4.13"
+petgraph = "0.5"
 ena = "0.13.0" # union-find implementation
 num = "0.2"     # infinite precision rationals
-color-backtrace = "0.2.2"
+color-backtrace = "0.3"
 uom = { version = "0.25.0", default-features = false, features = [ "autoconvert", "rational64", "si", "std", "use_serde"]}
