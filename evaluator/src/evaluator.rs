@@ -432,30 +432,52 @@ impl<'a> ExpressionEvaluator<'a> {
             WindowLookup(win_ref) => self.lookup_window(*win_ref, ts),
 
             Function(name, args, _ty) => {
-                //TODO(marvin): handle type
                 assert!(!args.is_empty());
-                let arg = self.eval_expr(&args[0], ts);
-                match arg {
-                    Value::Float(f) => {
-                        let res = match name.as_ref() {
-                            "sqrt" => f.sqrt(),
-                            "sin" => f.sin(),
-                            "cos" => f.cos(),
-                            "arctan" => f.atan(),
-                            "abs" => f.abs(),
-                            _ => unreachable!("Unknown function: {}, args: {:?}", name, args),
-                        };
-                        Value::Float(NotNan::new(res).expect("TODO: Handle"))
-                    }
-                    Value::Signed(i) => {
-                        let res = match name.as_ref() {
-                            "abs" => i.abs(),
-                            _ => unreachable!("Unknown function: {}, args: {:?}", name, args),
-                        };
-                        Value::Signed(res)
-                    }
-                    Value::Str(s) => match name.as_ref() {
-                        "matches" => {
+                let fst = self.eval_expr(&args[0], ts);
+
+                macro_rules! create_float_arith {
+                    ($fn:ident) => {
+                        match fst {
+                            Value::Float(f) => Value::new_float(f.$fn()),
+                            v => unreachable!("wrong Value type of {:?} for function $fn", v),
+                        }
+                    };
+                }
+
+                macro_rules! create_binary_arith {
+                    ($fn:ident) => {{
+                        if args.len() != 2 {
+                            unreachable!("wrong number of arguments for function $fn")
+                        }
+                        let snd = self.eval_expr(&args[1], ts);
+                        match (fst, snd) {
+                            (Value::Float(f1), Value::Float(f2)) => Value::Float(f1.$fn(f2)),
+                            (Value::Signed(s1), Value::Signed(s2)) => Value::Signed(s1.$fn(s2)),
+                            (Value::Unsigned(u1), Value::Unsigned(u2)) => Value::Unsigned(u1.$fn(u2)),
+                            (v1, v2) => unreachable!("wrong Value types of {:?}, {:?} for function $fn", v1, v2),
+                        }
+                    }};
+                }
+
+                match name.as_ref() {
+                    "sqrt" => create_float_arith!(sqrt),
+                    "sin" => create_float_arith!(sin),
+                    "cos" => create_float_arith!(cos),
+                    "arctan" => create_float_arith!(atan),
+                    "abs" => match fst {
+                        Value::Float(f) => Value::new_float(f.abs()),
+                        Value::Signed(i) => Value::Signed(i.abs()),
+                        _ => {
+                            unreachable!();
+                        }
+                    },
+                    "min" => create_binary_arith!(min),
+                    "max" => create_binary_arith!(max),
+                    "matches" => {
+                        if args.len() != 2 {
+                            unreachable!("wrong number of arguments for match")
+                        }
+                        if let Value::Str(s) = fst {
                             let re_str = match &args[1].kind {
                                 ExpressionKind::LoadConstant(Constant::Str(s)) => s,
                                 _ => unreachable!("regex should be a string literal"),
@@ -464,9 +486,10 @@ impl<'a> ExpressionEvaluator<'a> {
                             // TODO: move it out of the eval loop
                             let re = Regex::new(&re_str).expect("Given regular expression was invalid");
                             Value::Bool(re.is_match(&s))
+                        } else {
+                            unreachable!()
                         }
-                        _ => unreachable!("unknown `String` function: {}, args: {:?}", name, args),
-                    },
+                    }
                     _ => unreachable!("Unknown function: {}, args: {:?}", name, args),
                 }
             }
