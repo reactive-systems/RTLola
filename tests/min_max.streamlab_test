@@ -1,0 +1,35 @@
+{
+  "spec_file": "../tests/specs/min_max.lola",
+  "input_file": "../traces/tests/single_int-every0.1s.csv",
+  "rationale": "Compute min and max of value and value*(-)2",
+  "triggers": {
+    "max is positive": {
+      "expected_count": 9,
+      "time_info": [
+        "0.100000000",
+        "0.110000000",
+        "0.210000000",
+        "0.300000000",
+        "0.310000000",
+        "0.390000000",
+        "0.410000000",
+        "0.510000000",
+        "0.610000000"
+      ]
+    },
+    "min is negative": {
+      "expected_count": 9,
+      "time_info": [
+        "0.100000000",
+        "0.110000000",
+        "0.210000000",
+        "0.300000000",
+        "0.310000000",
+        "0.390000000",
+        "0.410000000",
+        "0.510000000",
+        "0.610000000"
+      ]
+    }
+  }
+}

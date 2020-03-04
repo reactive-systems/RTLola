@@ -1,0 +1,10 @@
+import math
+input a: Int64
+
+output x := a
+output min_x := min(x,-x)
+//output min_x := min(-x,x) // this works
+output max_x := max(-x,x)
+//output max_x := max(x,-x) // this works
+trigger min_x < 0 "min is negative"
+trigger max_x > 0 "max is positive"
