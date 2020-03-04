@@ -197,7 +197,7 @@ impl<'s> Expr<'s> for Expression {
                         }
                         CompiledExpr::new(move |ctx| {
                             let fst = f_arg.execute(ctx);
-                            let snd = args[0].clone().compile().execute(ctx);
+                            let snd = args[1].clone().compile().execute(ctx);
                             match (fst, snd) {
                                 (Value::Float(f1), Value::Float(f2)) => Value::Float(f1.$fn(f2)),
                                 (Value::Signed(s1), Value::Signed(s2)) => Value::Signed(s1.$fn(s2)),
