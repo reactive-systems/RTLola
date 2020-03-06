@@ -28,8 +28,13 @@ cargo build --release --target $TARGET --locked --features public
 
 ### Windows
 
+```bash
+set RUSTFLAGS=-C target-feature=+crt-static 
+rustup run stable-msvc cargo build --release --target x86_64-pc-windows-msvc --locked --features public
 ```
-cargo build --release --target x86_64-pc-windows-msvc --locked --features public -C target-feature=+crt-static
+Or
+```bash
+rustup run stable-gnu cargo build --release --target x86_64-pc-windows-gnu --locked --features public
 ```
 
 ## Packaging
@@ -39,5 +44,7 @@ We currently provide a single zip containing
 * binaries (`streamlab-linux`, `streamlab-mac`, and `streamlab-windows.exe`)
 * evaluator readme (`/evaluator/readme.md`)
 * syntax description (`/doc/syntax.md`)
+* changelog (`/CHANGELOG.md`)
+* ids description (`/doc/streamlab-ids.md`)
 
 using the naming convention `streamlab-TAG.zip`, e.g., `streamlab-0.1.0.zip`.

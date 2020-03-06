@@ -2,6 +2,24 @@
 
 StreamLAB is a monitoring framework for reactive systems.
 
+## Installation Notes
+
+The provided binaries require a PCAP library to be installed. If it is not already installed on your system you can do so as follows:
+
+### Windows
+
+You can download and install the library from here:
+[NPcap](https://nmap.org/npcap/)
+
+### Linux
+
+Use the packet manager of your choice to install the `libpcap-dev` package. For example using `apt`:
+
+`apt install libpcap-dev`
+
+### Mac OS
+
+The PCAP library is already be included in Mac OS X.
 
 ## Command Line Usage
 
