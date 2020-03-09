@@ -10,7 +10,6 @@ use pest::Parser;
 use simplelog::*;
 
 use crate::analysis;
-use crate::analysis::graph_based_analysis::MemoryBound;
 use crate::ir::lowering::Lowering;
 use crate::parse::{LolaParser, Rule, SourceMapper};
 use crate::reporting::Handler;

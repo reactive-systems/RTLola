@@ -125,7 +125,7 @@ fn add_sliding_windows<'a>(
                 };
             }
         }
-        SlidingWindowAggregation { expr, duration, wait: _, aggregation } => {
+        SlidingWindowAggregation { expr, duration, aggregation, .. } => {
             if let Ident(_) = &expr.kind {
             } else {
                 unreachable!("checked in AST verification");

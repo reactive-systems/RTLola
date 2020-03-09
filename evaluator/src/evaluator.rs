@@ -2,7 +2,6 @@ use crate::basics::{EvalConfig, EvaluatorChoice::*, ExecutionMode, OutputHandler
 use crate::closuregen::{CompiledExpr, Expr};
 use crate::storage::{GlobalStore, Value};
 use bit_set::BitSet;
-use ordered_float::NotNan;
 use regex::Regex;
 use std::sync::Arc;
 use std::time::Instant;
@@ -664,6 +663,7 @@ mod tests {
 
     use super::*;
     use crate::storage::Value::*;
+    use ordered_float::NotNan;
     use std::time::{Duration, Instant};
     use streamlab_frontend::ir::LolaIR;
     use streamlab_frontend::FrontendConfig;
