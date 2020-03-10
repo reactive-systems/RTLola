@@ -39,6 +39,7 @@ impl Config {
         Config { cfg, ir }
     }
 
+    #[allow(unsafe_code)]
     pub fn new(args: &[String]) -> Self {
         let parse_matches = App::new("StreamLAB")
         .version(env!("CARGO_PKG_VERSION"))
@@ -295,6 +296,11 @@ impl Config {
         };
 
         let src = if ids_mode {
+            let pcap_load = unsafe { pcap::load_pcap_library() };
+            if let Err(err) = pcap_load {
+                eprintln!("Could not load PCAP library");
+                std::process::exit(1);
+            }
             let local_network = String::from(parse_matches.value_of("LOCAL_NETWORK").unwrap());
             if let Some(file) = parse_matches.value_of("PCAP_INPUT_FILE") {
                 EventSourceConfig::PCAP {

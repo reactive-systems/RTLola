@@ -19,7 +19,7 @@ streamlab-common = {path = "../common/"}
 streamlab-frontend = {path = "../frontend/"}
 ordered-float = "1.0.2"
 csv = "1.1.1"
-pcap = "0.7" # pcap file parsing
+pcap_on_demand = "0.1" # pcap file parsing
 etherparse = "0.9.0" # Network Packet parser
 ip_network = "0.3.4" # IP Address handling
 clap = "2.33.0"  # command line parsing
