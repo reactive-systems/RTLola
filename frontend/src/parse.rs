@@ -596,6 +596,14 @@ fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>, handler: &H
                                     assert_eq!(args.len(), 0);
                                     ExpressionKind::StreamAccess(inner, StreamAccessKind::Hold)
                                 }
+                                "hold(or:)" => {
+                                    assert_eq!(args.len(), 1);
+                                    let lhs = Expression::new(
+                                        ExpressionKind::StreamAccess(inner.into(), StreamAccessKind::Hold),
+                                        span,
+                                    );
+                                    ExpressionKind::Default(Box::new(lhs), args[0].clone())
+                                }
                                 "get()" => {
                                     assert_eq!(args.len(), 0);
                                     ExpressionKind::StreamAccess(inner, StreamAccessKind::Optional)
