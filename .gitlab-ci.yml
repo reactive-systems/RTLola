@@ -57,6 +57,7 @@ cargo:test:windows:
   stage: tests
   tags:
     - windows
+    - rust
   script:
     - rustup update
     - rustc --version && cargo --version      # Print version info for debugging
@@ -106,7 +107,7 @@ cargo:bench:
       expire_in: 5 yrs
   allow_failure: true
 
-# For the release build we do not you the Cargo.lock file, because we haven't investigated how it interacts with different platforms.
+# For the release build we do not use the Cargo.lock file, because we haven't investigated how it interacts with different platforms.
 # Windows, Linux, and MacOS could resolve to different Cargo.lock files.
 # However, we keep the Cargo.lock files as artifacts.
 
@@ -119,6 +120,7 @@ release-windows:
     - triggers
   tags:
     - windows
+    - rust
   variables:
     RUSTFLAGS: "-C target-feature=+crt-static"
   before_script:
@@ -128,7 +130,7 @@ release-windows:
   script:
     - rustup run stable-msvc cargo build --release --target x86_64-pc-windows-msvc --features public
   artifacts:
-    name: "streamlab-windows-$CI_COMMIT_REF_NAME"
+    name: "streamlab-windows-${CI_COMMIT_REF_NAME}_${CI_COMMIT_SHORT_SHA}"
     paths:
       - target/x86_64-pc-windows-msvc/release/streamlab.exe
       - Cargo.lock
@@ -143,6 +145,7 @@ release-windows:
 #    - triggers
 #  tags:
 #    - windows
+#    - rust
 #  before_script:
 #    - cd evaluator
 #    - rustup update
@@ -150,7 +153,7 @@ release-windows:
 #  script:
 #    - rustup run stable-gnu cargo build --release --target x86_64-pc-windows-gnu --features public
 #  artifacts:
-#    name: "streamlab-windows-gnu-$CI_COMMIT_REF_NAME"
+#    name: "streamlab-windows-gnu-${CI_COMMIT_REF_NAME}_${CI_COMMIT_SHORT_SHA}"
 #    paths:
 #      - target/x86_64-pc-windows-gnu/release/streamlab.exe
 #      - Cargo.lock
@@ -171,7 +174,7 @@ release-linux:
   script:
     - cargo build --release --target x86_64-unknown-linux-musl --features public
   artifacts:
-    name: "streamlab-linux-$CI_COMMIT_REF_NAME"
+    name: "streamlab-linux-${CI_COMMIT_REF_NAME}_${CI_COMMIT_SHORT_SHA}"
     paths:
       - target/x86_64-unknown-linux-musl/release/streamlab
       - Cargo.lock
@@ -193,7 +196,7 @@ release-linux:
 #  script:
 #    - rustup run stable-msvc cargo build --release --target x86_64-apple-darwin --features public
 #  artifacts:
-#    name: "streamlab-macos-$CI_COMMIT_REF_NAME"
+#    name: "streamlab-macos-${CI_COMMIT_REF_NAME}_${CI_COMMIT_SHORT_SHA}"
 #    paths:
 #      - target/x86_64-apple-darwin/release/streamlab
 #      - Cargo.lock
