@@ -232,9 +232,7 @@ impl Statistics {
         let copy = self.data.clone();
         thread::spawn(move || {
             // this thread is responsible for displaying progress information
-            let mut spinner = "⠁⠁⠉⠙⠚⠒⠂⠂⠒⠲⠴⠤⠄⠄⠤⠠⠠⠤⠦⠖⠒⠐⠐⠒⠓⠋⠉⠈⠈ "
-                .chars()
-                .cycle();
+            let mut spinner = "⠁⠁⠉⠙⠚⠒⠂⠂⠒⠲⠴⠤⠄⠄⠤⠠⠠⠤⠦⠖⠒⠐⠐⠒⠓⠋⠉⠈⠈ ".chars().cycle();
             loop {
                 thread::sleep(Duration::from_millis(100));
                 #[allow(clippy::mutex_atomic)]
