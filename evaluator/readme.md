@@ -4,7 +4,7 @@ StreamLAB is a monitoring framework for reactive systems.
 
 ## Installation Notes
 
-The provided binaries require a PCAP library to be installed. If it is not already installed on your system you can do so as follows:
+If you want to use the network interface, the provided binaries require a PCAP library to be installed. If it is not already installed on your system you can do so as follows:
 
 ### Windows
 
