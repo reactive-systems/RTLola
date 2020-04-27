@@ -1,6 +1,6 @@
 [package]
 name = "streamlab-frontend"
-version = "0.3.1"
+version = "0.3.2"
 authors = [
     "Malte Schledjewski <schledjewski@react.uni-saarland.de>",
     "Maximilian Schwenger <schwenger@react.uni-saarland.de>",

@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.2] - 2020-04-27
+
+### General
+- Libpcap now only loaded, if the network monitoring interface is used.
+
+### Added
+- Frontend: `hold(or: default)` syntax now supported
+- Evaluator: Added `forall` (`conjunction`) and `exists` (`disjunction`) window aggregations over boolean streams
+- Evaluator: Implemented `sum` window aggregation over boolean streams
+
 ## [0.3.1] - 2020-03-05
 
 ### Fixed

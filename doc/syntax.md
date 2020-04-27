@@ -105,4 +105,4 @@ y.offset(by: -100sec)  // y[-100sec]
 x.aggregate(over: 1h, using: sum)
 ```
 
-possible aggregates are `count`, `sum`, `average`, `min`, `max` and `integral`
+possible aggregates are `count`, `sum`, `average`, `min`, `max`, `forall`, `exists` and `integral`
