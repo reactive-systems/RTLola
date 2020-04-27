@@ -378,8 +378,8 @@ pub enum InferError {
 impl InferError {
     pub(crate) fn normalize_types(&mut self, unifier: &mut ValueUnifier<ValueTy>) {
         if let InferError::ValueTypeMismatch(ref mut expected, ref mut found) = self {
-            std::mem::replace(expected, expected.normalize_ty(unifier));
-            std::mem::replace(found, found.normalize_ty(unifier));
+            *expected = expected.normalize_ty(unifier);
+            *found = found.normalize_ty(unifier);
         }
     }
 }
