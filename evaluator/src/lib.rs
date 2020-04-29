@@ -250,7 +250,7 @@ impl Config {
             ids_mode = true;
             matches
         } else {
-            eprintln!("Unkown subcommand. See help for more information.");
+            eprintln!("Unknown subcommand. See help for more information.");
             std::process::exit(1)
         };
 
