@@ -3,16 +3,16 @@
 #![deny(unsafe_code)] // disallow unsafe code by default
 #![forbid(unused_must_use)] // disallow discarding errors
 
-mod analysis;
-mod ast;
+pub mod analysis;
+pub mod ast;
 pub mod export;
 pub mod ir;
-mod parse;
-mod reporting;
+pub mod parse;
+pub mod reporting;
 mod stdlib;
 #[cfg(test)]
 mod tests;
-mod ty;
+pub mod ty;
 
 // module containing the code for the executables
 pub mod app {
