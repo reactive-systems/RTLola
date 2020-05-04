@@ -12,7 +12,7 @@ use termcolor::{ColorChoice, StandardStream, WriteColor};
 
 /// A handler is responsible for emitting warnings and errors
 #[derive(Debug)]
-pub(crate) struct Handler {
+pub struct Handler {
     error_count: RefCell<usize>,
     warning_count: RefCell<usize>,
     emitter: RefCell<Box<dyn Emitter>>,
@@ -20,7 +20,7 @@ pub(crate) struct Handler {
 }
 
 impl Handler {
-    pub(crate) fn new(mapper: SourceMapper) -> Self {
+    pub fn new(mapper: SourceMapper) -> Self {
         Handler {
             error_count: RefCell::new(0),
             warning_count: RefCell::new(0),
