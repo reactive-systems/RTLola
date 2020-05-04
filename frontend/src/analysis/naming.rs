@@ -40,9 +40,9 @@ pub(crate) const KEYWORDS: [&str; 26] = [
     "error",
 ];
 
-pub(crate) type DeclarationTable<'a> = HashMap<NodeId, Declaration<'a>>;
+pub type DeclarationTable<'a> = HashMap<NodeId, Declaration<'a>>;
 
-pub(crate) struct NamingAnalysis<'a, 'b> {
+pub struct NamingAnalysis<'a, 'b> {
     declarations: ScopedDecl<'a>,
     type_declarations: ScopedDecl<'a>,
     fun_declarations: ScopedDecl<'a>,
@@ -51,7 +51,7 @@ pub(crate) struct NamingAnalysis<'a, 'b> {
 }
 
 impl<'a, 'b> NamingAnalysis<'a, 'b> {
-    pub(crate) fn new(handler: &'b Handler, config: FrontendConfig) -> Self {
+    pub fn new(handler: &'b Handler, config: FrontendConfig) -> Self {
         let mut scoped_decls = ScopedDecl::new();
 
         for (name, ty) in ValueTy::primitive_types(config.ty) {
@@ -160,7 +160,7 @@ impl<'a, 'b> NamingAnalysis<'a, 'b> {
     }
 
     /// Entry method, checks that every identifier in the given spec is bound.
-    pub(crate) fn check(&mut self, spec: &'a LolaSpec) -> DeclarationTable<'a> {
+    pub fn check(&mut self, spec: &'a LolaSpec) -> DeclarationTable<'a> {
         stdlib::import_implicit_module(&mut self.fun_declarations);
         for import in &spec.imports {
             match import.name.name.as_str() {

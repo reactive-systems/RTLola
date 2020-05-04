@@ -8,7 +8,7 @@
 pub(crate) mod graph_based_analysis;
 pub(crate) mod id_assignment;
 mod lola_version;
-pub(crate) mod naming;
+pub mod naming;
 
 use self::lola_version::LolaVersionAnalysis;
 use self::naming::NamingAnalysis;
