@@ -238,8 +238,8 @@ pub enum TypeKind {
 /// inspired by <https://doc.rust-lang.org/nightly/nightly-rustc/src/syntax/ast.rs.html>
 #[derive(Debug, Clone)]
 pub struct Expression {
-    pub(crate) kind: ExpressionKind,
-    pub(crate) id: NodeId,
+    pub kind: ExpressionKind,
+    pub id: NodeId,
     pub(crate) span: Span,
 }
 
@@ -275,8 +275,10 @@ pub enum ExpressionKind {
     Unary(UnOp, Box<Expression>),
     /// An if-then-else expression
     Ite(Box<Expression>, Box<Expression>, Box<Expression>),
+    //TODO remove
     /// An expression enveloped in parentheses
     ParenthesizedExpression(Option<Box<Parenthesis>>, Box<Expression>, Option<Box<Parenthesis>>),
+
     /// An expression was expected, e.g., after an operator like `*`
     MissingExpression,
     /// A tuple expression
