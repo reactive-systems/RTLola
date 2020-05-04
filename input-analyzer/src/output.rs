@@ -18,19 +18,25 @@ pub(crate) enum FileType {
     PCAP,
     UNKNOWN,
 }
-
 #[derive(Eq, PartialEq)]
 pub(crate) enum StreamDataType {
     BOOL,
     STRING,
     INT64,
     UINT64,
+    #[allow(dead_code)]
     INT32,
+    #[allow(dead_code)]
     UINT32,
+    #[allow(dead_code)]
     INT16,
+    #[allow(dead_code)]
     UINT16,
+    #[allow(dead_code)]
     INT8,
+    #[allow(dead_code)]
     UINT8,
+    #[allow(dead_code)]
     FLOAT32,
     FLOAT64,
     TUPLE(Vec<StreamDataType>),
