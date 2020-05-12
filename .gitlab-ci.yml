@@ -66,7 +66,7 @@ cargo:test:windows:
 
 # Use cargo to test the project on nightly toolchain
 cargo:test-nightly:
-  stage: tests
+  stage: test
   image: rustlang/rust:nightly
   variables:
     CARGO_INCREMENTAL: 0
@@ -76,10 +76,12 @@ cargo:test-nightly:
     - apt-get update -yqq
     - apt-get install -yqq --no-install-recommends libpcap-dev
     - cargo install grcov
+    - cargo install cargo2junit
   script:
     - rustc --version && cargo --version      # Print version info for debugging
     - cargo build
-    - cargo test --all --verbose || true      # ignore the return code so that we can build a report
+    - (cargo test -- -Z unstable-options --format json | cargo2junit > results.xml) || true # ignore the return code so that we can show the complete output (including ignored tests)
+    - python3 ./tests/streamlab-e2e-tests.py || true        # count the e2e test for coverage but keep going
     - grcov ./target/debug/ -s . -t html --llvm --branch --ignore-not-existing -o ./target/debug/coverage/
     - cat ./target/debug/coverage/index.html
     - cargo test --all --verbose
@@ -89,6 +91,8 @@ cargo:test-nightly:
     when: always
     paths:
       - target/debug/coverage/
+    reports:
+      junit: results.xml
 
 # Run the tool by checking the number of triggers fired
 integration_tests:
