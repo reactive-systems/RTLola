@@ -8,7 +8,7 @@ use etherparse::{
     UdpHeader,
 };
 use ip_network::IpNetwork;
-use pcap::{Activated, Capture, Device, Error as PCAPError};
+use pcap_on_demand::{Activated, Capture, Device, Error as PCAPError};
 use std::error::Error;
 use std::net::IpAddr;
 use std::str::FromStr;

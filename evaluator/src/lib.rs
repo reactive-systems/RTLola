@@ -296,9 +296,9 @@ impl Config {
         };
 
         let src = if ids_mode {
-            let pcap_load = unsafe { pcap::load_pcap_library() };
+            let pcap_load = unsafe { pcap_on_demand::load_pcap_library() };
             if let Err(err) = pcap_load {
-                eprintln!("Could not load PCAP library");
+                eprintln!("Could not load PCAP library: {}", err.to_string());
                 std::process::exit(1);
             }
             let local_network = String::from(parse_matches.value_of("LOCAL_NETWORK").unwrap());
