@@ -1,5 +1,7 @@
 # StreamLAB
 
+![coverage](https://gitlab.com/reactive-systems/lolaparser/badges/master/coverage.svg?style=flat-square)
+
 StreamLAB is a monitoring framework for reactive systems.
 It is written in Rust.
 

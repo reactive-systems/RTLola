@@ -74,7 +74,8 @@ cargo:test-nightly:
     RUSTDOCFLAGS: "-Cpanic=abort"
   before_script:
     - apt-get update -yqq
-    - apt-get install -yqq --no-install-recommends libpcap-dev
+    - apt-get install -yqq --no-install-recommends libpcap-dev python3-pip
+    - pip3 install junit-xml
     - cargo install grcov
     - cargo install cargo2junit
   script:
@@ -96,15 +97,20 @@ cargo:test-nightly:
 
 # Run the tool by checking the number of triggers fired
 integration_tests:
-  stage: tests
+  stage: test
   image: rust:latest
   before_script:
     - apt-get update -yqq
-    - apt-get install -yqq --no-install-recommends libpcap-dev
+    - apt-get install -yqq --no-install-recommends libpcap-dev python3-pip
+    - pip3 install junit-xml
   variables:
     BUILD_MODE: "release"
   script:
-    - cd tests && python3 ./streamlab-e2e-tests.py
+    - python3 ./tests/streamlab-e2e-tests.py
+  artifacts:
+    when: always
+    reports:
+      junit: e2e-results.xml
 
 # Use cargo to run the benchmarks
 cargo:bench:
