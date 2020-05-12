@@ -68,13 +68,27 @@ cargo:test:windows:
 cargo:test-nightly:
   stage: tests
   image: rustlang/rust:nightly
+  variables:
+    CARGO_INCREMENTAL: 0
+    RUSTFLAGS: "-Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort"
+    RUSTDOCFLAGS: "-Cpanic=abort"
   before_script:
     - apt-get update -yqq
     - apt-get install -yqq --no-install-recommends libpcap-dev
+    - cargo install grcov
   script:
     - rustc --version && cargo --version      # Print version info for debugging
+    - cargo build
+    - cargo test --all --verbose || true      # ignore the return code so that we can build a report
+    - grcov ./target/debug/ -s . -t html --llvm --branch --ignore-not-existing -o ./target/debug/coverage/
+    - cat ./target/debug/coverage/index.html
     - cargo test --all --verbose
   allow_failure: true
+  coverage: '/linesPercentage \w+">\d+\.\d+ /'
+  artifacts:
+    when: always
+    paths:
+      - target/debug/coverage/
 
 # Run the tool by checking the number of triggers fired
 integration_tests:
