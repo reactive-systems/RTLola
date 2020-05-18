@@ -301,7 +301,7 @@ impl ValueTy {
         }
     }
 
-    pub(crate) fn is_primitive(&self) -> bool {
+    pub fn is_primitive(&self) -> bool {
         use self::ValueTy::*;
         match self {
             Bool | Int(_) | UInt(_) | Float(_) | String | Bytes => true,

@@ -71,7 +71,7 @@ pub struct Constant {
     pub name: Ident,
     pub ty: Option<Type>,
     pub literal: Literal,
-    pub(crate) id: NodeId,
+    pub id: NodeId,
     pub(crate) span: Span,
 }
 
@@ -81,7 +81,7 @@ pub struct Input {
     pub name: Ident,
     pub ty: Type,
     pub params: Vec<Parameter>,
-    pub(crate) id: NodeId,
+    pub id: NodeId,
     pub(crate) span: Span,
 }
 
@@ -95,7 +95,7 @@ pub struct Output {
     pub template_spec: Option<TemplateSpec>,
     pub termination: Option<Expression>,
     pub expression: Expression,
-    pub(crate) id: NodeId,
+    pub id: NodeId,
     pub(crate) span: Span,
 }
 
@@ -103,7 +103,7 @@ pub struct Output {
 pub struct Parameter {
     pub name: Ident,
     pub ty: Type,
-    pub(crate) id: NodeId,
+    pub id: NodeId,
     pub(crate) span: Span,
 }
 
@@ -199,7 +199,7 @@ impl Parenthesis {
 #[derive(Debug, Clone)]
 pub struct Type {
     pub kind: TypeKind,
-    pub(crate) id: NodeId,
+    pub id: NodeId,
     pub(crate) span: Span,
 }
 
