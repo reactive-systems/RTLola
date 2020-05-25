@@ -240,7 +240,7 @@ pub enum TypeKind {
 pub struct Expression {
     pub kind: ExpressionKind,
     pub id: NodeId,
-    pub(crate) span: Span,
+    pub span: Span,
 }
 
 impl Expression {
@@ -340,7 +340,7 @@ pub enum TimeUnit {
 pub struct Literal {
     pub kind: LitKind,
     pub(crate) id: NodeId,
-    pub(crate) span: Span,
+    pub span: Span,
 }
 
 impl Literal {
