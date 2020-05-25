@@ -1,6 +1,6 @@
 //! This module contains the AST data structures for the Lola Language.
 
-pub(crate) mod conversion;
+pub mod conversion;
 pub(crate) mod print;
 pub(crate) mod verify;
 
@@ -110,7 +110,7 @@ pub struct Parameter {
 #[derive(Debug, Clone)]
 pub struct ActivationCondition {
     pub expr: Option<Expression>,
-    pub(crate) id: NodeId,
+    pub id: NodeId,
     pub(crate) span: Span,
 }
 
@@ -119,7 +119,7 @@ pub struct TemplateSpec {
     pub inv: Option<InvokeSpec>,
     pub ext: Option<ExtendSpec>,
     pub ter: Option<TerminateSpec>,
-    pub(crate) id: NodeId,
+    pub id: NodeId,
     pub(crate) span: Span,
 }
 
@@ -128,14 +128,14 @@ pub struct InvokeSpec {
     pub target: Expression,
     pub condition: Option<Expression>,
     pub is_if: bool,
-    pub(crate) id: NodeId,
+    pub id: NodeId,
     pub(crate) span: Span,
 }
 
 #[derive(Debug, Clone)]
 pub struct ExtendSpec {
     pub target: Expression,
-    pub(crate) id: NodeId,
+    pub id: NodeId,
     pub(crate) span: Span,
 }
 
@@ -146,14 +146,14 @@ pub struct TimeSpec {
     pub signum: Signum,
     pub period: Duration,
     pub exact_period: Rational,
-    pub(crate) id: NodeId,
+    pub id: NodeId,
     pub(crate) span: Span,
 }
 
 #[derive(Debug, Clone)]
 pub struct TerminateSpec {
     pub target: Expression,
-    pub(crate) id: NodeId,
+    pub id: NodeId,
     pub(crate) span: Span,
 }
 
@@ -163,7 +163,7 @@ pub struct Trigger {
     pub name: Option<Ident>,
     pub expression: Expression,
     pub message: Option<String>,
-    pub(crate) id: NodeId,
+    pub id: NodeId,
     pub(crate) span: Span,
 }
 

@@ -111,7 +111,7 @@ impl Expression {
         }
     }
 
-    pub(crate) fn parse_freqspec(&self) -> Result<UOM_Frequency, String> {
+    pub fn parse_freqspec(&self) -> Result<UOM_Frequency, String> {
         if let Ok(freq) = self.parse_frequency() {
             Ok(freq)
         } else if let Ok(period) = self.parse_duration() {
