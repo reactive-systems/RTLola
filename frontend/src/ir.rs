@@ -399,6 +399,59 @@ impl Expression {
     }
 }
 
+impl PartialOrd for Offset {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        use std::cmp::Ordering;
+        use Offset::*;
+        match (self,other) {
+            (PastDiscreteOffset(_),FutureDiscreteOffset(_)) |
+            (PastRealTimeOffset(_),FutureRealTimeOffset(_)) |
+            (PastDiscreteOffset(_), FutureRealTimeOffset(_)) |
+            (PastRealTimeOffset(_),FutureDiscreteOffset(_))=> Some(Ordering::Less),
+
+            (FutureDiscreteOffset(_),PastDiscreteOffset(_)) |
+            (FutureDiscreteOffset(_),PastRealTimeOffset(_)) |
+            (FutureRealTimeOffset(_),PastDiscreteOffset(_)) |
+            (FutureRealTimeOffset(_),PastRealTimeOffset(_)) => Some(Ordering::Greater),
+
+            (FutureDiscreteOffset(a),FutureDiscreteOffset(b))
+            => Some(a.cmp(b)),
+            (PastDiscreteOffset(a),PastDiscreteOffset(b))
+            => Some(b.cmp(a)),
+
+            (_,_) => unimplemented!(),
+
+        }
+    }
+}
+
+impl PartialOrd for StreamReference {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        use std::cmp::Ordering;
+        use StreamReference::*;
+        let x = match (self,other) {
+            (InRef(_),OutRef(_)) => Ordering::Less,
+            (OutRef(_),InRef(_)) => Ordering::Greater,
+            (InRef(a),InRef(b)) |
+            (OutRef(a),OutRef(b)) => a.cmp(b),
+        };
+        Some(x)
+    }
+}
+
+
+impl Ord for StreamReference {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.partial_cmp(other).unwrap()
+    }
+}
+
+impl Ord for Offset {
+    fn cmp(&self,other: &Self) -> std::cmp::Ordering {
+        self.partial_cmp(other).unwrap()
+    }
+}
+
 impl LolaIR {
     pub fn input_refs(&self) -> Vec<InputReference> {
         (0..self.inputs.len()).collect()

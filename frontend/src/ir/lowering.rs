@@ -421,9 +421,8 @@ impl<'a> Lowering<'a> {
     fn lower_storage_req(&self, req: StorageRequirement) -> MemorizationBound {
         match req {
             StorageRequirement::Finite(b) => MemorizationBound::Bounded(b as u16),
-            StorageRequirement::FutureRef(_) | StorageRequirement::Unbounded => {
-                MemorizationBound::Unbounded
-            }
+            StorageRequirement::FutureRef(b) => MemorizationBound::Bounded(b as u16),
+            StorageRequirement::Unbounded => MemorizationBound::Unbounded,
         }
     }
 
