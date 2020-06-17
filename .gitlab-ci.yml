@@ -124,11 +124,14 @@ cargo:bench:
   script:
     - rustc --version && cargo --version      # Print version info for debugging
     - cargo bench --quiet | grep -e 'bench:' | tee bench_results.txt # TODO: actually compare the results
+    - sed s/'test '// bench_results.txt | sed -e s/' ... bench:'// | sed -e s/,//g | sed -e "s|ns/iter.*$||" > metrics.txt
   artifacts:
       name: "bench_results"
       paths:
         - bench_results.txt
       expire_in: 5 yrs
+      reports:
+        metrics: metrics.txt
   allow_failure: true
 
 # For the release build we do not use the Cargo.lock file, because we haven't investigated how it interacts with different platforms.
