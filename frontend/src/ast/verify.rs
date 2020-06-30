@@ -6,12 +6,12 @@ use uom::si::time::second;
 /// The grammar is an over-approximation of syntactical valid specifications
 /// The verifier checks for those over-approximations and reports errors.
 pub(crate) struct Verifier<'a, 'b> {
-    spec: &'a LolaSpec,
+    spec: &'a RTLolaAst,
     handler: &'b Handler,
 }
 
 impl<'a, 'b> Verifier<'a, 'b> {
-    pub(crate) fn new(spec: &'a LolaSpec, handler: &'b Handler) -> Self {
+    pub(crate) fn new(spec: &'a RTLolaAst, handler: &'b Handler) -> Self {
         Self { spec, handler }
     }
 

@@ -143,7 +143,7 @@ impl<T: UnifiableTy> Unifier for ValueUnifier<T> {
     }
 }
 
-pub trait UnifiableTy: std::marker::Sized + std::fmt::Display + Clone + std::cmp::PartialEq + std::fmt::Debug {
+pub trait UnifiableTy: Sized + std::fmt::Display + Clone + PartialEq + std::fmt::Debug {
     type V: UnifyKey<Value = ValueVarVal<Self>> + std::fmt::Display;
     fn normalize_ty<U: Unifier<Var = Self::V, Ty = Self>>(&self, unifier: &mut U) -> Self;
     fn coerces_with<U: Unifier<Var = Self::V, Ty = Self>>(&self, unifier: &mut U, right: &Self) -> bool;
@@ -238,7 +238,7 @@ impl UnifiableTy for ValueTy {
                 }
             }
             (ValueTy::Constr(constr_l), ValueTy::Constr(constr_r)) => {
-                constr_l.conjunction(constr_r).map(|c| ValueTy::Constr(c.clone()))
+                constr_l.conjunction(constr_r).map(|c| ValueTy::Constr(*c))
             }
             (ValueTy::Constr(constr), other) => {
                 if other.satisfies(constr) {

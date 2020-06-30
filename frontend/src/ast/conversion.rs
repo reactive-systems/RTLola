@@ -111,7 +111,7 @@ impl Expression {
         }
     }
 
-    pub fn parse_freqspec(&self) -> Result<UOM_Frequency, String> {
+    pub(crate) fn parse_freqspec(&self) -> Result<UOM_Frequency, String> {
         if let Ok(freq) = self.parse_frequency() {
             Ok(freq)
         } else if let Ok(period) = self.parse_duration() {
@@ -305,6 +305,7 @@ impl Expression {
 mod tests {
     use super::*;
     use crate::ast::{Literal, Span};
+    use crate::parse::NodeId;
     use num::ToPrimitive;
     use std::time::Duration;
 
@@ -331,7 +332,8 @@ mod tests {
 
     fn time_spec_int(val: &str, unit: &str) -> Duration {
         let expr = Expression::new(
-            ExpressionKind::Lit(Literal::new_numeric(val, Some(unit.to_string()), Span::unknown())),
+            NodeId::new(32),
+            ExpressionKind::Lit(Literal::new_numeric(NodeId::new(24), val, Some(unit.to_string()), Span::unknown())),
             Span::unknown(),
         );
         let freq = expr.parse_freqspec().unwrap();

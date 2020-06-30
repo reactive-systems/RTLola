@@ -15,12 +15,12 @@ grep -e 'let spec = ".*";$' -r ../frontend -h \
       'echo "{}" > in/$(echo "{}"|sha1sum -|sed -e "s/^\(.\{8\}\).*/\1/")'
 
 pushd .. >/dev/null
-echo "building streamlab-analyze..."
-cargo build --bin streamlab-analyze --quiet
-echo "test files with streamlab-analyze..."
+echo "building rtlola-analyze..."
+cargo build --bin rtlola-analyze --quiet
+echo "test files with rtlola-analyze..."
 for file in afl-fuzz-frontend/in/*
 do
-    echo | ./target/debug/streamlab-analyze "$file" ir 2>"$$" >/dev/null
+    echo | ./target/debug/rtlola-analyze "$file" ir 2>"$$" >/dev/null
     n_panics=$(grep -e 'panic' "$$"|wc -l)
     if [ $n_panics -gt 0 ]; then
         rm "$file"

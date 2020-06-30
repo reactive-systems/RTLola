@@ -4,23 +4,23 @@ use super::ast::*;
 use crate::reporting::{Handler, LabeledSpan};
 use crate::FrontendConfig;
 use lazy_static::lazy_static;
-use pest;
 use pest::iterators::{Pair, Pairs};
 use pest::prec_climber::{Assoc, Operator, PrecClimber};
 use pest::Parser;
 use pest_derive::Parser;
-use std::path::PathBuf;
+use std::{cell::RefCell, path::PathBuf, rc::Rc};
 
 #[derive(Parser)]
 #[grammar = "lola.pest"]
 pub(crate) struct LolaParser;
 
 #[derive(Debug)]
-pub struct StreamlabParser<'a, 'b> {
+pub(crate) struct RTLolaParser<'a, 'b> {
     content: &'a str,
-    spec: LolaSpec,
+    spec: RTLolaAst,
     handler: &'b Handler,
     config: FrontendConfig,
+    node_id: RefCell<NodeId>,
 }
 
 lazy_static! {
@@ -48,59 +48,61 @@ lazy_static! {
     };
 }
 
-impl<'a, 'b> StreamlabParser<'a, 'b> {
+impl<'a, 'b> RTLolaParser<'a, 'b> {
     pub(crate) fn new(content: &'a str, handler: &'b Handler, config: FrontendConfig) -> Self {
-        Self { content, spec: LolaSpec::new(), handler, config }
+        RTLolaParser { content, spec: RTLolaAst::new(), handler, config, node_id: RefCell::new(NodeId::new(0)) }
     }
 
-    pub(crate) fn parse(mut self) -> Result<LolaSpec, pest::error::Error<Rule>> {
+    fn next_id(&self) -> NodeId {
+        let res = *self.node_id.borrow();
+        self.node_id.borrow_mut().0 += 1;
+        res
+    }
+
+    pub(crate) fn parse(mut self) -> Result<RTLolaAst, pest::error::Error<Rule>> {
         let mut pairs = LolaParser::parse(Rule::Spec, self.content)?;
         assert!(pairs.clone().count() == 1, "Spec must not be empty.");
         let spec_pair = pairs.next().unwrap();
         assert!(spec_pair.as_rule() == Rule::Spec);
         for pair in spec_pair.into_inner() {
             match pair.as_rule() {
-                Rule::LanguageSpec => {
-                    self.spec.language = Some(LanguageSpec::from(pair.as_str()));
-                }
                 Rule::ImportStmt => {
                     let import = self.parse_import(pair);
                     self.spec.imports.push(import);
                 }
                 Rule::ConstantStream => {
                     let constant = self.parse_constant(pair);
-                    self.spec.constants.push(constant);
+                    self.spec.constants.push(Rc::new(constant));
                 }
                 Rule::InputStream => {
                     let inputs = self.parse_inputs(pair);
-                    self.spec.inputs.extend(inputs);
+                    self.spec.inputs.extend(inputs.into_iter().map(Rc::new));
                 }
                 Rule::OutputStream => {
                     let output = self.parse_output(pair);
-                    self.spec.outputs.push(output);
+                    self.spec.outputs.push(Rc::new(output));
                 }
                 Rule::Trigger => {
-                    let trigger = parse_trigger(&mut self.spec, pair, self.handler);
-                    self.spec.trigger.push(trigger);
+                    let trigger = self.parse_trigger(pair);
+                    self.spec.trigger.push(Rc::new(trigger));
                 }
                 Rule::TypeDecl => {
-                    let type_decl = parse_type_declaration(pair);
+                    let type_decl = self.parse_type_declaration(pair);
                     self.spec.type_declarations.push(type_decl);
                 }
                 Rule::EOI => {}
                 _ => unreachable!(),
             }
         }
-        crate::analysis::id_assignment::assign_ids(&mut self.spec);
         Ok(self.spec)
     }
 
-    fn parse_import(&mut self, pair: Pair<Rule>) -> Import {
+    fn parse_import(&self, pair: Pair<Rule>) -> Import {
         assert_eq!(pair.as_rule(), Rule::ImportStmt);
         let span = pair.as_span().into();
         let mut pairs = pair.into_inner();
-        let name = parse_ident(&pairs.next().expect("mismatch between grammar and AST"));
-        Import { name, id: NodeId::DUMMY, span }
+        let name = self.parse_ident(&pairs.next().expect("mismatch between grammar and AST"));
+        Import { name, id: self.next_id(), span }
     }
 
     /**
@@ -111,14 +113,14 @@ impl<'a, 'b> StreamlabParser<'a, 'b> {
      * - `Rule::Type`
      * - `Rule::Literal`
      */
-    fn parse_constant(&mut self, pair: Pair<'_, Rule>) -> Constant {
+    fn parse_constant(&self, pair: Pair<'_, Rule>) -> Constant {
         assert_eq!(pair.as_rule(), Rule::ConstantStream);
         let span = pair.as_span().into();
         let mut pairs = pair.into_inner();
-        let name = parse_ident(&pairs.next().expect("mismatch between grammar and AST"));
-        let ty = parse_type(pairs.next().expect("mismatch between grammar and AST"));
-        let literal = parse_literal(pairs.next().expect("mismatch between grammar and AST"));
-        Constant { id: NodeId::DUMMY, name, ty: Some(ty), literal, span }
+        let name = self.parse_ident(&pairs.next().expect("mismatch between grammar and AST"));
+        let ty = self.parse_type(pairs.next().expect("mismatch between grammar and AST"));
+        let literal = self.parse_literal(pairs.next().expect("mismatch between grammar and AST"));
+        Constant { id: self.next_id(), name, ty: Some(ty), literal, span }
     }
 
     /**
@@ -129,17 +131,17 @@ impl<'a, 'b> StreamlabParser<'a, 'b> {
      * - (`Rule::ParamList`)?
      * - `Rule::Type`
      */
-    fn parse_inputs(&mut self, pair: Pair<'_, Rule>) -> Vec<Input> {
+    fn parse_inputs(&self, pair: Pair<'_, Rule>) -> Vec<Input> {
         assert_eq!(pair.as_rule(), Rule::InputStream);
         let mut inputs = Vec::new();
         let mut pairs = pair.into_inner();
         while let Some(pair) = pairs.next() {
             let start = pair.as_span().start();
-            let name = parse_ident(&pair);
+            let name = self.parse_ident(&pair);
 
             let mut pair = pairs.next().expect("mismatch between grammar and AST");
             let params = if let Rule::ParamList = pair.as_rule() {
-                let res = parse_parameter_list(pair.into_inner());
+                let res = self.parse_parameter_list(pair.into_inner());
                 pair = pairs.next().expect("mismatch between grammar and AST");
 
                 if !self.config.allow_parameters {
@@ -154,8 +156,14 @@ impl<'a, 'b> StreamlabParser<'a, 'b> {
                 Vec::new()
             };
             let end = pair.as_span().end();
-            let ty = parse_type(pair);
-            inputs.push(Input { id: NodeId::DUMMY, name, params, ty, span: Span { start, end } })
+            let ty = self.parse_type(pair);
+            inputs.push(Input {
+                id: self.next_id(),
+                name,
+                params: params.into_iter().map(Rc::new).collect(),
+                ty,
+                span: Span { start, end },
+            })
         }
 
         assert!(!inputs.is_empty());
@@ -170,15 +178,15 @@ impl<'a, 'b> StreamlabParser<'a, 'b> {
      * - `Rule::Type`
      * - `Rule::Expr`
      */
-    fn parse_output(&mut self, pair: Pair<'_, Rule>) -> Output {
+    fn parse_output(&self, pair: Pair<'_, Rule>) -> Output {
         assert_eq!(pair.as_rule(), Rule::OutputStream);
         let span = pair.as_span().into();
         let mut pairs = pair.into_inner();
-        let name = parse_ident(&pairs.next().expect("mismatch between grammar and AST"));
+        let name = self.parse_ident(&pairs.next().expect("mismatch between grammar and AST"));
 
         let mut pair = pairs.next().expect("mismatch between grammar and AST");
         let params = if let Rule::ParamList = pair.as_rule() {
-            let res = parse_parameter_list(pair.into_inner());
+            let res = self.parse_parameter_list(pair.into_inner());
             pair = pairs.next().expect("mismatch between grammar and AST");
 
             if !self.config.allow_parameters {
@@ -194,33 +202,33 @@ impl<'a, 'b> StreamlabParser<'a, 'b> {
         };
 
         let ty = if let Rule::Type = pair.as_rule() {
-            let ty = parse_type(pair);
+            let ty = self.parse_type(pair);
             pair = pairs.next().expect("mismatch between grammar and AST");
             ty
         } else {
-            Type::new_inferred()
+            Type::new_inferred(self.next_id())
         };
 
         // Parse the `@ [Expr]` part of output declaration
         let extend = if let Rule::ActivationCondition = pair.as_rule() {
             let span: Span = pair.as_span().into();
-            let expr = build_expression_ast(&mut self.spec, pair.into_inner(), self.handler);
+            let expr = self.build_expression_ast(pair.into_inner());
             pair = pairs.next().expect("mismatch between grammar and AST");
-            ActivationCondition { expr: Some(expr), id: NodeId::DUMMY, span }
+            ActivationCondition { expr: Some(expr), id: self.next_id(), span }
         } else {
-            ActivationCondition { expr: None, id: NodeId::DUMMY, span: Span::unknown() }
+            ActivationCondition { expr: None, id: self.next_id(), span: Span::unknown() }
         };
 
         let mut tspec = None;
         if let Rule::TemplateSpec = pair.as_rule() {
-            tspec = Some(parse_template_spec(&mut self.spec, pair, self.handler));
+            tspec = Some(self.parse_template_spec(pair));
             pair = pairs.next().expect("mismatch between grammar and AST");
         };
 
         // Parse termination condition `close EXPRESSION`
         let termination = if let Rule::TerminateDecl = pair.as_rule() {
             let expr = pair.into_inner().next().expect("mismatch between grammar and AST");
-            let expr = build_expression_ast(&mut self.spec, expr.into_inner(), self.handler);
+            let expr = self.build_expression_ast(expr.into_inner());
             pair = pairs.next().expect("mismatch between grammar and AST");
 
             if !self.config.allow_parameters {
@@ -242,8 +250,575 @@ impl<'a, 'b> StreamlabParser<'a, 'b> {
         };
 
         // Parse expression
-        let expression = build_expression_ast(&mut self.spec, pair.into_inner(), self.handler);
-        Output { id: NodeId::DUMMY, name, ty, extend, params, template_spec: tspec, termination, expression, span }
+        let expression = self.build_expression_ast(pair.into_inner());
+        Output {
+            id: self.next_id(),
+            name,
+            ty,
+            extend,
+            params: params.into_iter().map(Rc::new).collect(),
+            template_spec: tspec,
+            termination,
+            expression,
+            span,
+        }
+    }
+
+    fn parse_parameter_list(&self, param_list: Pairs<'_, Rule>) -> Vec<Parameter> {
+        let mut params = Vec::new();
+        for param_decl in param_list {
+            assert_eq!(Rule::ParameterDecl, param_decl.as_rule());
+            let span = param_decl.as_span().into();
+            let mut decl = param_decl.into_inner();
+            let name = self.parse_ident(&decl.next().expect("mismatch between grammar and AST"));
+            let ty = if let Some(type_pair) = decl.next() {
+                assert_eq!(Rule::Type, type_pair.as_rule());
+                self.parse_type(type_pair)
+            } else {
+                Type::new_inferred(self.next_id())
+            };
+            params.push(Parameter { name, ty, id: self.next_id(), span });
+        }
+        params
+    }
+
+    fn parse_template_spec(&self, pair: Pair<'_, Rule>) -> TemplateSpec {
+        let span = pair.as_span().into();
+        let mut decls = pair.into_inner();
+        let mut pair = decls.next();
+        let mut rule = pair.as_ref().map(Pair::as_rule);
+
+        let mut inv_spec = None;
+        if let Some(Rule::InvokeDecl) = rule {
+            inv_spec = Some(self.parse_inv_spec(pair.unwrap()));
+            pair = decls.next();
+            rule = pair.as_ref().map(Pair::as_rule);
+        }
+        let mut ext_spec = None;
+        if let Some(Rule::ExtendDecl) = rule {
+            ext_spec = Some(self.parse_ext_spec(pair.unwrap()));
+            pair = decls.next();
+            rule = pair.as_ref().map(Pair::as_rule);
+        }
+        let mut ter_spec = None;
+        if let Some(Rule::TerminateDecl) = rule {
+            let exp = pair.unwrap();
+            let span_ter = exp.as_span().into();
+            let expr = exp.into_inner().next().expect("mismatch between grammar and AST");
+            let expr = self.build_expression_ast(expr.into_inner());
+            ter_spec = Some(TerminateSpec { target: expr, id: self.next_id(), span: span_ter });
+        }
+        TemplateSpec { inv: inv_spec, ext: ext_spec, ter: ter_spec, id: self.next_id(), span }
+    }
+
+    fn parse_ext_spec(&self, ext_pair: Pair<'_, Rule>) -> ExtendSpec {
+        let span_ext = ext_pair.as_span().into();
+        let mut children = ext_pair.into_inner();
+
+        let first_child = children.next().expect("mismatch between grammar and ast");
+        let target = match first_child.as_rule() {
+            Rule::Expr => self.build_expression_ast(first_child.into_inner()),
+            _ => unreachable!(),
+        };
+        ExtendSpec { target, id: self.next_id(), span: span_ext }
+    }
+
+    fn parse_inv_spec(&self, inv_pair: Pair<'_, Rule>) -> InvokeSpec {
+        let span_inv = inv_pair.as_span().into();
+        let mut inv_children = inv_pair.into_inner();
+        let expr_pair = inv_children.next().expect("mismatch between grammar and AST");
+        let inv_target = self.build_expression_ast(expr_pair.into_inner());
+        // Compute invocation condition:
+        let mut is_if = false;
+        let mut cond_expr = None;
+        if let Some(inv_cond_pair) = inv_children.next() {
+            is_if = match inv_cond_pair.as_rule() {
+                Rule::InvokeIf => true,
+                Rule::InvokeUnless => false,
+                _ => unreachable!(),
+            };
+            let condition = inv_cond_pair.into_inner().next().expect("mismatch between grammar and AST");
+            cond_expr = Some(self.build_expression_ast(condition.into_inner()))
+        }
+        InvokeSpec { condition: cond_expr, is_if, target: inv_target, id: self.next_id(), span: span_inv }
+    }
+
+    /**
+     * Transforms a `Rule::Trigger` into `Trigger` AST node.
+     * Panics if input is not `Rule::Trigger`.
+     * The output rule consists of the following tokens:
+     * - (`Rule::Ident`)?
+     * - `Rule::Expr`
+     * - (`Rule::StringLiteral`)?
+     */
+    fn parse_trigger(&self, pair: Pair<'_, Rule>) -> Trigger {
+        assert_eq!(pair.as_rule(), Rule::Trigger);
+        let span = pair.as_span().into();
+        let mut pairs = pair.into_inner();
+
+        let mut name = None;
+        let mut message = None;
+
+        let mut pair = pairs.next().expect("mismatch between grammar and AST");
+        // first token is either expression or identifier
+        if let Rule::Ident = pair.as_rule() {
+            name = Some(self.parse_ident(&pair));
+            pair = pairs.next().expect("mismatch between grammar and AST");
+        }
+        let expression = self.build_expression_ast(pair.into_inner());
+
+        if let Some(pair) = pairs.next() {
+            assert_eq!(pair.as_rule(), Rule::String);
+            message = Some(pair.as_str().to_string());
+        }
+
+        Trigger { id: self.next_id(), name, expression, message, span }
+    }
+
+    /**
+     * Transforms a `Rule::Ident` into `Ident` AST node.
+     * Panics if input is not `Rule::Ident`.
+     */
+    fn parse_ident(&self, pair: &Pair<'_, Rule>) -> Ident {
+        assert_eq!(pair.as_rule(), Rule::Ident);
+        let name = pair.as_str().to_string();
+        Ident::new(name, pair.as_span().into())
+    }
+
+    /**
+     * Transforms a `Rule::TypeDecl` into `TypeDeclaration` AST node.
+     * Panics if input is not `Rule::TypeDecl`.
+     */
+    fn parse_type_declaration(&self, pair: Pair<'_, Rule>) -> TypeDeclaration {
+        assert_eq!(pair.as_rule(), Rule::TypeDecl);
+        let span = pair.as_span().into();
+        let mut pairs = pair.into_inner();
+        let name = self.parse_ident(&pairs.next().expect("mismatch between grammar and AST"));
+        let mut fields = Vec::new();
+        while let Some(pair) = pairs.next() {
+            let field_name = pair.as_str().to_string();
+            let ty = self.parse_type(pairs.next().expect("mismatch between grammar and AST"));
+            fields.push(Box::new(TypeDeclField {
+                name: field_name,
+                ty,
+                id: self.next_id(),
+                span: pair.as_span().into(),
+            }));
+        }
+
+        TypeDeclaration { name: Some(name), span, id: self.next_id(), fields }
+    }
+
+    /**
+     * Transforms a `Rule::Type` into `Type` AST node.
+     * Panics if input is not `Rule::Type`.
+     */
+    fn parse_type(&self, pair: Pair<'_, Rule>) -> Type {
+        assert_eq!(pair.as_rule(), Rule::Type);
+        let span = pair.as_span();
+        let mut tuple = Vec::new();
+        for pair in pair.into_inner() {
+            match pair.as_rule() {
+                Rule::Ident => {
+                    return Type::new_simple(self.next_id(), pair.as_str().to_string(), pair.as_span().into());
+                }
+                Rule::Type => tuple.push(self.parse_type(pair)),
+                Rule::Optional => {
+                    let span = pair.as_span();
+                    let inner =
+                        pair.into_inner().next().expect("mismatch between grammar and AST: first argument is a type");
+                    let inner_ty = Type::new_simple(self.next_id(), inner.as_str().to_string(), inner.as_span().into());
+                    return Type::new_optional(self.next_id(), inner_ty, span.into());
+                }
+                _ => unreachable!("{:?} is not a type, ensured by grammar", pair.as_rule()),
+            }
+        }
+        Type::new_tuple(self.next_id(), tuple, span.into())
+    }
+
+    /**
+     * Transforms a `Rule::Literal` into `Literal` AST node.
+     * Panics if input is not `Rule::Literal`.
+     */
+    fn parse_literal(&self, pair: Pair<'_, Rule>) -> Literal {
+        assert_eq!(pair.as_rule(), Rule::Literal);
+        let inner = pair.into_inner().next().expect("Rule::Literal has exactly one child");
+        match inner.as_rule() {
+            Rule::String => {
+                let str_rep = inner.as_str();
+                Literal::new_str(self.next_id(), str_rep, inner.as_span().into())
+            }
+            Rule::RawString => {
+                let str_rep = inner.as_str();
+                Literal::new_raw_str(self.next_id(), str_rep, inner.as_span().into())
+            }
+            Rule::NumberLiteral => {
+                let span = inner.as_span();
+                let mut pairs = inner.into_inner();
+                let value = pairs.next().expect("Mismatch between AST and grammar");
+
+                let str_rep: &str = value.as_str();
+                let unit = match pairs.next() {
+                    None => None,
+                    Some(unit) => Some(unit.as_str().to_string()),
+                };
+
+                Literal::new_numeric(self.next_id(), str_rep, unit, span.into())
+            }
+            Rule::True => Literal::new_bool(self.next_id(), true, inner.as_span().into()),
+            Rule::False => Literal::new_bool(self.next_id(), false, inner.as_span().into()),
+            _ => unreachable!(),
+        }
+    }
+
+    #[allow(clippy::vec_box)]
+    fn parse_vec_of_expressions(&self, pairs: Pairs<'_, Rule>) -> Vec<Box<Expression>> {
+        pairs.map(|expr| self.build_expression_ast(expr.into_inner())).map(Box::new).collect()
+    }
+
+    fn parse_vec_of_types(&self, pairs: Pairs<'_, Rule>) -> Vec<Type> {
+        pairs.map(|p| self.parse_type(p)).collect()
+    }
+
+    fn build_function_expression(&self, pair: Pair<'_, Rule>, span: Span) -> Expression {
+        let mut children = pair.into_inner();
+        let fun_name = self.parse_ident(&children.next().unwrap());
+        let mut next = children.next().expect("Mismatch between AST and parser");
+        let type_params = match next.as_rule() {
+            Rule::GenericParam => {
+                let params = self.parse_vec_of_types(next.into_inner());
+                next = children.next().expect("Mismatch between AST and parser");
+                params
+            }
+            Rule::FunctionArgs => Vec::new(),
+            _ => unreachable!(),
+        };
+        assert_eq!(next.as_rule(), Rule::FunctionArgs);
+        let mut args = Vec::new();
+        let mut arg_names = Vec::new();
+        for pair in next.into_inner() {
+            assert_eq!(pair.as_rule(), Rule::FunctionArg);
+            let mut pairs = pair.into_inner();
+            let mut pair = pairs.next().expect("Mismatch between AST and parser");
+            if pair.as_rule() == Rule::Ident {
+                // named argument
+                arg_names.push(Some(self.parse_ident(&pair)));
+                pair = pairs.next().expect("Mismatch between AST and parser");
+            } else {
+                arg_names.push(None);
+            }
+            args.push(self.build_expression_ast(pair.into_inner()).into());
+        }
+        let name = FunctionName { name: fun_name, arg_names };
+        Expression::new(self.next_id(), ExpressionKind::Function(name, type_params, args), span)
+    }
+
+    /**
+     * Builds the Expr AST.
+     */
+    fn build_expression_ast(&self, pairs: Pairs<'_, Rule>) -> Expression {
+        PREC_CLIMBER.climb(
+            pairs,
+            |pair: Pair<'_, Rule>| self.build_term_ast(pair),
+            |lhs: Expression, op: Pair<'_, Rule>, rhs: Expression| {
+                // Reduce function combining `Expression`s to `Expression`s with the correct precs
+                let span = Span { start: lhs.span.start, end: rhs.span.end };
+                let op = match op.as_rule() {
+                    // Arithmetic
+                    Rule::Add => BinOp::Add,
+                    Rule::Subtract => BinOp::Sub,
+                    Rule::Multiply => BinOp::Mul,
+                    Rule::Divide => BinOp::Div,
+                    Rule::Mod => BinOp::Rem,
+                    Rule::Power => BinOp::Pow,
+                    // Logical
+                    Rule::And => BinOp::And,
+                    Rule::Or => BinOp::Or,
+                    // Comparison
+                    Rule::LessThan => BinOp::Lt,
+                    Rule::LessThanOrEqual => BinOp::Le,
+                    Rule::MoreThan => BinOp::Gt,
+                    Rule::MoreThanOrEqual => BinOp::Ge,
+                    Rule::Equal => BinOp::Eq,
+                    Rule::NotEqual => BinOp::Ne,
+                    // Bitwise
+                    Rule::BitAnd => BinOp::BitAnd,
+                    Rule::BitOr => BinOp::BitOr,
+                    Rule::BitXor => BinOp::BitXor,
+                    Rule::ShiftLeft => BinOp::Shl,
+                    Rule::ShiftRight => BinOp::Shr,
+                    // bubble up the unary operator on the lhs (if it exists) to fix precedence
+                    Rule::Dot => {
+                        let (unop, binop_span, inner) = match lhs.kind {
+                            ExpressionKind::Unary(unop, inner) => {
+                                (Some(unop), Span { start: inner.span.start, end: rhs.span.end }, inner)
+                            }
+                            _ => (None, span, Box::new(lhs)),
+                        };
+                        match rhs.kind {
+                            // access to a tuple
+                            ExpressionKind::Lit(l) => {
+                                let ident = match l.kind {
+                                    LitKind::Numeric(val, unit) => {
+                                        assert!(unit.is_none());
+                                        Ident::new(val, l.span)
+                                    }
+                                    _ => {
+                                        self.handler.error_with_span(
+                                            &format!("expected unsigned integer, found {}", l),
+                                            LabeledSpan::new(rhs.span, "unexpected", true),
+                                        );
+                                        std::process::exit(1);
+                                    }
+                                };
+                                let binop_expr =
+                                    Expression::new(self.next_id(), ExpressionKind::Field(inner, ident), binop_span);
+                                match unop {
+                                    None => return binop_expr,
+                                    Some(unop) => {
+                                        return Expression::new(
+                                            self.next_id(),
+                                            ExpressionKind::Unary(unop, Box::new(binop_expr)),
+                                            span,
+                                        )
+                                    }
+                                }
+                            }
+                            ExpressionKind::Function(name, types, args) => {
+                                // match for builtin function names and transform them into appropriate AST nodes
+                                let signature = name.as_string();
+                                let kind = match signature.as_str() {
+                                    "defaults(to:)" => {
+                                        assert_eq!(args.len(), 1);
+                                        ExpressionKind::Default(inner, args[0].clone())
+                                    }
+                                    "offset(by:)" => {
+                                        assert_eq!(args.len(), 1);
+                                        let offset_expr = &args[0];
+                                        let offset = match offset_expr.parse_offset() {
+                                            Ok(offset) => offset,
+                                            Err(reason) => {
+                                                self.handler.error_with_span(
+                                                    "failed to parse offset",
+                                                    LabeledSpan::new(rhs.span, &reason, true),
+                                                );
+                                                std::process::exit(1);
+                                            }
+                                        };
+                                        ExpressionKind::Offset(inner, offset)
+                                    }
+                                    "hold()" => {
+                                        assert_eq!(args.len(), 0);
+                                        ExpressionKind::StreamAccess(inner, StreamAccessKind::Hold)
+                                    }
+                                    "hold(or:)" => {
+                                        assert_eq!(args.len(), 1);
+                                        let lhs = Expression::new(
+                                            self.next_id(),
+                                            ExpressionKind::StreamAccess(inner, StreamAccessKind::Hold),
+                                            span,
+                                        );
+                                        ExpressionKind::Default(Box::new(lhs), args[0].clone())
+                                    }
+                                    "get()" => {
+                                        assert_eq!(args.len(), 0);
+                                        ExpressionKind::StreamAccess(inner, StreamAccessKind::Optional)
+                                    }
+                                    "aggregate(over:using:)" | "aggregate(over_exactly:using:)" => {
+                                        assert_eq!(args.len(), 2);
+                                        let window_op = match &args[1].kind {
+                                            ExpressionKind::Ident(i) => match i.name.as_str() {
+                                                "Σ" | "sum" => WindowOperation::Sum,
+                                                "#" | "count" => WindowOperation::Count,
+                                                //"Π" | "prod" | "product" => WindowOperation::Product,
+                                                "∫" | "integral" => WindowOperation::Integral,
+                                                "avg" | "average" => WindowOperation::Average,
+                                                "min" => WindowOperation::Min,
+                                                "max" => WindowOperation::Max,
+                                                "∃" | "disjunction" | "∨" | "exists" => {
+                                                    WindowOperation::Disjunction
+                                                }
+                                                "∀" | "conjunction" | "∧" | "forall" => {
+                                                    WindowOperation::Conjunction
+                                                }
+                                                fun => {
+                                                    self.handler.error_with_span(
+                                                        &format!("unknown aggregation function {}", fun),
+                                                        LabeledSpan::new(
+                                                            i.span,
+                                                            "available: count, min, max, sum, average, integral",
+                                                            true,
+                                                        ),
+                                                    );
+                                                    std::process::exit(1);
+                                                }
+                                            },
+                                            _ => {
+                                                self.handler.error_with_span(
+                                                    "expected aggregation function",
+                                                    LabeledSpan::new(
+                                                        args[1].span,
+                                                        "available: count, min, max, sum, average, integral",
+                                                        true,
+                                                    ),
+                                                );
+                                                std::process::exit(1);
+                                            }
+                                        };
+                                        ExpressionKind::SlidingWindowAggregation {
+                                            expr: inner,
+                                            duration: args[0].clone(),
+                                            wait: signature.contains("over_exactly"),
+                                            aggregation: window_op,
+                                        }
+                                    }
+                                    _ => ExpressionKind::Method(inner, name, types, args),
+                                };
+                                let binop_expr = Expression::new(self.next_id(), kind, binop_span);
+                                match unop {
+                                    None => return binop_expr,
+                                    Some(unop) => {
+                                        return Expression::new(
+                                            self.next_id(),
+                                            ExpressionKind::Unary(unop, Box::new(binop_expr)),
+                                            span,
+                                        )
+                                    }
+                                }
+                            }
+                            _ => {
+                                self.handler.error_with_span(
+                                    &format!("expected method call or tuple access, found {}", rhs),
+                                    LabeledSpan::new(rhs.span, "unexpected", true),
+                                );
+                                std::process::exit(1);
+                            }
+                        }
+                    }
+                    Rule::OpeningBracket => {
+                        let offset = match rhs.parse_offset() {
+                            Ok(offset) => offset,
+                            Err(reason) => {
+                                self.handler.error_with_span(
+                                    "failed to parse offset expression",
+                                    LabeledSpan::new(rhs.span, &reason, true),
+                                );
+                                std::process::exit(1);
+                            }
+                        };
+                        match lhs.kind {
+                            ExpressionKind::Unary(unop, inner) => {
+                                let inner_span = Span { start: inner.span.start, end: rhs.span.end };
+                                let new_inner =
+                                    Expression::new(self.next_id(), ExpressionKind::Offset(inner, offset), inner_span);
+                                return Expression::new(
+                                    self.next_id(),
+                                    ExpressionKind::Unary(unop, Box::new(new_inner)),
+                                    span,
+                                );
+                            }
+                            _ => {
+                                return Expression::new(
+                                    self.next_id(),
+                                    ExpressionKind::Offset(lhs.into(), offset),
+                                    span,
+                                )
+                            }
+                        }
+                    }
+                    _ => unreachable!(),
+                };
+                Expression::new(self.next_id(), ExpressionKind::Binary(op, Box::new(lhs), Box::new(rhs)), span)
+            },
+        )
+    }
+
+    fn build_term_ast(&self, pair: Pair<'_, Rule>) -> Expression {
+        let span = pair.as_span();
+        match pair.as_rule() {
+            // Map function from `Pair` to AST data structure `Expression`
+            Rule::Literal => {
+                Expression::new(self.next_id(), ExpressionKind::Lit(self.parse_literal(pair)), span.into())
+            }
+            Rule::Ident => Expression::new(self.next_id(), ExpressionKind::Ident(self.parse_ident(&pair)), span.into()),
+            Rule::ParenthesizedExpression => {
+                let mut inner = pair.into_inner();
+                let opp = inner.next().expect(
+                    "Rule::ParenthesizedExpression has a token for the (potentialy missing) opening parenthesis",
+                );
+                let opening_parenthesis = if let Rule::OpeningParenthesis = opp.as_rule() {
+                    Some(Box::new(Parenthesis::new(self.next_id(), opp.as_span().into())))
+                } else {
+                    None
+                };
+
+                let inner_expression =
+                    inner.next().expect("Rule::ParenthesizedExpression has a token for the contained expression");
+
+                let closing = inner.next().expect(
+                    "Rule::ParenthesizedExpression has a token for the (potentialy missing) closing parenthesis",
+                );
+                let closing_parenthesis = if let Rule::ClosingParenthesis = closing.as_rule() {
+                    Some(Box::new(Parenthesis::new(self.next_id(), closing.as_span().into())))
+                } else {
+                    None
+                };
+
+                Expression::new(
+                    self.next_id(),
+                    ExpressionKind::ParenthesizedExpression(
+                        opening_parenthesis,
+                        Box::new(self.build_expression_ast(inner_expression.into_inner())),
+                        closing_parenthesis,
+                    ),
+                    span.into(),
+                )
+            }
+            Rule::UnaryExpr => {
+                // First child is the operator, second the operand.
+                let mut children = pair.into_inner();
+                let pest_operator = children.next().expect("Unary expressions need to have an operator.");
+                let operand = children.next().expect("Unary expressions need to have an operand.");
+                let operand = self.build_term_ast(operand);
+                let operator = match pest_operator.as_rule() {
+                    Rule::Add => return operand, // Discard unary plus because it is semantically null.
+                    Rule::Subtract => UnOp::Neg,
+                    Rule::Neg => UnOp::Not,
+                    Rule::BitNot => UnOp::BitNot,
+                    _ => unreachable!(),
+                };
+                Expression::new(self.next_id(), ExpressionKind::Unary(operator, Box::new(operand)), span.into())
+            }
+            Rule::TernaryExpr => {
+                let mut children = self.parse_vec_of_expressions(pair.into_inner());
+                assert_eq!(children.len(), 3, "A ternary expression needs exactly three children.");
+                Expression::new(
+                    self.next_id(),
+                    ExpressionKind::Ite(children.remove(0), children.remove(0), children.remove(0)),
+                    span.into(),
+                )
+            }
+            Rule::Tuple => {
+                let elements = self.parse_vec_of_expressions(pair.into_inner());
+                assert!(elements.len() != 1, "Tuples may not have exactly one element.");
+                Expression::new(self.next_id(), ExpressionKind::Tuple(elements), span.into())
+            }
+            Rule::Expr => self.build_expression_ast(pair.into_inner()),
+            Rule::FunctionExpr => self.build_function_expression(pair, span.into()),
+            Rule::IntegerLiteral => {
+                let span = span.into();
+                Expression::new(
+                    self.next_id(),
+                    ExpressionKind::Lit(Literal::new_numeric(self.next_id(), pair.as_str(), None, span)),
+                    span,
+                )
+            }
+            Rule::MissingExpression => {
+                let span = span.into();
+                Expression::new(self.next_id(), ExpressionKind::MissingExpression, span)
+            }
+            _ => unreachable!("Unexpected rule when parsing expression ast: {:?}", pair.as_rule()),
+        }
     }
 }
 
@@ -251,531 +826,12 @@ impl<'a, 'b> StreamlabParser<'a, 'b> {
  * Transforms a textual representation of a Lola specification into
  * an AST representation.
  */
-pub fn parse<'a, 'b>(
+pub(crate) fn parse<'a, 'b>(
     content: &'a str,
     handler: &'b Handler,
     config: FrontendConfig,
-) -> Result<LolaSpec, pest::error::Error<Rule>> {
-    StreamlabParser::new(content, handler, config).parse()
-}
-
-fn parse_parameter_list(param_list: Pairs<'_, Rule>) -> Vec<Parameter> {
-    let mut params = Vec::new();
-    for param_decl in param_list {
-        assert_eq!(Rule::ParameterDecl, param_decl.as_rule());
-        let span = param_decl.as_span().into();
-        let mut decl = param_decl.into_inner();
-        let name = parse_ident(&decl.next().expect("mismatch between grammar and AST"));
-        let ty = if let Some(type_pair) = decl.next() {
-            assert_eq!(Rule::Type, type_pair.as_rule());
-            parse_type(type_pair)
-        } else {
-            Type::new_inferred()
-        };
-        params.push(Parameter { name, ty, id: NodeId::DUMMY, span });
-    }
-    params
-}
-
-fn parse_template_spec(spec: &mut LolaSpec, pair: Pair<'_, Rule>, handler: &Handler) -> TemplateSpec {
-    let span = pair.as_span().into();
-    let mut decls = pair.into_inner();
-    let mut pair = decls.next();
-    let mut rule = pair.as_ref().map(Pair::as_rule);
-
-    let mut inv_spec = None;
-    if let Some(Rule::InvokeDecl) = rule {
-        inv_spec = Some(parse_inv_spec(spec, pair.unwrap(), handler));
-        pair = decls.next();
-        rule = pair.as_ref().map(Pair::as_rule);
-    }
-    let mut ext_spec = None;
-    if let Some(Rule::ExtendDecl) = rule {
-        ext_spec = Some(parse_ext_spec(spec, pair.unwrap(), handler));
-        pair = decls.next();
-        rule = pair.as_ref().map(Pair::as_rule);
-    }
-    let mut ter_spec = None;
-    if let Some(Rule::TerminateDecl) = rule {
-        let exp = pair.unwrap();
-        let span_ter = exp.as_span().into();
-        let expr = exp.into_inner().next().expect("mismatch between grammar and AST");
-        let expr = build_expression_ast(spec, expr.into_inner(), handler);
-        ter_spec = Some(TerminateSpec { target: expr, id: NodeId::DUMMY, span: span_ter });
-    }
-    TemplateSpec { inv: inv_spec, ext: ext_spec, ter: ter_spec, id: NodeId::DUMMY, span }
-}
-
-fn parse_ext_spec(spec: &mut LolaSpec, ext_pair: Pair<'_, Rule>, handler: &Handler) -> ExtendSpec {
-    let span_ext = ext_pair.as_span().into();
-    let mut children = ext_pair.into_inner();
-
-    let first_child = children.next().expect("mismatch between grammar and ast");
-    let target = match first_child.as_rule() {
-        Rule::Expr => build_expression_ast(spec, first_child.into_inner(), handler),
-        _ => unreachable!(),
-    };
-    ExtendSpec { target, id: NodeId::DUMMY, span: span_ext }
-}
-
-fn parse_inv_spec(spec: &mut LolaSpec, inv_pair: Pair<'_, Rule>, handler: &Handler) -> InvokeSpec {
-    let span_inv = inv_pair.as_span().into();
-    let mut inv_children = inv_pair.into_inner();
-    let expr_pair = inv_children.next().expect("mismatch between grammar and AST");
-    let inv_target = build_expression_ast(spec, expr_pair.into_inner(), handler);
-    // Compute invocation condition:
-    let mut is_if = false;
-    let mut cond_expr = None;
-    if let Some(inv_cond_pair) = inv_children.next() {
-        is_if = match inv_cond_pair.as_rule() {
-            Rule::InvokeIf => true,
-            Rule::InvokeUnless => false,
-            _ => unreachable!(),
-        };
-        let condition = inv_cond_pair.into_inner().next().expect("mismatch between grammar and AST");
-        cond_expr = Some(build_expression_ast(spec, condition.into_inner(), handler))
-    }
-    InvokeSpec { condition: cond_expr, is_if, target: inv_target, id: NodeId::DUMMY, span: span_inv }
-}
-
-/**
- * Transforms a `Rule::Trigger` into `Trigger` AST node.
- * Panics if input is not `Rule::Trigger`.
- * The output rule consists of the following tokens:
- * - (`Rule::Ident`)?
- * - `Rule::Expr`
- * - (`Rule::StringLiteral`)?
- */
-fn parse_trigger(spec: &mut LolaSpec, pair: Pair<'_, Rule>, handler: &Handler) -> Trigger {
-    assert_eq!(pair.as_rule(), Rule::Trigger);
-    let span = pair.as_span().into();
-    let mut pairs = pair.into_inner();
-
-    let mut name = None;
-    let mut message = None;
-
-    let mut pair = pairs.next().expect("mismatch between grammar and AST");
-    // first token is either expression or identifier
-    if let Rule::Ident = pair.as_rule() {
-        name = Some(parse_ident(&pair));
-        pair = pairs.next().expect("mismatch between grammar and AST");
-    }
-    let expression = build_expression_ast(spec, pair.into_inner(), handler);
-
-    if let Some(pair) = pairs.next() {
-        assert_eq!(pair.as_rule(), Rule::String);
-        message = Some(pair.as_str().to_string());
-    }
-
-    Trigger { id: NodeId::DUMMY, name, expression, message, span }
-}
-
-/**
- * Transforms a `Rule::Ident` into `Ident` AST node.
- * Panics if input is not `Rule::Ident`.
- */
-fn parse_ident(pair: &Pair<'_, Rule>) -> Ident {
-    assert_eq!(pair.as_rule(), Rule::Ident);
-    let name = pair.as_str().to_string();
-    Ident::new(name, pair.as_span().into())
-}
-
-/**
- * Transforms a `Rule::TypeDecl` into `TypeDeclaration` AST node.
- * Panics if input is not `Rule::TypeDecl`.
- */
-fn parse_type_declaration(pair: Pair<'_, Rule>) -> TypeDeclaration {
-    assert_eq!(pair.as_rule(), Rule::TypeDecl);
-    let span = pair.as_span().into();
-    let mut pairs = pair.into_inner();
-    let name = parse_ident(&pairs.next().expect("mismatch between grammar and AST"));
-    let mut fields = Vec::new();
-    while let Some(pair) = pairs.next() {
-        let field_name = pair.as_str().to_string();
-        let ty = parse_type(pairs.next().expect("mismatch between grammar and AST"));
-        fields.push(Box::new(TypeDeclField { name: field_name, ty, id: NodeId::DUMMY, span: pair.as_span().into() }));
-    }
-
-    TypeDeclaration { name: Some(name), span, id: NodeId::DUMMY, fields }
-}
-
-/**
- * Transforms a `Rule::Type` into `Type` AST node.
- * Panics if input is not `Rule::Type`.
- */
-fn parse_type(pair: Pair<'_, Rule>) -> Type {
-    assert_eq!(pair.as_rule(), Rule::Type);
-    let span = pair.as_span();
-    let mut tuple = Vec::new();
-    for pair in pair.into_inner() {
-        match pair.as_rule() {
-            Rule::Ident => {
-                return Type::new_simple(pair.as_str().to_string(), pair.as_span().into());
-            }
-            Rule::Type => tuple.push(parse_type(pair)),
-            Rule::Optional => {
-                let span = pair.as_span();
-                let inner =
-                    pair.into_inner().next().expect("mismatch between grammar and AST: first argument is a type");
-                let inner_ty = Type::new_simple(inner.as_str().to_string(), inner.as_span().into());
-                return Type::new_optional(inner_ty, span.into());
-            }
-            _ => unreachable!("{:?} is not a type, ensured by grammar", pair.as_rule()),
-        }
-    }
-    Type::new_tuple(tuple, span.into())
-}
-
-/**
- * Transforms a `Rule::Literal` into `Literal` AST node.
- * Panics if input is not `Rule::Literal`.
- */
-fn parse_literal(pair: Pair<'_, Rule>) -> Literal {
-    assert_eq!(pair.as_rule(), Rule::Literal);
-    let inner = pair.into_inner().next().expect("Rule::Literal has exactly one child");
-    match inner.as_rule() {
-        Rule::String => {
-            let str_rep = inner.as_str();
-            Literal::new_str(str_rep, inner.as_span().into())
-        }
-        Rule::RawString => {
-            let str_rep = inner.as_str();
-            Literal::new_raw_str(str_rep, inner.as_span().into())
-        }
-        Rule::NumberLiteral => {
-            let span = inner.as_span();
-            let mut pairs = inner.into_inner();
-            let value = pairs.next().expect("Mismatch between AST and grammar");
-
-            let str_rep: &str = value.as_str();
-            let unit = match pairs.next() {
-                None => None,
-                Some(unit) => Some(unit.as_str().to_string()),
-            };
-
-            Literal::new_numeric(str_rep, unit, span.into())
-        }
-        Rule::True => Literal::new_bool(true, inner.as_span().into()),
-        Rule::False => Literal::new_bool(false, inner.as_span().into()),
-        _ => unreachable!(),
-    }
-}
-
-#[allow(clippy::vec_box)]
-fn parse_vec_of_expressions(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>, handler: &Handler) -> Vec<Box<Expression>> {
-    pairs.map(|expr| build_expression_ast(spec, expr.into_inner(), handler)).map(Box::new).collect()
-}
-
-fn parse_vec_of_types(pairs: Pairs<'_, Rule>) -> Vec<Type> {
-    pairs.map(parse_type).collect()
-}
-
-fn build_function_expression(spec: &mut LolaSpec, pair: Pair<'_, Rule>, span: Span, handler: &Handler) -> Expression {
-    let mut children = pair.into_inner();
-    let fun_name = parse_ident(&children.next().unwrap());
-    let mut next = children.next().expect("Mismatch between AST and parser");
-    let type_params = match next.as_rule() {
-        Rule::GenericParam => {
-            let params = parse_vec_of_types(next.into_inner());
-            next = children.next().expect("Mismatch between AST and parser");
-            params
-        }
-        Rule::FunctionArgs => Vec::new(),
-        _ => unreachable!(),
-    };
-    assert_eq!(next.as_rule(), Rule::FunctionArgs);
-    let mut args = Vec::new();
-    let mut arg_names = Vec::new();
-    for pair in next.into_inner() {
-        assert_eq!(pair.as_rule(), Rule::FunctionArg);
-        let mut pairs = pair.into_inner();
-        let mut pair = pairs.next().expect("Mismatch between AST and parser");
-        if pair.as_rule() == Rule::Ident {
-            // named argument
-            arg_names.push(Some(parse_ident(&pair)));
-            pair = pairs.next().expect("Mismatch between AST and parser");
-        } else {
-            arg_names.push(None);
-        }
-        args.push(build_expression_ast(spec, pair.into_inner(), handler).into());
-    }
-    let name = FunctionName { name: fun_name, arg_names };
-    Expression::new(ExpressionKind::Function(name, type_params, args), span)
-}
-
-/**
- * Builds the Expr AST.
- */
-fn build_expression_ast(spec: &mut LolaSpec, pairs: Pairs<'_, Rule>, handler: &Handler) -> Expression {
-    PREC_CLIMBER.climb(
-        pairs,
-        |pair: Pair<'_, Rule>| build_term_ast(spec, pair, handler),
-        |lhs: Expression, op: Pair<'_, Rule>, rhs: Expression| {
-            // Reduce function combining `Expression`s to `Expression`s with the correct precs
-            let span = Span { start: lhs.span.start, end: rhs.span.end };
-            let op = match op.as_rule() {
-                // Arithmetic
-                Rule::Add => BinOp::Add,
-                Rule::Subtract => BinOp::Sub,
-                Rule::Multiply => BinOp::Mul,
-                Rule::Divide => BinOp::Div,
-                Rule::Mod => BinOp::Rem,
-                Rule::Power => BinOp::Pow,
-                // Logical
-                Rule::And => BinOp::And,
-                Rule::Or => BinOp::Or,
-                // Comparison
-                Rule::LessThan => BinOp::Lt,
-                Rule::LessThanOrEqual => BinOp::Le,
-                Rule::MoreThan => BinOp::Gt,
-                Rule::MoreThanOrEqual => BinOp::Ge,
-                Rule::Equal => BinOp::Eq,
-                Rule::NotEqual => BinOp::Ne,
-                // Bitwise
-                Rule::BitAnd => BinOp::BitAnd,
-                Rule::BitOr => BinOp::BitOr,
-                Rule::BitXor => BinOp::BitXor,
-                Rule::ShiftLeft => BinOp::Shl,
-                Rule::ShiftRight => BinOp::Shr,
-                // bubble up the unary operator on the lhs (if it exists) to fix precedence
-                Rule::Dot => {
-                    let (unop, binop_span, inner) = match lhs.kind {
-                        ExpressionKind::Unary(unop, inner) => {
-                            (Some(unop), Span { start: inner.span.start, end: rhs.span.end }, inner)
-                        }
-                        _ => (None, span, Box::new(lhs)),
-                    };
-                    match rhs.kind {
-                        // access to a tuple
-                        ExpressionKind::Lit(l) => {
-                            let ident = match l.kind {
-                                LitKind::Numeric(val, unit) => {
-                                    assert!(unit.is_none());
-                                    Ident::new(val, l.span)
-                                }
-                                _ => {
-                                    handler.error_with_span(
-                                        &format!("expected unsigned integer, found {}", l),
-                                        LabeledSpan::new(rhs.span, "unexpected", true),
-                                    );
-                                    std::process::exit(1);
-                                }
-                            };
-                            let binop_expr = Expression::new(ExpressionKind::Field(inner, ident), binop_span);
-                            match unop {
-                                None => return binop_expr,
-                                Some(unop) => {
-                                    return Expression::new(ExpressionKind::Unary(unop, Box::new(binop_expr)), span)
-                                }
-                            }
-                        }
-                        ExpressionKind::Function(name, types, args) => {
-                            // match for builtin function names and transform them into appropriate AST nodes
-                            let signature = name.as_string();
-                            let kind = match signature.as_str() {
-                                "defaults(to:)" => {
-                                    assert_eq!(args.len(), 1);
-                                    ExpressionKind::Default(inner, args[0].clone())
-                                }
-                                "offset(by:)" => {
-                                    assert_eq!(args.len(), 1);
-                                    let offset_expr = &args[0];
-                                    let offset = match offset_expr.parse_offset() {
-                                        Ok(offset) => offset,
-                                        Err(reason) => {
-                                            handler.error_with_span(
-                                                "failed to parse offset",
-                                                LabeledSpan::new(rhs.span, &reason, true),
-                                            );
-                                            std::process::exit(1);
-                                        }
-                                    };
-                                    ExpressionKind::Offset(inner, offset)
-                                }
-                                "hold()" => {
-                                    assert_eq!(args.len(), 0);
-                                    ExpressionKind::StreamAccess(inner, StreamAccessKind::Hold)
-                                }
-                                "hold(or:)" => {
-                                    assert_eq!(args.len(), 1);
-                                    let lhs = Expression::new(
-                                        ExpressionKind::StreamAccess(inner.into(), StreamAccessKind::Hold),
-                                        span,
-                                    );
-                                    ExpressionKind::Default(Box::new(lhs), args[0].clone())
-                                }
-                                "get()" => {
-                                    assert_eq!(args.len(), 0);
-                                    ExpressionKind::StreamAccess(inner, StreamAccessKind::Optional)
-                                }
-                                "aggregate(over:using:)" | "aggregate(over_exactly:using:)" => {
-                                    assert_eq!(args.len(), 2);
-                                    let window_op = match &args[1].kind {
-                                        ExpressionKind::Ident(i) => match i.name.as_str() {
-                                            "Σ" | "sum" => WindowOperation::Sum,
-                                            "#" | "count" => WindowOperation::Count,
-                                            //"Π" | "prod" | "product" => WindowOperation::Product,
-                                            "∫" | "integral" => WindowOperation::Integral,
-                                            "avg" | "average" => WindowOperation::Average,
-                                            "min" => WindowOperation::Min,
-                                            "max" => WindowOperation::Max,
-                                            "∃" | "disjunction" | "∨" | "exists" => WindowOperation::Disjunction,
-                                            "∀" | "conjunction" | "∧" | "forall" => WindowOperation::Conjunction,
-                                            fun => {
-                                                handler.error_with_span(
-                                                    &format!("unknown aggregation function {}", fun),
-                                                    LabeledSpan::new(
-                                                        i.span,
-                                                        "available: count, min, max, sum, average, integral",
-                                                        true,
-                                                    ),
-                                                );
-                                                std::process::exit(1);
-                                            }
-                                        },
-                                        _ => {
-                                            handler.error_with_span(
-                                                "expected aggregation function",
-                                                LabeledSpan::new(
-                                                    args[1].span,
-                                                    "available: count, min, max, sum, average, integral",
-                                                    true,
-                                                ),
-                                            );
-                                            std::process::exit(1);
-                                        }
-                                    };
-                                    ExpressionKind::SlidingWindowAggregation {
-                                        expr: inner,
-                                        duration: args[0].clone(),
-                                        wait: signature.contains("over_exactly"),
-                                        aggregation: window_op,
-                                    }
-                                }
-                                _ => ExpressionKind::Method(inner, name, types, args),
-                            };
-                            let binop_expr = Expression::new(kind, binop_span);
-                            match unop {
-                                None => return binop_expr,
-                                Some(unop) => {
-                                    return Expression::new(ExpressionKind::Unary(unop, Box::new(binop_expr)), span)
-                                }
-                            }
-                        }
-                        _ => {
-                            handler.error_with_span(
-                                &format!("expected method call or tuple access, found {}", rhs),
-                                LabeledSpan::new(rhs.span, "unexpected", true),
-                            );
-                            std::process::exit(1);
-                        }
-                    }
-                }
-                Rule::OpeningBracket => {
-                    let offset = match rhs.parse_offset() {
-                        Ok(offset) => offset,
-                        Err(reason) => {
-                            handler.error_with_span(
-                                "failed to parse offset expression",
-                                LabeledSpan::new(rhs.span, &reason, true),
-                            );
-                            std::process::exit(1);
-                        }
-                    };
-                    match lhs.kind {
-                        ExpressionKind::Unary(unop, inner) => {
-                            let inner_span = Span { start: inner.span.start, end: rhs.span.end };
-                            let new_inner = Expression::new(ExpressionKind::Offset(inner, offset), inner_span);
-                            return Expression::new(ExpressionKind::Unary(unop, Box::new(new_inner)), span);
-                        }
-                        _ => return Expression::new(ExpressionKind::Offset(lhs.into(), offset), span),
-                    }
-                }
-                _ => unreachable!(),
-            };
-            Expression::new(ExpressionKind::Binary(op, Box::new(lhs), Box::new(rhs)), span)
-        },
-    )
-}
-
-fn build_term_ast(spec: &mut LolaSpec, pair: Pair<'_, Rule>, handler: &Handler) -> Expression {
-    let span = pair.as_span();
-    match pair.as_rule() {
-        // Map function from `Pair` to AST data structure `Expression`
-        Rule::Literal => Expression::new(ExpressionKind::Lit(parse_literal(pair)), span.into()),
-        Rule::Ident => Expression::new(ExpressionKind::Ident(parse_ident(&pair)), span.into()),
-        Rule::ParenthesizedExpression => {
-            let mut inner = pair.into_inner();
-            let opp = inner
-                .next()
-                .expect("Rule::ParenthesizedExpression has a token for the (potentialy missing) opening parenthesis");
-            let opening_parenthesis = if let Rule::OpeningParenthesis = opp.as_rule() {
-                Some(Box::new(Parenthesis::new(opp.as_span().into())))
-            } else {
-                None
-            };
-
-            let inner_expression =
-                inner.next().expect("Rule::ParenthesizedExpression has a token for the contained expression");
-
-            let closing = inner
-                .next()
-                .expect("Rule::ParenthesizedExpression has a token for the (potentialy missing) closing parenthesis");
-            let closing_parenthesis = if let Rule::ClosingParenthesis = closing.as_rule() {
-                Some(Box::new(Parenthesis::new(closing.as_span().into())))
-            } else {
-                None
-            };
-
-            Expression::new(
-                ExpressionKind::ParenthesizedExpression(
-                    opening_parenthesis,
-                    Box::new(build_expression_ast(spec, inner_expression.into_inner(), handler)),
-                    closing_parenthesis,
-                ),
-                span.into(),
-            )
-        }
-        Rule::UnaryExpr => {
-            // First child is the operator, second the operand.
-            let mut children = pair.into_inner();
-            let pest_operator = children.next().expect("Unary expressions need to have an operator.");
-            let operand = children.next().expect("Unary expressions need to have an operand.");
-            let operand = build_term_ast(spec, operand, handler);
-            let operator = match pest_operator.as_rule() {
-                Rule::Add => return operand, // Discard unary plus because it is semantically null.
-                Rule::Subtract => UnOp::Neg,
-                Rule::Neg => UnOp::Not,
-                Rule::BitNot => UnOp::BitNot,
-                _ => unreachable!(),
-            };
-            Expression::new(ExpressionKind::Unary(operator, Box::new(operand)), span.into())
-        }
-        Rule::TernaryExpr => {
-            let mut children = parse_vec_of_expressions(spec, pair.into_inner(), handler);
-            assert_eq!(children.len(), 3, "A ternary expression needs exactly three children.");
-            Expression::new(
-                ExpressionKind::Ite(children.remove(0), children.remove(0), children.remove(0)),
-                span.into(),
-            )
-        }
-        Rule::Tuple => {
-            let elements = parse_vec_of_expressions(spec, pair.into_inner(), handler);
-            assert!(elements.len() != 1, "Tuples may not have exactly one element.");
-            Expression::new(ExpressionKind::Tuple(elements), span.into())
-        }
-        Rule::Expr => build_expression_ast(spec, pair.into_inner(), handler),
-        Rule::FunctionExpr => build_function_expression(spec, pair, span.into(), handler),
-        Rule::IntegerLiteral => {
-            let span = span.into();
-            Expression::new(ExpressionKind::Lit(Literal::new_numeric(pair.as_str(), None, span)), span)
-        }
-        Rule::MissingExpression => {
-            let span = span.into();
-            Expression::new(ExpressionKind::MissingExpression, span)
-        }
-        _ => unreachable!("Unexpected rule when parsing expression ast: {:?}", pair.as_rule()),
-    }
+) -> Result<RTLolaAst, pest::error::Error<Rule>> {
+    RTLolaParser::new(content, handler, config).parse()
 }
 
 #[derive(Debug, Clone, Eq)]
@@ -785,7 +841,7 @@ pub struct Ident {
 }
 
 impl Ident {
-    pub fn new(name: String, span: Span) -> Ident {
+    pub(crate) fn new(name: String, span: Span) -> Ident {
         Ident { name, span }
     }
 }
@@ -804,18 +860,10 @@ impl PartialEq for Ident {
 pub struct NodeId(u32);
 
 impl NodeId {
-    pub fn new(x: usize) -> NodeId {
+    pub(crate) fn new(x: usize) -> NodeId {
         assert!(x < (u32::max_value() as usize));
         NodeId(x as u32)
     }
-
-    pub fn from_u32(x: u32) -> NodeId {
-        NodeId(x)
-    }
-
-    /// When parsing, we initially give all AST nodes this AST node id.
-    /// Then later, in the renumber pass, we renumber them to have small, positive ids.
-    pub const DUMMY: NodeId = NodeId(!0);
 }
 
 impl std::fmt::Display for NodeId {
@@ -837,7 +885,7 @@ pub struct Span {
 }
 
 impl Span {
-    pub fn unknown() -> Span {
+    pub(crate) fn unknown() -> Span {
         use std::usize;
         Span { start: usize::max_value(), end: usize::max_value() }
     }
@@ -851,7 +899,7 @@ impl<'a> From<pest::Span<'a>> for Span {
 
 /// A mapper from `Span` to actual source code
 #[derive(Debug)]
-pub struct SourceMapper {
+pub(crate) struct SourceMapper {
     path: PathBuf,
     content: String,
 }
@@ -886,7 +934,7 @@ pub(crate) struct CharSpan {
 }
 
 impl SourceMapper {
-    pub fn new(path: PathBuf, content: &str) -> SourceMapper {
+    pub(crate) fn new(path: PathBuf, content: &str) -> SourceMapper {
         SourceMapper { path, content: content.to_string() }
     }
 
@@ -944,7 +992,7 @@ mod tests {
     use super::*;
     use pest::{consumes_to, parses_to};
 
-    fn cmp_ast_spec(ast: &LolaSpec, spec: &str) -> bool {
+    fn cmp_ast_spec(ast: &RTLolaAst, spec: &str) -> bool {
         // Todo: Make more robust, e.g. against changes in whitespace.
         assert_eq!(format!("{}", ast), spec);
         true
@@ -983,7 +1031,7 @@ mod tests {
     fn parse_constant_ast() {
         let spec = "constant five : Int := 5";
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
-        let mut parser = StreamlabParser::new(spec, &handler, FrontendConfig::default());
+        let parser = RTLolaParser::new(spec, &handler, FrontendConfig::default());
         let pair = LolaParser::parse(Rule::ConstantStream, spec).unwrap_or_else(|e| panic!("{}", e)).next().unwrap();
         let ast = parser.parse_constant(pair);
         assert_eq!(format!("{}", ast), "constant five: Int := 5")
@@ -993,7 +1041,7 @@ mod tests {
     fn parse_constant_double() {
         let spec = "constant fiveoh: Double := 5.0";
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
-        let mut parser = StreamlabParser::new(spec, &handler, FrontendConfig::default());
+        let parser = RTLolaParser::new(spec, &handler, FrontendConfig::default());
         let pair = LolaParser::parse(Rule::ConstantStream, spec).unwrap_or_else(|e| panic!("{}", e)).next().unwrap();
         let ast = parser.parse_constant(pair);
         assert_eq!(format!("{}", ast), "constant fiveoh: Double := 5.0")
@@ -1020,7 +1068,7 @@ mod tests {
     fn parse_input_ast() {
         let spec = "input a: Int, b: Int, c: Bool";
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
-        let mut parser = StreamlabParser::new(spec, &handler, FrontendConfig::default());
+        let parser = RTLolaParser::new(spec, &handler, FrontendConfig::default());
         let pair = LolaParser::parse(Rule::InputStream, spec).unwrap_or_else(|e| panic!("{}", e)).next().unwrap();
         let inputs = parser.parse_inputs(pair);
         assert_eq!(inputs.len(), 3);
@@ -1069,7 +1117,7 @@ mod tests {
     fn parse_output_ast() {
         let spec = "output out: Int := in + 1";
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
-        let mut parser = StreamlabParser::new(spec, &handler, FrontendConfig::default());
+        let parser = RTLolaParser::new(spec, &handler, FrontendConfig::default());
         let pair = LolaParser::parse(Rule::OutputStream, spec).unwrap_or_else(|e| panic!("{}", e)).next().unwrap();
         let ast = parser.parse_output(pair);
         assert_eq!(format!("{}", ast), spec)
@@ -1098,40 +1146,40 @@ mod tests {
     #[test]
     fn parse_trigger_ast() {
         let spec = "trigger in ≠ out \"some message\"";
-        let pair = LolaParser::parse(Rule::Trigger, spec).unwrap_or_else(|e| panic!("{}", e)).next().unwrap();
-        let mut lola = LolaSpec::new();
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), spec));
-        let ast = super::parse_trigger(&mut lola, pair, &handler);
+        let parser = RTLolaParser::new(spec, &handler, FrontendConfig::default());
+        let pair = LolaParser::parse(Rule::Trigger, spec).unwrap_or_else(|e| panic!("{}", e)).next().unwrap();
+        let ast = parser.parse_trigger(pair);
         assert_eq!(format!("{}", ast), "trigger in ≠ out \"some message\"")
     }
 
     #[test]
     fn parse_expression() {
         let content = "in + 1";
-        let expr = LolaParser::parse(Rule::Expr, content).unwrap_or_else(|e| panic!("{}", e)).next().unwrap();
-        let mut spec = LolaSpec::new();
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), content));
-        let ast = build_expression_ast(&mut spec, expr.into_inner(), &handler);
+        let expr = LolaParser::parse(Rule::Expr, content).unwrap_or_else(|e| panic!("{}", e)).next().unwrap();
+        let parser = RTLolaParser::new(content, &handler, FrontendConfig::default());
+        let ast = parser.build_expression_ast(expr.into_inner());
         assert_eq!(format!("{}", ast), content)
     }
 
     #[test]
     fn parse_expression_precedence() {
         let content = "(a ∨ b ∧ c)";
-        let expr = LolaParser::parse(Rule::Expr, content).unwrap_or_else(|e| panic!("{}", e)).next().unwrap();
-        let mut spec = LolaSpec::new();
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), content));
-        let ast = build_expression_ast(&mut spec, expr.into_inner(), &handler);
+        let parser = RTLolaParser::new(content, &handler, FrontendConfig::default());
+        let expr = LolaParser::parse(Rule::Expr, content).unwrap_or_else(|e| panic!("{}", e)).next().unwrap();
+        let ast = parser.build_expression_ast(expr.into_inner());
         assert_eq!(format!("{}", ast), content)
     }
 
     #[test]
     fn parse_missing_closing_parenthesis() {
         let content = "(a ∨ b ∧ c";
-        let expr = LolaParser::parse(Rule::Expr, content).unwrap_or_else(|e| panic!("{}", e)).next().unwrap();
-        let mut spec = LolaSpec::new();
         let handler = Handler::new(SourceMapper::new(PathBuf::new(), content));
-        let ast = build_expression_ast(&mut spec, expr.into_inner(), &handler);
+        let parser = RTLolaParser::new(content, &handler, FrontendConfig::default());
+        let expr = LolaParser::parse(Rule::Expr, content).unwrap_or_else(|e| panic!("{}", e)).next().unwrap();
+        let ast = parser.build_expression_ast(expr.into_inner());
         assert_eq!(format!("{}", ast), content)
     }
 

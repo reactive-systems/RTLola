@@ -1,19 +1,4 @@
-use crate::analysis::graph_based_analysis::get_ast_id;
-use crate::analysis::graph_based_analysis::ComputationGraph;
-use crate::analysis::graph_based_analysis::ComputeStep;
-use crate::analysis::graph_based_analysis::DependencyGraph;
-use crate::analysis::graph_based_analysis::Location;
-use crate::analysis::graph_based_analysis::NIx;
-use crate::analysis::graph_based_analysis::Offset;
-use crate::analysis::graph_based_analysis::StreamDependency;
-use crate::analysis::graph_based_analysis::StreamNode::ClassicInput;
-use crate::analysis::graph_based_analysis::StreamNode::ClassicOutput;
-use crate::analysis::graph_based_analysis::StreamNode::ParameterizedInput;
-use crate::analysis::graph_based_analysis::StreamNode::ParameterizedOutput;
-use crate::analysis::graph_based_analysis::StreamNode::RTOutput;
-use crate::analysis::graph_based_analysis::StreamNode::RTTrigger;
-use crate::analysis::graph_based_analysis::StreamNode::Trigger;
-use crate::analysis::graph_based_analysis::TimeOffset;
+use crate::analysis::graph_based_analysis::{StreamNode::*, *};
 use crate::parse::NodeId;
 use crate::ty::StreamTy;
 use std::collections::HashMap;
@@ -22,74 +7,48 @@ pub(crate) type EvalOrder = Vec<Vec<ComputeStep>>;
 
 #[derive(Debug)]
 pub(crate) struct EvaluationOrderResult {
-    pub event_based_streams_order: EvalOrder,
-    pub periodic_streams_order: EvalOrder,
+    pub(crate) event_based_streams_order: EvalOrder,
+    pub(crate) periodic_streams_order: EvalOrder,
 }
 
 pub(crate) fn determine_evaluation_order(
-    mut dependency_graph: DependencyGraph,
+    dependency_graph: DependencyGraph,
 ) -> (EvaluationOrderResult, DependencyGraph) {
-    prune_graph(&mut dependency_graph);
-    let pruned_dependency_graph = dependency_graph.clone();
-    //    println!("{:?}", petgraph::dot::Dot::new(&pruned_dependency_graph));
+    // TODO prune the graph
 
-    let (compute_graph_event_based, compute_graph_periodic) =
-        build_compute_graphs(dependency_graph);
-    //    println!("{:?}", petgraph::dot::Dot::new(&compute_graph_event_based));
-    let event_based_streams_order = get_compute_order(compute_graph_event_based);
+    let (compute_graph_unperiodic, compute_graph_periodic) = build_compute_graphs(dependency_graph.clone());
+    //    println!("{:?}", petgraph::dot::Dot::new(&compute_graph_unperiodic));
+    //    println!("{:?}", petgraph::dot::Dot::new(&compute_graph_periodic));
+    let event_based_streams_order = get_compute_order(compute_graph_unperiodic);
     let periodic_streams_order = get_compute_order(compute_graph_periodic);
 
-    (
-        EvaluationOrderResult {
-            event_based_streams_order,
-            periodic_streams_order,
-        },
-        pruned_dependency_graph,
-    )
-}
-
-fn prune_graph(dependency_graph: &mut DependencyGraph) {
-    // TODO In the future we will do pruning.
+    (EvaluationOrderResult { event_based_streams_order, periodic_streams_order }, dependency_graph)
 }
 
 fn build_compute_graphs(dependency_graph: DependencyGraph) -> (ComputationGraph, ComputationGraph) {
-    let mut normal_time_graph = dependency_graph.clone();
-    normal_time_graph.retain_nodes(|g, node_index| {
+    let mut unperiodic_streams_graph = dependency_graph.clone();
+    unperiodic_streams_graph.retain_nodes(|g, node_index| {
         match g.node_weight(node_index).expect("Existence guaranteed by the library") {
-            RTTrigger(_, StreamTy::RealTime(_))
-            | RTOutput(_, StreamTy::RealTime(_)) => false,
+            RTTrigger(_, StreamTy::RealTime(_)) | RTOutput(_, StreamTy::RealTime(_)) => false,
             ClassicInput(_)
-            | ClassicOutput(_)
-            | ParameterizedInput(_)
-            | ParameterizedOutput(_)
-            | Trigger(_)
             | RTTrigger(_, StreamTy::Event(_))
             | RTOutput(_, StreamTy::Event(_))
             | RTTrigger(_, StreamTy::Infer(_))
             | RTOutput(_, StreamTy::Infer(_)) => true,
         }
     });
-    let mut real_time_graph = dependency_graph.clone();
-    real_time_graph.retain_nodes(|g, node_index| {
+    let mut periodic_streams_graph = dependency_graph;
+    periodic_streams_graph.retain_nodes(|g, node_index| {
         match g.node_weight(node_index).expect("Existence guaranteed by the library") {
             RTTrigger(_, StreamTy::RealTime(_))
             | RTOutput(_, StreamTy::RealTime(_))
             | RTTrigger(_, StreamTy::Infer(_))
             | RTOutput(_, StreamTy::Infer(_)) => true,
-            ClassicInput(_)
-            | ClassicOutput(_)
-            | ParameterizedInput(_)
-            | ParameterizedOutput(_)
-            | Trigger(_)
-            | RTTrigger(_, StreamTy::Event(_))
-            | RTOutput(_, StreamTy::Event(_)) => false,
+            RTTrigger(_, StreamTy::Event(_)) | RTOutput(_, StreamTy::Event(_)) | ClassicInput(_) => false,
         }
     });
 
-    (
-        build_compute_graph(normal_time_graph),
-        build_compute_graph(real_time_graph),
-    )
+    (build_compute_graph(unperiodic_streams_graph), build_compute_graph(periodic_streams_graph))
 }
 
 struct StepEntry {
@@ -133,56 +92,60 @@ fn build_compute_graph(mut dependency_graph: DependencyGraph) -> ComputationGrap
             StreamDependency::Access(location, offset, _) => {
                 match offset {
                     Offset::Discrete(value) => {
-                        if *value < 0 {
-                            // we only need whether there was a new value
-                            match location {
-                                Location::Invoke => computation_graph.add_edge(
-                                    mapping[&source_id].invoke,
-                                    mapping[&target_id].extend,
-                                    (),
-                                ),
-                                Location::Extend => computation_graph.add_edge(
-                                    mapping[&source_id].extend,
-                                    mapping[&target_id].extend,
-                                    (),
-                                ),
-                                Location::Expression => computation_graph.add_edge(
-                                    mapping[&source_id].evaluate,
-                                    mapping[&target_id].extend,
-                                    (),
-                                ),
-                                Location::Terminate => computation_graph.add_edge(
-                                    mapping[&source_id].terminate,
-                                    mapping[&target_id].extend,
-                                    (),
-                                ),
-                            };
-                        } else if *value == 0 {
-                            // we need the current value
-                            match location {
-                                Location::Invoke => computation_graph.add_edge(
-                                    mapping[&source_id].invoke,
-                                    mapping[&target_id].evaluate,
-                                    (),
-                                ),
-                                Location::Extend => computation_graph.add_edge(
-                                    mapping[&source_id].extend,
-                                    mapping[&target_id].evaluate,
-                                    (),
-                                ),
-                                Location::Expression => computation_graph.add_edge(
-                                    mapping[&source_id].evaluate,
-                                    mapping[&target_id].evaluate,
-                                    (),
-                                ),
-                                Location::Terminate => computation_graph.add_edge(
-                                    mapping[&source_id].terminate,
-                                    mapping[&target_id].evaluate,
-                                    (),
-                                ),
-                            };
+                        use std::cmp::Ordering;
+                        match value.cmp(&0) {
+                            Ordering::Equal => {
+                                // we need the current value
+                                match location {
+                                    Location::Invoke => computation_graph.add_edge(
+                                        mapping[&source_id].invoke,
+                                        mapping[&target_id].evaluate,
+                                        (),
+                                    ),
+                                    Location::Extend => computation_graph.add_edge(
+                                        mapping[&source_id].extend,
+                                        mapping[&target_id].evaluate,
+                                        (),
+                                    ),
+                                    Location::Expression => computation_graph.add_edge(
+                                        mapping[&source_id].evaluate,
+                                        mapping[&target_id].evaluate,
+                                        (),
+                                    ),
+                                    Location::Terminate => computation_graph.add_edge(
+                                        mapping[&source_id].terminate,
+                                        mapping[&target_id].evaluate,
+                                        (),
+                                    ),
+                                };
+                            }
+                            Ordering::Less => {
+                                // we only need whether there was a new value
+                                match location {
+                                    Location::Invoke => computation_graph.add_edge(
+                                        mapping[&source_id].invoke,
+                                        mapping[&target_id].extend,
+                                        (),
+                                    ),
+                                    Location::Extend => computation_graph.add_edge(
+                                        mapping[&source_id].extend,
+                                        mapping[&target_id].extend,
+                                        (),
+                                    ),
+                                    Location::Expression => computation_graph.add_edge(
+                                        mapping[&source_id].evaluate,
+                                        mapping[&target_id].extend,
+                                        (),
+                                    ),
+                                    Location::Terminate => computation_graph.add_edge(
+                                        mapping[&source_id].terminate,
+                                        mapping[&target_id].extend,
+                                        (),
+                                    ),
+                                };
+                            }
+                            Ordering::Greater => {} // no need to add dependency for positive edges
                         }
-                        // no need to add dependency for positive edges
                     }
                     Offset::Time(offset) => {
                         if let TimeOffset::UpToNow(_) = offset {
@@ -239,9 +202,6 @@ mod tests {
     use crate::analysis::graph_based_analysis::dependency_graph::analyse_dependencies;
     use crate::analysis::graph_based_analysis::evaluation_order::determine_evaluation_order;
     use crate::analysis::graph_based_analysis::ComputeStep;
-    use crate::analysis::graph_based_analysis::StorageRequirement;
-    use crate::analysis::graph_based_analysis::TrackingRequirement;
-    use crate::analysis::lola_version::LolaVersionAnalysis;
     use crate::analysis::naming::NamingAnalysis;
     use crate::parse::parse;
     use crate::parse::NodeId;
@@ -271,13 +231,9 @@ mod tests {
         let mut type_analysis = TypeAnalysis::new(&handler, &mut decl_table);
         let type_table = type_analysis.check(&ast);
         let type_table = type_table.as_ref().expect("We expect in these tests that the type analysis checks out.");
-        let mut version_analyzer = LolaVersionAnalysis::new(&handler, &type_table);
-        let version = version_analyzer.analyse(&ast);
-        assert!(!version.is_none(), "We only analyze dependencies for specifications that so far seem to be ok.");
-        let dependency_analysis =
-            analyse_dependencies(&ast, &version_analyzer.result, &decl_table, &handler, &type_table);
+        let dependency_analysis = analyse_dependencies(&ast, &decl_table, &handler, &type_table);
 
-        let (order, pruned_graph) = determine_evaluation_order(dependency_analysis.dependency_graph);
+        let (order, _) = determine_evaluation_order(dependency_analysis.dependency_graph);
         assert_eq!(expected_errors, handler.emitted_errors());
         assert_eq!(expected_warning, handler.emitted_warnings());
         assert_eq!(expected_event_based_streams_order.len(), order.event_based_streams_order.len());
@@ -287,8 +243,8 @@ mod tests {
             assert_eq!(level.len(), result_level.len());
             for (index, step) in level {
                 let node_id = match index {
-                    StreamIndex::Out(i) => ast.outputs[i].id,
-                    StreamIndex::In(i) => ast.inputs[i].id,
+                    Out(i) => ast.outputs[i].id,
+                    In(i) => ast.inputs[i].id,
                 };
                 let expected_step = match step {
                     ComputeStep::Evaluate(_) => ComputeStep::Evaluate(node_id),

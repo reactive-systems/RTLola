@@ -52,7 +52,6 @@ pub(crate) fn determine_buffer_size(
                 InvokeByName(_) => storage_required = max(storage_required, 1_u16),
             }
         }
-
         if this_stream_is_future_dependent {
             storage_requirements.insert(id, StorageRequirement::FutureRef(storage_required));
         } else {
@@ -64,11 +63,8 @@ pub(crate) fn determine_buffer_size(
     if store_all_inputs {
         for node_index in dependency_graph.node_indices() {
             let node_weight = dependency_graph.node_weight(node_index).expect("We iterate over all node indices");
-            match node_weight {
-                StreamNode::ClassicInput(id) | StreamNode::ParameterizedInput(id) => {
-                    storage_requirements.insert(*id, StorageRequirement::Unbounded);
-                }
-                _ => {}
+            if let StreamNode::ClassicInput(id) = node_weight {
+                storage_requirements.insert(*id, StorageRequirement::Unbounded);
             }
         }
     }
@@ -165,7 +161,6 @@ mod tests {
     use crate::analysis::graph_based_analysis::space_requirements::determine_tracking_size;
     use crate::analysis::graph_based_analysis::StorageRequirement;
     use crate::analysis::graph_based_analysis::TrackingRequirement;
-    use crate::analysis::lola_version::LolaVersionAnalysis;
     use crate::analysis::naming::NamingAnalysis;
     use crate::parse::parse;
     use crate::parse::SourceMapper;
@@ -194,11 +189,8 @@ mod tests {
         let mut type_analysis = TypeAnalysis::new(&handler, &mut decl_table);
         let type_table = type_analysis.check(&spec);
         let type_table = type_table.as_ref().expect("We expect that the version analysis found no error");
-        let mut version_analyzer = LolaVersionAnalysis::new(&handler, &type_table);
-        let _version = version_analyzer.analyse(&spec);
 
-        let dependency_analysis =
-            analyse_dependencies(&spec, &version_analyzer.result, &decl_table, &handler, &type_table);
+        let dependency_analysis = analyse_dependencies(&spec, &decl_table, &handler, &type_table);
 
         let (_, pruned_graph) = determine_evaluation_order(dependency_analysis.dependency_graph);
 
@@ -239,12 +231,8 @@ mod tests {
         let type_table = type_analysis.check(&spec);
         let type_table = type_table.as_ref().expect("We expect in these tests that the type analysis checks out.");
 
-        let mut version_analyzer = LolaVersionAnalysis::new(&handler, &type_table);
-        let _version = version_analyzer.analyse(&spec);
-
-        let dependency_analysis =
-            analyse_dependencies(&spec, &version_analyzer.result, &decl_table, &handler, &type_table);
-        let mut type_analysis = TypeAnalysis::new(&handler, &mut decl_table);
+        let dependency_analysis = analyse_dependencies(&spec, &decl_table, &handler, &type_table);
+        let _ = TypeAnalysis::new(&handler, &mut decl_table);
         let (_, pruned_graph) = determine_evaluation_order(dependency_analysis.dependency_graph);
 
         let future_dependent_stream = future_dependent_stream(&pruned_graph);

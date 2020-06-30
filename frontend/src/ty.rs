@@ -13,6 +13,9 @@ use unifier::ValueVar;
 use uom::si::frequency::hertz;
 use uom::si::rational64::Frequency as UOM_Frequency;
 
+/**
+Configuration of the type system in the frontend.
+*/
 #[derive(Debug, Clone, Copy, Default)]
 pub struct TypeConfig {
     /// allow only 64bit types, i.e., `Int64`, `UInt64`, and `Float64`
@@ -29,84 +32,157 @@ pub struct Ty {
     stream: StreamTy,
 }
 
+/**
+The possible stream types describing the temporal behavior of a stream.
+*/
 #[derive(Debug, PartialEq, Eq, PartialOrd, Clone, Hash)]
 pub enum StreamTy {
     /// An event stream with the given dependencies
     Event(Activation<NodeId>),
-    // A real-time stream with given frequency
+    /// A real-time stream with given frequency
     RealTime(Freq),
-    /// The type of the stream should be inferred as the conjunction of the given `StreamTy`
+    /// **INTERNAL USE**: The type of the stream should be inferred as the conjunction of the given `StreamTy`
     Infer(Vec<NodeId>),
 }
 
 /// The `value` type, storing information about the stored values (`Bool`, `UInt8`, etc.)
 #[derive(Debug, PartialEq, Eq, PartialOrd, Clone, Hash)]
 pub enum ValueTy {
+    /// The boolean value type.
     Bool,
+    /// A signed integer value type. See `IntTy` for more information.
     Int(IntTy),
+    /// An unsigned integer value type. See `UIntTy` for more information.
     UInt(UIntTy),
+    /// A floating-point value type. See `FloatTy` for more information.
     Float(FloatTy),
     // an abstract data type, e.g., structs, enums, etc.
     //Adt(AdtDef),
+    /// A utf-8 encoded string type.
     String,
+    /// A byte string type.
     Bytes,
+    /// A tuple of value types.
     Tuple(Vec<ValueTy>),
     /// an optional value type, e.g., resulting from accessing a stream with offset -1
     Option(Box<ValueTy>),
     /// Used during type inference
     Infer(ValueVar),
+    /// Constraint used during type inference
     Constr(TypeConstraint),
     /// A reference to a generic parameter in a function declaration, e.g. `T` in `a<T>(x:T) -> T`
     Param(u8, String),
+    /**
+     **INTERNAL USE**: A type error.
+     */
     Error,
 }
 
+/**
+The possible signed integer value types.
+*/
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
 pub enum IntTy {
+    /**
+    Signed 8-bit integer value type.
+    */
     I8,
+    /**
+    Signed 16-bit integer value type.
+    */
     I16,
+    /**
+    Signed 32-bit integer value type.
+    */
     I32,
+    /**
+    Signed 64-bit integer value type.
+    */
     I64,
 }
 use self::IntTy::*;
 
+/**
+The possible unsigned integer value types.
+*/
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
 pub enum UIntTy {
+    /**
+    Unsigned 8-bit integer value type.
+    */
     U8,
+    /**
+    Unsigned 16-bit integer value type.
+    */
     U16,
+    /**
+    Unsigned 32-bit integer value type.
+    */
     U32,
+    /**
+    Unsigned 64-bit integer value type.
+    */
     U64,
 }
 use self::UIntTy::*;
 
+/**
+The possible floating-point value types.
+*/
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
 pub enum FloatTy {
+    /**
+    16-bit floating-point value type.
+    */
     F16,
+    /**
+    32-bit floating-point value type.
+    */
     F32,
+    /**
+    64-bit floating-point value type.
+    */
     F64,
 }
 use self::FloatTy::*;
 
+/**
+The frequency with which a stream gets executed.
+*/
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
 pub struct Freq {
-    pub(crate) freq: UOM_Frequency,
+    /**
+    The frequency stored in the format provided by the `uom` crate.
+    */
+    pub freq: UOM_Frequency,
 }
 
+/**
+The activation condition describes when an event-based stream produces a new value.
+*/
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Hash)]
 pub enum Activation<Var> {
+    /**
+    When all of the activation conditions is true.
+    */
     Conjunction(Vec<Self>),
+    /**
+    When one of the activation conditions is true.
+    */
     Disjunction(Vec<Self>),
+    /**
+    Whenever the specified stream produces a new value.
+    */
     Stream(Var),
+    /**
+    Whenever an event-based stream produces a new value.
+    */
     True,
 }
 
 impl std::fmt::Display for Freq {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(
-            f,
-            "{}",
-            self.freq.clone().into_format_args(uom::si::frequency::hertz, uom::fmt::DisplayStyle::Abbreviation)
-        )
+        write!(f, "{}", self.freq.clone().into_format_args(hertz, uom::fmt::DisplayStyle::Abbreviation))
     }
 }
 
@@ -179,14 +255,14 @@ impl Activation<NodeId> {
             (Conjunction(c_l), Conjunction(c_r)) => {
                 let mut con = c_l.clone();
                 con.extend(c_r.iter().cloned());
-                Activation::Conjunction(con)
+                Conjunction(con)
             }
             (Conjunction(c), other) | (other, Conjunction(c)) => {
                 let mut con = c.clone();
                 con.push(other.clone());
-                Activation::Conjunction(con)
+                Conjunction(con)
             }
-            (_, _) => Activation::Conjunction(vec![self.clone(), other.clone()]),
+            (_, _) => Conjunction(vec![self.clone(), other.clone()]),
         }
     }
 }
@@ -301,6 +377,11 @@ impl ValueTy {
         }
     }
 
+    /**
+    Returns whether this type is a primitive type.
+
+    Primitive types are the built-in types except compound types such as tuples.
+    */
     pub fn is_primitive(&self) -> bool {
         use self::ValueTy::*;
         match self {
@@ -399,19 +480,36 @@ impl std::fmt::Display for Activation<NodeId> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd)]
+/**
+Type constraint used during type checking and type inference.
+
+**FOR INERNAL USE**
+*/
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Copy)]
 pub enum TypeConstraint {
+    /**
+    The type must be a signed integer type.
+    */
     SignedInteger,
+    /**
+    The type must be an unsigned integer type.
+    */
     UnsignedInteger,
+    /**
+    The type must be a floating-point type.
+    */
     FloatingPoint,
     /// signed + unsigned integer
     Integer,
     /// integer + floating point
     Numeric,
-    /// Types that can be comparaed, i.e., implement `==`
+    /// Types that can be compared, i.e., implement `==`
     Equatable,
     /// Types that can be ordered, i.e., implement `<`, `>`,
     Comparable,
+    /**
+    The type is unconstrained.
+    */
     Unconstrained,
 }
 

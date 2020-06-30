@@ -2,7 +2,6 @@ use crate::analysis::TypeTable;
 use crate::ast::*;
 use crate::parse::{NodeId, Span};
 use crate::reporting::Handler;
-use crate::reporting::LabeledSpan;
 use crate::ty::StreamTy;
 use std::collections::HashMap;
 
@@ -10,16 +9,13 @@ pub(crate) type LolaVersionTable = HashMap<NodeId, LanguageSpec>;
 type WhyNot = (Span, String);
 
 struct VersionTracker {
-    pub cannot_be_classic: Option<WhyNot>,
-    pub cannot_be_lola2: Option<WhyNot>,
+    pub(crate) cannot_be_classic: Option<WhyNot>,
+    pub(crate) cannot_be_lola2: Option<WhyNot>,
 }
 
 impl VersionTracker {
     fn from_stream(is_parameterized: Option<WhyNot>, is_timed: Option<WhyNot>) -> Self {
-        Self {
-            cannot_be_classic: is_parameterized.or_else(|| is_timed.clone()),
-            cannot_be_lola2: is_timed.clone(),
-        }
+        Self { cannot_be_classic: is_parameterized.or_else(|| is_timed.clone()), cannot_be_lola2: is_timed.clone() }
     }
 }
 
@@ -79,7 +75,7 @@ fn analyse_expression(version_tracker: &mut VersionTracker, expr: &Expression, t
 }
 
 pub(crate) struct LolaVersionAnalysis<'a> {
-    pub result: LolaVersionTable,
+    pub(crate) result: LolaVersionTable,
     handler: &'a Handler,
     type_table: &'a TypeTable,
 }
@@ -173,16 +169,8 @@ impl<'a> LolaVersionAnalysis<'a> {
 
         self.rule_out_versions_based_on_inputs(&spec, &mut reason_against_classic_lola);
 
-        self.rule_out_versions_based_on_outputs(
-            &spec,
-            &mut reason_against_classic_lola,
-            &mut reason_against_lola2,
-        );
-        self.rule_out_versions_based_on_triggers(
-            &spec,
-            &mut reason_against_classic_lola,
-            &mut reason_against_lola2,
-        );
+        self.rule_out_versions_based_on_outputs(&spec, &mut reason_against_classic_lola, &mut reason_against_lola2);
+        self.rule_out_versions_based_on_triggers(&spec, &mut reason_against_classic_lola, &mut reason_against_lola2);
 
         // Try to use the minimal Lola version or give an error containing the reasons why none of the versions is possible.
         if reason_against_classic_lola.is_none() {

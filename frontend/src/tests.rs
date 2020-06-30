@@ -1,8 +1,8 @@
-//! End-to-end tests of the StreamLAB frontend
+//! End-to-end tests of the RTLola frontend
 
 use super::*;
 
-fn parse(spec: &str) -> Result<LolaIR, String> {
+fn parse(spec: &str) -> Result<RTLolaIR, String> {
     super::parse("stdin", spec, FrontendConfig::default())
 }
 

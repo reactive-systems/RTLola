@@ -1,4 +1,4 @@
-//! This module contains the logic for the `streamlab-analyze` binary.
+//! This module contains the logic for the `rtlola-analyze` binary.
 
 use std::error::Error;
 use std::fs::File;
@@ -16,6 +16,19 @@ use crate::reporting::Handler;
 use crate::ty::TypeConfig;
 use crate::FrontendConfig;
 
+#[rustfmt::skip]
+/**
+Run the `rtlola-analyzer` program.
+
+**Warning: This will will in general exit the process on error.**  
+Only problems while reading the input file result in returning an `Err<Box<dyn Error>>`
+*/
+#[allow(non_snake_case)]
+pub fn runAnalysisCLI(args: &[String]) -> Result<(), Box<dyn Error>> {
+    let config = Config::new(args);
+    config.run()
+}
+
 const CONFIG: FrontendConfig =
     FrontendConfig { ty: TypeConfig { use_64bit_only: true, type_aliases: true }, allow_parameters: true };
 
@@ -27,17 +40,17 @@ enum Analysis {
     IR,
 }
 
-pub struct Config {
+pub(crate) struct Config {
     which: Analysis,
     filename: String,
 }
 
 impl Config {
-    pub fn new(args: &[String]) -> Self {
-        let matches = App::new("streamlab-analyze")
+    pub(crate) fn new(args: &[String]) -> Self {
+        let matches = App::new("rtlola-analyze")
             .version(env!("CARGO_PKG_VERSION"))
             .author(env!("CARGO_PKG_AUTHORS"))
-            .about("streamlab-analyze is a tool to analyze Lola specifications")
+            .about("rtlola-analyze is a tool to analyze Lola specifications")
             .arg(Arg::with_name("v").short("v").multiple(true).required(false).help("Sets the level of verbosity"))
             .arg(Arg::with_name("INPUT").help("Sets the input file to use").required(true).index(1))
             .subcommand(SubCommand::with_name("parse").about("Parses the input file and outputs parse tree"))
@@ -59,7 +72,7 @@ impl Config {
             0 => LevelFilter::Warn,
             1 => LevelFilter::Info,
             2 => LevelFilter::Debug,
-            3 | _ => LevelFilter::Trace,
+            _ => LevelFilter::Trace,
         };
 
         let filename = matches.value_of("INPUT").map(std::string::ToString::to_string).unwrap();
@@ -90,7 +103,7 @@ impl Config {
         }
     }
 
-    pub fn run(&self) -> Result<(), Box<dyn Error>> {
+    pub(crate) fn run(&self) -> Result<(), Box<dyn Error>> {
         let mut file = File::open(&self.filename)?;
         let mut contents = String::new();
         file.read_to_string(&mut contents)?;
@@ -106,7 +119,7 @@ impl Config {
                 Ok(())
             }
             Analysis::AST => {
-                let spec = crate::parse::parse(&contents, &handler, self::CONFIG).unwrap_or_else(|e| {
+                let spec = crate::parse::parse(&contents, &handler, CONFIG).unwrap_or_else(|e| {
                     eprintln!("parse error:\n{}", e);
                     std::process::exit(1)
                 });
@@ -114,7 +127,7 @@ impl Config {
                 Ok(())
             }
             Analysis::Prettyprint => {
-                let spec = crate::parse::parse(&contents, &handler, self::CONFIG).unwrap_or_else(|e| {
+                let spec = crate::parse::parse(&contents, &handler, CONFIG).unwrap_or_else(|e| {
                     eprintln!("parse error:\n{}", e);
                     std::process::exit(1)
                 });
@@ -122,38 +135,41 @@ impl Config {
                 Ok(())
             }
             Analysis::Analyze => {
-                let spec = crate::parse::parse(&contents, &handler, self::CONFIG).unwrap_or_else(|e| {
-                    eprintln!("parse error:\n{}", e);
-                    std::process::exit(1)
-                });
-                let report = analysis::analyze(&spec, &handler, self::CONFIG);
-                //println!("{:?}", report);
+                let report = match crate::parse::parse(&contents, &handler, CONFIG)
+                    .map_err(|_| "Parse Error.")
+                    .and_then(|spec| analysis::analyze(&spec, &handler, CONFIG).map_err(|_| "Analysis Error"))
+                {
+                    Err(s) => {
+                        eprintln!("parse error:\n{}", s);
+                        std::process::exit(1)
+                    }
+                    Ok(report) => report,
+                };
+
                 use crate::analysis::graph_based_analysis::MemoryBound;
-                if let Some(r) = report.graph_analysis_result {
-                    match r.memory_requirements {
-                        MemoryBound::Unbounded => println!("The specification has no bound on the memory consumption."),
-                        MemoryBound::Bounded(bytes) => println!("The specification uses at most {} bytes.", bytes),
-                        MemoryBound::Unknown => {
-                            println!("Incomplete specification: we cannot determine the memory consumption.")
-                        }
+                match report.graph_analysis_result.memory_requirements {
+                    MemoryBound::Unbounded => println!("The specification has no bound on the memory consumption."),
+                    MemoryBound::Bounded(bytes) => println!("The specification uses at most {} bytes.", bytes),
+                    MemoryBound::Unknown => {
+                        println!("Incomplete specification: we cannot determine the memory consumption.")
                     }
                 };
                 Ok(())
             }
             Analysis::IR => {
-                let spec = crate::parse::parse(&contents, &handler, self::CONFIG).unwrap_or_else(|e| {
+                let spec = crate::parse::parse(&contents, &handler, CONFIG).unwrap_or_else(|e| {
                     eprintln!("parse error:\n{}", e);
                     std::process::exit(1)
                 });
 
-                let analysis_result = crate::analysis::analyze(&spec, &handler, self::CONFIG);
-                if !analysis_result.is_success() {
-                    return Ok(()); // TODO throw a good `Error`
+                if let Ok(report) = crate::analysis::analyze(&spec, &handler, CONFIG) {
+                    let ir = Lowering::new(&spec, &report).lower();
+                    println!("{:#?}", ir);
+                    Ok(())
+                } else {
+                    println!("Error!");
+                    Ok(()) // TODO throw a good `Error`
                 }
-                assert!(analysis_result.is_success());
-                let ir = Lowering::new(&spec, &analysis_result).lower();
-                println!("{:#?}", ir);
-                Ok(())
             }
         }
     }

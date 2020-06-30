@@ -403,28 +403,14 @@ impl Display for BinOp {
     }
 }
 
-impl Display for LanguageSpec {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        match &self {
-            LanguageSpec::Classic => write!(f, "ClassicLola"),
-            LanguageSpec::Lola2 => write!(f, "Lola 2.0"),
-            LanguageSpec::RTLola => write!(f, "RTLola"),
-        }
-    }
-}
-
 impl Display for Import {
     fn fmt(&self, f: &mut Formatter) -> Result {
         write!(f, "import {}", self.name)
     }
 }
 
-impl Display for LolaSpec {
+impl Display for RTLolaAst {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        if let Some(v) = &self.language {
-            writeln!(f, "version {}", v)?
-        }
-
         for import in &self.imports {
             writeln!(f, "{}", import)?;
         }

@@ -1,8 +1,7 @@
 use super::{DependencyGraph, EIx, Location, NIx, Offset, StreamDependency, StreamNode, TimeOffset};
-use crate::analysis::lola_version::LolaVersionTable;
 use crate::analysis::naming::{Declaration, DeclarationTable};
 use crate::ast;
-use crate::ast::{ExpressionKind, LanguageSpec, LolaSpec, Output, TemplateSpec};
+use crate::ast::{ExpressionKind, Output, RTLolaAst, TemplateSpec};
 use crate::parse::{NodeId, Span};
 use crate::reporting::{DiagnosticBuilder, Handler, LabeledSpan, Level};
 use crate::ty::check::TypeTable;
@@ -14,7 +13,7 @@ use std::collections::HashMap;
 
 #[derive(Debug, Copy, Clone)]
 pub(crate) struct StreamMappingInfo {
-    normal_time_index: NIx,
+    index: NIx,
 }
 
 pub(crate) type StreamMapping = HashMap<NodeId, StreamMappingInfo>;
@@ -27,8 +26,8 @@ enum CycleWeight {
 }
 
 struct CycleTracker {
-    pub positive: Vec<usize>,
-    pub negative: Vec<usize>,
+    pub(crate) positive: Vec<usize>,
+    pub(crate) negative: Vec<usize>,
 }
 
 impl Default for CycleTracker {
@@ -40,9 +39,8 @@ impl Default for CycleTracker {
 #[derive(Debug)]
 struct DependencyAnalyser<'a> {
     dependency_graph: DependencyGraph,
-    spec: &'a LolaSpec,
-    version_table: &'a LolaVersionTable,
-    naming_table: &'a DeclarationTable<'a>,
+    spec: &'a RTLolaAst,
+    naming_table: &'a DeclarationTable,
     handler: &'a Handler,
     type_table: &'a TypeTable,
     stream_names: HashMap<NodeId, String>,
@@ -51,8 +49,8 @@ struct DependencyAnalyser<'a> {
 // TODO add fields
 #[derive(Debug)]
 pub(crate) struct DependencyAnalysis {
-    pub dependency_graph: DependencyGraph,
-    pub nodes_with_positive_cycle: Vec<NodeId>,
+    pub(crate) dependency_graph: DependencyGraph,
+    pub(crate) nodes_with_positive_cycle: Vec<NodeId>,
 }
 
 struct CycleFinder<'a> {
@@ -180,68 +178,28 @@ impl<'a> DependencyAnalyser<'a> {
         // for each trigger add one node
         for trigger in &self.spec.trigger {
             let id = trigger.id;
-            match self.version_table[&id] {
-                LanguageSpec::RTLola => {
-                    let normal_time_index = self
-                        .dependency_graph
-                        .add_node(StreamNode::RTTrigger(id, self.type_table.get_stream_type(id).clone()));
-                    mapping.insert(id, StreamMappingInfo { normal_time_index });
-                }
-                LanguageSpec::Classic | LanguageSpec::Lola2 => {
-                    let normal_time_index = self.dependency_graph.add_node(StreamNode::Trigger(id));
-                    mapping.insert(id, StreamMappingInfo { normal_time_index });
-                }
-            }
+            let index =
+                self.dependency_graph.add_node(StreamNode::RTTrigger(id, self.type_table.get_stream_type(id).clone()));
+            mapping.insert(id, StreamMappingInfo { index });
         }
     }
 
     fn add_output_nodes(&mut self, mapping: &mut HashMap<NodeId, StreamMappingInfo>) {
-        // for each output add a node
         for output in &self.spec.outputs {
             let id = output.id;
             self.stream_names.insert(id, output.name.name.clone());
-            match self.version_table[&id] {
-                LanguageSpec::Classic => {
-                    let normal_time_index = self
-                        .dependency_graph
-                        .add_node(StreamNode::ClassicOutput(id));
-                    mapping.insert(id, StreamMappingInfo { normal_time_index });
-                }
-                LanguageSpec::Lola2 => {
-                    let normal_time_index = self
-                        .dependency_graph
-                        .add_node(StreamNode::ParameterizedOutput(id));
-                    mapping.insert(id, StreamMappingInfo { normal_time_index });
-                }
-                LanguageSpec::RTLola => {
-                    let normal_time_index = self
-                        .dependency_graph
-                        .add_node(StreamNode::RTOutput(id, self.type_table.get_stream_type(id).clone()));
-                    mapping.insert(id, StreamMappingInfo { normal_time_index });
-                }
-            }
+            let index =
+                self.dependency_graph.add_node(StreamNode::RTOutput(id, self.type_table.get_stream_type(id).clone()));
+            mapping.insert(id, StreamMappingInfo { index });
         }
     }
 
     fn add_input_nodes(&mut self, mapping: &mut HashMap<NodeId, StreamMappingInfo>) {
-        // for each input add a node
         for input in &self.spec.inputs {
             let id = input.id;
             self.stream_names.insert(id, input.name.name.clone());
-            match self.version_table[&id] {
-                LanguageSpec::Classic => {
-                    let normal_time_index =
-                        self.dependency_graph.add_node(StreamNode::ClassicInput(id));
-                    mapping.insert(id, StreamMappingInfo { normal_time_index });
-                }
-                LanguageSpec::Lola2 => {
-                    let normal_time_index = self
-                        .dependency_graph
-                        .add_node(StreamNode::ParameterizedInput(id));
-                    mapping.insert(id, StreamMappingInfo { normal_time_index });
-                }
-                LanguageSpec::RTLola => unreachable!(),
-            }
+            let index = self.dependency_graph.add_node(StreamNode::ClassicInput(id));
+            mapping.insert(id, StreamMappingInfo { index });
         }
     }
 
@@ -269,9 +227,9 @@ impl<'a> DependencyAnalyser<'a> {
     ) {
         match &expr.kind {
             ExpressionKind::Tuple(elements) | ExpressionKind::Function(_, _, elements) => {
-                elements.iter().for_each(|element| {
-                    self.add_edges_for_expression(current_node, element, location, mapping)
-                });
+                elements
+                    .iter()
+                    .for_each(|element| self.add_edges_for_expression(current_node, element, location, mapping));
             }
             ExpressionKind::MissingExpression | ExpressionKind::Lit(_) => {}
             ExpressionKind::Default(stream, default) => {
@@ -297,7 +255,7 @@ impl<'a> DependencyAnalyser<'a> {
                 Declaration::In(input) => {
                     let target_stream_id = input.id;
                     let target_stream_entry = mapping[&target_stream_id];
-                    let target_stream_index = target_stream_entry.normal_time_index;
+                    let target_stream_index = target_stream_entry.index;
                     self.dependency_graph.add_edge(
                         current_node,
                         target_stream_index,
@@ -307,7 +265,7 @@ impl<'a> DependencyAnalyser<'a> {
                 Declaration::Out(output) => {
                     let target_stream_id = output.id;
                     let target_stream_entry = mapping[&target_stream_id];
-                    let target_stream_index = target_stream_entry.normal_time_index;
+                    let target_stream_index = target_stream_entry.index;
                     self.dependency_graph.add_edge(
                         current_node,
                         target_stream_index,
@@ -327,7 +285,7 @@ impl<'a> DependencyAnalyser<'a> {
                     _ => unreachable!(),
                 };
                 let target_stream_entry = mapping[&target_stream_id];
-                let target_stream_index = target_stream_entry.normal_time_index;
+                let target_stream_index = target_stream_entry.index;
 
                 let offset = self.translate_offset(offset);
                 self.dependency_graph.add_edge(
@@ -347,7 +305,7 @@ impl<'a> DependencyAnalyser<'a> {
                     _ => unreachable!(),
                 };
                 let target_stream_entry = mapping[&target_stream_id];
-                let target_stream_index = target_stream_entry.normal_time_index;
+                let target_stream_index = target_stream_entry.index;
 
                 let offset = Offset::SlidingWindow;
                 self.dependency_graph.add_edge(
@@ -366,9 +324,9 @@ impl<'a> DependencyAnalyser<'a> {
             }
             ExpressionKind::Method(inner, _, _, params) => {
                 self.add_edges_for_expression(current_node, inner, location, mapping);
-                params.iter().for_each(|element| {
-                    self.add_edges_for_expression(current_node, element, location, mapping)
-                });
+                params
+                    .iter()
+                    .for_each(|element| self.add_edges_for_expression(current_node, element, location, mapping));
             }
         }
     }
@@ -433,18 +391,13 @@ impl<'a> DependencyAnalyser<'a> {
     fn add_output_dependencies(&mut self, mut mapping: &mut HashMap<NodeId, StreamMappingInfo>) {
         for output in &self.spec.outputs {
             let id = output.id;
-            let current_node = mapping[&id].normal_time_index;
-            self.handle_expression(&mut mapping, &output, id, current_node);
+            let current_node = mapping[&id].index;
+            self.handle_expression(&mut mapping, &output, current_node);
 
-            match self.version_table[&id] {
-                LanguageSpec::Classic => {}
-                LanguageSpec::Lola2 | LanguageSpec::RTLola => {
-                    if let Some(ref template_spec) = output.template_spec {
-                        self.handle_invoke(&mut mapping, current_node, template_spec);
-                        self.handle_extend(&mut mapping, current_node, template_spec);
-                        self.handle_terminate(&mut mapping, current_node, template_spec);
-                    }
-                }
+            if let Some(ref template_spec) = output.template_spec {
+                self.handle_invoke(&mut mapping, current_node, template_spec);
+                self.handle_extend(&mut mapping, current_node, template_spec);
+                self.handle_terminate(&mut mapping, current_node, template_spec);
             }
         }
     }
@@ -468,7 +421,7 @@ impl<'a> DependencyAnalyser<'a> {
                     }
                 };
                 if by_name {
-                    let accessed_node = mapping[&target_id].normal_time_index;
+                    let accessed_node = mapping[&target_id].index;
                     self.dependency_graph.add_edge(
                         current_node,
                         accessed_node,
@@ -478,12 +431,7 @@ impl<'a> DependencyAnalyser<'a> {
             }
             // otherwise it is an expression
             if !by_name {
-                self.add_edges_for_expression(
-                    current_node,
-                    &invoke_spec.target,
-                    Location::Invoke,
-                    &mut mapping,
-                );
+                self.add_edges_for_expression(current_node, &invoke_spec.target, Location::Invoke, &mut mapping);
             }
 
             // check the unless/if
@@ -511,12 +459,7 @@ impl<'a> DependencyAnalyser<'a> {
         template_spec: &TemplateSpec,
     ) {
         if let Some(ref terminate_spec) = template_spec.ter {
-            self.add_edges_for_expression(
-                current_node,
-                &terminate_spec.target,
-                Location::Terminate,
-                &mut mapping,
-            );
+            self.add_edges_for_expression(current_node, &terminate_spec.target, Location::Terminate, &mut mapping);
         }
     }
 
@@ -524,27 +467,16 @@ impl<'a> DependencyAnalyser<'a> {
         &mut self,
         mut mapping: &mut HashMap<NodeId, StreamMappingInfo>,
         output: &Output,
-        id: NodeId,
         current_node: NodeIndex<u32>,
     ) {
-        self.add_edges_for_expression(
-            current_node,
-            &output.expression,
-            Location::Expression,
-            &mut mapping,
-        );
+        self.add_edges_for_expression(current_node, &output.expression, Location::Expression, &mut mapping);
     }
 
     fn add_trigger_dependencies(&mut self, mut mapping: &mut HashMap<NodeId, StreamMappingInfo>) {
         for trigger in &self.spec.trigger {
             let id = trigger.id;
-            let current_node = mapping[&id].normal_time_index;
-            self.add_edges_for_expression(
-                current_node,
-                &trigger.expression,
-                Location::Expression,
-                &mut mapping,
-            );
+            let current_node = mapping[&id].index;
+            self.add_edges_for_expression(current_node, &trigger.expression, Location::Expression, &mut mapping);
         }
     }
 
@@ -557,6 +489,7 @@ impl<'a> DependencyAnalyser<'a> {
 
         // At this point we have all nodes.
         // Input streams are therefore already completely processed
+
         // Triggers still need their expression checked
         // TODO in the future we may have to add information about the extension
         self.add_trigger_dependencies(&mut mapping);
@@ -615,13 +548,8 @@ impl<'a> DependencyAnalyser<'a> {
             .node_weight(node_index)
             .expect("We do not modify the graph so every NodeIndex should still be valid.");
         let stream_id = match node {
-            StreamNode::ClassicOutput(id)
-            | StreamNode::ParameterizedOutput(id)
-            | StreamNode::RTOutput(id, _) => id,
-            StreamNode::ClassicInput(_)
-            | StreamNode::ParameterizedInput(_)
-            | StreamNode::Trigger(_)
-            | StreamNode::RTTrigger(_,_) => {
+            StreamNode::RTOutput(id, _) => id,
+            StreamNode::ClassicInput(_) | StreamNode::RTTrigger(_, _) => {
                 unreachable!("Inputs and triggers must never appear in a cycle.")
             }
         };
@@ -797,13 +725,8 @@ impl<'a> DependencyAnalyser<'a> {
         let start_node_info =
             self.dependency_graph.node_weight(edge_start_index).expect("The graph library just us this NodeIndex");
         match start_node_info {
-            StreamNode::ClassicOutput(id)
-            | StreamNode::ParameterizedOutput(id)
-            | StreamNode::RTOutput(id, _) => id,
-            StreamNode::ClassicInput(_)
-            | StreamNode::ParameterizedInput(_)
-            | StreamNode::Trigger(_)
-            | StreamNode::RTTrigger(_,_) => {
+            StreamNode::RTOutput(id, _) => id,
+            StreamNode::ClassicInput(_) | StreamNode::RTTrigger(_, _) => {
                 unreachable!("Inputs and triggers must never appear in a cycle.")
             }
         }
@@ -811,8 +734,7 @@ impl<'a> DependencyAnalyser<'a> {
 }
 
 pub(crate) fn analyse_dependencies<'a>(
-    spec: &'a LolaSpec,
-    version_table: &'a LolaVersionTable,
+    spec: &'a RTLolaAst,
     naming_table: &'a DeclarationTable,
     handler: &'a Handler,
     type_table: &TypeTable,
@@ -820,7 +742,6 @@ pub(crate) fn analyse_dependencies<'a>(
     let analyser = DependencyAnalyser {
         dependency_graph: DependencyGraph::default(),
         spec,
-        version_table,
         naming_table,
         handler,
         type_table,
@@ -832,7 +753,6 @@ pub(crate) fn analyse_dependencies<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::analysis::lola_version::LolaVersionAnalysis;
     use crate::analysis::naming::NamingAnalysis;
     use crate::parse::parse;
     use crate::parse::SourceMapper;
@@ -850,11 +770,7 @@ mod tests {
         let mut type_analysis = TypeAnalysis::new(&handler, &mut decl_table);
         let type_table = type_analysis.check(&ast);
         let type_table = type_table.as_ref().expect("We expect in these tests that the type analysis checks out.");
-        let mut version_analyzer = LolaVersionAnalysis::new(&handler, &type_table);
-        let version = version_analyzer.analyse(&ast);
-        assert!(!version.is_none(), "We only analyze dependencies for specifications that so far seem to be ok.");
-        let _dependency_analysis =
-            analyse_dependencies(&ast, &version_analyzer.result, &decl_table, &handler, &type_table);
+        let _dependency_analysis = analyse_dependencies(&ast, &decl_table, &handler, &type_table);
         assert_eq!(num_errors, handler.emitted_errors());
         assert_eq!(num_warnings, handler.emitted_warnings());
     }

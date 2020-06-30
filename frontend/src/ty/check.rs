@@ -10,8 +10,8 @@ use super::unifier::{InferError, UnifiableTy, Unifier, ValueUnifier, ValueVar};
 use super::{Activation, Freq, StreamTy, TypeConstraint, ValueTy};
 use crate::analysis::naming::{Declaration, DeclarationTable};
 use crate::ast::{
-    BinOp, Constant, Expression, ExpressionKind, FunctionName, Input, Literal, LolaSpec, Offset,
-    Output, StreamAccessKind, Trigger, Type, TypeKind, WindowOperation,
+    BinOp, Constant, Expression, ExpressionKind, FunctionName, Input, Literal, Offset, Output, RTLolaAst,
+    StreamAccessKind, Trigger, Type, TypeKind, WindowOperation,
 };
 use crate::parse::{NodeId, Span};
 use crate::reporting::{Handler, LabeledSpan};
@@ -20,14 +20,17 @@ use crate::stdlib::{FuncDecl, MethodLookup};
 use log::{debug, trace};
 use num::traits::ops::inv::Inv;
 use num::Signed;
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    rc::Rc,
+};
 use uom::si::frequency::hertz;
 use uom::si::rational64::Frequency as UOM_Frequency;
 use uom::si::time::second;
 
 pub(crate) struct TypeAnalysis<'a, 'b, 'c> {
     handler: &'b Handler,
-    declarations: &'c mut DeclarationTable<'a>,
+    declarations: &'c mut DeclarationTable,
     method_lookup: MethodLookup<'a>,
     unifier: ValueUnifier<ValueTy>,
     /// maps `NodeId`'s to the variables used in `unifier`
@@ -64,7 +67,7 @@ impl TypeTable {
 }
 
 impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
-    pub(crate) fn new(handler: &'b Handler, declarations: &'c mut DeclarationTable<'a>) -> TypeAnalysis<'a, 'b, 'c> {
+    pub(crate) fn new(handler: &'b Handler, declarations: &'c mut DeclarationTable) -> TypeAnalysis<'a, 'b, 'c> {
         TypeAnalysis {
             handler,
             declarations,
@@ -76,7 +79,7 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
         }
     }
 
-    pub(crate) fn check(&mut self, spec: &'a LolaSpec) -> Option<TypeTable> {
+    pub(crate) fn check(&mut self, spec: &'a RTLolaAst) -> Option<TypeTable> {
         self.imports(spec);
         self.infer_types(spec);
         if self.handler.contains_error() {
@@ -93,7 +96,7 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
         }
     }
 
-    fn extract_type_table(&mut self, spec: &'a LolaSpec) -> TypeTable {
+    fn extract_type_table(&mut self, spec: &'a RTLolaAst) -> TypeTable {
         let value_nids: Vec<NodeId> = self.value_vars.keys().cloned().collect();
         let vtt: HashMap<NodeId, ValueTy> = value_nids.into_iter().map(|nid| (nid, self.get_type(nid))).collect();
         let stt: HashMap<NodeId, StreamTy> = self.stream_ty.clone();
@@ -120,7 +123,7 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
         TypeTable { value_tt: vtt, stream_tt: stt, func_tt, acti_cond }
     }
 
-    fn imports(&mut self, spec: &'a LolaSpec) {
+    fn imports(&mut self, spec: &'a RTLolaAst) {
         stdlib::import_implicit_method(&mut self.method_lookup);
         for import in &spec.imports {
             match import.name.name.as_str() {
@@ -134,7 +137,7 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
         }
     }
 
-    fn infer_types(&mut self, spec: &'a LolaSpec) {
+    fn infer_types(&mut self, spec: &'a RTLolaAst) {
         trace!("infer types");
         for constant in &spec.constants {
             self.infer_constant(constant).unwrap_or_else(|_| {
@@ -318,7 +321,7 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
         match &expression.kind {
             Lit(_) => {}
             Ident(_) => {
-                let decl = self.declarations[&expression.id];
+                let decl = self.declarations[&expression.id].clone();
 
                 match decl {
                     Declaration::Const(_) => {}
@@ -487,7 +490,7 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
         match &expr.kind {
             Lit(_) => {}
             Ident(_) => {
-                let decl = self.declarations[&expr.id];
+                let decl = self.declarations[&expr.id].clone();
 
                 match decl {
                     Declaration::Const(_) => {}
@@ -528,7 +531,7 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
                 self.check_output_clock_expression(stream_ty, right)?;
             }
             StreamAccess(inner, access_type) => {
-                let inner_ty = match self.declarations[&inner.id] {
+                let inner_ty = match self.declarations[&inner.id].clone() {
                     Declaration::In(input) => &self.stream_ty[&input.id],
                     Declaration::Out(output) => &self.stream_ty[&output.id],
                     _ => unreachable!(),
@@ -619,7 +622,7 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
                 // recursion
                 // stream types have to match
                 if let ExpressionKind::Ident(_) = &expr.kind {
-                    let decl = self.declarations[&expr.id];
+                    let decl = self.declarations[&expr.id].clone();
 
                     let id = match decl {
                         Declaration::In(input) => input.id,
@@ -710,7 +713,7 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
 
     fn parse_activation_condition(&mut self, out_id: NodeId, expr: &Expression) -> Result<Activation<NodeId>, ()> {
         match &expr.kind {
-            ExpressionKind::Ident(_) => match self.declarations[&expr.id] {
+            ExpressionKind::Ident(_) => match self.declarations[&expr.id].clone() {
                 Declaration::In(input) => Ok(Activation::Stream(input.id)),
                 Declaration::Out(output) => {
                     if output.id == out_id {
@@ -766,7 +769,7 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
         match &ast_ty.kind {
             TypeKind::Inferred => {}
             TypeKind::Simple(_) => {
-                match self.declarations[&ast_ty.id] {
+                match self.declarations[&ast_ty.id].clone() {
                     Declaration::Type(ty) => {
                         // ?ty_var = `ty`
                         self.unifier.unify_var_ty(ty_var, (*ty).clone()).expect("cannot fail as `ty_var` is fresh");
@@ -922,7 +925,7 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
                 // no stream type constraint is needed
             }
             Ident(_) => {
-                let decl = self.declarations[&expr.id];
+                let decl = self.declarations[&expr.id].clone();
 
                 match decl {
                     Declaration::Const(constant) => {
@@ -984,13 +987,13 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
                 self.infer_expression(inner, Some(ValueTy::Infer(target_var)))?;
             }
             Function(_name, types, params) => {
-                let decl = self.declarations[&expr.id];
+                let decl = self.declarations[&expr.id].clone();
                 let fun_decl = match decl {
-                    Declaration::Func(fun_decl) => fun_decl.clone(),
+                    Declaration::Func(fun_decl) => fun_decl,
                     Declaration::ParamOut(out) => {
                         // create matching function declaration
                         assert!(!out.params.is_empty());
-                        FuncDecl {
+                        Rc::new(FuncDecl {
                             name: FunctionName { name: out.name.clone(), arg_names: vec![None; out.params.len()] },
                             generics: Vec::new(),
                             parameters: out
@@ -999,7 +1002,7 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
                                 .map(|param| ValueTy::Infer(self.value_vars[&param.ty.id]))
                                 .collect(),
                             return_type: ValueTy::Infer(self.value_vars[&out.id]),
-                        }
+                        })
                     }
                     _ => unreachable!("ensured by naming analysis"),
                 };
@@ -1039,9 +1042,9 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
                 // recursion
                 self.infer_expression(base, None)?;
 
-                if let Some(infered) = self.unifier.get_type(self.value_vars[&base.id]) {
-                    debug!("{} {}", base, infered);
-                    if let Some(fun_decl) = self.method_lookup.get(&infered, &name) {
+                if let Some(inferred) = self.unifier.get_type(self.value_vars[&base.id]) {
+                    debug!("{} {}", base, inferred);
+                    if let Some(fun_decl) = self.method_lookup.get(&inferred, &name) {
                         debug!("{:?}", fun_decl);
 
                         for ty in types {
@@ -1059,11 +1062,11 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
                             parameters.as_slice(),
                         )?;
 
-                        self.declarations.insert(expr.id, fun_decl.into());
+                        self.declarations.insert(expr.id, Declaration::Func(Rc::new(fun_decl.clone())));
                     } else {
                         self.handler.error_with_span(
                             &format!("unknown method `{}`", name),
-                            LabeledSpan::new(expr.span, &format!("no method `{}` for `{}`", name, infered), true),
+                            LabeledSpan::new(expr.span, &format!("no method `{}` for `{}`", name, inferred), true),
                         );
                     }
                 } else {
@@ -1329,7 +1332,7 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
     }
 
     /// Assigns types as infered
-    fn assign_types(&mut self, spec: &LolaSpec) {
+    fn assign_types(&mut self, spec: &RTLolaAst) {
         for constant in &spec.constants {
             debug!(
                 "{} has type {}",
@@ -1468,7 +1471,7 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
     /// The resulting AC is a Boolean Condition over Inpuut Stream References.
     pub(crate) fn get_activation_condition(
         &mut self,
-        spec: &'a LolaSpec,
+        spec: &'a RTLolaAst,
         id: NodeId,
     ) -> Option<Activation<crate::ir::StreamReference>> {
         if !self.stream_ty.contains_key(&id) {
@@ -1531,7 +1534,7 @@ impl<'a, 'b, 'c> TypeAnalysis<'a, 'b, 'c> {
 
     fn translate_activation_condition(
         &self,
-        spec: &'a LolaSpec,
+        spec: &'a RTLolaAst,
         ac: &Activation<NodeId>,
     ) -> Option<Activation<crate::ir::StreamReference>> {
         Some(match ac {
@@ -2198,24 +2201,25 @@ mod tests {
         let spec = "input a: Int32\ntrigger a > 50";
         let type_table = type_check(spec);
         // expression `a > 50` has NodeId = 3
-        assert_eq!(type_table.get_value_type(NodeId::new(3)), &ValueTy::Bool);
-        assert_eq!(type_table.get_func_arg_types(NodeId::new(3)), &vec![ValueTy::Int(IntTy::I32)]);
+        let exp_a_gt_50_id = NodeId::new(5);
+        assert_eq!(type_table.get_value_type(exp_a_gt_50_id), &ValueTy::Bool);
+        assert_eq!(type_table.get_func_arg_types(exp_a_gt_50_id), &vec![ValueTy::Int(IntTy::I32)]);
     }
 
     #[test]
     fn test_conjunctive_stream_types() {
         let spec = "input a: Int32\ninput b: Int32\noutput x := a + b";
         let type_table = type_check(spec);
-        // input `a` has NodeId = 0
-        // input `b` has NodeId = 2
-        // output `x` has NodeId = 4
-        assert_eq!(type_table.get_value_type(NodeId::new(4)), &ValueTy::Int(IntTy::I32));
+        // input `a` has NodeId = 1
+        let a_id = NodeId::new(1);
+        // input `b` has NodeId = 3
+        let b_id = NodeId::new(3);
+        // output `x` has NodeId = 9
+        let x_id = NodeId::new(9);
+        assert_eq!(type_table.get_value_type(x_id), &ValueTy::Int(IntTy::I32));
         assert_eq!(
-            type_table.get_stream_type(NodeId::new(4)),
-            &StreamTy::Event(Activation::Conjunction(vec![
-                Activation::Stream(NodeId::new(0)),
-                Activation::Stream(NodeId::new(2))
-            ]))
+            type_table.get_stream_type(x_id),
+            &StreamTy::Event(Activation::Conjunction(vec![Activation::Stream(a_id), Activation::Stream(b_id)]))
         );
     }
 
@@ -2223,16 +2227,17 @@ mod tests {
     fn test_activation_condition() {
         let spec = "input a: Int32\ninput b: Int32\noutput x @(a || b) := 1";
         let type_table = type_check(spec);
-        // input `a` has NodeId = 0
-        // input `b` has NodeId = 2
-        // output `x` has NodeId = 4
-        assert_eq!(type_table.get_value_type(NodeId::new(4)), &ValueTy::Int(IntTy::I64));
+        // node ids can be verified using `rtlola-analyze spec.lola ast`
+        // input `a` has NodeId = 1
+        let a_id = NodeId::new(1);
+        // input `b` has NodeId = 3
+        let b_id = NodeId::new(3);
+        // output `x` has NodeId = 14
+        let x_id = NodeId::new(14);
+        assert_eq!(type_table.get_value_type(x_id), &ValueTy::Int(IntTy::I64));
         assert_eq!(
-            type_table.get_stream_type(NodeId::new(4)),
-            &StreamTy::Event(Activation::Disjunction(vec![
-                Activation::Stream(NodeId::new(0)),
-                Activation::Stream(NodeId::new(2))
-            ]))
+            type_table.get_stream_type(x_id),
+            &StreamTy::Event(Activation::Disjunction(vec![Activation::Stream(a_id), Activation::Stream(b_id)]))
         );
     }
 
@@ -2240,12 +2245,18 @@ mod tests {
     fn test_realtime_activation_condition() {
         let spec = "output a: Int32 @10Hz := 0\noutput b: Int32 @5Hz := 0\noutput x := a+b";
         let type_table = type_check(spec);
-        // output `a` has NodeId = 0, StreamVar = 0
-        // output `b` has NodeId = 7, StreamVar = 1
-        // output `x` has NodeId = 14
-        assert_eq!(type_table.get_value_type(NodeId::new(14)), &ValueTy::Int(IntTy::I32));
+        // node ids can be verified using `rtlola-analyze spec.lola ast`
+        // output `a` has NodeId = 6
+        let _a_id = NodeId::new(6);
+        // output `b` has NodeId = 13
+        let _b_id = NodeId::new(13);
+        // output `x` has NodeId = 19
+        let x_id = NodeId::new(19);
+
+        assert_eq!(type_table.get_value_type(x_id), &ValueTy::Int(IntTy::I32));
+
         assert_eq!(
-            type_table.get_stream_type(NodeId::new(14)),
+            type_table.get_stream_type(x_id),
             &StreamTy::RealTime(Freq::new(UOM_Frequency::new::<hertz>(Rational::from_u8(5).unwrap())))
         );
     }
@@ -2254,15 +2265,16 @@ mod tests {
     fn test_get() {
         let spec = "input a: Int32\ninput b: Int32\noutput x @(a || b) := a.get().defaults(to: 0)";
         let type_table = type_check(spec);
-        // input `a` has NodeId = 0
-        // input `b` has NodeId = 2
-        // output `x` has NodeId = 4
-        assert_eq!(type_table.get_value_type(NodeId::new(4)), &ValueTy::Int(IntTy::I32));
+        // node ids can be verified using `rtlola-analyze spec.lola ast`
+        // input `a` has NodeId = 1
+        // input `b` has NodeId = 3
+        // output `x` has NodeId = 19
+        assert_eq!(type_table.get_value_type(NodeId::new(19)), &ValueTy::Int(IntTy::I32));
         assert_eq!(
-            type_table.get_stream_type(NodeId::new(4)),
+            type_table.get_stream_type(NodeId::new(19)),
             &StreamTy::Event(Activation::Disjunction(vec![
-                Activation::Stream(NodeId::new(0)),
-                Activation::Stream(NodeId::new(2))
+                Activation::Stream(NodeId::new(1)),
+                Activation::Stream(NodeId::new(3))
             ]))
         );
     }
@@ -2295,40 +2307,45 @@ mod tests {
     fn test_normalization_event_streams() {
         let spec = "input a: Int32\ninput b: Int32\ninput c: Int32\noutput x := a + b\noutput y := x + x + c";
         let type_table = type_check(spec);
-        //  input `a` has NodeId =  0
-        //  input `b` has NodeId =  2
-        //  input `c` has NodeId =  4
-        // output `x` has NodeId =  6
-        // output `y` has NodeId = 12
-        let stream_ty_x = type_table.get_stream_type(NodeId::new(6));
+        // node ids can be verified using `rtlola-analyze spec.lola ast`
+        //  input `a` has NodeId =  1
+        let a_id = NodeId::new(1);
+        //  input `b` has NodeId =  3
+        let b_id = NodeId::new(3);
+        //  input `c` has NodeId =  5
+        let c_id = NodeId::new(5);
+        // output `x` has NodeId = 11
+        let x_id = NodeId::new(11);
+        // output `y` has NodeId = 19
+        let y_id = NodeId::new(19);
+
+        let stream_ty_x = type_table.get_stream_type(x_id);
+
         assert_eq!(
             stream_ty_x,
-            &StreamTy::Event(Activation::Conjunction(vec![
-                Activation::Stream(NodeId::new(0)),
-                Activation::Stream(NodeId::new(2))
-            ]))
+            &StreamTy::Event(Activation::Conjunction(vec![Activation::Stream(a_id), Activation::Stream(b_id)]))
         );
 
-        let stream_ty_y = type_table.get_stream_type(NodeId::new(12));
+        let stream_ty_y = type_table.get_stream_type(y_id);
         assert_eq!(
             stream_ty_y,
             &StreamTy::Event(Activation::Conjunction(vec![
-                Activation::Stream(NodeId::new(0)),
-                Activation::Stream(NodeId::new(2)),
-                Activation::Stream(NodeId::new(4))
+                Activation::Stream(a_id),
+                Activation::Stream(b_id),
+                Activation::Stream(c_id)
             ]))
         );
 
         use crate::ir::StreamReference;
         assert_eq!(
-            type_table.get_acti_cond(NodeId::new(6)),
+            type_table.get_acti_cond(x_id),
             &Activation::Conjunction(vec![
                 Activation::Stream(StreamReference::InRef(0)),
                 Activation::Stream(StreamReference::InRef(1)),
             ])
         );
         assert_eq!(
-            type_table.get_acti_cond(NodeId::new(12)),
+            type_table.get_acti_cond(y_id),
             &Activation::Conjunction(vec![
                 Activation::Stream(StreamReference::InRef(0)),
                 Activation::Stream(StreamReference::InRef(1)),

@@ -2,7 +2,7 @@
 
 ## Execution
 
-Run the `streamlab-e2e-tests.py` with Python >=3.5 from this folder or the repo base.
+Run the `rtlola-interpreter-e2e-tests.py` with Python >=3.5 from this folder or the repo base.
 
 
 
@@ -10,7 +10,7 @@ Run the `streamlab-e2e-tests.py` with Python >=3.5 from this folder or the repo 
 
 You need a specification file and an input file.
 
-Each test case is represented as a file with the `streamlab_test` suffix in this folder.
+Each test case is represented as a file with the `rtlola_interpreter_test` suffix in this folder.
 
 TODO
 JSON format (needs extension for specifying the timestamps)
@@ -28,43 +28,43 @@ A suitable tool for trace generation: [Colasoft Packet Builder](https://www.cola
 
 - activation condition
     - implicit
-        - `add_two_int.streamlab_test`
+        - `add_two_int.rtlola_interpreter_test`
     - explicit
-        - `add_two_int-explicit_ac.streamlab_test`
-        - `conjunct_in_ac.streamlab_test`
+        - `add_two_int-explicit_ac.rtlola_interpreter_test`
+        - `conjunct_in_ac.rtlola_interpreter_test`
 - access
     - synchronous
-        - `add_two_int.streamlab_test` (E➜E))
+        - `add_two_int.rtlola_interpreter_test` (E➜E))
     - hold
-        - `hold_access.streamlab_test` (E➜E)
+        - `hold_access.rtlola_interpreter_test` (E➜E)
     - get
-        - `get_access.streamlab_test` (E➜E)
+        - `get_access.rtlola_interpreter_test` (E➜E)
     - offset
-        - `medium_offset.streamlab_test` (E➜E)
-        - `large_offset.streamlab_test` (E➜E)
-        - `short_offset-holes.streamlab_test` (E➜E)
+        - `medium_offset.rtlola_interpreter_test` (E➜E)
+        - `large_offset.rtlola_interpreter_test` (E➜E)
+        - `short_offset-holes.rtlola_interpreter_test` (E➜E)
 - sliding windows
     - aggregations
         - count
-            - `simple_sliding_window.streamlab_test` (T➜E)
+            - `simple_sliding_window.rtlola_interpreter_test` (T➜E)
         - sum
-            - `simple_sliding_window.streamlab_test` (T➜E)
+            - `simple_sliding_window.rtlola_interpreter_test` (T➜E)
         - average
-            - `simple_sliding_window.streamlab_test` (T➜E)
+            - `simple_sliding_window.rtlola_interpreter_test` (T➜E)
         - integral
-            - `simple_sliding_window.streamlab_test` (T➜E)
+            - `simple_sliding_window.rtlola_interpreter_test` (T➜E)
 - stream kinds
     - event-based
-        - `add_two_int.streamlab_test`
+        - `add_two_int.rtlola_interpreter_test`
         - ...
     - frequency-based
-        - `frequencies.streamlab_test` (T➜E) (T➜T)
+        - `frequencies.rtlola_interpreter_test` (T➜E) (T➜T)
 
 ## Things to do
 
 - add time based checks for triggers ( time since start / absolute time)
 - add tolerance for time based trigger checking
-- adjust `simple_sliding_window.streamlab_test` for the other aggregations
+- adjust `simple_sliding_window.rtlola_interpreter_test` for the other aggregations
 - tuple, and data types, string, regexp
 - forward sliding windows / delay operator
 - min/max

@@ -1,6 +1,9 @@
-//! This module contains the AST data structures for the Lola Language.
+/*! This module contains the AST data structures for the RTLola Language.
 
-pub mod conversion;
+Every node in the abstract syntax tree is assigned a unique id and stores the matching span in the specification.
+*/
+
+pub(crate) mod conversion;
 pub(crate) mod print;
 pub(crate) mod verify;
 
@@ -8,24 +11,23 @@ use super::parse::Ident;
 use crate::parse::NodeId;
 use crate::parse::Span;
 use num::rational::Rational64 as Rational;
+use std::rc::Rc;
 use std::time::Duration;
 
-/// The root Lola specification
+/// The root of a RTLola specification
 #[derive(Debug, Default, Clone)]
-pub struct LolaSpec {
-    pub language: Option<LanguageSpec>,
+pub struct RTLolaAst {
     pub imports: Vec<Import>,
-    pub constants: Vec<Constant>,
-    pub inputs: Vec<Input>,
-    pub outputs: Vec<Output>,
-    pub trigger: Vec<Trigger>,
+    pub constants: Vec<Rc<Constant>>,
+    pub inputs: Vec<Rc<Input>>,
+    pub outputs: Vec<Rc<Output>>,
+    pub trigger: Vec<Rc<Trigger>>,
     pub type_declarations: Vec<TypeDeclaration>,
 }
 
-impl LolaSpec {
-    pub fn new() -> LolaSpec {
-        LolaSpec {
-            language: None,
+impl RTLolaAst {
+    pub(crate) fn new() -> RTLolaAst {
+        RTLolaAst {
             imports: Vec::new(),
             constants: Vec::new(),
             inputs: Vec::new(),
@@ -36,82 +38,72 @@ impl LolaSpec {
     }
 }
 
-/// Versions and Extensions of the Lola language
-#[derive(Debug, PartialEq, Eq, Copy, Clone)]
-pub enum LanguageSpec {
-    /// The original Lola specification language,
-    /// see ``LOLA: Runtime Monitoring of Synchronous Systems'' (https://ieeexplore.ieee.org/document/1443364)
-    Classic,
-
-    /// Extension of Lola to parameterized streams,
-    /// see ``A Stream-based Specification Language for Network Monitoring'' (https://link.springer.com/chapter/10.1007%2F978-3-319-46982-9_10)
-    Lola2,
-
-    /// Extension of Lola to real-time specifications,
-    /// see ``Real-time Stream-based Monitoring'' (https://arxiv.org/abs/1711.03829)
-    RTLola,
-}
-
-impl<'a> From<&'a str> for LanguageSpec {
-    fn from(_string: &str) -> Self {
-        unimplemented!();
-    }
-}
-
+/**
+An AST node representing the import of a module.
+*/
 #[derive(Debug, Clone)]
 pub struct Import {
     pub name: Ident,
-    pub(crate) id: NodeId,
-    pub(crate) span: Span,
+    pub id: NodeId,
+    pub span: Span,
 }
 
-/// A declaration of a constant (stream)
+/**
+An AST node representing the declaration of a constant.
+*/
 #[derive(Debug, Clone)]
 pub struct Constant {
     pub name: Ident,
     pub ty: Option<Type>,
     pub literal: Literal,
     pub id: NodeId,
-    pub(crate) span: Span,
+    pub span: Span,
 }
 
-/// A declaration of an input stream
+/**
+An AST node representing the declaration of an input stream.
+*/
 #[derive(Debug, Clone)]
 pub struct Input {
     pub name: Ident,
     pub ty: Type,
-    pub params: Vec<Parameter>,
+    pub params: Vec<Rc<Parameter>>,
     pub id: NodeId,
-    pub(crate) span: Span,
+    pub span: Span,
 }
 
-/// A declaration of an output stream
+/**
+An AST node representing the declaration of an output stream.
+*/
 #[derive(Debug, Clone)]
 pub struct Output {
     pub name: Ident,
     pub ty: Type,
     pub extend: ActivationCondition,
-    pub params: Vec<Parameter>,
+    pub params: Vec<Rc<Parameter>>,
     pub template_spec: Option<TemplateSpec>,
     pub termination: Option<Expression>,
     pub expression: Expression,
     pub id: NodeId,
-    pub(crate) span: Span,
+    pub span: Span,
 }
 
+/**
+An AST node representing the declaration of a parameter of a stream.
+*/
 #[derive(Debug, Clone)]
 pub struct Parameter {
     pub name: Ident,
     pub ty: Type,
     pub id: NodeId,
-    pub(crate) span: Span,
+    pub span: Span,
 }
 
 #[derive(Debug, Clone)]
 pub struct ActivationCondition {
     pub expr: Option<Expression>,
     pub id: NodeId,
-    pub(crate) span: Span,
+    pub span: Span,
 }
 
 #[derive(Debug, Clone)]
@@ -120,7 +112,7 @@ pub struct TemplateSpec {
     pub ext: Option<ExtendSpec>,
     pub ter: Option<TerminateSpec>,
     pub id: NodeId,
-    pub(crate) span: Span,
+    pub span: Span,
 }
 
 #[derive(Debug, Clone)]
@@ -129,70 +121,81 @@ pub struct InvokeSpec {
     pub condition: Option<Expression>,
     pub is_if: bool,
     pub id: NodeId,
-    pub(crate) span: Span,
+    pub span: Span,
 }
 
 #[derive(Debug, Clone)]
 pub struct ExtendSpec {
     pub target: Expression,
     pub id: NodeId,
-    pub(crate) span: Span,
+    pub span: Span,
 }
 
-pub(crate) type Signum = i8;
+pub type Signum = i8;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct TimeSpec {
     pub signum: Signum,
     pub period: Duration,
     pub exact_period: Rational,
     pub id: NodeId,
-    pub(crate) span: Span,
+    pub span: Span,
 }
 
 #[derive(Debug, Clone)]
 pub struct TerminateSpec {
     pub target: Expression,
     pub id: NodeId,
-    pub(crate) span: Span,
+    pub span: Span,
 }
 
-/// A declaration of a trigger
+/**
+An AST node representing the declaration of a trigger.
+*/
 #[derive(Debug, Clone)]
 pub struct Trigger {
     pub name: Option<Ident>,
     pub expression: Expression,
     pub message: Option<String>,
     pub id: NodeId,
-    pub(crate) span: Span,
+    pub span: Span,
 }
 
+/**
+An AST node representing the declaration of a user-defined type.
+*/
 #[allow(clippy::vec_box)]
 #[derive(Debug, Clone)]
 pub struct TypeDeclaration {
     pub name: Option<Ident>,
     pub fields: Vec<Box<TypeDeclField>>,
-    pub(crate) id: NodeId,
-    pub(crate) span: Span,
+    pub id: NodeId,
+    pub span: Span,
 }
 
+/**
+An AST node representing the declaration of a field of a user-defined type.
+*/
 #[derive(Debug, Clone)]
 pub struct TypeDeclField {
     pub ty: Type,
     pub name: String,
-    pub(crate) id: NodeId,
-    pub(crate) span: Span,
+    pub id: NodeId,
+    pub span: Span,
 }
 
-#[derive(Debug, Clone)]
+/**
+An AST node representing an opening or closing parenthesis.
+*/
+#[derive(Debug, Clone, Copy)]
 pub struct Parenthesis {
-    pub(crate) id: NodeId,
-    pub(crate) span: Span,
+    pub id: NodeId,
+    pub span: Span,
 }
 
 impl Parenthesis {
-    pub fn new(span: Span) -> Parenthesis {
-        Parenthesis { id: NodeId::DUMMY, span }
+    pub(crate) fn new(id: NodeId, span: Span) -> Parenthesis {
+        Parenthesis { id, span }
     }
 }
 
@@ -200,24 +203,24 @@ impl Parenthesis {
 pub struct Type {
     pub kind: TypeKind,
     pub id: NodeId,
-    pub(crate) span: Span,
+    pub span: Span,
 }
 
 impl Type {
-    pub fn new_simple(name: String, span: Span) -> Type {
-        Type { id: NodeId::DUMMY, kind: TypeKind::Simple(name), span }
+    pub(crate) fn new_simple(id: NodeId, name: String, span: Span) -> Type {
+        Type { id, kind: TypeKind::Simple(name), span }
     }
 
-    pub fn new_tuple(tuple: Vec<Type>, span: Span) -> Type {
-        Type { id: NodeId::DUMMY, kind: TypeKind::Tuple(tuple), span }
+    pub(crate) fn new_tuple(id: NodeId, tuple: Vec<Type>, span: Span) -> Type {
+        Type { id, kind: TypeKind::Tuple(tuple), span }
     }
 
-    pub fn new_optional(name: Type, span: Span) -> Type {
-        Type { id: NodeId::DUMMY, kind: TypeKind::Optional(name.into()), span }
+    pub(crate) fn new_optional(id: NodeId, name: Type, span: Span) -> Type {
+        Type { id, kind: TypeKind::Optional(name.into()), span }
     }
 
-    pub fn new_inferred() -> Type {
-        Type { id: NodeId::DUMMY, kind: TypeKind::Inferred, span: Span::unknown() }
+    pub(crate) fn new_inferred(id: NodeId) -> Type {
+        Type { id, kind: TypeKind::Inferred, span: Span::unknown() }
     }
 }
 
@@ -233,9 +236,11 @@ pub enum TypeKind {
     Inferred,
 }
 
-/// An expression
-///
-/// inspired by <https://doc.rust-lang.org/nightly/nightly-rustc/src/syntax/ast.rs.html>
+/**
+An expression
+
+inspired by <https://doc.rust-lang.org/nightly/nightly-rustc/src/syntax/ast.rs.html>
+*/
 #[derive(Debug, Clone)]
 pub struct Expression {
     pub kind: ExpressionKind,
@@ -244,8 +249,8 @@ pub struct Expression {
 }
 
 impl Expression {
-    pub fn new(kind: ExpressionKind, span: Span) -> Expression {
-        Expression { id: NodeId::DUMMY, kind, span }
+    pub(crate) fn new(id: NodeId, kind: ExpressionKind, span: Span) -> Expression {
+        Expression { id, kind, span }
     }
 }
 
@@ -315,7 +320,7 @@ pub enum StreamAccessKind {
     Optional,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Offset {
     Discrete(i16),
     RealTime(Rational, TimeUnit),
@@ -339,25 +344,25 @@ pub enum TimeUnit {
 #[derive(Debug, Clone)]
 pub struct Literal {
     pub kind: LitKind,
-    pub(crate) id: NodeId,
+    pub id: NodeId,
     pub span: Span,
 }
 
 impl Literal {
-    pub fn new_bool(val: bool, span: Span) -> Literal {
-        Literal { id: NodeId::DUMMY, kind: LitKind::Bool(val), span }
+    pub(crate) fn new_bool(id: NodeId, val: bool, span: Span) -> Literal {
+        Literal { id, kind: LitKind::Bool(val), span }
     }
 
-    pub fn new_numeric(val: &str, unit: Option<String>, span: Span) -> Literal {
-        Literal { id: NodeId::DUMMY, kind: LitKind::Numeric(val.to_string(), unit), span }
+    pub(crate) fn new_numeric(id: NodeId, val: &str, unit: Option<String>, span: Span) -> Literal {
+        Literal { id, kind: LitKind::Numeric(val.to_string(), unit), span }
     }
 
-    pub(crate) fn new_str(val: &str, span: Span) -> Literal {
-        Literal { id: NodeId::DUMMY, kind: LitKind::Str(val.to_string()), span }
+    pub(crate) fn new_str(id: NodeId, val: &str, span: Span) -> Literal {
+        Literal { id, kind: LitKind::Str(val.to_string()), span }
     }
 
-    pub(crate) fn new_raw_str(val: &str, span: Span) -> Literal {
-        Literal { id: NodeId::DUMMY, kind: LitKind::RawStr(val.to_string()), span }
+    pub(crate) fn new_raw_str(id: NodeId, val: &str, span: Span) -> Literal {
+        Literal { id, kind: LitKind::RawStr(val.to_string()), span }
     }
 }
 
@@ -368,12 +373,15 @@ pub enum LitKind {
     /// A raw string literal (`r#" x " a \ff "#`)
     RawStr(String),
     /// A numeric value with optional postfix part (`42`, `1.3`, `1Hz`, `100sec`)
-    /// Strored as a string to have lossless representation
+    /// Stores as a string to have lossless representation
     Numeric(String, Option<String>),
     /// A boolean literal (`true`)
     Bool(bool),
 }
 
+/**
+An AST node representing a binary operator.
+*/
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum BinOp {
     /// The `+` operator (addition)
@@ -416,6 +424,9 @@ pub enum BinOp {
     Gt,
 }
 
+/**
+An AST node representing an unary operator.
+*/
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum UnOp {
     /// The `!` operator for logical inversion
@@ -426,9 +437,18 @@ pub enum UnOp {
     BitNot,
 }
 
+/**
+An AST node representing the name of a called function and also the names of the arguments.
+*/
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FunctionName {
+    /**
+    The name of the called function.
+    */
     pub name: Ident,
+    /**
+    A list containing an element for each argument, containing the name if it is a named argument or else `None`.
+    */
     pub arg_names: Vec<Option<Ident>>,
 }
 

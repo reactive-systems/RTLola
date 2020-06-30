@@ -1,16 +1,22 @@
+/*!
+This module describes the intermediate representation of a specification.
+*/
+
 pub(crate) mod lowering;
 mod print;
+mod schedule;
 
-pub use crate::ast::StreamAccessKind; // Re-export needed for IR
-pub use crate::ast::WindowOperation; // Re-export needed for IR
-use crate::ty::ValueTy;
-pub use crate::ty::{Activation, FloatTy, IntTy, UIntTy}; // Re-export needed for IR
+pub use crate::ast::StreamAccessKind;
+pub use crate::ast::WindowOperation;
+pub use crate::ir::schedule::{Deadline, Schedule};
+pub use crate::ty::{Activation, FloatTy, IntTy, UIntTy, ValueTy}; // Re-export needed for IR
+
 use std::time::Duration;
 use uom::si::rational64::Frequency as UOM_Frequency;
 use uom::si::rational64::Time as UOM_Time;
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct LolaIR {
+pub struct RTLolaIR {
     /// All input streams.
     pub inputs: Vec<InputStream>,
     /// All output streams with the bare minimum of information.
@@ -23,8 +29,6 @@ pub struct LolaIR {
     pub sliding_windows: Vec<SlidingWindow>,
     /// A collection of triggers
     pub triggers: Vec<Trigger>,
-    /// A collection of flags representing features the specification requires.
-    pub feature_flags: Vec<FeatureFlag>,
 }
 
 /// Represents a value type. Stream types are no longer relevant.
@@ -93,7 +97,7 @@ pub struct InputStream {
     pub ty: Type,
     pub dependent_streams: Vec<Tracking>,
     pub dependent_windows: Vec<WindowReference>,
-    pub(crate) layer: u32,
+    pub layer: u32,
     pub memory_bound: MemorizationBound,
     pub reference: StreamReference,
 }
@@ -109,12 +113,12 @@ pub struct OutputStream {
     pub dependent_streams: Vec<Tracking>,
     pub dependent_windows: Vec<WindowReference>,
     pub memory_bound: MemorizationBound,
-    pub(crate) layer: u32,
+    pub layer: u32,
     pub reference: StreamReference,
     pub ac: Option<Activation<StreamReference>>,
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct TimeDrivenStream {
     pub reference: StreamReference,
     pub frequency: UOM_Frequency,
@@ -274,18 +278,6 @@ pub struct SlidingWindow {
     pub ty: Type,
 }
 
-/// Each flag represents a certain feature of Lola not necessarily available in all version of the
-/// language or for all functions of the front-end.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum FeatureFlag {
-    DiscreteFutureOffset,
-    RealTimeOffset,
-    RealTimeFutureOffset,
-    SlidingWindows,
-    DiscreteWindows,
-    UnboundedMemory,
-}
-
 /////// Referencing Structures ///////
 
 /// Allows for referencing a window instance.
@@ -428,7 +420,7 @@ impl Ord for Offset {
     }
 }
 
-impl LolaIR {
+impl RTLolaIR {
     pub fn input_refs(&self) -> Vec<InputReference> {
         (0..self.inputs.len()).collect()
     }
@@ -437,7 +429,7 @@ impl LolaIR {
         (0..self.outputs.len()).collect()
     }
 
-    pub(crate) fn get_in_mut(&mut self, reference: StreamReference) -> &mut InputStream {
+    pub fn get_in_mut(&mut self, reference: StreamReference) -> &mut InputStream {
         match reference {
             StreamReference::InRef(ix) => &mut self.inputs[ix],
             StreamReference::OutRef(_) => unreachable!("Called `LolaIR::get_in` with a `StreamReference::OutRef`."),
@@ -451,7 +443,7 @@ impl LolaIR {
         }
     }
 
-    pub(crate) fn get_out_mut(&mut self, reference: StreamReference) -> &mut OutputStream {
+    pub fn get_out_mut(&mut self, reference: StreamReference) -> &mut OutputStream {
         match reference {
             StreamReference::InRef(_) => unreachable!("Called `LolaIR::get_out` with a `StreamReference::InRef`."),
             StreamReference::OutRef(ix) => &mut self.outputs[ix],
@@ -529,6 +521,10 @@ impl LolaIR {
             }
         }
         layers
+    }
+
+    pub fn compute_schedule(&self) -> Result<Schedule, String> {
+        Schedule::from(self)
     }
 }
 

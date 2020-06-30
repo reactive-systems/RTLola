@@ -1,6 +1,6 @@
-# StreamLAB Syntax
+# RTLola Syntax
 
-This document is a reference for the syntax of StreamLAB specifications.
+This document is a reference for the syntax of RTLola specifications.
 
 
 ## Stream Declarations

@@ -5,7 +5,7 @@ use crate::analysis::naming::Declaration;
 use crate::analysis::DeclarationTable;
 use crate::analysis::TypeTable;
 use crate::ast;
-use crate::ast::{ExpressionKind, LolaSpec, WindowOperation};
+use crate::ast::{ExpressionKind, RTLolaAst, WindowOperation};
 use crate::ty::StreamTy;
 use num::rational::Rational64 as Rational;
 use num::ToPrimitive;
@@ -38,10 +38,10 @@ fn determine_needed_window_memory(type_size: u128, number_of_element: u128, op: 
     }
 }
 
-fn add_sliding_windows<'a>(
+fn add_sliding_windows(
     expr: &ast::Expression,
     type_table: &TypeTable,
-    declaration_table: &DeclarationTable<'a>,
+    declaration_table: &DeclarationTable,
 ) -> MemoryBound {
     let mut required_memory: u128 = 0;
     let mut unknown_size = false;
@@ -195,12 +195,12 @@ fn add_sliding_windows<'a>(
     }
 }
 
-pub(crate) fn determine_worst_case_memory_consumption<'a>(
-    spec: &LolaSpec,
+pub(crate) fn determine_worst_case_memory_consumption(
+    spec: &RTLolaAst,
     buffer_requirements: &SpaceRequirements,
     tracking_requirements: &TrackingRequirements,
     type_table: &TypeTable,
-    declaration_table: &DeclarationTable<'a>,
+    declaration_table: &DeclarationTable,
 ) -> MemoryBound {
     //----------------------
     // fixed shared overhead
@@ -213,7 +213,7 @@ pub(crate) fn determine_worst_case_memory_consumption<'a>(
                 let buffer_size_per_instance = match storage_requirement {
                     StorageRequirement::Finite(size) => u128::from(*size),
                     StorageRequirement::FutureRef(_) => unreachable!(),
-                    StorageRequirement::Unbounded => unimplemented!(),
+                    StorageRequirement::Unbounded => return MemoryBound::Unbounded,
                 };
                 let value_type = type_table.get_value_type(input.id);
                 let value_type_size = match get_byte_size(value_type) {
@@ -242,7 +242,7 @@ pub(crate) fn determine_worst_case_memory_consumption<'a>(
                 let buffer_size_per_instance = match storage_requirement {
                     StorageRequirement::Finite(size) => u128::from(*size),
                     StorageRequirement::FutureRef(_) => 0u128,
-                    StorageRequirement::Unbounded => unimplemented!(),
+                    StorageRequirement::Unbounded => return MemoryBound::Unbounded,
                 };
                 let value_type = type_table.get_value_type(output.id);
                 let value_type_size = match get_byte_size(value_type) {

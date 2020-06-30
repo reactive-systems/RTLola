@@ -82,7 +82,7 @@ cargo:test-nightly:
     - rustc --version && cargo --version      # Print version info for debugging
     - cargo build
     - (cargo test -- -Z unstable-options --format json | cargo2junit > results.xml) || true # ignore the return code so that we can show the complete output (including ignored tests)
-    - python3 ./tests/streamlab-e2e-tests.py || true        # count the e2e test for coverage but keep going
+    - python3 ./tests/rtlola-interpreter-e2e-tests.py || true        # count the e2e test for coverage but keep going
     - grcov ./target/debug/ -s . -t html --llvm --branch --ignore-not-existing -o ./target/debug/coverage/
     - cat ./target/debug/coverage/index.html
     - cargo test --all --verbose
@@ -106,7 +106,7 @@ integration_tests:
   variables:
     BUILD_MODE: "release"
   script:
-    - python3 ./tests/streamlab-e2e-tests.py
+    - python3 ./tests/rtlola-interpreter-e2e-tests.py
   artifacts:
     when: always
     reports:
@@ -157,9 +157,9 @@ release-windows:
   script:
     - rustup run stable-msvc cargo build --release --target x86_64-pc-windows-msvc --features public
   artifacts:
-    name: "streamlab-windows-${CI_COMMIT_REF_NAME}_${CI_COMMIT_SHORT_SHA}"
+    name: "rtlola-interpreter-windows-${CI_COMMIT_REF_NAME}_${CI_COMMIT_SHORT_SHA}"
     paths:
-      - target/x86_64-pc-windows-msvc/release/streamlab.exe
+      - target/x86_64-pc-windows-msvc/release/rtlola-interpreter.exe
       - Cargo.lock
 
 
@@ -180,9 +180,9 @@ release-windows:
 #  script:
 #    - rustup run stable-gnu cargo build --release --target x86_64-pc-windows-gnu --features public
 #  artifacts:
-#    name: "streamlab-windows-gnu-${CI_COMMIT_REF_NAME}_${CI_COMMIT_SHORT_SHA}"
+#    name: "rtlola-interpreter-windows-gnu-${CI_COMMIT_REF_NAME}_${CI_COMMIT_SHORT_SHA}"
 #    paths:
-#      - target/x86_64-pc-windows-gnu/release/streamlab.exe
+#      - target/x86_64-pc-windows-gnu/release/rtlola-interpreter.exe
 #      - Cargo.lock
 
 release-linux:
@@ -201,9 +201,9 @@ release-linux:
   script:
     - cargo build --release --target x86_64-unknown-linux-musl --features public
   artifacts:
-    name: "streamlab-linux-${CI_COMMIT_REF_NAME}_${CI_COMMIT_SHORT_SHA}"
+    name: "rtlola-interpreter-linux-${CI_COMMIT_REF_NAME}_${CI_COMMIT_SHORT_SHA}"
     paths:
-      - target/x86_64-unknown-linux-musl/release/streamlab
+      - target/x86_64-unknown-linux-musl/release/rtlola-interpreter
       - Cargo.lock
 
 #release-macos:
@@ -223,7 +223,7 @@ release-linux:
 #  script:
 #    - rustup run stable-msvc cargo build --release --target x86_64-apple-darwin --features public
 #  artifacts:
-#    name: "streamlab-macos-${CI_COMMIT_REF_NAME}_${CI_COMMIT_SHORT_SHA}"
+#    name: "rtlola-interpreter-macos-${CI_COMMIT_REF_NAME}_${CI_COMMIT_SHORT_SHA}"
 #    paths:
-#      - target/x86_64-apple-darwin/release/streamlab
+#      - target/x86_64-apple-darwin/release/rtlola-interpreter
 #      - Cargo.lock

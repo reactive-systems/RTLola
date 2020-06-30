@@ -1,0 +1,39 @@
+[package]
+name = "rtlola-interpreter"
+version = "0.3.2"
+authors = [
+    "Malte Schledjewski <schledjewski@react.uni-saarland.de>",
+    "Maximilian Schwenger <schwenger@react.uni-saarland.de>",
+    "Marvin Stenger <stenger@react.uni-saarland.de>",
+    "Leander Tentrup <tentrup@react.uni-saarland.de>",
+    "Florian Kohn <s8flkohn@stud.uni-saarland.de>"
+]
+edition = "2018"
+
+[[bin]]
+name = "rtlola-interpreter"
+path = "src/bin/rtlola.rs"
+
+[dependencies]
+rtlola-frontend = {path = "../frontend"}
+ordered-float = "1.0.2"
+csv = "1.1.1"
+pcap_on_demand = "0.1.3" # pcap file parsing
+etherparse = "0.9.0" # Network Packet parser
+ip_network = "0.3.4" # IP Address handling
+clap = "2.33.0"  # command line parsing
+byteorder = "1.3.2"
+crossterm = "0.10.2"  # terminal output
+bit-set = "0.5.1"
+crossbeam-channel = "0.4"
+regex = "1.2.1"
+humantime = "2.0"
+spin_sleep = "0.3.7"
+human-panic = { version = "1.0.1", optional = true }
+either = "1.5.3"
+
+[features]
+public = ["human-panic"]
+
+[dev-dependencies]
+tempfile = "3.1.0"

@@ -5,9 +5,8 @@ mod input_dependencies;
 mod memory_analysis;
 pub mod space_requirements;
 
-use super::lola_version::LolaVersionTable;
 use super::DeclarationTable;
-use crate::ast::LolaSpec;
+use crate::ast::RTLolaAst;
 use crate::parse::{NodeId, Span};
 use crate::reporting::Handler;
 use crate::ty::check::TypeTable;
@@ -39,15 +38,13 @@ pub(crate) struct GraphAnalysisResult {
     pub(crate) input_dependencies: RequiredInputs,
 }
 
-pub(crate) fn analyze<'a>(
-    spec: &'a LolaSpec,
-    version_analysis: &LolaVersionTable,
-    declaration_table: &DeclarationTable<'a>,
+pub(crate) fn analyze(
+    spec: &RTLolaAst,
+    declaration_table: &DeclarationTable,
     type_table: &TypeTable,
     handler: &Handler,
 ) -> Result<GraphAnalysisResult, String> {
-    let dependency_analysis =
-        dependency_graph::analyse_dependencies(spec, version_analysis, declaration_table, &handler, type_table);
+    let dependency_analysis = dependency_graph::analyse_dependencies(spec, declaration_table, &handler, type_table);
 
     if handler.contains_error() {
         handler.error("aborting due to previous error");
@@ -86,13 +83,9 @@ pub(crate) fn analyze<'a>(
 
 #[derive(Debug, Clone)]
 pub(crate) enum StreamNode {
-    ClassicInput(NodeId),
-    ClassicOutput(NodeId),
-    ParameterizedInput(NodeId),
-    ParameterizedOutput(NodeId),
     RTOutput(NodeId, StreamTy),
-    Trigger(NodeId),
     RTTrigger(NodeId, StreamTy),
+    ClassicInput(NodeId),
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -161,13 +154,7 @@ type EIx = petgraph::prelude::EdgeIndex;
 
 fn get_ast_id(dependent_node: &StreamNode) -> NodeId {
     match dependent_node {
-        StreamNode::ClassicOutput(id)
-        | StreamNode::ParameterizedOutput(id)
-        | StreamNode::RTOutput(id, _)
-        | StreamNode::ClassicInput(id)
-        | StreamNode::ParameterizedInput(id)
-        | StreamNode::Trigger(id)
-        | StreamNode::RTTrigger(id, _) => *id,
+        StreamNode::RTOutput(id, _) | StreamNode::ClassicInput(id) | StreamNode::RTTrigger(id, _) => *id,
     }
 }
 

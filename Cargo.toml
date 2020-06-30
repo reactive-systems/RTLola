@@ -1,9 +1,8 @@
 [workspace]
 
 members = [
-  "common",
   "frontend",
-  "evaluator",
   "input-analyzer",
+  "interpreter",
 ]
 

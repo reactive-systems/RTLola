@@ -6,6 +6,13 @@ use crate::parse::SourceMapper;
 use crate::reporting::Handler;
 use crate::FrontendConfig;
 
+#[rustfmt::skip]
+/**
+Analyses the specification in the file specified by `filename` with a frontend configured by `config`.
+
+**Warning: This exits the process on errors.**  
+This is exposed as the `analyze` subcommand by the interpreter.
+*/
 pub fn analyze(filename: &str, config: FrontendConfig) {
     let contents = fs::read_to_string(filename).unwrap_or_else(|e| {
         eprintln!("Could not read file `{}`: {}", filename, e);

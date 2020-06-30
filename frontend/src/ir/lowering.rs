@@ -3,23 +3,26 @@ use crate::ty::check::TypeTable;
 // Only import the unambiguous Nodes, use `ast::`/`ir::` prefix for disambiguation.
 use crate::analysis::naming::Declaration;
 use crate::ast;
-use crate::ast::{ExpressionKind, LolaSpec};
+use crate::ast::{ExpressionKind, RTLolaAst};
 use crate::ir;
 use crate::ir::{
-    EventDrivenStream, LolaIR, MemorizationBound, StreamAccessKind, StreamReference, TimeDrivenStream, WindowReference,
+    EventDrivenStream, MemorizationBound, RTLolaIR, StreamAccessKind, StreamReference, TimeDrivenStream,
+    WindowReference,
 };
 use crate::parse::NodeId;
 use crate::ty::StreamTy;
 use std::collections::HashMap;
 use std::convert::TryInto;
-use std::time::Duration;
+use std::{rc::Rc, time::Duration};
 
 use crate::analysis::graph_based_analysis::evaluation_order::{EvalOrder, EvaluationOrderResult};
 use crate::analysis::graph_based_analysis::space_requirements::{
     SpaceRequirements as MemoryTable, TrackingRequirements,
 };
-use crate::analysis::graph_based_analysis::{ComputeStep, RequiredInputs, StorageRequirement, TrackingRequirement};
-use crate::analysis::AnalysisResult;
+use crate::analysis::{
+    graph_based_analysis::{ComputeStep, RequiredInputs, StorageRequirement, TrackingRequirement},
+    Report,
+};
 
 use num::{traits::Inv, Signed, ToPrimitive};
 use uom::si::frequency::hertz;
@@ -29,47 +32,45 @@ use uom::si::time::{nanosecond, second};
 type EvalTable = HashMap<NodeId, u32>;
 
 pub(crate) struct Lowering<'a> {
-    ast: &'a LolaSpec,
+    ast: &'a RTLolaAst,
     ref_lookup: HashMap<NodeId, StreamReference>,
-    dt: &'a DeclarationTable<'a>,
+    dt: &'a DeclarationTable,
     tt: &'a TypeTable,
     et: EvalTable,
     mt: &'a MemoryTable,
     tr: &'a TrackingRequirements,
-    ir: LolaIR,
+    ir: RTLolaIR,
     ri: &'a RequiredInputs,
 }
 
 impl<'a> Lowering<'a> {
-    pub(crate) fn new(ast: &'a LolaSpec, analysis_result: &'a AnalysisResult<'a>) -> Lowering<'a> {
-        let mut ir = LolaIR {
+    pub(crate) fn new(ast: &'a RTLolaAst, analysis_result: &'a Report) -> Lowering<'a> {
+        let mut ir = RTLolaIR {
             inputs: Vec::new(),
             outputs: Vec::new(),
             time_driven: Vec::new(),
             event_driven: Vec::new(),
             sliding_windows: Vec::new(),
             triggers: Vec::new(),
-            feature_flags: Vec::new(),
         };
 
         ir.inputs.reserve(ast.inputs.len());
         ir.outputs.reserve(ast.outputs.len());
-        let graph = analysis_result.graph_analysis_result.as_ref().unwrap();
 
         Lowering {
             ast,
             ref_lookup: Lowering::create_ref_lookup(&ast.inputs, &ast.outputs),
-            dt: analysis_result.declaration_table.as_ref().unwrap(),
-            tt: analysis_result.type_table.as_ref().unwrap(),
-            et: Self::order_to_table(&graph.evaluation_order),
-            mt: &graph.space_requirements,
-            tr: &graph.tracking_requirements,
+            dt: &analysis_result.declaration_table,
+            tt: &analysis_result.type_table,
+            et: Self::order_to_table(&analysis_result.graph_analysis_result.evaluation_order),
+            mt: &analysis_result.graph_analysis_result.space_requirements,
+            tr: &analysis_result.graph_analysis_result.tracking_requirements,
             ir,
-            ri: &graph.input_dependencies,
+            ri: &analysis_result.graph_analysis_result.input_dependencies,
         }
     }
 
-    pub(crate) fn lower(mut self) -> LolaIR {
+    pub(crate) fn lower(mut self) -> RTLolaIR {
         self.lower_ast();
         self.ir
     }
@@ -420,8 +421,8 @@ impl<'a> Lowering<'a> {
 
     fn lower_storage_req(&self, req: StorageRequirement) -> MemorizationBound {
         match req {
-            StorageRequirement::Finite(b) => MemorizationBound::Bounded(b as u16),
-            StorageRequirement::FutureRef(b) => MemorizationBound::Bounded(b as u16),
+            StorageRequirement::Finite(b) => MemorizationBound::Bounded(b),
+            StorageRequirement::FutureRef(b) => MemorizationBound::Bounded(b),
             StorageRequirement::Unbounded => MemorizationBound::Unbounded,
         }
     }
@@ -689,7 +690,7 @@ impl<'a> Lowering<'a> {
             .collect()
     }
 
-    fn lower_offset(&self, target: ir::StreamReference, offset: &ast::Offset) -> ir::Offset {
+    fn lower_offset(&self, target: StreamReference, offset: &ast::Offset) -> ir::Offset {
         match offset {
             &ast::Offset::Discrete(val) if val < 0 => {
                 assert!(val < 0); // Should be checked by type checker, though.
@@ -805,7 +806,7 @@ impl<'a> Lowering<'a> {
             .collect()
     }
 
-    fn create_ref_lookup(inputs: &[ast::Input], outputs: &[ast::Output]) -> HashMap<NodeId, StreamReference> {
+    fn create_ref_lookup(inputs: &[Rc<ast::Input>], outputs: &[Rc<ast::Output>]) -> HashMap<NodeId, StreamReference> {
         let ins = inputs.iter().enumerate().map(|(ix, i)| (i.id, StreamReference::InRef(ix)));
         let outs = outputs.iter().enumerate().map(|(ix, o)| (o.id, StreamReference::OutRef(ix))); // Re-start indexing @ 0.
         ins.chain(outs).collect()
@@ -827,9 +828,7 @@ impl<'a> Lowering<'a> {
             }
             res.into_iter()
         };
-        o2t(&eo.periodic_streams_order)
-            .chain(o2t(&eo.event_based_streams_order))
-            .collect()
+        o2t(&eo.periodic_streams_order).chain(o2t(&eo.event_based_streams_order)).collect()
     }
 
     fn get_decl(&self, nid: NodeId) -> &Declaration {
@@ -864,12 +863,12 @@ mod tests {
     use crate::ir::*;
     use crate::FrontendConfig;
 
-    fn spec_to_ir(spec: &str) -> LolaIR {
+    fn spec_to_ir(spec: &str) -> RTLolaIR {
         crate::parse("stdin", spec, FrontendConfig::default()).expect("spec was invalid")
     }
 
     fn check_stream_number(
-        ir: &LolaIR,
+        ir: &RTLolaIR,
         inputs: usize,
         outputs: usize,
         time: usize,

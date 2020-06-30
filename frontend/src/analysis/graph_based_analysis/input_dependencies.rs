@@ -17,7 +17,7 @@ pub(crate) fn determine_required_inputs(dependency_graph: &DependencyGraph) -> R
         let node_info = dependency_graph.node_weight(node).expect("we iterate over the NIx");
         let mut visited: HashSet<NIx> = HashSet::new();
         let mut stack: Vec<NIx> = Vec::new();
-        if let StreamNode::ClassicInput(node_id) | StreamNode::ParameterizedInput(node_id) = node_info {
+        if let StreamNode::ClassicInput(node_id) = node_info {
             visited.clear();
             stack.push(node);
             visited.insert(node);

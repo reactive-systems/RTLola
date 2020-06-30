@@ -8,11 +8,11 @@ use std::collections::HashMap;
 
 /// A (possibly generic) function declaration
 #[derive(Debug, Clone)]
-pub struct FuncDecl {
-    pub name: FunctionName,
-    pub generics: Vec<ValueTy>,
-    pub parameters: Vec<ValueTy>,
-    pub return_type: ValueTy,
+pub(crate) struct FuncDecl {
+    pub(crate) name: FunctionName,
+    pub(crate) generics: Vec<ValueTy>,
+    pub(crate) parameters: Vec<ValueTy>,
+    pub(crate) return_type: ValueTy,
 }
 
 impl FuncDecl {
@@ -189,7 +189,7 @@ lazy_static! {
     };
 }
 
-pub(crate) fn import_implicit_module<'a>(fun_scope: &mut ScopedDecl<'a>) {
+pub(crate) fn import_implicit_module(fun_scope: &mut ScopedDecl) {
     fun_scope.add_fun_decl(&CAST);
 }
 
@@ -197,7 +197,7 @@ pub(crate) fn import_implicit_method(lookup: &mut MethodLookup) {
     lookup.add(ValueTy::Bytes, &BYTES_AT);
 }
 
-pub(crate) fn import_math_module<'a>(fun_scope: &mut ScopedDecl<'a>) {
+pub(crate) fn import_math_module(fun_scope: &mut ScopedDecl) {
     fun_scope.add_fun_decl(&SQRT);
     fun_scope.add_fun_decl(&COS);
     fun_scope.add_fun_decl(&SIN);
@@ -207,7 +207,7 @@ pub(crate) fn import_math_module<'a>(fun_scope: &mut ScopedDecl<'a>) {
     fun_scope.add_fun_decl(&MAX);
 }
 
-pub(crate) fn import_regex_module<'a>(fun_scope: &mut ScopedDecl<'a>) {
+pub(crate) fn import_regex_module(fun_scope: &mut ScopedDecl) {
     fun_scope.add_fun_decl(&MATCHES_STRING_REGEX);
 }
 

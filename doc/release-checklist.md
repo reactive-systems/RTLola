@@ -41,10 +41,10 @@ rustup run stable-gnu cargo build --release --target x86_64-pc-windows-gnu --loc
 
 We currently provide a single zip containing
 
-* binaries (`streamlab-linux`, `streamlab-mac`, and `streamlab-windows.exe`)
+* binaries (`rtlola-interpreter-linux`, `rtlola-interpreter-mac`, and `rtlola-interpreter.exe`)
 * evaluator readme (`/evaluator/readme.md`)
 * syntax description (`/doc/syntax.md`)
 * changelog (`/CHANGELOG.md`)
-* ids description (`/doc/streamlab-ids.md`)
+* ids description (`/doc/rtlola-ids.md`)
 
-using the naming convention `streamlab-TAG.zip`, e.g., `streamlab-0.1.0.zip`.
+using the naming convention `rtlola-interpreter-TAG.zip`, e.g., `rtlola-interpreter-0.1.0.zip`.

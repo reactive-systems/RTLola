@@ -6,54 +6,43 @@
 //! * `type_checker` checks whether components of the AST have a valid type
 
 pub(crate) mod graph_based_analysis;
-pub(crate) mod id_assignment;
-mod lola_version;
-pub mod naming;
+// pub(crate) mod id_assignment;
+pub(crate) mod naming;
 
-use self::lola_version::LolaVersionAnalysis;
 use self::naming::NamingAnalysis;
-use super::ast::LolaSpec;
 use crate::ast;
+use crate::ast::RTLolaAst;
 use crate::reporting::Handler;
 use crate::ty::check::TypeAnalysis;
 use crate::FrontendConfig;
 
-pub trait AnalysisError<'a>: std::fmt::Debug {}
-
 // Export output types.
 pub(crate) use self::graph_based_analysis::GraphAnalysisResult;
 pub(crate) use self::naming::DeclarationTable;
-pub(crate) use crate::ast::LanguageSpec;
 pub(crate) use crate::ty::check::TypeTable;
 
-pub(crate) struct AnalysisResult<'a> {
-    pub(crate) declaration_table: Option<DeclarationTable<'a>>,
-    pub(crate) type_table: Option<TypeTable>,
-    pub(crate) version: Option<LanguageSpec>,
-    pub(crate) graph_analysis_result: Option<GraphAnalysisResult>,
+pub(crate) struct Report {
+    pub(crate) declaration_table: DeclarationTable,
+    pub(crate) type_table: TypeTable,
+    pub(crate) graph_analysis_result: GraphAnalysisResult,
 }
 
-impl<'a> AnalysisResult<'a> {
-    fn new() -> AnalysisResult<'a> {
-        AnalysisResult { declaration_table: None, type_table: None, version: None, graph_analysis_result: None }
-    }
-
-    pub(crate) fn is_success(&self) -> bool {
-        self.declaration_table.is_some()
-            && self.type_table.is_some()
-            && self.version.is_some()
-            && self.graph_analysis_result.is_some()
+impl Report {
+    fn new(
+        declaration_table: DeclarationTable,
+        type_table: TypeTable,
+        graph_analysis_result: GraphAnalysisResult,
+    ) -> Report {
+        Report { declaration_table, type_table, graph_analysis_result }
     }
 }
 
-pub(crate) fn analyze<'a, 'b>(spec: &'a LolaSpec, handler: &'b Handler, config: FrontendConfig) -> AnalysisResult<'a> {
-    let mut result = AnalysisResult::new();
-
+pub(crate) fn analyze(spec: &RTLolaAst, handler: &Handler, config: FrontendConfig) -> Result<Report, ()> {
     ast::verify::Verifier::new(spec, handler).check();
 
     if handler.contains_error() {
         handler.error("aborting due to previous error");
-        return result;
+        return Err(());
     }
 
     let mut naming_analyzer = NamingAnalysis::new(&handler, config);
@@ -61,46 +50,28 @@ pub(crate) fn analyze<'a, 'b>(spec: &'a LolaSpec, handler: &'b Handler, config: 
 
     if handler.contains_error() {
         handler.error("aborting due to previous error");
-        return result;
+        return Err(());
     }
 
     let mut type_analysis = TypeAnalysis::new(&handler, &mut decl_table);
     let type_table = type_analysis.check(&spec);
     assert_eq!(type_table.is_none(), handler.contains_error());
 
-    result.declaration_table = Some(decl_table);
-
     if handler.contains_error() {
         handler.error("aborting due to previous error");
-        return AnalysisResult::new();
-    } else {
-        result.type_table = type_table;
+        return Err(());
     }
 
-    let mut version_analyzer =
-        LolaVersionAnalysis::new(&handler, result.type_table.as_ref().expect("We already checked for type errors"));
-    let version_result = version_analyzer.analyse(spec);
-    if version_result.is_none() {
-        print!("error");
-        return AnalysisResult::new();
-    } else {
-        result.version = version_result;
-    }
+    let tt = type_table.unwrap();
 
-    let graph_result = graph_based_analysis::analyze(
-        spec,
-        &version_analyzer.result,
-        result.declaration_table.as_ref().expect("We already checked for naming errors"),
-        result.type_table.as_mut().expect("We already checked for type errors"),
-        &handler,
-    );
+    let graph_result = graph_based_analysis::analyze(spec, &decl_table, &tt, &handler);
 
     if handler.contains_error() || graph_result.is_err() {
         handler.error("aborting due to previous error");
-        return AnalysisResult::new();
-    } else {
-        result.graph_analysis_result = graph_result.ok();
+        return Err(());
     }
 
-    result
+    let graph_res = graph_result.unwrap();
+
+    Ok(Report::new(decl_table, tt, graph_res))
 }

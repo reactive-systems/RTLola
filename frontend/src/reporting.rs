@@ -12,7 +12,7 @@ use termcolor::{ColorChoice, StandardStream, WriteColor};
 
 /// A handler is responsible for emitting warnings and errors
 #[derive(Debug)]
-pub struct Handler {
+pub(crate) struct Handler {
     error_count: RefCell<usize>,
     warning_count: RefCell<usize>,
     emitter: RefCell<Box<dyn Emitter>>,
@@ -20,7 +20,7 @@ pub struct Handler {
 }
 
 impl Handler {
-    pub fn new(mapper: SourceMapper) -> Self {
+    pub(crate) fn new(mapper: SourceMapper) -> Self {
         Handler {
             error_count: RefCell::new(0),
             warning_count: RefCell::new(0),
@@ -301,7 +301,7 @@ impl StderrEmitter {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Level {
+pub(crate) enum Level {
     /// A compiler bug
     #[allow(dead_code)]
     Bug,
@@ -318,12 +318,12 @@ pub enum Level {
 
 /// A structured representation of a user-facing diagnostic.
 #[derive(Debug, Clone)]
-pub struct Diagnostic {
-    pub level: Level,
-    pub message: String,
+pub(crate) struct Diagnostic {
+    pub(crate) level: Level,
+    pub(crate) message: String,
     pub(crate) span: Vec<LabeledSpan>,
-    pub children: Vec<SubDiagnostic>,
-    pub sort_spans: bool,
+    pub(crate) children: Vec<SubDiagnostic>,
+    pub(crate) sort_spans: bool,
 }
 
 impl Diagnostic {
@@ -343,14 +343,14 @@ impl Diagnostic {
 
 /// For example a note attached to an error.
 #[derive(Debug, Clone)]
-pub struct SubDiagnostic {
-    pub level: Level,
-    pub message: String,
-    pub span: Option<Span>,
+pub(crate) struct SubDiagnostic {
+    pub(crate) level: Level,
+    pub(crate) message: String,
+    pub(crate) span: Option<Span>,
 }
 
 impl Level {
-    pub fn to_str(self) -> &'static str {
+    pub(crate) fn to_str(self) -> &'static str {
         match self {
             Bug => "error: internal compiler error",
             Fatal | Error => "error",

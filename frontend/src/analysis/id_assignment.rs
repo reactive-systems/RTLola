@@ -1,7 +1,7 @@
 use crate::ast::*;
 use crate::parse::NodeId;
 
-pub(crate) fn assign_ids(spec: &mut LolaSpec) {
+pub(crate) fn assign_ids(spec: &mut LolaAst) {
     let mut free_id = 0;
     let mut next_id = || {
         let res = free_id;
@@ -258,7 +258,7 @@ mod tests {
 
     #[test]
     fn assign_atomic() {
-        let mut spec = LolaSpec::new();
+        let mut spec = LolaAst::new();
         spec.inputs.push(input());
         assign_ids(&mut spec);
         assert_ne!(spec.inputs[0].id, NodeId::DUMMY);
@@ -267,7 +267,7 @@ mod tests {
 
     #[test]
     fn assign_different_one_stream() {
-        let mut spec = LolaSpec::new();
+        let mut spec = LolaAst::new();
         spec.inputs.push(input());
         assign_ids(&mut spec);
         assert_ne!(spec.inputs[0].ty.id, spec.inputs[0].id);
@@ -275,7 +275,7 @@ mod tests {
 
     #[test]
     fn assign_different_several_streams() {
-        let mut spec = LolaSpec::new();
+        let mut spec = LolaAst::new();
         spec.inputs.push(input());
         spec.inputs.push(input());
         spec.constants.push(constant());
@@ -301,7 +301,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn already_assigned() {
-        let mut spec = LolaSpec::new();
+        let mut spec = LolaAst::new();
         let mut input = input();
         input.id = NodeId::from_u32(42);
         spec.inputs.push(input);
@@ -311,7 +311,7 @@ mod tests {
 
     #[test]
     fn assign_expr() {
-        let mut spec = LolaSpec::new();
+        let mut spec = LolaAst::new();
         let lhs = Expression::new(ExpressionKind::Ident(ident()), span());
         let rhs = Expression::new(ExpressionKind::Ident(ident()), span());
         let expr = Expression::new(ExpressionKind::Binary(BinOp::Div, Box::new(lhs), Box::new(rhs)), span());

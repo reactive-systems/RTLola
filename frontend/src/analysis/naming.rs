@@ -7,7 +7,7 @@ use crate::stdlib;
 use crate::stdlib::FuncDecl;
 use crate::ty::ValueTy;
 use crate::FrontendConfig;
-use std::collections::HashMap;
+use std::{collections::HashMap, rc::Rc};
 
 // These MUST all be lowercase
 // TODO add an static assertion for this
@@ -40,22 +40,22 @@ pub(crate) const KEYWORDS: [&str; 26] = [
     "error",
 ];
 
-pub type DeclarationTable<'a> = HashMap<NodeId, Declaration<'a>>;
+pub(crate) type DeclarationTable = HashMap<NodeId, Declaration>;
 
-pub struct NamingAnalysis<'a, 'b> {
-    declarations: ScopedDecl<'a>,
-    type_declarations: ScopedDecl<'a>,
-    fun_declarations: ScopedDecl<'a>,
-    result: DeclarationTable<'a>,
+pub(crate) struct NamingAnalysis<'b> {
+    declarations: ScopedDecl,
+    type_declarations: ScopedDecl,
+    fun_declarations: ScopedDecl,
+    result: DeclarationTable,
     handler: &'b Handler,
 }
 
-impl<'a, 'b> NamingAnalysis<'a, 'b> {
-    pub fn new(handler: &'b Handler, config: FrontendConfig) -> Self {
+impl<'b> NamingAnalysis<'b> {
+    pub(crate) fn new(handler: &'b Handler, config: FrontendConfig) -> Self {
         let mut scoped_decls = ScopedDecl::new();
 
         for (name, ty) in ValueTy::primitive_types(config.ty) {
-            scoped_decls.add_decl_for(name, Declaration::Type(ty));
+            scoped_decls.add_decl_for(name, Declaration::Type(Rc::new(ty.clone())));
         }
 
         // add a new scope to distinguish between extern/builtin declarations
@@ -75,7 +75,7 @@ impl<'a, 'b> NamingAnalysis<'a, 'b> {
     /// Checks if
     /// * name of declaration is a keyword
     /// * declaration already exists in current scope
-    fn add_decl_for(&mut self, decl: Declaration<'a>) {
+    fn add_decl_for(&mut self, decl: Declaration) {
         assert!(!decl.is_type());
         let name = decl.get_name().expect("added declarations are guaranteed to have a name");
 
@@ -100,12 +100,12 @@ impl<'a, 'b> NamingAnalysis<'a, 'b> {
             }
             builder.emit();
         } else {
-            self.declarations.add_decl_for(name, decl);
+            self.declarations.add_decl_for(name, decl.clone());
         }
     }
 
     /// Checks if given type is bound
-    fn check_type(&mut self, ty: &'a Type) {
+    fn check_type(&mut self, ty: &Type) {
         match &ty.kind {
             TypeKind::Simple(name) => {
                 if let Some(decl) = self.type_declarations.get_decl_for(&name) {
@@ -128,7 +128,7 @@ impl<'a, 'b> NamingAnalysis<'a, 'b> {
     }
 
     /// Checks that the parameter name and type are both valid
-    fn check_param(&mut self, param: &'a Parameter) {
+    fn check_param(&mut self, param: &Rc<Parameter>) {
         // check the name
         if let Some(decl) = self.declarations.get_decl_for(&param.name.name) {
             assert!(!decl.is_type());
@@ -152,7 +152,7 @@ impl<'a, 'b> NamingAnalysis<'a, 'b> {
             }
         } else {
             // it does not exist
-            self.add_decl_for(param.into());
+            self.add_decl_for(Declaration::Param(param.clone()));
         }
 
         // check the type
@@ -160,7 +160,7 @@ impl<'a, 'b> NamingAnalysis<'a, 'b> {
     }
 
     /// Entry method, checks that every identifier in the given spec is bound.
-    pub fn check(&mut self, spec: &'a LolaSpec) -> DeclarationTable<'a> {
+    pub(crate) fn check(&mut self, spec: &RTLolaAst) -> DeclarationTable {
         stdlib::import_implicit_module(&mut self.fun_declarations);
         for import in &spec.imports {
             match import.name.name.as_str() {
@@ -175,27 +175,27 @@ impl<'a, 'b> NamingAnalysis<'a, 'b> {
 
         // Store global declarations, i.e., constants, inputs, and outputs of the given specification
         for constant in &spec.constants {
-            self.add_decl_for(constant.into());
+            self.add_decl_for(Declaration::Const(constant.clone()));
             if let Some(ty) = constant.ty.as_ref() {
                 self.check_type(ty)
             }
         }
 
         for input in &spec.inputs {
-            self.add_decl_for(input.into());
+            self.add_decl_for(Declaration::In(input.clone()));
             self.check_type(&input.ty);
 
             // check types for parametric inputs
             self.declarations.push();
-            input.params.iter().for_each(|param| self.check_param(&param));
+            input.params.iter().for_each(|param| self.check_param(param));
             self.declarations.pop();
         }
 
         for output in &spec.outputs {
             if output.params.is_empty() {
-                self.add_decl_for(Declaration::Out(output));
+                self.add_decl_for(Declaration::Out(output.clone()));
             } else {
-                self.add_decl_for(Declaration::ParamOut(output))
+                self.add_decl_for(Declaration::ParamOut(output.clone()))
             }
             self.check_type(&output.ty);
         }
@@ -207,8 +207,8 @@ impl<'a, 'b> NamingAnalysis<'a, 'b> {
     }
 
     /// Checks that if the trigger has a name, it is unique
-    fn check_triggers(&mut self, spec: &'a LolaSpec) {
-        let mut trigger_names: Vec<(&'a String, &'a Trigger)> = Vec::new();
+    fn check_triggers(&mut self, spec: &RTLolaAst) {
+        let mut trigger_names: Vec<(&String, &Trigger)> = Vec::new();
         for trigger in &spec.trigger {
             if let Some(ident) = &trigger.name {
                 if let Some(decl) = self.declarations.get_decl_in_current_scope_for(&ident.name) {
@@ -227,24 +227,21 @@ impl<'a, 'b> NamingAnalysis<'a, 'b> {
                 }
                 let mut found = false;
                 for previous_entry in &trigger_names {
-                    match previous_entry {
-                        (ref name, ref previous_trigger) => {
-                            if ident.name == **name {
-                                found = true;
-                                let mut builder = self.handler.build_error_with_span(
-                                    &format!("the trigger `{}` is defined multiple times", ident.name),
-                                    LabeledSpan::new(ident.span, &format!("`{}` redefined here", ident.name), true),
-                                );
-                                builder.add_span_with_label(
-                                    previous_trigger.span,
-                                    &format!("previous trigger definition `{}` here", ident.name),
-                                    false,
-                                );
-                                builder.emit();
+                    let (name, previous_trigger) = previous_entry;
+                    if ident.name == **name {
+                        found = true;
+                        let mut builder = self.handler.build_error_with_span(
+                            &format!("the trigger `{}` is defined multiple times", ident.name),
+                            LabeledSpan::new(ident.span, &format!("`{}` redefined here", ident.name), true),
+                        );
+                        builder.add_span_with_label(
+                            previous_trigger.span,
+                            &format!("previous trigger definition `{}` here", ident.name),
+                            false,
+                        );
+                        builder.emit();
 
-                                break;
-                            }
-                        }
+                        break;
                     }
                 }
                 if !found {
@@ -257,7 +254,7 @@ impl<'a, 'b> NamingAnalysis<'a, 'b> {
         }
     }
 
-    fn check_outputs(&mut self, spec: &'a LolaSpec) {
+    fn check_outputs(&mut self, spec: &RTLolaAst) {
         // recurse into expressions and check them
         for output in &spec.outputs {
             self.declarations.push();
@@ -282,13 +279,13 @@ impl<'a, 'b> NamingAnalysis<'a, 'b> {
             if let Some(expr) = output.termination.as_ref() {
                 self.check_expression(expr);
             }
-            self.declarations.add_decl_for("self", Declaration::Out(output));
+            self.declarations.add_decl_for("self", Declaration::Out(output.clone()));
             self.check_expression(&output.expression);
             self.declarations.pop();
         }
     }
 
-    fn check_ident(&mut self, expression: &'a Expression, ident: &'a Ident) {
+    fn check_ident(&mut self, expression: &Expression, ident: &Ident) {
         if let Some(decl) = self.declarations.get_decl_for(&ident.name) {
             assert!(!decl.is_type());
 
@@ -301,7 +298,7 @@ impl<'a, 'b> NamingAnalysis<'a, 'b> {
         }
     }
 
-    fn check_function(&mut self, expression: &'a Expression, name: &'a FunctionName) {
+    fn check_function(&mut self, expression: &Expression, name: &FunctionName) {
         let str_repr = name.to_string();
         if let Some(decl) = self.fun_declarations.get_decl_for(str_repr.as_str()) {
             assert!(decl.is_function());
@@ -318,9 +315,8 @@ impl<'a, 'b> NamingAnalysis<'a, 'b> {
         }
     }
 
-    fn check_expression(&mut self, expression: &'a Expression) {
+    fn check_expression(&mut self, expression: &Expression) {
         use self::ExpressionKind::*;
-        assert_ne!(expression.id, NodeId::DUMMY);
 
         match &expression.kind {
             Ident(ident) => {
@@ -369,11 +365,11 @@ impl<'a, 'b> NamingAnalysis<'a, 'b> {
 }
 
 /// Provides a mapping from `String` to `Declaration` and is able to handle different scopes.
-pub(crate) struct ScopedDecl<'a> {
-    scopes: Vec<HashMap<String, Declaration<'a>>>,
+pub(crate) struct ScopedDecl {
+    scopes: Vec<HashMap<String, Declaration>>,
 }
 
-impl<'a> ScopedDecl<'a> {
+impl ScopedDecl {
     fn new() -> Self {
         ScopedDecl { scopes: vec![HashMap::new()] }
     }
@@ -387,48 +383,51 @@ impl<'a> ScopedDecl<'a> {
         self.scopes.pop();
     }
 
-    fn get_decl_for(&self, name: &str) -> Option<Declaration<'a>> {
+    fn get_decl_for(&self, name: &str) -> Option<Declaration> {
         for scope in self.scopes.iter().rev() {
-            if let Some(&decl) = scope.get(name) {
-                return Some(decl);
+            if let Some(decl) = scope.get(name) {
+                return Some(decl.clone());
             }
         }
         None
     }
 
-    fn get_decl_in_current_scope_for(&self, name: &str) -> Option<Declaration<'a>> {
+    fn get_decl_in_current_scope_for(&self, name: &str) -> Option<Declaration> {
         match self.scopes.last().expect("It appears that we popped the global context.").get(name) {
-            Some(&decl) => Some(decl),
+            Some(decl) => Some(decl.clone()),
             None => None,
         }
     }
 
-    fn add_decl_for(&mut self, name: &'a str, decl: Declaration<'a>) {
+    fn add_decl_for(&mut self, name: &str, decl: Declaration) {
         assert!(self.scopes.last().is_some());
         self.scopes.last_mut().expect("It appears that we popped the global context.").insert(name.to_string(), decl);
     }
 
-    pub(crate) fn add_fun_decl(&mut self, fun: &'a FuncDecl) {
+    pub(crate) fn add_fun_decl(&mut self, fun: &FuncDecl) {
         assert!(self.scopes.last().is_some());
         let name = fun.name.to_string();
-        self.scopes.last_mut().expect("It appears that we popped the global context.").insert(name, fun.into());
+        self.scopes
+            .last_mut()
+            .expect("It appears that we popped the global context.")
+            .insert(name, Declaration::Func(Rc::new(fun.clone())));
     }
 }
 
-#[derive(Debug, Copy, Clone)]
-pub enum Declaration<'a> {
-    Const(&'a Constant),
-    In(&'a Input),
+#[derive(Debug, Clone)]
+pub(crate) enum Declaration {
+    Const(Rc<Constant>),
+    In(Rc<Input>),
     /// A non-parametric output
-    Out(&'a Output),
+    Out(Rc<Output>),
     /// A paramertric output, internally represented as a function application
-    ParamOut(&'a Output),
-    Type(&'a ValueTy),
-    Param(&'a Parameter),
-    Func(&'a FuncDecl),
+    ParamOut(Rc<Output>),
+    Type(Rc<ValueTy>),
+    Param(Rc<Parameter>),
+    Func(Rc<FuncDecl>),
 }
 
-impl<'a> Declaration<'a> {
+impl Declaration {
     fn get_span(&self) -> Option<Span> {
         match &self {
             Declaration::Const(constant) => Some(constant.name.span),
@@ -440,7 +439,7 @@ impl<'a> Declaration<'a> {
         }
     }
 
-    fn get_name(&self) -> Option<&'a str> {
+    fn get_name(&self) -> Option<&str> {
         match self {
             Declaration::Const(constant) => Some(&constant.name.name),
             Declaration::In(input) => Some(&input.name.name),
@@ -468,36 +467,6 @@ impl<'a> Declaration<'a> {
             Declaration::Func(_) | Declaration::ParamOut(_) => true,
             _ => false,
         }
-    }
-}
-
-impl<'a> Into<Declaration<'a>> for &'a Constant {
-    fn into(self) -> Declaration<'a> {
-        Declaration::Const(self)
-    }
-}
-
-impl<'a> Into<Declaration<'a>> for &'a Input {
-    fn into(self) -> Declaration<'a> {
-        Declaration::In(self)
-    }
-}
-
-impl<'a> Into<Declaration<'a>> for &'a Output {
-    fn into(self) -> Declaration<'a> {
-        Declaration::Out(self)
-    }
-}
-
-impl<'a> Into<Declaration<'a>> for &'a Parameter {
-    fn into(self) -> Declaration<'a> {
-        Declaration::Param(self)
-    }
-}
-
-impl<'a> Into<Declaration<'a>> for &'a FuncDecl {
-    fn into(self) -> Declaration<'a> {
-        Declaration::Func(self)
     }
 }
 
