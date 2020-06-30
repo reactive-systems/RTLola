@@ -2,9 +2,7 @@
 
 use super::*;
 use crate::parse::Ident;
-use num::{BigInt, ToPrimitive, Zero};
 use std::fmt::{Display, Formatter, Result};
-use std::ops::Rem;
 
 /// Writes out the joined vector `v`, enclosed by the given strings `pref` and `suff`.
 pub(crate) fn write_delim_list<T: Display>(
@@ -117,49 +115,6 @@ impl Display for InvokeSpec {
 impl Display for ExtendSpec {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         write!(f, "extend {}", &self.target)
-    }
-}
-
-impl Display for TimeSpec {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        let value = self.exact_period.to_integer();
-        let abs_value = BigInt::from(value.abs());
-
-        if !value.is_zero() {
-            if (&abs_value).rem(10_u64.pow(9) * 60 * 60 * 24 * 365).is_zero() {
-                let x: BigInt = abs_value / (10_u64.pow(9) * 60 * 60 * 24 * 365);
-                return write!(f, "{}{:?}a", if value.is_negative() { "-" } else { "" }, x.to_u128().unwrap());
-            }
-            if (&abs_value).rem(10_u64.pow(9) * 60 * 60 * 24 * 7).is_zero() {
-                let x: BigInt = abs_value / (10_u64.pow(9) * 60 * 60 * 24 * 7);
-                return write!(f, "{}{:?}w", if value.is_negative() { "-" } else { "" }, x.to_u128().unwrap());
-            }
-            if (&abs_value).rem(10_u64.pow(9) * 60 * 60 * 24).is_zero() {
-                let x: BigInt = abs_value / (10_u64.pow(9) * 60 * 60 * 24);
-                return write!(f, "{}{:?}d", if value.is_negative() { "-" } else { "" }, x.to_u128().unwrap());
-            }
-            if (&abs_value).rem(10_u64.pow(9) * 60 * 60).is_zero() {
-                let x: BigInt = abs_value / (10_u64.pow(9) * 60 * 60);
-                return write!(f, "{}{:?}h", if value.is_negative() { "-" } else { "" }, x.to_u128().unwrap());
-            }
-            if (&abs_value).rem(10_u64.pow(9) * 60).is_zero() {
-                let x: BigInt = abs_value / (10_u64.pow(9) * 60);
-                return write!(f, "{}{:?}min", if value.is_negative() { "-" } else { "" }, x.to_u128().unwrap());
-            }
-            if (&abs_value).rem(10_u64.pow(9)).is_zero() {
-                let x: BigInt = abs_value / (10_u64.pow(9));
-                return write!(f, "{}{:?}s", if value.is_negative() { "-" } else { "" }, x.to_u128().unwrap());
-            }
-            if (&abs_value).rem(10_u64.pow(6)).is_zero() {
-                let x: BigInt = abs_value / (10_u64.pow(6));
-                return write!(f, "{}{:?}ms", if value.is_negative() { "-" } else { "" }, x.to_u128().unwrap());
-            }
-            if (&abs_value).rem(10_u64.pow(3)).is_zero() {
-                let x: BigInt = abs_value / (10_u64.pow(3));
-                return write!(f, "{}{:?}μs", if value.is_negative() { "-" } else { "" }, x.to_u128().unwrap());
-            }
-        }
-        write!(f, "{}{:?}ns", if value.is_negative() { "-" } else { "" }, abs_value.to_u128().unwrap())
     }
 }
 
