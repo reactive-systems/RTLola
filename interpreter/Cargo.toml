@@ -2,11 +2,11 @@
 name = "rtlola-interpreter"
 version = "0.3.2"
 authors = [
+    "Florian Kohn <s8flkohn@stud.uni-saarland.de>",
     "Malte Schledjewski <schledjewski@react.uni-saarland.de>",
     "Maximilian Schwenger <schwenger@react.uni-saarland.de>",
     "Marvin Stenger <stenger@react.uni-saarland.de>",
-    "Leander Tentrup <tentrup@react.uni-saarland.de>",
-    "Florian Kohn <s8flkohn@stud.uni-saarland.de>"
+    "Leander Tentrup <tentrup@react.uni-saarland.de>"
 ]
 edition = "2018"
 
