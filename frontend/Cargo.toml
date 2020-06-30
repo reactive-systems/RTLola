@@ -1,6 +1,6 @@
 [package]
 name = "rtlola-frontend"
-version = "0.3.2"
+version = "0.3.3"
 authors = [
     "Jan Baumeister <jbaumeister@react.uni-saarland.de>",
     "Florian Kohn <s8flkohn@stud.uni-saarland.de>",
@@ -11,6 +11,12 @@ authors = [
     "Leander Tentrup <tentrup@react.uni-saarland.de>",
 ]
 edition = "2018"
+description = "A parser and analyzer for RTLola specifications."
+readme = "README.md"
+homepage = "http://rtlola.org"
+repository = "https://github.com/reactive-systems/RTLola"
+license = "Apache-2.0"
+keywords = ["verification", "frontend", "monitoring", "parser", "analyzer"]
 
 [dependencies]
 log = "0.4.8"  # logging macros

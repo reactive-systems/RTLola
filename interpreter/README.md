@@ -1,6 +1,8 @@
-# RTLola
+# RTLola Intepreter
 
 RTLola is a monitoring framework for reactive systems.
+
+Copyright (C) Universität des Saarlandes 2020.  Authors: Florian Kohn, Malte Schledjewski, Maximilian Schwenger, Marvin Stenger, and Leander Tentrup.
 
 ## Installation Notes
 
