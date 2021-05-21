@@ -2,6 +2,12 @@
 
 RTLola is a monitoring framework.  It consist of a parser, analyzer, and interpreter for the RTLola specification language.
 
+# Discontinued!  See RTLola-Frontend / RTLola-Interpreter
+
+This repository is archived but development continues.  Check out our new repos:
+[RTLola-Frontend](https://github.com/reactive-systems/RTLola-Frontend)
+[RTLola-Interpreter](https://github.com/reactive-systems/RTLola-Interpreter)
+
 ## Modules
 
 The implementation is split into the following modules
